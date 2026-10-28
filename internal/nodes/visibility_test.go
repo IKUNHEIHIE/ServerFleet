@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"testing"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/nodes"
@@ -166,6 +167,22 @@ func TestVisiblePropagatesCancellationOrDeadlineFromFinalCheck(t *testing.T) {
 				t.Fatalf("Visible returned %v together with an error, want nil", ids(got))
 			}
 		})
+	}
+}
+
+func TestVisiblePropagatesExpiredDeadlineDuringFinalCheck(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Millisecond)
+	defer cancel()
+	authorizer := authorizerFunc(func(ctx context.Context, _ auth.Check) error {
+		<-ctx.Done()
+		return ctx.Err()
+	})
+	got, err := nodes.Visible(ctx, authorizer, "user-1", loadFixture(t)[:1])
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("error = %v, want context.DeadlineExceeded", err)
+	}
+	if got != nil {
+		t.Fatalf("Visible returned %v together with an error, want nil", ids(got))
 	}
 }
 
