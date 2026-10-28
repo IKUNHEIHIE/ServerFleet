@@ -1,0 +1,42 @@
+{
+  "status": "STATIC_CHECKS_PASS_ONLY",
+  "baseline": {
+    "paths": 119,
+    "operations": 151,
+    "schemas": 132
+  },
+  "coreDraft": {
+    "paths": 29,
+    "operations": 34
+  },
+  "combinedDraft": {
+    "paths": 147,
+    "operations": 185,
+    "schemas": 171
+  },
+  "xrayUnchanged": {
+    "paths": 19,
+    "operations": 23
+  },
+  "passed": [
+    "YAML parse",
+    "JSON Schema $ref resolution",
+    "path parameter consistency",
+    "unique operationId",
+    "base path operation equality",
+    "base schema equality",
+    "global security equality",
+    "new login/bootstrap unauth declarations",
+    "Protobuf elementary brace/required-message checks"
+  ],
+  "notRun": [
+    "buf lint",
+    "buf breaking",
+    "protoc generation",
+    "OpenAPI external validator",
+    "Go TypeScript cross-language roundtrip",
+    "WSS mTLS live integration",
+    "negative security tests",
+    "performance PoC"
+  ]
+}

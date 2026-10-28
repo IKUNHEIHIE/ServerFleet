@@ -1,0 +1,49 @@
+# 插件声明草案；不是可执行或已签名的发布制品。
+id: xray-manager
+name: Xray 节点管理器
+version: 0.1.0-spec
+publisher: Server Fleet 官方（项目仓库尚未绑定）
+releaseStatus: approved-design-only
+entryPage: plugin-xray-manager
+installMode: on-demand
+includeInCoreRelease: false
+requires:
+  controller: '>=0.9.0'
+  capabilities:
+    - nodes.read
+    - tasks.create.scoped
+    - tasks.preview
+    - credentials.use.scoped
+    - certs.read.scoped
+    - audit.append
+permissions:
+  - xray.read
+  - xray.install
+  - xray.uninstall
+  - xray.service.manage
+  - xray.config.read
+  - xray.config.write
+  - xray.users.manage
+  - xray.traffic.read
+  - xray.credentials.reveal
+apiNamespace: /api/v1/plugins/xray-manager
+ui:
+  navigation:
+    - 概览
+    - Xray 节点
+    - 配置管理
+    - 用户管理
+    - 流量统计
+    - 部署记录
+constraints:
+  allowArbitraryHostShell: false
+  allowPublicManagementAPI: false
+  requireApprovalForInstall: true
+  requireApprovalForAdoption: true
+  keepManagedInstancesOnPluginUninstall: true
+  initialInstanceLimitPerNode: 1
+artifacts:
+  sourcePath: Plugin/xray-manager/
+  signedRelease: null
+  sha256: null
+  note: 正式发布前需要供应链签名、版本兼容矩阵、WASM/声明式产物及校验材料。

@@ -1,0 +1,11 @@
+{
+  "archive": "/mnt/data/ServerFleet-v0.9-G1-Approved-Complete.zip",
+  "archive_bytes": 244478,
+  "file_count": 36,
+  "product_and_api_unchanged": true,
+  "historical_ADR_copies": 5,
+  "new_arch_docs": 10,
+  "arch_missing_refs": [],
+  "other_stale_relative_refs": [],
+  "status": "G1 accepted; PoC pending; G2 not frozen"
+}
