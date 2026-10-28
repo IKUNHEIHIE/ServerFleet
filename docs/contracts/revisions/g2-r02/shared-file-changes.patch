@@ -1,0 +1,39 @@
+diff --git a/docs/contracts/P1-CANDIDATE-REVIEW.md b/docs/contracts/P1-CANDIDATE-REVIEW.md
+--- a/docs/contracts/P1-CANDIDATE-REVIEW.md
++++ b/docs/contracts/P1-CANDIDATE-REVIEW.md
+@@ -46 +46,10 @@
+ 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。本次只具备 Mock、适配层和隔离测试的基础条件。
++
++## G2-R01 / codex-01 追加评审（待独立安全/通信/任务 owner 审查）
++
++新增隔离候选与证据见 `docs/contracts/revisions/g2-r02/README.md`，G2 仍未冻结。未改原候选、Proto、兼容基线和已批准 ADR。
++
++- R02-C01：旧151/新34操作逐项矩阵及显式profile迁移提案；Cookie写分支须CSRF AND，不能因选择旧profile绕开新安全门槛。profile探测/切换、Bearer/CSRF/session生命周期待批准。
++- R02-C02：同一任务jobId/taskId和完整状态；旧六状态不能压缩unknown/paused/expired，旧客户端拒绝/升级策略待批准。
++- R02-C03：expectedRevision/ETag同一资源版本，AI scopeRevision和Xray配置revision独立；幂等查找键不能含body哈希以致漏掉换参冲突。原子存储、TTL/敏感重放待批准。
++- R02-C04：P1 Proto wire兼容验证通过，空值/未知enum可解析，语义门禁/TS/真实WSS+mTLS/持久去重/StateSync截断续接未验证。缺失PRIV/WC/PKI-OPS/UPDATE原ADR继续阻塞相应安全细节。
+diff --git a/docs/development/TASK-BOARD.md b/docs/development/TASK-BOARD.md
+--- a/docs/development/TASK-BOARD.md
++++ b/docs/development/TASK-BOARD.md
+@@ -1,9 +1,10 @@
+ # 任务登记板
+
+-状态：P1 完成后暂停。以下没有正在运行的开发会话，后续建议尚未授权启动。
++状态：P1 工程基础完成；G2-R01 已由项目负责人授权并交付本地候选，待独立审查；不表示G2冻结或业务开发获准。
+
+ | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许目录 | 审查人 | 基础提交 |
+ |---|---|---|---|---|---|---|
+ | M0-P1 | 本轮基础交付 | codex-p1-local | main / 项目主目录（初始化例外） | P1 工程及文档 | 项目负责人验收 | 原始资料提交 fc4c403 |
++| G2-R01 | 本地评审交付，待审查，不表示G2冻结 | codex-01 | contract/g2-review-cx01 / D:\admin\desktop\codex\myproject\ks.worktrees\contract--g2-review-cx01 | docs/contracts/revisions/g2-r02、api/openapi/revisions/g2-r02、tests/contracts/g2r02 | 独立Codex安全+通信/任务owner；集成人合并 | 15814c6 |
+
+ 新任务由集成负责人先登记再分配；同一文件只给一个写入人。任务建议和执行授权不是一回事。首次启动从 FIRST-BATCH-WORK-PACKAGES 选择 2～3 个独立项；相关契约未冻结时仅 Mock/纯领域测试。
+diff --git a/scripts/check.mjs b/scripts/check.mjs
+--- a/scripts/check.mjs
++++ b/scripts/check.mjs
+@@ -37,5 +37,6 @@
+     if (!before.equals(readFileSync(generated))) throw new Error("Generated Go code was stale. Commit regenerated output.");
+     run(go, ["test", "./tests/contracts"], { name: "protobuf-roundtrip" });
+     run(process.execPath, ["scripts/proto-negative.mjs"], { name: "protobuf-negative-checks" });
++    run(process.execPath, ["tests/contracts/g2r02/run.mjs"], { name: "g2r02-explicit-contracts" });
+   },
+   go() {

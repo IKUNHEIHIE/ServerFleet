@@ -1,0 +1,1 @@
+serverfleet\agent\v1\agent.proto:14:3:Field "1" with name "protocol_major" on message "Envelope" changed type from "uint32" to "string".

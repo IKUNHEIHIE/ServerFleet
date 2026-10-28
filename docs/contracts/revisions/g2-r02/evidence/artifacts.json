@@ -1,0 +1,58 @@
+[
+  {
+    "file": "api/openapi/revisions/g2-r02/merged-candidate.yaml",
+    "sha256": "d84235693d9e0a85549ca19b54a4b64d7881b9838baea84979736ef0f0b98d74"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/COMPATIBILITY.md",
+    "sha256": "defdf1b9339f07b8342c83bfd117553c20ae47f134d786d287ee7ce8bd22e90d"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/OPERATIONS.md",
+    "sha256": "fc1700749378d14bf0659ac74423a27d3790e54e6d75164f543e6f615369426d"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/PROTO-REVIEW.md",
+    "sha256": "064c1ef7b8ac8e7e1da7d47ecedd87068905521f473e1d4bf429d588af094dc9"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/README.md",
+    "sha256": "4e55e7efeae0ae6d08aff25420100b4bd5a6cf2d6fccf314200b93ce9d4e742a"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/REVIEW-C01-C07.md",
+    "sha256": "911c79f38a490d446fee768a0c087a8aa8a28ad4f5ee7ea0a36433e218d84f17"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/VALIDATION.md",
+    "sha256": "a4805edc586999e1e5c0379714b4e45ccefe0fd20839dc76a05cf1d2255b06e8"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/operations.json",
+    "sha256": "819ab8dfdc21517b77d85d3df2fc47f5beb63008aa88e6a48953e62906476d18"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/shared-file-changes.patch",
+    "sha256": "9cf86729e9424895aef3af00f948023bc6baee5391a227028491239e164a2ce9"
+  },
+  {
+    "file": "tests/contracts/g2r02/build-candidate.mjs",
+    "sha256": "8da2d114eb4b02ce201a121d02c82596240e80465a4a1c7f840029b000b62a1a"
+  },
+  {
+    "file": "tests/contracts/g2r02/candidate.test.mjs",
+    "sha256": "80fc7e3f8758f515c6527051e873e3fd2092a442fbb478d39086c43ffb9ad276"
+  },
+  {
+    "file": "tests/contracts/g2r02/proto_review_test.go",
+    "sha256": "40b557faaff3c16fc2b9071c2df42618336ce1df94d3907abcf45534f76e7ef8"
+  },
+  {
+    "file": "tests/contracts/g2r02/run.mjs",
+    "sha256": "fab01774ecbac1cf8d302ac28a6b674908112b8793d87aab4478ac9b1aa0fc11"
+  },
+  {
+    "file": "tests/contracts/g2r02/safety-fixtures.test.mjs",
+    "sha256": "1c047436b2ecc5a745887eed1b956445b0de58e483d5ffcce42ef01ee388c0a7"
+  }
+]

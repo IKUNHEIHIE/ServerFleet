@@ -1,0 +1,34 @@
+✔ delivered revision explicitly validates refs, IDs, paths and cross-cutting policy for all 185 operations (223.6127ms)
+✔ reproducible build and operation matrix cover old151 + new34 without stale rows (164.9117ms)
+✔ negative mutation rejected: dangling ref (182.5184ms)
+✔ negative mutation rejected: duplicate ID (158.8246ms)
+✔ negative mutation rejected: lost path parameter (162.4561ms)
+✔ negative mutation rejected: CSRF as OR bypass (169.7081ms)
+✔ negative mutation rejected: anonymous task mutation (152.6027ms)
+✔ negative mutation rejected: missing operation (148.8314ms)
+✔ negative mutation rejected: unknown task state silently removed (166.5054ms)
+✔ negative mutation rejected: HTTP/body status disagreement (145.7921ms)
+✔ negative mutation rejected: task precondition optional (155.7119ms)
+✔ negative mutation rejected: success silently rewritten (164.1305ms)
+✔ duplicate YAML keys rejected in revision input (0.9702ms)
+✔ auth fixtures: safe Cookie read, bound Cookie write, scoped Bearer write accepted (0.2314ms)
+✔ auth negative fixtures: absent/revoked identity, missing CSRF, cross-origin, mixed credentials refused (0.1292ms)
+✔ revision fixtures: group revision0/body alias, identical body+strongETag accepted (0.4929ms)
+✔ revision negatives: missing428, stale412, disagree400, weak/wildcard/list rejected (0.2401ms)
+✔ revision namespaces remain distinct: scopeRevision is not resource If-Match nor Xray config revision (0.0948ms)
+✔ idempotency fixtures: digest is compared after subject/method/path/key lookup, replay rechecks current authority (0.4505ms)
+✔ task projection samples preserve unknown/paused/expired instead of false success, jobId/taskId must match (0.5247ms)
+✔ SSE gap and Last-Event-ID contract is explicit; cursor never grants authority (0.1782ms)
+✔ P1 proto revision only adds go_package and formatting; original semantic tokens unchanged (0.598ms)
+✔ RBAC samples: default-zero AI scope; group additions excluded and removals immediately lose scope (1.7276ms)
+✔ AI full-access still refuses arbitrary root Shell without real administrator approval (0.195ms)
+✔ dispatch samples: 15min applies only before start; unknown side effects and expired work never auto-run (0.1751ms)
+✔ audit view samples: explicit allowed fields; raw secret fields are not a contract extension point (275.6771ms)
+ℹ tests 26
+ℹ suites 0
+ℹ pass 26
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 2633.9199

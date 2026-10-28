@@ -1,0 +1,54 @@
+[
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/artifacts.json",
+    "sha256": "5dbfd33aa50b7fff3f61195684f10d7fd899d072fc9035d617fffc9dc090d552"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/check-all.json",
+    "sha256": "cd9d16de835bb35666793fb237140555553b84d3846ede6914155ce64fe0322b"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/check-contracts.json",
+    "sha256": "d7efb79e86c9d0640dce4ce782b5d2ceb51570c9cec31675052fb7705c2d5fb6"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/check-security.json",
+    "sha256": "4e238d0b9dbce0bc42fa6199082c1d1ddac15e70080660d4af9eb55a5ad348c7"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/g2r02-contract-tests.log",
+    "sha256": "9b9657b8d60639d0d4ce03d2587783d1c409d126d81247b6e219f593b5e2978a"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/g2r02-openapi-lint.log",
+    "sha256": "fec40a9627617eac203dc6b86a70457f8d2d872fe4270de0c11719091c49fbe7"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/g2r02-proto-tests.log",
+    "sha256": "8ff13fdcb396fb2b1294decaa637eefb097d803b5e1ddbfa6a1af2634225c129"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/g2r02-results.json",
+    "sha256": "000340b34b879f55290a5021bb32d20662b384db6bdbd6e4a5fd619473bf14ac"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/govulncheck.log",
+    "sha256": "3016e51e4eac0d421674d2128bbbdefb2924b4646e0c14a1ab034977ad73fae5"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/npm-audit.log",
+    "sha256": "6d8c5c8f3d7684adb070417bd608d01ae90aa3dc26a65af03ffda4955f38d9a3"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/protobuf-negative-breaking.log",
+    "sha256": "650afb6fd4dd52f2c2c1f68257fae29c8b8767595f3b65990c638ed54da58e39"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/protobuf-negative-compile.log",
+    "sha256": "df60d3dfaab15599039711f34756d171b15db1ba784879fa439606cbe6dc8be5"
+  },
+  {
+    "file": "docs/contracts/revisions/g2-r02/evidence/source-integrity.log",
+    "sha256": "ce1d0e3452868ac1db94258f2f5e9016dc21a8df0180b0689c0285867ff9c96d"
+  }
+]
