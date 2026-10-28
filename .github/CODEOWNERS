@@ -1,0 +1,5 @@
+# Governance roles and path owners are defined in docs/development/MODULE-OWNERSHIP.md.
+# GitHub usernames/team slugs are not yet provided; do not invent identities.
+# After a remote is explicitly authorized, the integration owner must replace
+# these comments with actual owners and enable required reviews/checks on main.
+# Example syntax only: /internal/auth/ @YOUR-REAL-SECURITY-TEAM

@@ -1,0 +1,24 @@
+{
+  "name": "serverfleet",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "workspaces": ["apps/web"],
+  "engines": {"node": "24.x", "npm": ">=11 <12"},
+  "scripts": {
+    "check": "node scripts/check.mjs all",
+    "check:go": "node scripts/check.mjs go",
+    "check:web": "node scripts/check.mjs web",
+    "check:contracts": "node scripts/check.mjs contracts",
+    "check:policy": "node scripts/check.mjs policy",
+    "check:security": "node scripts/check.mjs security",
+    "check:git": "node scripts/check.mjs git",
+    "generate": "node scripts/check.mjs generate",
+    "tools:install": "node scripts/install-go-tools.mjs"
+  },
+  "devDependencies": {
+    "@bufbuild/buf": "1.75.0",
+    "@redocly/cli": "2.72.0",
+    "yaml": "2.9.1"
+  }
+}

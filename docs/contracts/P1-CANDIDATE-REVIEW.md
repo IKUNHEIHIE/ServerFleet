@@ -1,0 +1,46 @@
+# P1 候选契约审查与冲突登记
+
+日期：2026-10-29；状态：**G2-CANDIDATE-NOT-FROZEN**。本文件记录工程诊断，不替代产品/安全 ADR，不宣告 G2 Gate 通过。
+
+## 原始来源与工作入口
+
+`SOURCE-INDEX.json` 列出完整来源。69 项原始清单和三份 OpenAPI 工作副本由 `verify-source.mjs` 每次验证字节一致；资料原文和历史 ADR 未改。
+
+| 工件 | 原始候选 | 工程候选/状态 |
+|---|---|---|
+| G2 Core OpenAPI | 现行基线 `g2/G2-Core-OpenAPI-candidate.yaml` | `api/openapi/g2-core-candidate.yaml`；29 路径/34 操作，字节不变 |
+| G2 Merged OpenAPI | 现行基线 `g2/ServerFleet-API-Contract-v0.9-G2-merged-candidate.yaml` | `api/openapi/g2-merged-candidate.yaml`；147 路径/185 操作，字节不变 |
+| Xray OpenAPI | 现行基线 `Plugin/xray-manager/Xray-Manager-OpenAPI.yaml` | `api/openapi/xray-candidate.yaml`；19 路径/23 操作，字节不变 |
+| Agent Protobuf | 现行基线 `g2/proto/serverfleet/agent/v1/agent.proto` | `proto/serverfleet/agent/v1/agent.proto`；独立 **M0-P1-r1** 修订候选 |
+
+## Proto 实际诊断
+
+可重复诊断命令：`node scripts/diagnose-original-proto.mjs`（Go 工具先安装）。原 g2 目录执行：
+
+- `buf build`：PASS，原协议能够编译；不能把它写成 Proto 语法失败。
+- `buf lint`：FAIL，原 buf.yaml 未声明模块路径 `proto`，规则提示 package `serverfleet.agent.v1` 应位于 `serverfleet/agent/v1`，实际相对根为 `proto/serverfleet/agent/v1`。
+- `buf generate --template <本地 protoc-gen-go 配置>`：FAIL，关键错误 `unable to determine Go import path for "proto/serverfleet/agent/v1/agent.proto"`，缺少 `go_package` 或生成器 M 映射。
+
+**独立修订内容**：根 buf.yaml 显式 `modules: [{path: proto}]`；M0-P1-r1 仅增加 `go_package = "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1;agentv1"` 并运行 `buf format`。原始字段、编号、oneof、enum、WSS/mTLS 语义均未改。逐行差异保存在 `proto-M0-P1-r1.patch`。本地包路径只服务当前无远程工程；未来 module 改名需要显式迁移。
+
+修订候选已实测：STANDARD lint、格式、编译、Go 生成、生成一致性、FILE 兼容基线、Go 序列化往返与损坏帧拒绝。另与原候选 descriptor 进行 WIRE breaking 检查通过；这只证明本次修订未改线格式。测试基线位于 `tests/contracts/proto-baseline`，不代表产品冻结；禁止为消除错误直接更新基线。
+
+负向工具验证：把字段 1 类型改成 string，Buf 报 `changed type from uint32 to string`；复用字段号 2，编译报 `field number 2 used more than once`。这些是**预期拒绝**，不属于修订候选失败。
+
+## 现行资料冲突和待评审
+
+| 编号 | 问题与证据 | P1 处理 / 后续建议 |
+|---|---|---|
+| P1-C01 | 原 Buf 根路径和 Go 包路径缺口（见上） | 独立工具链/Proto 修订候选；须契约 owner 审查，尚未冻结 |
+| P1-C02 | 原 API Bearer/JWT 描述与 G2 Cookie+CSRF 候选混用 | 原文不改；先由 Codex 写认证迁移、token 生命周期与 CSRF 兼容方案，再实现真实登录 |
+| P1-C03 | 旧 BatchTaskJob.state 与 G2 TaskSummary/状态机的 unknown/paused 等不一致 | 不造第二状态源；统一迁移和完整状态枚举后才能做真实调度 |
+| P1-C04 | 旧 Error/成功响应/分页与 RFC9457、202、page/ETag 未统一 | 逐操作兼容评审；lint PASS 不等于语义统一 |
+| P1-C05 | 旧 ADR 示例 `/jobs` 与当前 `/tasks` | 依据 G2 统一规则用 `/tasks` 作为候选公开入口；保留旧 ADR，禁止双队列 |
+| P1-C06 | Release-History 文件标题及开头仍称 v0.7；PRD 局部仍有“待 ADR 修订”的旧语句 | 不用历史覆盖 v0.9 和 G1 Accepted；新索引说明正式替代关系，原文哈希不变 |
+| P1-C07 | 部分 PRIV/WC/PKI-OPS/UPDATE 原始 ADR 未单独收录 | 本阶段不实现相关业务；后续安全实现前从正式归档补齐核验，不能猜测 |
+| P1-C08 | Protobuf 帧/心跳/缓存/版本协商、mTLS、持有证明、去重和恢复无真实 PoC | 参数仍候选；不得从编译成功推断通信安全或 1C1G 性能 |
+| P1-C09 | WASM Host ABI、签名、配额、Xray/Nginx/灾备 PoC 未完成 | 不锁定运行时，不实现插件业务；按 G2 E01～E08/G1 PoC 门槛推进 |
+
+YAML 输入有大量正常锚点重用，默认库别名上限曾触发拒绝；工程只把上限设为有限 10000，并限制单文件 2 MiB、检测重复 key/避免重复遍历，未关闭保护或改写候选。Redocly `spec` 与补充规则对三份文件均通过；另有损坏 ref、重复 ID、路径参数和重复 YAML key 负向样例。
+
+正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。本次只具备 Mock、适配层和隔离测试的基础条件。

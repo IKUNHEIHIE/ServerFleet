@@ -1,0 +1,15 @@
+# Validate the candidate as OpenAPI, without imposing new product style rules.
+extends:
+  - spec
+rules:
+  operation-operationId: error
+  operation-operationId-unique: error
+  path-parameters-defined: error
+  no-unresolved-refs: error
+apis:
+  g2-core:
+    root: api/openapi/g2-core-candidate.yaml
+  g2-merged:
+    root: api/openapi/g2-merged-candidate.yaml
+  xray:
+    root: api/openapi/xray-candidate.yaml

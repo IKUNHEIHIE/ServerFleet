@@ -1,0 +1,15 @@
+{
+  "status": "G2-CANDIDATE-NOT-FROZEN",
+  "sourceRoot": "docs/reference/ServerFleet-ALL-v0.9-G2",
+  "byteExactCopies": {
+    "api/openapi/g2-core-candidate.yaml": "01-当前开发基线/g2/G2-Core-OpenAPI-candidate.yaml",
+    "api/openapi/g2-merged-candidate.yaml": "01-当前开发基线/g2/ServerFleet-API-Contract-v0.9-G2-merged-candidate.yaml",
+    "api/openapi/xray-candidate.yaml": "01-当前开发基线/Plugin/xray-manager/Xray-Manager-OpenAPI.yaml"
+  },
+  "protobufRevision": {
+    "id": "M0-P1-r1",
+    "original": "01-当前开发基线/g2/proto/serverfleet/agent/v1/agent.proto",
+    "candidate": "proto/serverfleet/agent/v1/agent.proto",
+    "changes": ["Added go_package for reproducible local Go generation", "Applied buf format only; no field, wire number or transport change"]
+  }
+}

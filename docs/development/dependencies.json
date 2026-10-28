@@ -1,0 +1,16 @@
+{
+  "module": "serverfleet.local/serverfleet",
+  "allowed": {
+    "apps/controller": ["internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/plugins", "internal/transport", "internal/storage", "gen/go"],
+    "apps/agent": ["internal/transport", "gen/go"],
+    "internal/auth": ["internal/audit", "internal/storage"],
+    "internal/nodes": ["internal/auth", "internal/audit", "internal/storage"],
+    "internal/tasks": ["internal/auth", "internal/nodes", "internal/audit", "internal/transport", "internal/storage"],
+    "internal/audit": ["internal/storage"],
+    "internal/plugins": ["internal/auth", "internal/tasks", "internal/audit", "internal/storage"],
+    "internal/transport": ["internal/audit", "internal/storage", "gen/go"],
+    "internal/storage": [],
+    "gen/go": [],
+    "tests": ["apps/controller", "apps/agent", "internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/plugins", "internal/transport", "internal/storage", "gen/go"]
+  }
+}
