@@ -1,31 +1,80 @@
 import { describe, expect, it } from "vitest";
-import type { CandidateNodeDetail } from "./candidate-adapter";
-import { toNodeListItem, toNodeListItems } from "./candidate-adapter";
-import { countLabel, formatLastSeen, formatPercent, resolveTitle, summariseNodes } from "./view-model";
-import { offlineNodeDetail, onlineNodeDetail } from "./test/fixtures";
+import { toNodeListItems } from "./candidate-adapter";
+import type { MetricQualityReason, MetricReading } from "./types";
+import { countLabel, describeMetric, formatLastSeen, resolveTitle, summariseNodes } from "./view-model";
+import { freshnessPolicy, offlineNodeDetail, onlineNodeDetail } from "./test/fixtures";
 
-const base: CandidateNodeDetail = {
-  nodeId: "node-base-01",
-  displayName: "base-01",
-  status: "online",
-  revision: 1,
-};
+const reading = (patch: Partial<MetricReading>): MetricReading => ({
+  quality: "fresh",
+  percent: null,
+  sampledAt: null,
+  reason: null,
+  ageMs: null,
+  ...patch,
+});
 
-describe("formatPercent", () => {
-  it("缺失读数返回 null，交给调用方渲染无有效数据", () => {
-    expect(formatPercent({ percent: null, sampledAt: null })).toBeNull();
-    expect(formatPercent({ percent: Number.NaN, sampledAt: null })).toBeNull();
-    expect(formatPercent({ percent: Number.POSITIVE_INFINITY, sampledAt: null })).toBeNull();
+describe("describeMetric · 有数值的情况", () => {
+  it("新鲜样本只给数值，不加任何附加说明", () => {
+    const metric = describeMetric(reading({ percent: 37, sampledAt: "2026-10-29T02:59:30Z", ageMs: 30_000 }));
+
+    expect(metric.kind).toBe("value");
+    expect(metric.value).toBe("37%");
+    expect(metric.note).toBeNull();
+    expect(metric.stale).toBe(false);
   });
 
-  it("真实 0 与四舍五入后的读数照常显示", () => {
-    expect(formatPercent({ percent: 0, sampledAt: null })).toBe("0%");
-    expect(formatPercent({ percent: 18.4, sampledAt: null })).toBe("18%");
-    expect(formatPercent({ percent: 18.6, sampledAt: null })).toBe("19%");
+  it("新鲜 0% 与 100% 原样保留", () => {
+    expect(describeMetric(reading({ percent: 0 })).value).toBe("0%");
+    expect(describeMetric(reading({ percent: 100 })).value).toBe("100%");
   });
 
-  it("不在展示层截断越界值，暴露给契约审查", () => {
-    expect(formatPercent({ percent: 130, sampledAt: null })).toBe("130%");
+  it("陈旧样本保留数值，并强制给出含采样时间的可见说明", () => {
+    const metric = describeMetric(
+      reading({ quality: "stale", percent: 55, sampledAt: "2026-10-29T02:41:00Z", ageMs: 19 * 60 * 1000 }),
+    );
+
+    expect(metric.kind).toBe("value");
+    expect(metric.value).toBe("55%");
+    expect(metric.stale).toBe(true);
+    expect(metric.note).toBe("陈旧 · 采样于 2026-10-29 02:41 UTC");
+  });
+
+  it("陈旧但时间不可渲染时仍标注陈旧，不静默降级为普通数值", () => {
+    const metric = describeMetric(reading({ quality: "stale", percent: 55, sampledAt: "broken" }));
+
+    expect(metric.note).toBe("陈旧 · 采样时间未知");
+    expect(metric.stale).toBe(true);
+  });
+
+  it("小数按四舍五入展示，不在展示层夹取", () => {
+    expect(describeMetric(reading({ percent: 18.4 })).value).toBe("18%");
+    expect(describeMetric(reading({ percent: 18.6 })).value).toBe("19%");
+  });
+});
+
+describe("describeMetric · 无数值的情况", () => {
+  const reasons: ReadonlyArray<[MetricQualityReason, string]> = [
+    ["node-not-online", "无有效数据（节点不在线或状态未确认）"],
+    ["absent", "无有效数据（未上报）"],
+    ["non-finite", "无有效数据（读数非法）"],
+    ["out-of-range", "无有效数据（超出 0–100 范围）"],
+    ["no-timestamp", "无有效数据（缺少采样时间）"],
+    ["invalid-timestamp", "无有效数据（采样时间无法解析）"],
+    ["future-timestamp", "无有效数据（采样时间晚于当前时间）"],
+  ];
+
+  it("每种原因都给出可读说明，且不产生数字", () => {
+    for (const [reason, expected] of reasons) {
+      const metric = describeMetric(reading({ quality: "invalid", percent: null, reason }));
+      expect(metric.kind, reason).toBe("empty");
+      expect(metric.value, reason).toBeNull();
+      expect(metric.reason, reason).toBe(expected);
+      expect(metric.stale, reason).toBe(false);
+    }
+  });
+
+  it("没有原因时退化为通用文案", () => {
+    expect(describeMetric(reading({ percent: null })).reason).toBe("无有效数据");
   });
 });
 
@@ -56,56 +105,11 @@ describe("countLabel / resolveTitle / summariseNodes", () => {
 
   it("空列表与有数据时给出不同摘要", () => {
     expect(summariseNodes([])).toBe("已授权节点接入后会显示在这里");
-    const nodes = toNodeListItems([onlineNodeDetail, offlineNodeDetail]);
+    const nodes = toNodeListItems(
+      [onlineNodeDetail, offlineNodeDetail],
+      undefined,
+      freshnessPolicy,
+    );
     expect(summariseNodes(nodes)).toBe("1 个在线 · 1 个未在线");
-  });
-});
-
-describe("toNodeListItem · 候选 DTO 映射", () => {
-  it("离线节点即使带 cpu=0 也映射为无有效数据", () => {
-    const item = toNodeListItem(offlineNodeDetail, {
-      cpuPercent: 0,
-      memoryPercent: 0,
-      sampledAt: "2026-10-26T11:05:00Z",
-    });
-
-    expect(item.status).toBe("offline");
-    expect(item.cpu.percent).toBeNull();
-    expect(item.cpu.sampledAt).toBeNull();
-    expect(item.memory.percent).toBeNull();
-  });
-
-  it("在线节点的真实 0 与缺失分别保留", () => {
-    const zero = toNodeListItem(base, { cpuPercent: 0, memoryPercent: 12, sampledAt: "2026-10-29T02:41:00Z" });
-    expect(zero.cpu.percent).toBe(0);
-    expect(zero.cpu.sampledAt).toBe("2026-10-29T02:41:00Z");
-
-    const missing = toNodeListItem(base, { cpuPercent: Number.NaN });
-    expect(missing.cpu.percent).toBeNull();
-    expect(missing.cpu.sampledAt).toBeNull();
-  });
-
-  it("完全没有指标载荷时不猜测读数", () => {
-    const item = toNodeListItem(onlineNodeDetail);
-    expect(item.cpu.percent).toBeNull();
-    expect(item.memory.percent).toBeNull();
-  });
-
-  it("空显示名回退到节点 ID，空白元数据归一为 null", () => {
-    const item = toNodeListItem({ ...base, displayName: "  ", platform: "  ", agentVersion: null });
-    expect(item.name).toBe("node-base-01");
-    expect(item.platform).toBeNull();
-    expect(item.agentVersion).toBeNull();
-  });
-
-  it("批量映射保持顺序并按 ID 取指标", () => {
-    const items = toNodeListItems([onlineNodeDetail, offlineNodeDetail], new Map([
-      [onlineNodeDetail.nodeId, { cpuPercent: 18 }],
-      [offlineNodeDetail.nodeId, { cpuPercent: 42 }],
-    ]));
-
-    expect(items.map(item => item.id)).toEqual([onlineNodeDetail.nodeId, offlineNodeDetail.nodeId]);
-    expect(items[0].cpu.percent).toBe(18);
-    expect(items[1].cpu.percent).toBeNull();
   });
 });

@@ -13,16 +13,53 @@
 export type NodeStatus = "online" | "offline" | "suspended" | "revoked" | "unknown";
 
 /**
- * 一次百分比读数。
- * 契约规则要求“数据未知时用 null，不用 0 冒充”，因此 null 与 0 在此类型中严格区分：
- * - `percent: 0` 是真实读数，显示 0%；
- * - `percent: null` 是无有效数据，显示“无有效数据”标记。
+ * 指标质量。决定单元格是否允许出现数字：
+ * - `fresh`：样本新鲜有效，显示百分比；
+ * - `stale`：样本存在但已超过最大样本年龄，保留数值时必须同时露出“陈旧”与采样时间；
+ * - `invalid`：数值或时间不合法，不得显示成普通百分比；
+ * - `missing`：上游没有可用读数，或没有可用采样时间。
+ */
+export type MetricQuality = "fresh" | "stale" | "invalid" | "missing";
+
+/** 指标不可用/降级的具体原因，用于给出可读说明，避免所有异常都显示成同一个破折号而无从排查。 */
+export type MetricQualityReason =
+  | "node-not-online"
+  | "absent"
+  | "non-finite"
+  | "out-of-range"
+  | "no-timestamp"
+  | "invalid-timestamp"
+  | "future-timestamp";
+
+/**
+ * 一次百分比读数及其质量判定。
+ *
+ * 不变式：`percent` 非 null 时必为 0–100 的有限数，且 `quality` 只能是 `fresh` 或 `stale`。
+ * 缺失、非法、未来时间一律 `percent: null`，因此展示层不可能把坏数据当成 0 或普通读数。
  */
 export interface MetricReading {
-  /** 百分比 0–100；null 表示无有效数据。 */
+  readonly quality: MetricQuality;
+  /** 0–100 的有限数；null 表示不展示数值。 */
   readonly percent: number | null;
-  /** 采样时间（RFC 3339 UTC，来自候选契约口径）；null 表示未采样。 */
+  /** 采样时间（RFC 3339 UTC）；仅 fresh/stale 保证可解析。 */
   readonly sampledAt: string | null;
+  /** 不可用原因；fresh/stale 为 null。 */
+  readonly reason: MetricQualityReason | null;
+  /** 采样年龄毫秒（policy.now − 采样时间）；策略不可用时为 null。 */
+  readonly ageMs: number | null;
+}
+
+/**
+ * 采样时效策略。
+ *
+ * 必须由调用方显式注入，测试固定取值：G2 候选没有冻结采样周期，
+ * 因此实现中不提供生产默认常量，也不把任何日期或周期写死。
+ */
+export interface FreshnessPolicy {
+  /** 当前时间（epoch 毫秒）。 */
+  readonly now: number;
+  /** 最大样本年龄（毫秒）。超过即视为陈旧。 */
+  readonly maxSampleAgeMs: number;
 }
 
 /** 节点列表的一行。 */

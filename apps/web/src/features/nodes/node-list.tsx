@@ -4,8 +4,8 @@ import { cn } from "@/lib/utils";
 import type { MetricReading, NodeListItemView, NodeListState } from "./types";
 import {
   countLabel,
+  describeMetric,
   formatLastSeen,
-  formatPercent,
   nodeStatusMeta,
   resolveTitle,
   summariseNodes,
@@ -41,7 +41,7 @@ const COLUMNS: readonly Column[] = [
 
 /**
  * 缺失值标记。
- * 视觉上沿用原型的破折号，但给读屏器一个明确词语，
+ * 视觉上沿用原型的破折号，但给读屏器一个明确原因，
  * 避免“—”、“无有效数据”、“0”在同一列里语义不清。
  */
 function MissingValue({ label }: { readonly label: string }) {
@@ -53,13 +53,21 @@ function MissingValue({ label }: { readonly label: string }) {
   );
 }
 
+/**
+ * 指标单元格。
+ *
+ * 只有新鲜或陈旧样本才有数字；陈旧样本必须同时渲染可见的“陈旧 + 采样时间”，
+ * 不使用 title/悬停承载时效信息，键盘与触摸用户同样能看到。
+ */
 function MetricCell({ reading }: { readonly reading: MetricReading }) {
-  const value = formatPercent(reading);
-  if (value === null) return <MissingValue label="无有效数据" />;
-  const sampledAt = formatLastSeen(reading.sampledAt);
+  const metric = describeMetric(reading);
+  if (metric.kind === "empty") return <MissingValue label={metric.reason ?? "无有效数据"} />;
   return (
-    <span className="tabular-nums" title={sampledAt ? `采样于 ${sampledAt}` : undefined}>
-      {value}
+    <span className="inline-flex flex-col items-end gap-0.5">
+      <span className="tabular-nums">{metric.value}</span>
+      {metric.note ? (
+        <span className="text-xs font-medium text-amber-700">{metric.note}</span>
+      ) : null}
     </span>
   );
 }
@@ -67,7 +75,7 @@ function MetricCell({ reading }: { readonly reading: MetricReading }) {
 function NodeStatusBadge({ node }: { readonly node: NodeListItemView }) {
   const meta = nodeStatusMeta[node.status];
   return (
-    <Badge variant="outline" className={cn("gap-1.5", meta.badgeClassName)}>
+    <Badge variant="outline" className={cn("gap-1.5 whitespace-nowrap", meta.badgeClassName)}>
       <span aria-hidden="true" className={cn("size-1.5 rounded-full", meta.dotClassName)} />
       {meta.label}
     </Badge>
@@ -167,9 +175,11 @@ function NodeTable({ labelledBy, nodes, onNodeActivate }: NodeTableProps) {
               )}
             >
               <th scope="row" className="px-4 py-3 text-left font-normal">
-                <span className="font-medium">{node.name}</span>
+                <span className="whitespace-nowrap font-medium">{node.name}</span>
                 {node.name === node.id ? null : (
-                  <span className="mt-0.5 block font-mono text-xs text-muted-foreground">{node.id}</span>
+                  <span className="mt-0.5 block whitespace-nowrap font-mono text-xs text-muted-foreground">
+                    {node.id}
+                  </span>
                 )}
               </th>
               <td className="px-4 py-3">
@@ -245,7 +255,7 @@ function ErrorState({ message, onRetry }: { readonly message?: string; readonly 
 function MetricFootnote() {
   return (
     <p className="border-t px-6 py-3 text-xs text-muted-foreground">
-      指标未知或节点不在线时显示“无有效数据”，不按 0 计；百分比为最近一次采样值，时间以 UTC 标注。
+      仅新鲜样本显示百分比；缺失、非法、未来时间或超出 0–100 范围的读数显示“无有效数据”，陈旧读数带“陈旧”与采样时间（UTC）；均不按 0 计。
     </p>
   );
 }

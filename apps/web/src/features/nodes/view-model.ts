@@ -1,4 +1,10 @@
-import type { MetricReading, NodeListItemView, NodeListState, NodeStatus } from "./types";
+import type {
+  MetricQualityReason,
+  MetricReading,
+  NodeListItemView,
+  NodeListState,
+  NodeStatus,
+} from "./types";
 
 /**
  * 状态的展示元数据。
@@ -38,18 +44,34 @@ export const nodeStatusMeta: Record<NodeStatus, NodeStatusMeta> = {
   },
 };
 
-const pad = (value: number) => String(value).padStart(2, "0");
-
 /**
- * 百分比展示。
- * 缺失（null / 非有限数）返回 null，由调用方渲染“无有效数据”，不能用 0 或空字符串顶替。
- * 不做 0–100 截断：契约越界应暴露给契约审查，而不是在展示层悄悄修正。
+ * 指标单元格的可展示结果。
+ *
+ * 只有 `kind: "value"` 才允许出现数字；`stale` 数值必须同时带 `note`（含“陈旧”与采样时间），
+ * 由组件以可见文本渲染，而不是鼠标悬停提示。
  */
-export function formatPercent(reading: MetricReading): string | null {
-  const { percent } = reading;
-  if (percent === null || !Number.isFinite(percent)) return null;
-  return `${Math.round(percent)}%`;
+export interface MetricPresentation {
+  readonly kind: "value" | "empty";
+  /** kind=value 时为形如 `37%` 的文本；kind=empty 时为 null。 */
+  readonly value: string | null;
+  /** 陈旧样本的可见说明；新鲜样本为 null。 */
+  readonly note: string | null;
+  /** kind=empty 时的可读说明（同时作为读屏文本）。 */
+  readonly reason: string | null;
+  readonly stale: boolean;
 }
+
+const reasonText: Record<MetricQualityReason, string> = {
+  "node-not-online": "无有效数据（节点不在线或状态未确认）",
+  absent: "无有效数据（未上报）",
+  "non-finite": "无有效数据（读数非法）",
+  "out-of-range": "无有效数据（超出 0–100 范围）",
+  "no-timestamp": "无有效数据（缺少采样时间）",
+  "invalid-timestamp": "无有效数据（采样时间无法解析）",
+  "future-timestamp": "无有效数据（采样时间晚于当前时间）",
+};
+
+const pad = (value: number) => String(value).padStart(2, "0");
 
 /**
  * 时间展示，固定按 UTC 输出并显式带单位，避免依赖运行环境时区导致同一数据两种读数。
@@ -63,6 +85,37 @@ export function formatLastSeen(lastSeenAt: string | null): string | null {
     `${time.getUTCFullYear()}-${pad(time.getUTCMonth() + 1)}-${pad(time.getUTCDate())} ` +
     `${pad(time.getUTCHours())}:${pad(time.getUTCMinutes())} UTC`
   );
+}
+
+/**
+ * 指标展示判定。
+ *
+ * 缺失、非法与未来时间一律落到 `empty`，不出现任何百分比；陈旧样本保留数值，
+ * 但同时返回带采样时间的可见说明，调用方不得只渲染数值。
+ */
+export function describeMetric(reading: MetricReading): MetricPresentation {
+  if (reading.percent === null) {
+    return {
+      kind: "empty",
+      value: null,
+      note: null,
+      reason: reading.reason ? reasonText[reading.reason] : "无有效数据",
+      stale: false,
+    };
+  }
+
+  if (reading.quality === "stale") {
+    const sampled = formatLastSeen(reading.sampledAt);
+    return {
+      kind: "value",
+      value: `${Math.round(reading.percent)}%`,
+      note: sampled ? `陈旧 · 采样于 ${sampled}` : "陈旧 · 采样时间未知",
+      reason: null,
+      stale: true,
+    };
+  }
+
+  return { kind: "value", value: `${Math.round(reading.percent)}%`, note: null, reason: null, stale: false };
 }
 
 /** 表头的数量徽标文案。失败状态不允许出现任何“已加载/成功”措辞。 */

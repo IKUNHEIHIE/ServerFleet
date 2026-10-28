@@ -1,7 +1,10 @@
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import type { CandidateNodeDetail, CandidateNodeMetrics } from "./candidate-adapter";
 import { NodeList } from "./node-list";
 import {
+  FIXED_NOW,
+  buildReadyState,
   emptyState,
   failedState,
   loadingState,
@@ -17,6 +20,24 @@ function bodyRows() {
   if (!body) throw new Error("tbody not found");
   return within(body).getAllByRole("row");
 }
+
+/** 单节点边界场景：同一个合成节点 + 指定指标。 */
+function singleNodeState(metrics: CandidateNodeMetrics) {
+  const detail: CandidateNodeDetail = {
+    nodeId: "node-edge-01",
+    displayName: "edge-01",
+    status: "online",
+    revision: 1,
+  };
+  return buildReadyState([detail], new Map([["node-edge-01", metrics]]));
+}
+
+function edgeRow() {
+  const table = screen.getByRole("table", { name: "节点列表" });
+  return within(table).getByRole("row", { name: /edge-01/ });
+}
+
+const secondsAgo = (seconds: number) => new Date(FIXED_NOW - seconds * 1000).toISOString();
 
 describe("NodeList · 加载状态", () => {
   it("只显示加载提示，不显示空列表或表格", () => {
@@ -79,8 +100,8 @@ describe("NodeList · 就绪状态", () => {
     const table = screen.getByRole("table", { name: "节点列表" });
     expect(within(table).getAllByRole("columnheader")).toHaveLength(7);
     expect(bodyRows()).toHaveLength(readyNodes.length);
-    expect(screen.getByText("2 个在线 · 4 个未在线")).toBeVisible();
-    expect(within(table).getAllByText("在线")).toHaveLength(2);
+    expect(screen.getByText("4 个在线 · 4 个未在线")).toBeVisible();
+    expect(within(table).getAllByText("在线")).toHaveLength(4);
     expect(within(table).getByText("离线")).toBeVisible();
     expect(within(table).getByText("已暂停")).toBeVisible();
     expect(within(table).getByText("已吊销")).toBeVisible();
@@ -100,6 +121,100 @@ describe("NodeList · 就绪状态", () => {
   });
 });
 
+describe("NodeList · 新鲜读数", () => {
+  it("新鲜 0% 照常显示，证明缺失与零值没有混同", () => {
+    render(<NodeList state={readyState} />);
+    const table = screen.getByRole("table", { name: "节点列表" });
+    const idleRow = within(table).getByRole("row", { name: /gcp-singapore-01/ });
+
+    expect(within(idleRow).getByText("0%")).toBeVisible();
+    expect(within(idleRow).queryByText(/^无有效数据/)).not.toBeInTheDocument();
+    expect(within(idleRow).queryByText(/陈旧/)).not.toBeInTheDocument();
+  });
+
+  it("新鲜 100% 照常显示", () => {
+    render(<NodeList state={readyState} />);
+    const table = screen.getByRole("table", { name: "节点列表" });
+    const fullRow = within(table).getByRole("row", { name: /gcp-frankfurt-01/ });
+
+    expect(within(fullRow).getByText("100%")).toBeVisible();
+    expect(within(fullRow).queryByText(/陈旧/)).not.toBeInTheDocument();
+  });
+
+  it("新鲜样本显示四舍五入后的百分比，且不带陈旧标记", () => {
+    render(<NodeList state={readyState} />);
+    const table = screen.getByRole("table", { name: "节点列表" });
+    const row = within(table).getByRole("row", { name: /aws-tokyo-01/ });
+
+    expect(within(row).getByText("18%")).toBeVisible();
+    expect(within(row).getByText("46%")).toBeVisible();
+    expect(within(row).queryByText(/陈旧/)).not.toBeInTheDocument();
+  });
+});
+
+describe("NodeList · 陈旧读数", () => {
+  it("陈旧样本保留数值，但必须同时可见地标注“陈旧”和采样时间", () => {
+    render(<NodeList state={readyState} />);
+    const table = screen.getByRole("table", { name: "节点列表" });
+    const row = within(table).getByRole("row", { name: /legacy-berlin-01/ });
+
+    expect(within(row).getByText("55%")).toBeVisible();
+    expect(within(row).getByText("70%")).toBeVisible();
+    expect(within(row).getAllByText("陈旧 · 采样于 2026-10-29 02:41 UTC")).toHaveLength(2);
+  });
+
+  it("时效信息不依赖鼠标悬停", () => {
+    render(<NodeList state={readyState} />);
+    const table = screen.getByRole("table", { name: "节点列表" });
+    const row = within(table).getByRole("row", { name: /legacy-berlin-01/ });
+    const note = within(row).getAllByText(/陈旧/)[0];
+
+    expect(note).toBeVisible();
+    expect(note).not.toHaveAttribute("title");
+    expect(within(row).getByText("55%")).not.toHaveAttribute("title");
+  });
+});
+
+describe("NodeList · 无效读数", () => {
+  it("百分比越界时不显示数字，也不夹成 0/100", () => {
+    render(<NodeList state={singleNodeState({ cpuPercent: 150, memoryPercent: -10, sampledAt: secondsAgo(1) })} />);
+
+    const row = edgeRow();
+    expect(within(row).getAllByText("无有效数据（超出 0–100 范围）")).toHaveLength(2);
+    expect(within(row).queryByText(/%/)).not.toBeInTheDocument();
+    expect(within(row).getByText("在线")).toBeVisible();
+  });
+
+  it("缺少采样时间时不显示数字", () => {
+    render(<NodeList state={singleNodeState({ cpuPercent: 37, memoryPercent: 12 })} />);
+
+    const row = edgeRow();
+    expect(within(row).getAllByText("无有效数据（缺少采样时间）")).toHaveLength(2);
+    expect(within(row).queryByText("37%")).not.toBeInTheDocument();
+    expect(within(row).queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it("采样时间在未来时不作为有效当前数据", () => {
+    render(
+      <NodeList
+        state={singleNodeState({ cpuPercent: 37, memoryPercent: 12, sampledAt: new Date(FIXED_NOW + 1000).toISOString() })}
+      />,
+    );
+
+    const row = edgeRow();
+    expect(within(row).getAllByText("无有效数据（采样时间晚于当前时间）")).toHaveLength(2);
+    expect(within(row).queryByText(/%/)).not.toBeInTheDocument();
+  });
+
+  it("采样时间无法解析时不显示数字", () => {
+    render(<NodeList state={singleNodeState({ cpuPercent: 37, memoryPercent: 12, sampledAt: "not-a-time" })} />);
+
+    const row = edgeRow();
+    expect(within(row).getAllByText("无有效数据（采样时间无法解析）")).toHaveLength(2);
+    expect(within(row).queryByText(/%/)).not.toBeInTheDocument();
+  });
+});
+
 describe("NodeList · 离线指标缺失", () => {
   it("离线节点即使上游带 cpu=0 也显示无有效数据，不显示 0%", () => {
     render(<NodeList state={readyState} />);
@@ -107,35 +222,17 @@ describe("NodeList · 离线指标缺失", () => {
     const table = screen.getByRole("table", { name: "节点列表" });
     const offlineRow = within(table).getByRole("row", { name: new RegExp(offlineNodeDetail.displayName) });
 
-    expect(within(offlineRow).getAllByText("无有效数据")).toHaveLength(2);
-    expect(within(offlineRow).queryByText(/0%/)).not.toBeInTheDocument();
+    expect(within(offlineRow).getAllByText("无有效数据（节点不在线或状态未确认）")).toHaveLength(2);
     expect(within(offlineRow).queryByText(/%/)).not.toBeInTheDocument();
   });
 
-  it("已暂停节点的读数同样按无有效数据处理", () => {
+  it("已暂停节点即使上游给了新鲜样本也不按当前读数展示", () => {
     render(<NodeList state={readyState} />);
     const table = screen.getByRole("table", { name: "节点列表" });
-    const row = within(table).getByRole("row", { name: /gcp-frankfurt-01/ });
+    const row = within(table).getByRole("row", { name: /gcp-osaka-01/ });
 
-    expect(within(row).getAllByText("无有效数据")).toHaveLength(2);
-  });
-
-  it("真实 0% 读数仍照常显示，证明缺失与零值没有混同", () => {
-    render(<NodeList state={readyState} />);
-    const table = screen.getByRole("table", { name: "节点列表" });
-    const idleRow = within(table).getByRole("row", { name: /gcp-singapore-01/ });
-
-    expect(within(idleRow).getByText("0%")).toBeVisible();
-    expect(within(idleRow).queryByText("无有效数据")).not.toBeInTheDocument();
-  });
-
-  it("在线节点显示四舍五入后的百分比", () => {
-    render(<NodeList state={readyState} />);
-    const table = screen.getByRole("table", { name: "节点列表" });
-    const row = within(table).getByRole("row", { name: /aws-tokyo-01/ });
-
-    expect(within(row).getByText("18%")).toBeVisible();
-    expect(within(row).getByText("46%")).toBeVisible();
+    expect(within(row).getAllByText("无有效数据（节点不在线或状态未确认）")).toHaveLength(2);
+    expect(within(row).queryByText(/%/)).not.toBeInTheDocument();
   });
 
   it("缺失的元数据也标注为未知，而不是留空", () => {
@@ -144,7 +241,7 @@ describe("NodeList · 离线指标缺失", () => {
     const unknownRow = within(table).getByRole("row", { name: /node-unknown-07/ });
 
     expect(within(unknownRow).getAllByText("未知").length).toBeGreaterThanOrEqual(3);
-    expect(within(unknownRow).getAllByText("无有效数据")).toHaveLength(2);
+    expect(within(unknownRow).getAllByText("无有效数据（节点不在线或状态未确认）")).toHaveLength(2);
   });
 });
 
