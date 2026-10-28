@@ -3,6 +3,7 @@ package nodes_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 
@@ -11,6 +12,12 @@ import (
 )
 
 var errDenied = errors.New("denied")
+
+type authorizerFunc func(context.Context, auth.Check) error
+
+func (f authorizerFunc) Authorize(ctx context.Context, check auth.Check) error {
+	return f(ctx, check)
+}
 
 type mockAuthorizer struct {
 	allowed  map[string]bool
@@ -108,6 +115,92 @@ func TestVisibleStopsOnCanceledContext(t *testing.T) {
 	}
 	if len(authorizer.checks) != 0 {
 		t.Fatalf("authorizer was called %d times after cancellation", len(authorizer.checks))
+	}
+}
+
+func TestVisiblePropagatesCancellationOrDeadlineFromFinalCheck(t *testing.T) {
+	fixture := loadFixture(t)[:1]
+	for _, tc := range []struct {
+		name string
+		auth func(context.Context, context.CancelFunc) auth.Authorizer
+		want error
+	}{
+		{
+			name: "cancel during final check",
+			auth: func(_ context.Context, cancel context.CancelFunc) auth.Authorizer {
+				return authorizerFunc(func(context.Context, auth.Check) error {
+					cancel()
+					return context.Canceled
+				})
+			},
+			want: context.Canceled,
+		},
+		{
+			name: "cancel during final check with nil authorizer error",
+			auth: func(_ context.Context, cancel context.CancelFunc) auth.Authorizer {
+				return authorizerFunc(func(context.Context, auth.Check) error {
+					cancel()
+					return nil
+				})
+			},
+			want: context.Canceled,
+		},
+		{
+			name: "wrapped deadline during final check",
+			auth: func(context.Context, context.CancelFunc) auth.Authorizer {
+				return authorizerFunc(func(context.Context, auth.Check) error {
+					return fmt.Errorf("authorization failed: %w", context.DeadlineExceeded)
+				})
+			},
+			want: context.DeadlineExceeded,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			got, err := nodes.Visible(ctx, tc.auth(ctx, cancel), "user-1", fixture)
+			if !errors.Is(err, tc.want) {
+				t.Fatalf("error = %v, want %v", err, tc.want)
+			}
+			if got != nil {
+				t.Fatalf("Visible returned %v together with an error, want nil", ids(got))
+			}
+		})
+	}
+}
+
+func TestVisibleWrappersPropagateFinalCheckCancellation(t *testing.T) {
+	fixture := loadFixture(t)[:1]
+	for _, tc := range []struct {
+		name string
+		call func(context.Context, auth.Authorizer) error
+	}{
+		{
+			name: "VisibleFilter",
+			call: func(ctx context.Context, authorizer auth.Authorizer) error {
+				_, err := nodes.VisibleFilter(ctx, authorizer, "user-1", fixture, nodes.NodeQuery{})
+				return err
+			},
+		},
+		{
+			name: "VisibleClassify",
+			call: func(ctx context.Context, authorizer auth.Authorizer) error {
+				_, err := nodes.VisibleClassify(ctx, authorizer, "user-1", fixture, nodes.DimensionRegion)
+				return err
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			authorizer := authorizerFunc(func(context.Context, auth.Check) error {
+				cancel()
+				return context.Canceled
+			})
+			if err := tc.call(ctx, authorizer); !errors.Is(err, context.Canceled) {
+				t.Fatalf("error = %v, want context.Canceled", err)
+			}
+		})
 	}
 }
 

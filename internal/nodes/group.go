@@ -96,15 +96,23 @@ func (g *OrdinaryGroup) ReplaceMembers(expectedRevision uint64, nodeIDs []string
 	return nil
 }
 
-// Rename updates the editable name and notes, advancing the revision only when they change.
-func (g *OrdinaryGroup) Rename(name, notes string) error {
+// Rename atomically updates the editable name and notes when expectedRevision matches the
+// current revision; stale writes are rejected without changing state. An unchanged name and
+// notes at the current revision is a no-op that does not advance the revision.
+func (g *OrdinaryGroup) Rename(expectedRevision uint64, name, notes string) error {
+	if expectedRevision == 0 {
+		return ErrInvalidRevision
+	}
 	name = strings.TrimSpace(name)
 	notes = strings.TrimSpace(notes)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if expectedRevision != g.revision {
+		return ErrRevisionConflict
+	}
 	if name == "" {
 		return ErrGroupNameRequired
 	}
-	g.mu.Lock()
-	defer g.mu.Unlock()
 	if name == g.name && notes == g.notes {
 		return nil
 	}

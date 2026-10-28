@@ -1,6 +1,9 @@
 package nodes
 
-import "time"
+import (
+	"math"
+	"time"
+)
 
 // Status is the provisionally modeled connection state of a node.
 type Status string
@@ -52,6 +55,9 @@ func (n Node) Usage(now time.Time, maxAge time.Duration) (Metrics, bool) {
 		return Metrics{}, false
 	}
 	sample := *n.Metrics
+	if !finite(sample.CPUPercent) || !finite(sample.MemoryPercent) {
+		return Metrics{}, false
+	}
 	if sample.ObservedAt.IsZero() || sample.ObservedAt.After(now) {
 		return Metrics{}, false
 	}
@@ -59,4 +65,8 @@ func (n Node) Usage(now time.Time, maxAge time.Duration) (Metrics, bool) {
 		return Metrics{}, false
 	}
 	return sample, true
+}
+
+func finite(value float64) bool {
+	return !math.IsNaN(value) && !math.IsInf(value, 0)
 }

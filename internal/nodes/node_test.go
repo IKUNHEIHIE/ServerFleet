@@ -1,6 +1,7 @@
 package nodes_test
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -90,6 +91,46 @@ func TestUsageDoesNotFakeZeroForOfflineFixtureNode(t *testing.T) {
 	now := time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)
 	if usage, ok := offline.Usage(now, 24*time.Hour); ok {
 		t.Fatalf("offline node reported usage %+v, want missing", usage)
+	}
+}
+
+func TestUsageRejectsNonFiniteMetrics(t *testing.T) {
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)
+	observed := now.Add(-1 * time.Minute)
+	for _, tc := range []struct {
+		name string
+		cpu  float64
+		mem  float64
+	}{
+		{name: "cpu NaN", cpu: math.NaN(), mem: 20},
+		{name: "cpu positive infinity", cpu: math.Inf(1), mem: 20},
+		{name: "cpu negative infinity", cpu: math.Inf(-1), mem: 20},
+		{name: "memory NaN", cpu: 10, mem: math.NaN()},
+		{name: "memory positive infinity", cpu: 10, mem: math.Inf(1)},
+		{name: "memory negative infinity", cpu: 10, mem: math.Inf(-1)},
+		{name: "both non-finite", cpu: math.NaN(), mem: math.Inf(1)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			node := nodes.Node{ID: "a", Status: nodes.StatusOnline, Metrics: &nodes.Metrics{
+				CPUPercent: tc.cpu, MemoryPercent: tc.mem, ObservedAt: observed,
+			}}
+			if usage, ok := node.Usage(now, 5*time.Minute); ok {
+				t.Fatalf("Usage accepted non-finite sample %+v", usage)
+			}
+		})
+	}
+}
+
+func TestUsageAcceptsRealZeroPercentSample(t *testing.T) {
+	now := time.Date(2026, 10, 29, 9, 0, 0, 0, time.UTC)
+	sample := &nodes.Metrics{CPUPercent: 0, MemoryPercent: 0, ObservedAt: now.Add(-1 * time.Minute)}
+	node := nodes.Node{ID: "a", Status: nodes.StatusOnline, Metrics: sample}
+	got, ok := node.Usage(now, 5*time.Minute)
+	if !ok {
+		t.Fatal("Usage rejected a fresh zero-percent sample")
+	}
+	if got.CPUPercent != 0 || got.MemoryPercent != 0 || !got.ObservedAt.Equal(sample.ObservedAt) {
+		t.Fatalf("Usage = %+v, want the real zero sample %+v", got, *sample)
 	}
 }
 

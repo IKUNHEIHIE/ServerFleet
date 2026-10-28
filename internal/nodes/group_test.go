@@ -128,28 +128,97 @@ func TestOrdinaryGroupReplaceMembersIsAtomicAcrossGoroutines(t *testing.T) {
 	}
 }
 
-func TestOrdinaryGroupRename(t *testing.T) {
+func TestOrdinaryGroupRenameRequiresRevision(t *testing.T) {
 	group, err := nodes.NewOrdinaryGroup("grp-1", "Web Fleet")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := group.Rename("Fleet A", "primary"); err != nil {
+	if err := group.Rename(1, "Fleet A", "primary"); err != nil {
 		t.Fatalf("Rename returned error: %v", err)
 	}
 	if group.Name() != "Fleet A" || group.Notes() != "primary" || group.Revision() != 2 {
 		t.Fatalf("after rename name/notes/revision = %q/%q/%d", group.Name(), group.Notes(), group.Revision())
 	}
-	if err := group.Rename("Fleet A", "primary"); err != nil {
+
+	if err := group.ReplaceMembers(2, []string{"node-1"}); err != nil {
+		t.Fatalf("ReplaceMembers returned error: %v", err)
+	}
+	if err := group.Rename(1, "Fleet B", "stale"); !errors.Is(err, nodes.ErrRevisionConflict) {
+		t.Fatalf("stale rename error = %v, want ErrRevisionConflict", err)
+	}
+	if group.Name() != "Fleet A" || group.Notes() != "primary" || group.Revision() != 3 {
+		t.Fatalf("stale rename changed group: name=%q notes=%q revision=%d", group.Name(), group.Notes(), group.Revision())
+	}
+
+	if err := group.Rename(0, "Fleet B", ""); !errors.Is(err, nodes.ErrInvalidRevision) {
+		t.Fatalf("zero revision error = %v, want ErrInvalidRevision", err)
+	}
+	if err := group.Rename(3, "Fleet A", "primary"); err != nil {
 		t.Fatalf("no-op Rename returned error: %v", err)
 	}
-	if group.Revision() != 2 {
+	if group.Revision() != 3 {
 		t.Fatalf("no-op rename advanced revision to %d", group.Revision())
 	}
-	if err := group.Rename(" ", "other"); !errors.Is(err, nodes.ErrGroupNameRequired) {
+
+	if err := group.Rename(3, " ", "other"); !errors.Is(err, nodes.ErrGroupNameRequired) {
 		t.Fatalf("blank name error = %v, want ErrGroupNameRequired", err)
 	}
-	if group.Name() != "Fleet A" || group.Notes() != "primary" {
-		t.Fatalf("failed rename changed group: %q/%q", group.Name(), group.Notes())
+	if group.Name() != "Fleet A" || group.Notes() != "primary" || group.Revision() != 3 {
+		t.Fatalf("failed rename changed group: name=%q notes=%q revision=%d", group.Name(), group.Notes(), group.Revision())
+	}
+
+	if err := group.Rename(3, "Fleet B", ""); err != nil {
+		t.Fatalf("Rename returned error: %v", err)
+	}
+	if group.Name() != "Fleet B" || group.Notes() != "" || group.Revision() != 4 {
+		t.Fatalf("after rename name=%q notes=%q revision=%d", group.Name(), group.Notes(), group.Revision())
+	}
+}
+
+func TestOrdinaryGroupRenameIsAtomicAcrossGoroutines(t *testing.T) {
+	group, err := nodes.NewOrdinaryGroup("grp-1", "Web Fleet")
+	if err != nil {
+		t.Fatal(err)
+	}
+	const workers = 8
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			errs <- group.Rename(1, fmt.Sprintf("editor-%d", i), "")
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+
+	successes, conflicts := 0, 0
+	for err := range errs {
+		switch {
+		case err == nil:
+			successes++
+		case errors.Is(err, nodes.ErrRevisionConflict):
+			conflicts++
+		default:
+			t.Fatalf("unexpected concurrent error: %v", err)
+		}
+	}
+	if successes != 1 || conflicts != workers-1 {
+		t.Fatalf("successes/conflicts = %d/%d, want 1/%d", successes, conflicts, workers-1)
+	}
+	if group.Revision() != 2 {
+		t.Fatalf("revision = %d, want 2", group.Revision())
+	}
+	winner := group.Name()
+	valid := false
+	for i := 0; i < workers; i++ {
+		if winner == fmt.Sprintf("editor-%d", i) {
+			valid = true
+		}
+	}
+	if !valid {
+		t.Fatalf("winner name = %q, want one of the concurrent editors", winner)
 	}
 }
 

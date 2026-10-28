@@ -36,10 +36,20 @@ func Visible(ctx context.Context, authorizer auth.Authorizer, subjectID string, 
 			return nil, err
 		}
 		check := auth.Check{SubjectID: subjectID, Action: readAction, NodeIDs: []string{n.ID}}
-		if err := authorizer.Authorize(ctx, check); err != nil {
+		authErr := authorizer.Authorize(ctx, check)
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		if authErr != nil {
+			if errors.Is(authErr, context.Canceled) || errors.Is(authErr, context.DeadlineExceeded) {
+				return nil, authErr
+			}
 			continue
 		}
 		out = append(out, n)
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }
