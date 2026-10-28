@@ -1,0 +1,54 @@
+[
+  {
+    "name": "missing-sample-time",
+    "input": {
+      "cpuPercent": 37
+    },
+    "actualCPU": {
+      "percent": 37,
+      "sampledAt": null
+    },
+    "actualCPUDisplay": "37%",
+    "actualMemoryDisplay": null
+  },
+  {
+    "name": "invalid-sample-time",
+    "input": {
+      "cpuPercent": 37,
+      "sampledAt": "not-a-time"
+    },
+    "actualCPU": {
+      "percent": 37,
+      "sampledAt": "not-a-time"
+    },
+    "actualCPUDisplay": "37%",
+    "actualMemoryDisplay": null
+  },
+  {
+    "name": "stale-sample",
+    "input": {
+      "cpuPercent": 37,
+      "sampledAt": "2000-01-01T00:00:00Z"
+    },
+    "actualCPU": {
+      "percent": 37,
+      "sampledAt": "2000-01-01T00:00:00Z"
+    },
+    "actualCPUDisplay": "37%",
+    "actualMemoryDisplay": null
+  },
+  {
+    "name": "out-of-range-percent",
+    "input": {
+      "cpuPercent": -10,
+      "memoryPercent": 150,
+      "sampledAt": "2026-10-29T00:00:00Z"
+    },
+    "actualCPU": {
+      "percent": -10,
+      "sampledAt": "2026-10-29T00:00:00Z"
+    },
+    "actualCPUDisplay": "-10%",
+    "actualMemoryDisplay": "150%"
+  }
+]

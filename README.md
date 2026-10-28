@@ -4,6 +4,8 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 **状态：G0 产品已确认；G1 方向已批准；G2 仍为候选，未冻结。P1 完成后暂停，后续开发需负责人明确分配新任务。**
 
+首批 G2-R01/N01/W01 的独立审查与下一批分工见 [首批审查报告](docs/development/reviews/BATCH-01-REVIEW.md) 和 [第二批任务单](docs/development/SECOND-BATCH-WORK-PACKAGES.md)。以任务登记板为准；原始 P1 报告是当时的验证快照。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

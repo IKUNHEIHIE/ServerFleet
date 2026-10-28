@@ -37,6 +37,8 @@ const suites = {
     if (!before.equals(readFileSync(generated))) throw new Error("Generated Go code was stale. Commit regenerated output.");
     run(go, ["test", "./tests/contracts"], { name: "protobuf-roundtrip" });
     run(process.execPath, ["scripts/proto-negative.mjs"], { name: "protobuf-negative-checks" });
+    // Revision candidates are checked explicitly, alongside the original inputs.
+    run(process.execPath, ["tests/contracts/g2r02/run.mjs"], { name: "g2r02-explicit-contracts" });
   },
   go() {
     const fmt = path.join(path.dirname(go), process.platform === "win32" ? "gofmt.exe" : "gofmt");

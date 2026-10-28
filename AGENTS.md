@@ -2,7 +2,7 @@
 
 ## 当前关卡和资料
 
-P1 仅工程基础。G0 产品已确认、G1 架构获批，G2 未冻结。先读 README、`docs/architecture/README.md`、`docs/development/MODULE-OWNERSHIP.md`、`docs/development/DEPENDENCY-RULES.md` 和任务单。完成本次任务后停止，不自行进入下一阶段或启动其他 Agent。
+P1 工程基础已完成。G0 产品已确认、G1 架构获批，G2 未冻结。当前授权任务与审查状态以 `docs/development/TASK-BOARD.md` 为准；G2-R01 只作为评审资料与候选接收，不批准运行时 profile、真实执行或接口冻结。先读 README、`docs/architecture/README.md`、`docs/development/MODULE-OWNERSHIP.md`、`docs/development/DEPENDENCY-RULES.md` 和任务单。完成分配的任务后停止，不自行扩展任务或启动其他 Agent。
 
 需求优先于候选；已批准 G1/安全 ADR 的约束有效。`docs/reference/ServerFleet-ALL-v0.9-G2/01-当前开发基线` 是现行原始文件集。原始 ZIP、参考资料和已批准历史 ADR 不可改写；`02-历史交付包` 仅追溯。HTML 是交互原型，不可直接作为 React 正式工程。发现冲突登记到 `docs/contracts/P1-CANDIDATE-REVIEW.md`，不可静默选旧方案。
 
