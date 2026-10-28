@@ -1,0 +1,7 @@
+PASS: decoded empty envelope rejected
+PASS: valid allowlisted offer accepted structurally
+PASS: unknown privilege rejected
+PASS: expired offer rejected
+PASS: offer wrong direction rejected
+PASS: typed nil does not panic
+PASS: late completion evidence not rejected by offer expiry

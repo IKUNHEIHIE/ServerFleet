@@ -1,0 +1,17 @@
+{"Time":"2026-10-29T04:18:53.9689775+08:00","Action":"skip","Package":"serverfleet.local/serverfleet/apps/agent","Elapsed":0}
+{"ImportPath":"serverfleet.local/serverfleet/reports/review-probes","Action":"build-output","Output":"# serverfleet.local/serverfleet/reports/review-probes\n"}
+{"ImportPath":"serverfleet.local/serverfleet/reports/review-probes","Action":"build-output","Output":"reports\\review-probes\\main.go:18:24: not enough arguments in call to g.Rename\n"}
+{"ImportPath":"serverfleet.local/serverfleet/reports/review-probes","Action":"build-output","Output":"\thave (string, string)\n"}
+{"ImportPath":"serverfleet.local/serverfleet/reports/review-probes","Action":"build-output","Output":"\twant (uint64, string, string)\n"}
+{"ImportPath":"serverfleet.local/serverfleet/reports/review-probes","Action":"build-output","Output":"reports\\review-probes\\main.go:19:26: not enough arguments in call to g.Rename\n"}
+{"ImportPath":"serverfleet.local/serverfleet/reports/review-probes","Action":"build-fail"}
+{"Time":"2026-10-29T04:18:54.7520246+08:00","Action":"start","Package":"serverfleet.local/serverfleet/apps/controller"}
+{"Time":"2026-10-29T04:18:54.7520246+08:00","Action":"output","Package":"serverfleet.local/serverfleet/apps/controller","Output":"?   \tserverfleet.local/serverfleet/apps/controller\t[no test files]\n"}
+{"Time":"2026-10-29T04:18:54.7520246+08:00","Action":"skip","Package":"serverfleet.local/serverfleet/apps/controller","Elapsed":0}
+{"Time":"2026-10-29T04:18:55.6569196+08:00","Action":"skip","Package":"serverfleet.local/serverfleet/internal/transport","Elapsed":0}
+{"Time":"2026-10-29T04:18:55.6569196+08:00","Action":"start","Package":"serverfleet.local/serverfleet/reports/review-probes"}
+{"Time":"2026-10-29T04:18:55.6569196+08:00","Action":"output","Package":"serverfleet.local/serverfleet/reports/review-probes","Output":"FAIL\tserverfleet.local/serverfleet/reports/review-probes [build failed]\n","OutputType":"frame"}
+{"Time":"2026-10-29T04:18:55.6569196+08:00","Action":"fail","Package":"serverfleet.local/serverfleet/reports/review-probes","Elapsed":0,"FailedBuild":"serverfleet.local/serverfleet/reports/review-probes"}
+{"Time":"2026-10-29T04:18:55.6569196+08:00","Action":"start","Package":"serverfleet.local/serverfleet/tests/architecture"}
+{"Time":"2026-10-29T04:18:56.041561+08:00","Action":"start","Package":"serverfleet.local/serverfleet/tests/contracts"}
+{"Time":"2026-10-29T04:18:56.041561+08:00","Action":"start","Package":"serverfleet.local/serverfleet/tests/testkit"}

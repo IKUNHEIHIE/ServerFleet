@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="60" failures="0" errors="0" time="0.6795247">
+    <testsuite name="src/App.test.tsx" timestamp="2026-10-28T20:28:36.513Z" hostname="DESKTOP-6A2IJTG" tests="3" failures="0" errors="0" skipped="0" time="0.0869068">
+        <testcase classname="src/App.test.tsx" name="development shell &gt; exposes a clear empty state without an execution control" time="0.0825884">
+        </testcase>
+        <testcase classname="src/App.test.tsx" name="development shell &gt; allows native attributes and style overrides on the base component" time="0.0023473">
+        </testcase>
+        <testcase classname="src/App.test.tsx" name="development shell &gt; blocks unmocked API calls and preserves missing telemetry" time="0.0009686">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/features/nodes/candidate-adapter.test.ts" timestamp="2026-10-28T20:28:36.515Z" hostname="DESKTOP-6A2IJTG" tests="19" failures="0" errors="0" skipped="0" time="0.0066042">
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时效：新鲜 / 陈旧 &gt; 阈值内的样本判为新鲜并保留数值" time="0.0015677">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时效：新鲜 / 陈旧 &gt; 刚好等于最大年龄仍算新鲜（边界包含）" time="0.000195">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时效：新鲜 / 陈旧 &gt; 超过最大年龄 1 毫秒即降级为陈旧，但保留数值与采样时间" time="0.0001687">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时效：新鲜 / 陈旧 &gt; 很久以前的在线样本不会显示成普通当前值" time="0.0001404">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时间缺失或非法 &gt; 没有采样时间不假定为刚刚采样" time="0.0001616">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时间缺失或非法 &gt; 只有空白字符的采样时间视作缺失" time="0.0000851">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时间缺失或非法 &gt; 无法解析的采样时间不保留数值" time="0.0001014">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="采样时间缺失或非法 &gt; 晚于当前时间的样本判为无效，不当作有效当前数据" time="0.0001201">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="百分比域：0–100 之外一律无效 &gt; 负值与大于 100 的值都不夹取、不显示" time="0.0002545">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="百分比域：0–100 之外一律无效 &gt; 边界值 0 与 100 是合法读数" time="0.000212">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="百分比域：0–100 之外一律无效 &gt; 非有限数按非法处理，且不影响真实 0" time="0.0001594">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="百分比域：0–100 之外一律无效 &gt; 非数值类型（上游脏数据）也按非法处理" time="0.0000596">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="百分比域：0–100 之外一律无效 &gt; 完全没有数值时不猜测读数" time="0.0000776">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="节点状态与指标可用性 &gt; 离线节点即便上游给了新鲜样本也不展示读数" time="0.0000878">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="节点状态与指标可用性 &gt; 暂停/吊销/未知状态同样不展示读数" time="0.0001026">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="策略注入异常时的失败安全 &gt; 阈值为 0 或非有限数时，任何样本都不会被判为新鲜" time="0.0001246">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="不变量：数值存在时必须带质量标签 &gt; percent 非 null 只可能来自 fresh 或 stale" time="0.0011375">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="toNodeListItems · 批量映射 &gt; 保持顺序、按 ID 取指标并应用同一策略" time="0.000496">
+        </testcase>
+        <testcase classname="src/features/nodes/candidate-adapter.test.ts" name="toNodeListItems · 批量映射 &gt; 空显示名回退到节点 ID，空白元数据归一为 null" time="0.0000885">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/features/nodes/node-list.test.tsx" timestamp="2026-10-28T20:28:36.518Z" hostname="DESKTOP-6A2IJTG" tests="26" failures="0" errors="0" skipped="0" time="0.5816719">
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 加载状态 &gt; 只显示加载提示，不显示空列表或表格" time="0.083319">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 空列表 &gt; 说明空列表原因，且不渲染表格或加载提示" time="0.0071257">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 失败状态 &gt; 用 alert 报错，且不出现任何成功迹象" time="0.0067779">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 失败状态 &gt; 重试按钮只在提供回调时出现并触发一次" time="0.0083175">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 失败状态 &gt; 没有错误详情时给出中性提示，不伪造结果" time="0.002784">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 就绪状态 &gt; 表格有可访问名称、7 列表头和逐行状态标签" time="0.0420138">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 就绪状态 &gt; 行标题与单元格共用一个列表标题作为可访问名称" time="0.0127582">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 就绪状态 &gt; 标题为空时回退到默认名称，避免无名区域" time="0.009632">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 新鲜读数 &gt; 新鲜 0% 照常显示，证明缺失与零值没有混同" time="0.0430692">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 新鲜读数 &gt; 新鲜 100% 照常显示" time="0.0386021">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 新鲜读数 &gt; 新鲜样本显示四舍五入后的百分比，且不带陈旧标记" time="0.0344539">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 陈旧读数 &gt; 陈旧样本保留数值，但必须同时可见地标注“陈旧”和采样时间" time="0.0385917">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 陈旧读数 &gt; 时效信息不依赖鼠标悬停" time="0.033518">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 无效读数 &gt; 百分比越界时不显示数字，也不夹成 0/100" time="0.011193">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 无效读数 &gt; 缺少采样时间时不显示数字" time="0.0093285">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 无效读数 &gt; 采样时间在未来时不作为有效当前数据" time="0.0093019">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 无效读数 &gt; 采样时间无法解析时不显示数字" time="0.0095683">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 离线指标缺失 &gt; 离线节点即使上游带 cpu=0 也显示无有效数据，不显示 0%" time="0.0330547">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 离线指标缺失 &gt; 已暂停节点即使上游给了新鲜样本也不按当前读数展示" time="0.0321627">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 离线指标缺失 &gt; 缺失的元数据也标注为未知，而不是留空" time="0.0324924">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 键盘交互 &gt; roving tabindex 只让一行进入 Tab 序列" time="0.0101215">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 键盘交互 &gt; 方向键在行间移动焦点并同步 tabindex" time="0.0329895">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 键盘交互 &gt; Enter 与 Space 激活当前行，且不误触其他行" time="0.0148128">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 键盘交互 &gt; 未提供激活回调时，Enter 不产生副作用也不被吞掉默认行为" time="0.0097001">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 键盘交互 &gt; 鼠标点击等价于激活该行" time="0.0094032">
+        </testcase>
+        <testcase classname="src/features/nodes/node-list.test.tsx" name="NodeList · 隔离性 &gt; 渲染期间不发起网络请求" time="0.0050019">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/features/nodes/view-model.test.ts" timestamp="2026-10-28T20:28:36.520Z" hostname="DESKTOP-6A2IJTG" tests="12" failures="0" errors="0" skipped="0" time="0.0043418">
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 有数值的情况 &gt; 新鲜样本只给数值，不加任何附加说明" time="0.001288">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 有数值的情况 &gt; 新鲜 0% 与 100% 原样保留" time="0.0003551">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 有数值的情况 &gt; 陈旧样本保留数值，并强制给出含采样时间的可见说明" time="0.0001955">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 有数值的情况 &gt; 陈旧但时间不可渲染时仍标注陈旧，不静默降级为普通数值" time="0.0001331">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 有数值的情况 &gt; 小数按四舍五入展示，不在展示层夹取" time="0.0001327">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 无数值的情况 &gt; 每种原因都给出可读说明，且不产生数字" time="0.0003138">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="describeMetric · 无数值的情况 &gt; 没有原因时退化为通用文案" time="0.0000964">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="formatLastSeen &gt; 按 UTC 输出确定格式，不受运行时区影响" time="0.0000791">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="formatLastSeen &gt; 空值与非法时间都返回 null" time="0.0001239">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="countLabel / resolveTitle / summariseNodes &gt; 各状态的数量文案互不混淆" time="0.0001755">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="countLabel / resolveTitle / summariseNodes &gt; 标题为空时回退到默认名称" time="0.0001188">
+        </testcase>
+        <testcase classname="src/features/nodes/view-model.test.ts" name="countLabel / resolveTitle / summariseNodes &gt; 空列表与有数据时给出不同摘要" time="0.0001357">
+        </testcase>
+    </testsuite>
+</testsuites>

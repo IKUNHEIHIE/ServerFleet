@@ -6,6 +6,8 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 首批 G2-R01/N01/W01 的独立审查与下一批分工见 [首批审查报告](docs/development/reviews/BATCH-01-REVIEW.md) 和 [第二批任务单](docs/development/SECOND-BATCH-WORK-PACKAGES.md)。以任务登记板为准；原始 P1 报告是当时的验证快照。
 
+第二批交付新增离线 Protobuf 语义校验、节点领域规则及已返修的节点列表组件；均未接入真实节点/执行链路，App 仍是开发空壳。最新复审见 [第二批复审](docs/development/reviews/BATCH-02-REVIEW.md)，后续独立任务见 [第三批任务单](docs/development/THIRD-BATCH-WORK-PACKAGES.md)。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。
