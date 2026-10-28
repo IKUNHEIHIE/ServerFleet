@@ -315,6 +315,27 @@ describe("NodeList · 键盘交互", () => {
   });
 });
 
+describe("NodeList · 空内容与副标题覆写", () => {
+  it("emptyContent 只在就绪且为空时替换默认“暂无节点”", () => {
+    render(<NodeList state={{ status: "ready", nodes: [] }} emptyContent={<p>自定义空内容</p>} />);
+
+    expect(screen.getByText("自定义空内容")).toBeVisible();
+    expect(screen.queryByText("暂无节点")).not.toBeInTheDocument();
+  });
+
+  it("已有节点时不会渲染 emptyContent", () => {
+    render(<NodeList state={readyState} emptyContent={<p>自定义空内容</p>} />);
+    expect(screen.queryByText("自定义空内容")).not.toBeInTheDocument();
+  });
+
+  it("description 传 null 时隐藏副标题，避免空列表出现误导摘要", () => {
+    render(<NodeList state={{ status: "ready", nodes: [] }} description={null} />);
+
+    expect(screen.queryByText(/已授权节点接入后会显示在这里/)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 2, name: "节点列表" })).toBeVisible();
+  });
+});
+
 describe("NodeList · 隔离性", () => {
   it("渲染期间不发起网络请求", () => {
     const fetchSpy = vi.fn(() => Promise.reject(new Error("blocked in tests")));
