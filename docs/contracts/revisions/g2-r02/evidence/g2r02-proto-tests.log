@@ -1,0 +1,34 @@
+=== RUN   TestAllEnvelopeVariantsRoundTrip
+=== RUN   TestAllEnvelopeVariantsRoundTrip/agent_hello
+=== RUN   TestAllEnvelopeVariantsRoundTrip/controller_hello
+=== RUN   TestAllEnvelopeVariantsRoundTrip/heartbeat
+=== RUN   TestAllEnvelopeVariantsRoundTrip/metrics
+=== RUN   TestAllEnvelopeVariantsRoundTrip/task_offer
+=== RUN   TestAllEnvelopeVariantsRoundTrip/task_ack
+=== RUN   TestAllEnvelopeVariantsRoundTrip/task_started
+=== RUN   TestAllEnvelopeVariantsRoundTrip/task_output
+=== RUN   TestAllEnvelopeVariantsRoundTrip/task_finished
+=== RUN   TestAllEnvelopeVariantsRoundTrip/task_cancel
+=== RUN   TestAllEnvelopeVariantsRoundTrip/state_sync_request
+=== RUN   TestAllEnvelopeVariantsRoundTrip/state_sync_reply
+=== RUN   TestAllEnvelopeVariantsRoundTrip/control_error
+--- PASS: TestAllEnvelopeVariantsRoundTrip (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/agent_hello (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/controller_hello (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/heartbeat (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/metrics (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/task_offer (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/task_ack (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/task_started (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/task_output (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/task_finished (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/task_cancel (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/state_sync_request (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/state_sync_reply (0.00s)
+    --- PASS: TestAllEnvelopeVariantsRoundTrip/control_error (0.00s)
+=== RUN   TestProtoDecoderAllowsUnsafeSemanticDefaults
+--- PASS: TestProtoDecoderAllowsUnsafeSemanticDefaults (0.00s)
+=== RUN   TestMalformedWireRejected
+--- PASS: TestMalformedWireRejected (0.00s)
+PASS
+ok  	serverfleet.local/serverfleet/tests/contracts/g2r02	2.445s
