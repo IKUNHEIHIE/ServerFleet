@@ -23,6 +23,8 @@ Go/Node 在系统已安装对应版本时可直接使用。当前 Windows 可 `.
 | `npm run check:git` | Git 空白差异检查 |
 | `npm run check:security` | npm audit（high/critical 阻断）+ govulncheck |
 | `node scripts/diagnose-original-proto.mjs` | 只读诊断原 Proto：编译、lint、Go 生成，记录原候选缺陷 |
+| `node scripts/runtime-smoke.mjs` | 编译后实际启动本地 Controller/Agent 并关闭进程 |
+| `node scripts/worktree-smoke.mjs` | 创建自建测试 Worktree、验证保护并清理；只供集成负责人运行 |
 
 `npm run check` 顺序运行基础五组，每组失败会记 FAIL 并返回非零；安全扫描独立，便于无网络环境明确报告 BLOCKED，不伪装通过。所有输出和分组 JSON 写入 `reports/`，前端 JUnit 写 `reports/web-junit.xml`。Go 测试 JSON 在 `reports/go-tests.log`。
 
