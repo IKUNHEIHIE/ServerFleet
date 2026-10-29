@@ -44,8 +44,16 @@ IdentitySQLStatements增加AppendAudit候选回调，必须绑定同一个DS Tx�
 
 ## R04 加密凭据生命周期
 
+提交 `3237c19a55a8b833d9adc84f9184f84e0465c311`。`go test ./internal/auth ./tests/architecture -count=1` PASS 9.151s/1.356s，staticcheck PASS。
+
 auth/credentials及HTTP可选接线、单元与真实SQLite测试；详细候选为CREDENTIAL-WIRING.md。支持限定用途的只写创建、元数据读取、密文暂存轮换、CAS替换/撤销、程序注册业务回调短时使用、调用前后gate、持久operation防重放与intent/终态审计。AES256GCM完整AAD绑定、注入密钥组、逐key持久预算先提交；没有默认密钥、通用解密口或假供应商验证。HTTP只提供实际已实现的create/list/references；rotate/revoke的202接线等待唯一tasks正式Controller本地目标，未造假任务。
 
 实际验证：新增单元覆盖密文/元数据不回显、幂等改秘密冲突、轮换暂存不改旧值、跨key替换/旧key退役、旧revision/过期stage/撤销拒绝、缺gate/引用源失败关闭、调用错误/恐慌/中途撤销/终态审计失败都不重试，借用缓冲清零，key预算耗尽拒绝。固定锁`node tests/poc/v09/platform/run-identity.mjs` 五项PASS 7.515s，真实SQLite/WAL关闭重开后凭据持久、预算保留、UNKNOWN operation不重跑、撤销后不使用。该测试的task gate为明确测试fixture，不是统一任务/审批的完整验收。
 
 剩余：真实密钥安装与恢复防回退key轮换、精确引用源和供应商有效性验证、Controller本地异步任务接线/页面；继续受限Bearer与Agent平台，不以此检查点结束。
+
+## R05 受限Bearer
+
+实现auth/bearer及候选HTTP（默认未启用），详见RESTRICTED-BEARER.md。令牌256位一次交付、持久摘要/epoch/期限/用途/只读动作/精确节点上限，签发与每次使用求交当前RBAC/grant/组成员。单独BearerIdentity/CommitGate避免subject适配丢失上限；拒绝浏览器头/混合凭据/重复头，不可认证Cookie管理API/执行/AI/Host。认证观察保存时钟底线，撤销和口令epoch变化均立即失效。
+
+`go test ./internal/auth -count=1` PASS 9.322s，staticcheck PASS。第一轮两个测试resolver对node返回多个ID导致invalid check，修正测试资源fixture后通过，未放宽生产校验。固定锁真实SQLite组合六项PASS 6.026s，令牌摘要持久、重启后可使用、撤销后再次重启不复活。尚未与DS节点list prepare/SSE接线，也不声称Bearer迁移已获批准。继续Agent接入/传输平台。

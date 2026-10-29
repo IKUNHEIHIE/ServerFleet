@@ -25,9 +25,10 @@ type IdentityHTTP struct {
 	credentials *CredentialService
 }
 type IdentityHTTPConfig struct {
-	Origin              string
-	RequireSecondFactor bool
-	Credentials         *CredentialService
+	Origin                 string
+	RequireSecondFactor    bool
+	Credentials            *CredentialService
+	EnableRestrictedTokens bool
 }
 
 func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*IdentityHTTP, error) {
@@ -58,6 +59,11 @@ func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*Identit
 	h.mux.HandleFunc("GET /api/v1/resource-grants", h.grants)
 	h.mux.HandleFunc("POST /api/v1/resource-grants", h.createGrant)
 	h.mux.HandleFunc("DELETE /api/v1/resource-grants/{grantId}", h.revokeGrant)
+	if cfg.EnableRestrictedTokens {
+		h.mux.HandleFunc("GET /api/v1/auth/tokens", h.listTokens)
+		h.mux.HandleFunc("POST /api/v1/auth/tokens", h.issueToken)
+		h.mux.HandleFunc("DELETE /api/v1/auth/tokens/{tokenId}", h.revokeToken)
+	}
 	if h.credentials != nil {
 		h.mux.HandleFunc("GET /api/v1/credentials", h.credentialMetadata)
 		h.mux.HandleFunc("POST /api/v1/credentials", h.createCredential)

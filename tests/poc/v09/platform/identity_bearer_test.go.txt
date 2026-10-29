@@ -1,0 +1,30 @@
+package persistencepoc
+
+import (
+ "bytes"
+ "context"
+ "path/filepath"
+ "testing"
+
+ "serverfleet.local/serverfleet/internal/auth"
+)
+
+func TestRestrictedBearerRealSQLiteRevokeSurvivesRestart(t *testing.T){
+ ctx:=context.Background();path:=filepath.Join(t.TempDir(),"token.db");db:=newDB(t,path,true);defer db.Close()
+ resolver:=func(_ context.Context,_,id string)([]string,error){return []string{id},nil}
+ identity,_:=auth.NewIdentityServiceWithResources(identityStore(t,db),resolver,nil)
+ setup,err:=identity.PrepareSetup(ctx);if err!=nil{t.Fatal(err)}
+ if err=identity.Bootstrap(ctx,setup,"admin","synthetic-token-password");err!=nil{t.Fatal(err)}
+ session,err:=identity.Login(ctx,"admin","synthetic-token-password","127.0.0.1");if err!=nil{t.Fatal(err)}
+ _,err=identity.CreateResourceGrant(ctx,session.Secret,session.CSRF,auth.GrantRequest{PrincipalID:session.Identity.SubjectID,ResourceType:"node",ResourceID:"node-a",Permissions:[]string{"nodes.read"}});if err!=nil{t.Fatal(err)}
+ token,err:=identity.IssueRestrictedToken(ctx,session.Secret,session.CSRF,auth.RestrictedTokenInput{Name:"Synthetic",Purpose:"script-read",Actions:[]string{"nodes.read"},NodeIDs:[]string{"node-a"},TTLSeconds:3600});if err!=nil{t.Fatal(err)}
+ data,_,err:=statements(db).Read(ctx,"SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1");if err!=nil||bytes.Contains(data,[]byte(token.Secret)){t.Fatal("bearer plaintext at rest",err)}
+ if _,err=identity.AuthorizeRestrictedToken(ctx,token.Secret,"nodes.read",[]string{"node-a"});err!=nil{t.Fatal(err)}
+ _=db.Close();db=newDB(t,path,false);defer db.Close()
+ identity,_=auth.NewIdentityServiceWithResources(identityStore(t,db),resolver,nil)
+ if _,err=identity.AuthorizeRestrictedToken(ctx,token.Secret,"nodes.read",[]string{"node-a"});err!=nil{t.Fatal("persisted token unusable",err)}
+ if err=identity.RevokeRestrictedToken(ctx,session.Secret,session.CSRF,token.Metadata.ID);err!=nil{t.Fatal(err)}
+ _=db.Close();db=newDB(t,path,false);defer db.Close()
+ identity,_=auth.NewIdentityServiceWithResources(identityStore(t,db),resolver,nil)
+ if _,err=identity.AuthorizeRestrictedToken(ctx,token.Secret,"nodes.read",[]string{"node-a"});err!=auth.ErrCredential{t.Fatal("restart revived token",err)}
+}

@@ -100,6 +100,7 @@ type identityState struct {
 	CredentialChanges map[string]credentialChange
 	CredentialKeyUses map[string]uint64
 	CredentialUses    map[string]credentialUse
+	Tokens            map[string]restrictedToken
 	requestID         string
 	requestSource     string
 }
@@ -159,6 +160,17 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	}
 	if s.CredentialUses == nil {
 		s.CredentialUses = map[string]credentialUse{}
+	}
+	if s.Tokens == nil {
+		s.Tokens = map[string]restrictedToken{}
+	}
+	if len(s.Tokens) > 10000 {
+		return nil, ErrIdentityUnavailable
+	}
+	for digest, token := range s.Tokens {
+		if digest != token.Digest || !validSecret(digest) || !validSecret(token.ID) || s.Users[token.SubjectID].ID == "" || token.Epoch == 0 || !validTokenCaps(token.Actions, token.NodeIDs) || token.CreatedAt.IsZero() || !token.ExpiresAt.After(token.CreatedAt) || token.ExpiresAt.Sub(token.CreatedAt) > time.Hour {
+			return nil, ErrIdentityUnavailable
+		}
 	}
 	if len(s.Credentials) > 5000 || len(s.CredentialChanges) > 1000 || len(s.CredentialKeyUses) > 64 || len(s.CredentialUses) > 10000 {
 		return nil, ErrIdentityUnavailable
