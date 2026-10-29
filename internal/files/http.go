@@ -118,6 +118,10 @@ func (api *httpAPI) create(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	if body.DryRun {
+		writeFixed(w, http.StatusBadRequest, "dry_run_unsupported", "dry run is available only through preflight")
+		return
+	}
 	transfer, err := api.service.CreateTransfer(r.Context(), CreateTransferInput{
 		SubjectID: principal.SubjectID, RequestID: principal.RequestID,
 		SourceNodeID: body.SourceNodeID, DestinationNodeID: body.DestinationNodeID,

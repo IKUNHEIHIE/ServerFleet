@@ -112,6 +112,10 @@ func (api *httpAPI) create(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &body) {
 		return
 	}
+	if err := validateHTTPInput(body); err != nil {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "request is invalid")
+		return
+	}
 	input := inputFromDTO(body)
 	input.ID = newGroupID()
 	record, err := api.service.Create(r.Context(), principal.SubjectID, principal.RequestID, input)
@@ -142,6 +146,10 @@ func (api *httpAPI) update(w http.ResponseWriter, r *http.Request) {
 	}
 	var body inputDTO
 	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if err := validateHTTPInput(body); err != nil {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "request is invalid")
 		return
 	}
 	input := inputFromDTO(body)
@@ -247,6 +255,23 @@ func (api *httpAPI) principal(w http.ResponseWriter, r *http.Request) (Principal
 		return Principal{}, false
 	}
 	return principal, true
+}
+
+func validateHTTPInput(body inputDTO) error {
+	if body.Service.Port < 1 || body.Service.Port > 65535 {
+		return ErrInvalid
+	}
+	switch body.Service.Protocol {
+	case "http", "https", "tcp", "udp":
+	default:
+		return ErrInvalid
+	}
+	switch body.LoadBalancing.Strategy {
+	case "round_robin", "least_connections", "none":
+	default:
+		return ErrInvalid
+	}
+	return nil
 }
 
 func inputFromDTO(body inputDTO) Input {

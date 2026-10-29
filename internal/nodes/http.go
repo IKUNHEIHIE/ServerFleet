@@ -316,7 +316,7 @@ func writeFixed(w http.ResponseWriter, status int, code, message string) {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, auth.ErrDenied):
+	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrInvalidCheck), errors.Is(err, auth.ErrPolicyUnavailable):
 		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
 	case errors.Is(err, ErrGroupNotFound), errors.Is(err, ErrNodeNotFound):
 		writeFixed(w, http.StatusNotFound, "not_found", "resource was not found")
