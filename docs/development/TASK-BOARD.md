@@ -1,10 +1,10 @@
 # 任务登记板
 
-更新：2026-10-29。TASK-01B审查接收；W05因首提交旧数据恢复/来源标识合并两个P2退回，尚未进入main。DeepSeek后续TASK-01C已分配，Gemini原分支W05-R1返修；Codex继续AUTH-01B原任务/目录/1f8f8cb基线，本轮未检查其未提交内容。G2-R02A仅接收候选工件，D01–D07及P1-C10仍OPEN，G2未冻结。总控不自动启动或代发其他会话消息，真实节点/生产操作未授权。
+更新：2026-10-29。AUTH-01B独立审查接收，仅为离线读取预检/不可变范围，未接旧Visible或真实入口；Codex下一项N03-A预检先行节点读取组合已分配。DeepSeek继续TASK-01C，Gemini原分支W05-R1，两个P2仍OPEN，W05未合入；本轮未检查两位未提交内容。G2-R02A仅接收候选工件，D01–D07及P1-C10仍OPEN，G2未冻结。总控不自动启动或代发其他会话消息，真实节点/生产操作未授权。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
-| AUTH01B-REVIEW | 审查中，交接后停止 | codex-review-01 | integration/auth01b-review / `.worktrees/integration--auth01b-review` | 精确审查AUTH-01B/隔离探针、合入通过项、证据/任务板/README及Codex下一步任务/目录；不干预TASK-01C/W05-R1 | 项目负责人验收；起始a652696 |
+| AUTH01B-REVIEW | 独立审查/组合/安全检查通过，交接后停止 | codex-review-01 | integration/auth01b-review / `.worktrees/integration--auth01b-review` | 精确审查AUTH-01B/隔离探针、合入通过项、证据/任务板/README及Codex下一步任务/目录；不干预TASK-01C/W05-R1 | 项目负责人验收；起始a652696 |
 | FOLLOWUP01-REVIEW | 审查完成：接收TASK-01B、W05退回；组合/安全检查通过，交接后停止 | codex-review-01 | integration/followup01-review / `.worktrees/integration--followup01-review` | 精确审查/隔离探针、合入通过项、证据/任务板/README及两位后续任务/目录；不干预AUTH-01B | 项目负责人验收；起始1f8f8cb |
 | M0-P1 | 已完成 | codex-p1-local | main / 主目录 | 原 P1 范围 | 交付 15814c6 |
 | G2-R01 | 审查通过，仅接收候选/评审工件；不批准运行时提案或冻结 | codex-01 | contract/g2-review-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\contract--g2-review-cx01` | 原三项授权目录 | 总控；被审查提交 8821555 |
@@ -30,9 +30,10 @@
 | TASK-01B | 审查通过，接收默认分批与当前批纯判定；完成停止 | deepseek-01 | feature/task-batch-rules-ds01 / `.worktrees/feature--task-batch-rules-ds01` | 原internal/tasks范围，ports/快照/等待规则未改 | 总控任务/安全审查；e23a4c5，起始adce532 |
 | W05 / W05-R1 | 原交付退回，W05-R01/R02两个P2待修；返修已分配，待人工派发 | gemini-01 | feature/web-node-loader-gm01 / `.worktrees/feature--web-node-loader-gm01` | 原features/nodes加载容器最小修复/测试/说明；不接App/真实API | 总控UI/数据隔离审查；原0ebe812，原基线adce532，追加返修 |
 | G2-R02A-REVIEW | 独立复审/组合检查通过；D08技术协调完成，交接后停止 | codex-review-01 | integration/batch06-contract-review / `.worktrees/integration--batch06-contract-review` | 审查/合入候选、check.mjs接线、两处Web来源注释/固定生成器重算provenance、审查/任务板/README/P1-C10及Codex后续目录 | 项目负责人验收；起始adce532 |
-| AUTH-01B | 已分配，本轮未收到交付，保持原任务 | codex-01 | feature/auth-read-preflight-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--auth-read-preflight-cx01` | internal/auth新增离线读取预检/不可变范围/测试/说明；不改现有auth文件、端口或其他模块 | 总控授权/安全审查；1f8f8cb |
+| AUTH-01B | 审查通过，接收离线预检/不可变范围；完成停止 | codex-01 | feature/auth-read-preflight-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--auth-read-preflight-cx01` | 原internal/auth新增文件范围，现有auth/端口/其他模块未改 | 总控授权/安全审查；14b9eac，起始1f8f8cb |
 | TASK-01C | 已分配，待人工派发，尚未启动 | deepseek-01 | feature/task-batch-progress-ds01 / `.worktrees/feature--task-batch-progress-ds01` | internal/tasks新增不可变顺序进度纯值/测试/独立说明；不改现有规则/端口或调度实现 | 总控任务/安全审查；本次FOLLOWUP01审查交接后的main |
+| N03-A | 已分配，待人工派发，尚未启动 | codex-01 | feature/nodes-read-usecase-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--nodes-read-usecase-cx01` | internal/nodes新增预检先行读取用例/局部函数接缝/测试/说明；不改现有文件/端口或真实接线 | 总控授权/节点安全审查；本次AUTH01B复审交接后的main |
 
-原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。TASK-01B旧目录停止，DeepSeek转新TASK-01C目录；Gemini在原W05目录追加返修，不要求同步main；Codex继续原AUTH-01B目录。本轮未改作者生产源码；忽略目录的总控探针及固定工具安装如实归档。
+原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。AUTH-01B旧目录停止，Codex转新N03-A目录；DeepSeek保持TASK-01C目录，Gemini在原W05目录追加返修，不要求同步main。本轮未改作者生产源码；总控探针只写独立忽略目录。
 
-DeepSeek/Gemini读`PARALLEL-FOLLOWUP-02.md`及`reviews/FOLLOWUP-01-REVIEW.md`；Codex继续原`CODEX-AUTH-01B-WORK-PACKAGE.md`。读取预检不能自行关闭D07或启用真实入口；N02/W04问题已关闭，W05两项仍OPEN，身份/策略存储/HTTP仍未接入。GitHub远程/真实PR/线上CI未配置或运行，没有自动启动开发会话。
+Codex读`CODEX-N03A-WORK-PACKAGE.md`及`reviews/AUTH-01B-REVIEW.md`；DeepSeek/Gemini仍读`PARALLEL-FOLLOWUP-02.md`及`reviews/FOLLOWUP-01-REVIEW.md`。读取预检与离线组合不能自行关闭D07或启用真实入口；N02/W04问题已关闭，W05两项仍OPEN，身份/策略存储/HTTP仍未接入。GitHub远程/真实PR/线上CI未配置或运行，没有自动启动开发会话。

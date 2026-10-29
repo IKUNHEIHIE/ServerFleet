@@ -1,0 +1,28 @@
+{
+  "task":"AUTH01B-REVIEW",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"a652696671e718643ab8d80dba58f13e691a521c",
+  "author":{"session":"codex-01","base":"1f8f8cbcb9655484d391a287865b38eee9c6885b","head":"14b9eacdaa6fb0ea6c0921e1f2fdf8bc912e82fd","decision":"ACCEPT_OFFLINE_RULES","newFiles":3,"existingSourceFilesChanged":0},
+  "testedCodeHead":"35084a8128a91c01b75886a8550e5120e90752d2",
+  "blockingFindings":[],
+  "checks":{
+    "authModule":{"status":"PASS","packageCoveragePercent":98.6,"prepareCoveragePercent":100,"checkNodeCoveragePercent":100},
+    "independentProbe":{"status":"PASS","assertions":36,"source":"evidence/auth01b-review-probe.go.txt"},
+    "npmCi":"PASS",
+    "toolsInstall":"PASS",
+    "combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":189,"goSubtestsPassed":677,"goFailures":0,"authTopLevelPassed":28,"authSubtestsPassed":233,"webPassed":151},
+    "combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},
+    "g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "originalFilesVerified":69,
+    "byteExactOriginalCandidatesVerified":3
+  },
+  "otherTasks":{"deepseek":"TASK-01C unchanged","gemini":"W05-R1 unchanged","w05Merged":false,"uncommittedFilesInspected":false},
+  "nextTask":{"id":"N03-A","session":"codex-01","branch":"feature/nodes-read-usecase-cx01","worktree":"D:/admin/desktop/codex/myproject/ks.worktrees/feature--nodes-read-usecase-cx01","status":"ASSIGNED_FOR_MANUAL_DISPATCH"},
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "notVerified":["runtime authentication and current policy store","enforced request lifetime for scope reuse","policy-inventory-output atomicity","HTTP and cache behavior","WSS/mTLS","task approval/dispatch/execution","Linux race","GitHub CI","1C1G performance"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

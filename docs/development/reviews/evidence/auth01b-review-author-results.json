@@ -1,0 +1,83 @@
+{
+  "all": {
+    "top": 176,
+    "sub": 648,
+    "fail": 0
+  },
+  "auth": {
+    "top": 28,
+    "sub": 233,
+    "fail": 0
+  },
+  "newScopeTests": {
+    "top": 14,
+    "sub": 48,
+    "fail": 0
+  },
+  "checks": {
+    "go": {
+      "executedAt": "2026-10-29T09:00:47.081Z",
+      "results": [
+        {
+          "name": "go",
+          "status": "PASS"
+        }
+      ]
+    },
+    "policy": {
+      "executedAt": "2026-10-29T09:00:26.360Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-10-29T09:00:33.734Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "contracts": {
+      "executedAt": "2026-10-29T09:02:50.999Z",
+      "results": [
+        {
+          "name": "contracts",
+          "status": "PASS"
+        }
+      ]
+    }
+  },
+  "r03": {
+    "task": "G2-R02A",
+    "executedAt": "2026-10-29T09:02:35.394Z",
+    "node": "v24.22.1",
+    "candidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "runtimeHTTP": "UNTESTED",
+    "runtimeAuthentication": "UNTESTED",
+    "results": [
+      {
+        "name": "structure",
+        "status": "PASS",
+        "paths": 2,
+        "operations": 2
+      },
+      {
+        "name": "candidate-lint-and-examples",
+        "status": "PASS"
+      },
+      {
+        "name": "source-matrix-and-real-negative-contract-checks",
+        "status": "PASS"
+      },
+      {
+        "name": "actual-offline-read-boundaries",
+        "status": "PASS"
+      }
+    ]
+  }
+}
