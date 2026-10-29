@@ -1,0 +1,70 @@
+package main
+
+import (
+ "encoding/json"
+ "errors"
+ "fmt"
+ "os"
+ "slices"
+
+ "serverfleet.local/serverfleet/internal/tasks"
+)
+
+func main() {
+ checks := 0
+ assert := func(ok bool, label string) { if !ok { panic(label) }; checks++ }
+ success := func(ids []string) []tasks.NodeResult { out:=make([]tasks.NodeResult,len(ids)); for i,id:=range ids { out[i]=tasks.NodeResult{NodeID:id,Code:tasks.NodeResultSucceeded} };return out }
+ for _,class:=range []tasks.OperationClass{tasks.OperationClassStandard,tasks.OperationClassRoot,tasks.OperationClassModifying} {
+  ids:=make([]string,13)
+  for i:=range ids { ids[i]=fmt.Sprintf("node-%02d",13-i) }
+  snapshot,_:=tasks.NewTargetSnapshot(ids)
+  plan,_:=tasks.NewDefaultBatchPlan(snapshot,class)
+  original,err:=tasks.StartBatchProgress(plan)
+  assert(err==nil && original.Valid() && original.State()==tasks.BatchProgressWaiting && original.CurrentBatchIndex()==0,"starts at first batch")
+  batches:=plan.Batches()
+  exposed:=original.CurrentBatchTargets(); exposed[0]="changed"
+  assert(slices.Equal(original.CurrentBatchTargets(),batches[0]),"targets are copies")
+  current:=original
+  for i,batch:=range batches {
+   assert(current.CurrentBatchIndex()==i && slices.Equal(current.CurrentBatchTargets(),batch),"current ordered batch")
+   old:=current
+   result:=success(batch)
+   for _,code:=range []tasks.NodeResultCode{tasks.NodeResultRunning,tasks.NodeResultUnknown} {
+    result[0].Code=code
+    next,outcome,err:=current.ApplyBatch(result)
+    assert(err==nil && outcome==tasks.BatchOutcomeIncomplete && next.CurrentBatchIndex()==i && !next.Terminal(),"in-flight never advances")
+   }
+   result[0].Code=tasks.NodeResultSucceeded
+   next,outcome,err:=current.ApplyBatch(result[:len(result)-1])
+   assert(err==nil && outcome==tasks.BatchOutcomeIncomplete && next.CurrentBatchIndex()==i,"missing results never advance")
+   for _,code:=range []tasks.NodeResultCode{tasks.NodeResultFailed,tasks.NodeResultCanceled,tasks.NodeResultTimedOut} {
+    failed:=success(batch); failed[0].Code=code
+    blocked,got,err:=current.ApplyBatch(failed)
+    assert(err==nil && got==tasks.BatchOutcomeBlocked && blocked.Terminal() && blocked.CurrentBatchIndex()==i,"failure terminal")
+    again,got,err:=blocked.ApplyBatch(success(batch))
+    assert(errors.Is(err,tasks.ErrProgressTerminal) && got=="" && again.State()==tasks.BatchProgressBlocked,"terminal cannot reopen")
+   }
+   foreign:=[]tasks.NodeResult{{NodeID:"foreign",Code:tasks.NodeResultSucceeded}}
+   denied,got,err:=current.ApplyBatch(foreign)
+   assert(errors.Is(err,tasks.ErrOutOfBatchResult) && got=="" && denied.CurrentBatchIndex()==i,"foreign batch evidence refused")
+   next,outcome,err=current.ApplyBatch(success(batch))
+   if i+1<len(batches) {
+    assert(err==nil && outcome==tasks.BatchOutcomeAdvance && next.CurrentBatchIndex()==i+1 && !next.Terminal(),"advances exactly one batch")
+    stale,got,err:=next.ApplyBatch(success(batch))
+    assert(errors.Is(err,tasks.ErrOutOfBatchResult) && got=="" && stale.CurrentBatchIndex()==i+1,"stale prior batch results refused")
+   } else {
+    assert(err==nil && outcome==tasks.BatchOutcomeComplete && next.Terminal(),"last batch completes")
+    _,got,err:=next.ApplyBatch(success(batch))
+    assert(errors.Is(err,tasks.ErrProgressTerminal) && got=="","complete cannot reopen")
+   }
+   assert(old.State()==tasks.BatchProgressWaiting && old.CurrentBatchIndex()==i,"old progress remains immutable")
+   current=next
+  }
+  assert(original.CurrentBatchIndex()==0 && !original.Terminal(),"pure old copy is not a one-time ticket")
+ }
+ _,err:=tasks.StartBatchProgress(tasks.BatchPlan{})
+ assert(errors.Is(err,tasks.ErrInvalidBatchPlan),"zero plan refused")
+ _,outcome,err:=(tasks.BatchProgress{}).ApplyBatch(nil)
+ assert(errors.Is(err,tasks.ErrInvalidProgress) && outcome=="","zero progress refused")
+ if err:=json.NewEncoder(os.Stdout).Encode(map[string]any{"status":"PASS","assertions":checks,"scope":"actual immutable progress API; no dispatch, persistence or anti-replay guarantee"});err!=nil{panic(err)}
+}

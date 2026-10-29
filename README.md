@@ -20,6 +20,8 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 AUTH-01B离线读取预检/不可变范围已通过独立审查，见 [授权预检复审](docs/development/reviews/AUTH-01B-REVIEW.md)。Codex后续为 [N03-A任务单](docs/development/CODEX-N03A-WORK-PACKAGE.md)：预检先行的离线节点读取组合；DeepSeek/Gemini维持原任务。G2未冻结，尚未接真实节点/API/执行，App仍是开发空壳；候选接收不批准认证/字段迁移或运行时profile，D07不能因离线预检通过而关闭。
 
+TASK-01C顺序批次进度已接收，实际交付为e169afa；W05-R1关闭标识trim问题，但同key无效load恢复仍会首提交显示旧数据，继续返修且未合入。见 [本轮复审](docs/development/reviews/FOLLOWUP-02-REVIEW.md)。[后续任务](docs/development/PARALLEL-FOLLOWUP-03.md)安排DeepSeek整理首条只读闭环的可批准方案/验收包，Gemini补剩余隔离问题；Codex继续原N03-A。方案仅为待批建议，G2及D01–D07/P1-C10仍OPEN。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

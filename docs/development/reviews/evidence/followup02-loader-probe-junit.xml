@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="5" failures="1" errors="0" time="0.2474577">
+    <testsuite name="../../reports/_review/followup01/source-return.test.tsx" timestamp="2026-10-29T09:36:00.286Z" hostname="DESKTOP-6A2IJTG" tests="2" failures="0" errors="0" skipped="0" time="0.0549488">
+        <testcase classname="../../reports/_review/followup01/source-return.test.tsx" name="restoring the same source after null must hide old ready data in the first commit" time="0.0412938">
+        </testcase>
+        <testcase classname="../../reports/_review/followup01/source-return.test.tsx" name="changing the exact scope key must not collapse padded identities" time="0.0127567">
+        </testcase>
+    </testsuite>
+    <testsuite name="../../reports/_review/followup02/load-return.test.tsx" timestamp="2026-10-29T09:36:00.287Z" hostname="DESKTOP-6A2IJTG" tests="3" failures="1" errors="0" skipped="0" time="0.1925089">
+        <testcase classname="../../reports/_review/followup02/load-return.test.tsx" name="restoring a same-key source after invalid load must hide old rows, count and detail in first commit" time="0.1691857">
+            <failure message="expected &apos;搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选…&apos; not to contain &apos;aws-tokyo-01&apos;" type="AssertionError">
+AssertionError: expected &apos;搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选…&apos; not to contain &apos;aws-tokyo-01&apos;
+
+Expected: &quot;aws-tokyo-01&quot;
+Received: &quot;搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-29 02:41 UTC2026-10-29 02:41 UTCazure-us-01node-offline-01离线Ubuntu 22.04v0.0.9—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）2026-10-26 11:05 UTCgcp-osaka-01node-suspended-01已暂停Debian 12v0.1.0—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）2026-10-28 19:12 UTClegacy-revoked-01node-revoked-01已吊销Debian 11—未知—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）—未知node-unknown-07未知—未知—未知—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）—未知仅新鲜样本显示百分比；缺失、非法、未来时间或超出 0–100 范围的读数显示“无有效数据”，陈旧读数带“陈旧”与采样时间（UTC）；均不按 0 计。节点详情aws-tokyo-01node-online-01关闭详情状态在线平台Ubuntu 24.04Agent 版本v0.1.0最近在线2026-10-29 02:59 UTCCPU 使用率18%内存使用率46%只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。&quot;
+
+ ❯ ../../reports/_review/followup02/load-return.test.tsx:37:26
+            </failure>
+        </testcase>
+        <testcase classname="../../reports/_review/followup02/load-return.test.tsx" name="same-key invalid load aborts old pending request and ignores late success" time="0.0096682">
+        </testcase>
+        <testcase classname="../../reports/_review/followup02/load-return.test.tsx" name="same-key invalid load aborts old pending request and ignores late failure" time="0.0127855">
+        </testcase>
+    </testsuite>
+</testsuites>
