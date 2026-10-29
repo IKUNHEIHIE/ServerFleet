@@ -49,3 +49,30 @@
 
 - 未改 apps/controller、apps/agent、auth、transport、Web、API/Proto/gen、依赖图、CI、锁文件。
 - 未新建 SSH 或第二执行队列；未接真实外部服务。
+
+## 5. 对 Codex CX-01（2fc8dab，未接收）S02/S03 的具体适配差异
+
+以下为讨论/测试输入，不是已冻结接口；未获总控接收前不接主线。
+
+### S02 storage：不提供通用 `RecordTx/View/Update` KV
+
+- 现状：`storage.Open` + `DB.InTx(ctx, func(ctx, Tx) error)`；`Tx` 提供 `Exec/Query/QueryRow`、`Result.RowsAffected`。没有 namespace/key/value 记录 API。
+- 身份事务可直接在一个 `InTx` 内完成：条件删除/更新 setup 行并检查 `RowsAffected==1` → 插入管理员 → 写入 initialized；任一失败或 ctx 取消自动回滚，回调只执行一次，`InTx` 返回 nil 才可交付秘密。
+- 串行化：进程内写者信号量 + `BEGIN IMMEDIATE`；跨进程用 `busy_timeout`。读用连接池并在 WAL 下并发。
+- 隔离理由：通用 KV 无法在 storage 层执行“auth namespace 仅组合根绑定”的安全断言；auth 表/迁移应由 CX 定义，storage 只提供事务机制，符合既定边界。
+- 差异待定：`me` 若需要多条查询的一致快照，可改用一条 JOIN，或由总控批准新增 `DB.InView`（`BEGIN DEFERRED` 只读事务）；当前未实现。
+- 授权世代：`storage.Generations.Advance(ctx, scope, expected)` 是持久 CAS（`expected=0` 仅首次创建），可直接承载 credentialEpoch/sessionEpoch；不要同时维护 auth 行内 epoch 与 Generations 两份真相。
+- 错误分类：`IsNotFound/IsUniqueViolation/IsConstraintViolation/IsBusy/IsReadOnly/IsCorrupt`；不要解析错误文本。
+- 并发初始化测试：同一 setup 行只允许一个 `RowsAffected=1`；取消/提交失败回滚；重启后 initialized/撤销仍生效。用 `InTx` 即可表达，无需新增 `records.go`。
+
+### S03 tasks：字段已落到 `SubmitRequest`，PlanDigest 不接受客户端输入
+
+- 现有 `SubmitRequest` 已含：`CanonicalParams []byte`、`IdempotencyKey`、`ScopeRevision uint64`、`Source audit.Source`、`PluginID`、`ApprovalID`；目标快照仍由 `NewTargetSnapshot` 冻结。
+- `PlanDigestSHA256` 由服务端计算（action + class + revision + 规范参数 + 快照顺序），客户端提交的摘要不参与信任决策；HTTP 审批要求摘要与当前计划完全一致。
+- 外部审批原子消费：`ApprovalConsumer.ConsumeApproval(ctx, tx, approvalID, subjectID, planDigest, nodeIDs)` 收到的是 **DS 的同一事务**，必须使用该 tx；返回审批人后 DS 在同一事务写入 revision/摘要绑定的 `task_approvals` 行并审计。消费者/审计失败 → 任务与消费一起回滚。派发前仍复检摘要、审批人≠提交人、TTL（默认 30m，可配）。
+- 参数：接受 map 或规范 JSON；服务端重新规范化，拒绝密码/token/私钥类键，≤32 键、≤32KB。`Source=plugin` 必须带 `PluginID`。
+- 未完成的适配：`ScopeRevision` 已持久化并随任务可读，但 AI 授权范围撤销的执行期复检仍需 CX 提供授权范围读取端口；当前不会因 scopeRevision 变化自动终止已派发任务。
+- HTTP 注册签名为 `Register(mux, service, authenticator, groupResolver, classResolver, readGate)`；`ReadGate` 每次读取与每次 SSE 输出复检，nil 即 403。CX 必须实现该端口，DS 不解析 Cookie/CSRF。
+- 兼容性：旧 `internal/tasks/ports.go` 未改；新字段只加在 Service 层请求，旧离线测试继续通过。没有第二队列或旁路。
+- 迁移：`ds/0030_tasks` 保持原 checksum；新增 `ds/0031_tasks_cx_fields` 增补 scope_revision/plugin_id/source/approval_ref。若总控已把 0030 应用到持久库，直接顺序应用 0031，不修改 0030。
+
