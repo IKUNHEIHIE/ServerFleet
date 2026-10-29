@@ -23,9 +23,9 @@
 | dns | `NewService(Options{DB,Repo,Audit,Authorizer,Provider})` | `dns.RegisterHTTP` | 账号/Zone/记录；`Provider` nil 即 provider 操作 503 |
 | certificates | `NewService(Options{DB,Repo,Audit,Authorizer,Issuer,Tasks,GroupRevisions,Now})` | 未注册（见下） | 内部分发/续签/吊销/轮换；私钥仅 KeyRef |
 | monitoring | 见 `internal/monitoring` | 未注册 | SSRF 校验、状态迁移、维护窗、告警端口 |
-| notifications | 见 `internal/notifications` | 未注册 | 去重、重试上限、QQ→SMTP 备用；SecretRef |
+| notifications | `NewService(Options{DB,Repo,Audit,Authorizer,SMTPSender,QQSender,Now})` | `notifications.RegisterHTTP(mux, svc, auth, ReadGate)` | 渠道/凭据引用/测试/设置/投递；响应不含 secretRef；去重/备用/重试上限 |
 | quota | 见 `internal/quota` | 未注册 | 缺失≠0、超额仅告警、不自动断网 |
-| gateway | 见 `internal/gateway` | 未注册 | 路由/准入/探针/统一任务 |
+| gateway | `NewService(Options{DB,Repo,Nodes,ServiceGroups,Checker,Tasks,Audit,Authorizer,Now})` | `gateway.RegisterHTTP`（部分） | 网关列表/详情/启用、provision、provision 查询、路由 CRUD；路由创建需 `gatewayId` 扩展字段；`/checks` 未注册，避免用推断值冒充 serviceRunning |
 | publishing | 见 `internal/publishing` | 未注册 | dns→cert→gateway 分阶段/重试/回滚 |
 
 ## 明确差距（不得当作已验收）
