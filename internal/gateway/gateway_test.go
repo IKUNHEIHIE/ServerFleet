@@ -130,6 +130,9 @@ func TestCreateGatewayPersistsAndDerivesEligibility(t *testing.T) {
 	if _, err := f.service.ListGateways(ctx, "admin"); !errors.Is(err, auth.ErrDenied) {
 		t.Fatalf("denied list err = %v", err)
 	}
+	if got := f.auditCount(t, gateway.ActionRead, "denied"); got != 2 {
+		t.Fatalf("read denial audit = %d", got)
+	}
 }
 
 func TestUpdateGatewayRevisionConflict(t *testing.T) {

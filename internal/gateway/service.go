@@ -768,11 +768,15 @@ func (s *Service) authorize(ctx context.Context, subjectID, action, requestID st
 	if err == nil {
 		return nil
 	}
-	// Read paths carry no request id; only mutations have a durable denial event.
-	if isPureDenial(err) && requestID != "" {
+	if isPureDenial(err) {
+		auditRequestID := requestID
+		if auditRequestID == "" {
+			// Read paths have no transport request id; keep the denial durable.
+			auditRequestID = "internal-read"
+		}
 		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 		defer cancel()
-		if auditErr := s.audit.Append(auditCtx, s.event(subjectID, action, "denied", requestID, nodeIDs, reason)); auditErr != nil {
+		if auditErr := s.audit.Append(auditCtx, s.event(subjectID, action, "denied", auditRequestID, nodeIDs, reason)); auditErr != nil {
 			return fmt.Errorf("gateway: authorization denied (denial audit failed: %w)", auditErr)
 		}
 	}
