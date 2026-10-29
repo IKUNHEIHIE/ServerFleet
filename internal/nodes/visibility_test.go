@@ -52,13 +52,35 @@ type sequenceAuthorizer struct {
 }
 
 func (s *sequenceAuthorizer) Authorize(context.Context, auth.Check) error {
-	if s.calls >= len(s.results) {
+	s.calls++
+	if s.calls > len(s.results) {
 		return nil
 	}
-	err := s.results[s.calls]
-	s.calls++
-	return err
+	return s.results[s.calls-1]
 }
+
+type singleUnwrapError struct{ err error }
+
+func (e singleUnwrapError) Error() string { return "single unwrap error" }
+func (e singleUnwrapError) Unwrap() error { return e.err }
+
+type multiUnwrapError struct{ errs []error }
+
+func (e multiUnwrapError) Error() string   { return "multi unwrap error" }
+func (e multiUnwrapError) Unwrap() []error { return e.errs }
+
+type dualCauseError struct{ fatal error }
+
+func (e dualCauseError) Error() string { return "dual cause error" }
+func (e dualCauseError) Unwrap() error { return auth.ErrDenied }
+func (e dualCauseError) Is(target error) bool {
+	return target == e.fatal
+}
+
+type isOnlyDeniedError struct{}
+
+func (isOnlyDeniedError) Error() string        { return "is-only denial error" }
+func (isOnlyDeniedError) Is(target error) bool { return target == auth.ErrDenied }
 
 func policyFor(t *testing.T, subject string, granted ...string) *auth.NodePolicy {
 	t.Helper()
@@ -73,6 +95,40 @@ func policyFor(t *testing.T, subject string, granted ...string) *auth.NodePolicy
 	return &auth.NodePolicy{
 		KnownNodes: known,
 		ReadGrants: map[string]map[string]struct{}{subject: grants},
+	}
+}
+
+func fatalAuthorizationErrors() []struct {
+	name string
+	err  error
+} {
+	return []struct {
+		name string
+		err  error
+	}{
+		{name: "policy unavailable", err: auth.ErrPolicyUnavailable},
+		{name: "invalid check", err: auth.ErrInvalidCheck},
+		{name: "context canceled", err: context.Canceled},
+		{name: "context deadline", err: context.DeadlineExceeded},
+		{name: "unknown error", err: errors.New("authorization backend exploded")},
+	}
+}
+
+func denialCombinationForms(fatal error) []struct {
+	name string
+	err  error
+} {
+	return []struct {
+		name string
+		err  error
+	}{
+		{name: "denied first", err: errors.Join(auth.ErrDenied, fatal)},
+		{name: "fatal first", err: errors.Join(fatal, auth.ErrDenied)},
+		{name: "outer wrapped", err: fmt.Errorf("outer: %w", errors.Join(auth.ErrDenied, fatal))},
+		{
+			name: "nested join",
+			err:  errors.Join(errors.Join(auth.ErrDenied, fatal), fmt.Errorf("nested denial: %w", auth.ErrDenied)),
+		},
 	}
 }
 
@@ -167,24 +223,28 @@ func TestVisibleAbortsOnFirstLastAndMidFailures(t *testing.T) {
 		nodeCount int
 		results   []error
 		want      error
+		wantCalls int
 	}{
 		{
 			name:      "first node",
 			nodeCount: 1,
 			results:   []error{auth.ErrPolicyUnavailable},
 			want:      auth.ErrPolicyUnavailable,
+			wantCalls: 1,
 		},
 		{
 			name:      "last node after an allowed node",
 			nodeCount: 2,
 			results:   []error{nil, auth.ErrInvalidCheck},
 			want:      auth.ErrInvalidCheck,
+			wantCalls: 2,
 		},
 		{
 			name:      "middle after an allowed node",
 			nodeCount: 3,
 			results:   []error{nil, auth.ErrPolicyUnavailable, nil},
 			want:      auth.ErrPolicyUnavailable,
+			wantCalls: 2,
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -195,6 +255,249 @@ func TestVisibleAbortsOnFirstLastAndMidFailures(t *testing.T) {
 			}
 			if got != nil {
 				t.Fatalf("Visible returned partial list %v with error", ids(got))
+			}
+			if authorizer.calls != tc.wantCalls {
+				t.Fatalf("authorizer calls = %d, want %d (no calls after failure)", authorizer.calls, tc.wantCalls)
+			}
+		})
+	}
+}
+
+func TestVisibleStopsAuthorizationAfterFailureWithRemainingNodes(t *testing.T) {
+	authorizer := &sequenceAuthorizer{results: []error{nil, auth.ErrPolicyUnavailable}}
+	got, err := nodes.Visible(context.Background(), authorizer, "user-1", loadFixture(t))
+	if !errors.Is(err, auth.ErrPolicyUnavailable) {
+		t.Fatalf("error = %v, want ErrPolicyUnavailable", err)
+	}
+	if got != nil {
+		t.Fatalf("Visible returned partial list %v with error", ids(got))
+	}
+	if authorizer.calls != 2 {
+		t.Fatalf("authorizer calls = %d, want 2 with remaining nodes unvisited", authorizer.calls)
+	}
+}
+
+func TestVisibleAbortsOnCombinedDenialAndFatalErrors(t *testing.T) {
+	fixture := loadFixture(t)[:2]
+	for _, fatal := range fatalAuthorizationErrors() {
+		for _, form := range denialCombinationForms(fatal.err) {
+			t.Run(fatal.name+"/"+form.name, func(t *testing.T) {
+				authorizer := &sequenceAuthorizer{results: []error{nil, form.err}}
+				got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+				if err == nil {
+					t.Fatalf("expected an error, got partial list %v", ids(got))
+				}
+				if !errors.Is(err, fatal.err) {
+					t.Fatalf("error = %v, want %v in the chain", err, fatal.err)
+				}
+				if !errors.Is(err, auth.ErrDenied) {
+					t.Fatalf("error = %v, want the denial chain preserved", err)
+				}
+				if got != nil {
+					t.Fatalf("Visible returned partial list %v with error", ids(got))
+				}
+				if authorizer.calls != 2 {
+					t.Fatalf("authorizer calls = %d, want 2", authorizer.calls)
+				}
+			})
+		}
+	}
+}
+
+func TestVisibleAbortsOnCombinedDenialAtFirstCheck(t *testing.T) {
+	fixture := loadFixture(t)[:1]
+	for _, fatal := range fatalAuthorizationErrors() {
+		for _, form := range denialCombinationForms(fatal.err) {
+			t.Run(fatal.name+"/"+form.name, func(t *testing.T) {
+				authorizer := &sequenceAuthorizer{results: []error{form.err}}
+				got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+				if err == nil {
+					t.Fatalf("expected an error, got result %v", ids(got))
+				}
+				if !errors.Is(err, fatal.err) || !errors.Is(err, auth.ErrDenied) {
+					t.Fatalf("error = %v, want both the fatal cause and denial preserved", err)
+				}
+				if got != nil {
+					t.Fatalf("Visible returned partial list %v with error", ids(got))
+				}
+				if authorizer.calls != 1 {
+					t.Fatalf("authorizer calls = %d, want 1", authorizer.calls)
+				}
+			})
+		}
+	}
+}
+
+func TestVisibilityWrappersAbortOnCombinedDenialAndFatalErrors(t *testing.T) {
+	fixture := loadFixture(t)[:2]
+	for _, fatal := range fatalAuthorizationErrors() {
+		combined := errors.Join(auth.ErrDenied, fatal.err)
+		t.Run("VisibleFilter/"+fatal.name, func(t *testing.T) {
+			authorizer := &sequenceAuthorizer{results: []error{nil, combined}}
+			got, err := nodes.VisibleFilter(context.Background(), authorizer, "user-1", fixture, nodes.NodeQuery{})
+			if err == nil || !errors.Is(err, fatal.err) || !errors.Is(err, auth.ErrDenied) {
+				t.Fatalf("error = %v, want both the fatal cause and denial preserved", err)
+			}
+			if got != nil {
+				t.Fatalf("VisibleFilter returned partial list %v", ids(got))
+			}
+			if authorizer.calls != 2 {
+				t.Fatalf("authorizer calls = %d, want 2", authorizer.calls)
+			}
+		})
+		t.Run("VisibleClassify/"+fatal.name, func(t *testing.T) {
+			authorizer := &sequenceAuthorizer{results: []error{nil, combined}}
+			buckets, err := nodes.VisibleClassify(context.Background(), authorizer, "user-1", fixture, nodes.DimensionRegion)
+			if err == nil || !errors.Is(err, fatal.err) || !errors.Is(err, auth.ErrDenied) {
+				t.Fatalf("error = %v, want both the fatal cause and denial preserved", err)
+			}
+			if buckets != nil {
+				t.Fatalf("VisibleClassify returned partial buckets %+v", buckets)
+			}
+			if authorizer.calls != 2 {
+				t.Fatalf("authorizer calls = %d, want 2", authorizer.calls)
+			}
+		})
+	}
+}
+
+func TestVisibleFiltersPureDenialChains(t *testing.T) {
+	policyDenied := &auth.PolicyError{Kind: auth.Denied, Field: "targets"}
+	tenWrapped := error(auth.ErrDenied)
+	for i := 0; i < 10; i++ {
+		tenWrapped = fmt.Errorf("wrap %d: %w", i, tenWrapped)
+	}
+	forms := []struct {
+		name string
+		err  error
+	}{
+		{name: "exact", err: auth.ErrDenied},
+		{name: "single wrapped", err: fmt.Errorf("wrapped: %w", auth.ErrDenied)},
+		{name: "double wrapped", err: fmt.Errorf("outer: %w", fmt.Errorf("inner: %w", auth.ErrDenied))},
+		{name: "ten wrapped", err: tenWrapped},
+		{name: "policy error", err: policyDenied},
+		{name: "wrapped policy error", err: fmt.Errorf("outer: %w", policyDenied)},
+	}
+	fixture := loadFixture(t)[:4]
+	for _, form := range forms {
+		t.Run(form.name, func(t *testing.T) {
+			authorizer := &sequenceAuthorizer{results: []error{nil, form.err, nil, form.err}}
+			got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+			if err != nil {
+				t.Fatalf("pure denial returned error: %v", err)
+			}
+			if want := []string{"node-online-a", "node-offline-a"}; !slices.Equal(ids(got), want) {
+				t.Fatalf("Visible ids = %v, want %v", ids(got), want)
+			}
+			if authorizer.calls != 4 {
+				t.Fatalf("authorizer calls = %d, want 4", authorizer.calls)
+			}
+		})
+	}
+}
+
+func TestVisibleTreatsMultiBranchErrorsConservatively(t *testing.T) {
+	fixture := loadFixture(t)[:1]
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{
+			name: "join of denials",
+			err:  errors.Join(auth.ErrDenied, fmt.Errorf("also denied: %w", auth.ErrDenied)),
+		},
+		{
+			name: "multi unwrap with nil and denial",
+			err:  multiUnwrapError{errs: []error{nil, auth.ErrDenied}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			authorizer := &sequenceAuthorizer{results: []error{tc.err}}
+			got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+			if err == nil {
+				t.Fatalf("expected an error, got result %v", ids(got))
+			}
+			if got != nil {
+				t.Fatalf("Visible returned partial list %v with error", ids(got))
+			}
+		})
+	}
+}
+
+func TestVisibleRejectsUnknownOrOverlyDeepDenialShapes(t *testing.T) {
+	fixture := loadFixture(t)[:1]
+	deepDenial := error(auth.ErrDenied)
+	for i := 0; i < 100; i++ {
+		deepDenial = fmt.Errorf("wrap %d: %w", i, deepDenial)
+	}
+	for _, tc := range []struct {
+		name string
+		err  error
+	}{
+		{name: "nil single unwrap", err: singleUnwrapError{}},
+		{name: "empty multi unwrap", err: multiUnwrapError{errs: []error{nil, nil}}},
+		{name: "is-only denial without unwrap", err: isOnlyDeniedError{}},
+		{name: "over-deep denial chain", err: deepDenial},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			authorizer := &sequenceAuthorizer{results: []error{tc.err}}
+			got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+			if err == nil {
+				t.Fatalf("expected an error, got result %v", ids(got))
+			}
+			if got != nil {
+				t.Fatalf("Visible returned partial list %v with error", ids(got))
+			}
+		})
+	}
+}
+
+func TestVisibleDenialChainDepthBoundary(t *testing.T) {
+	buildChain := func(wraps int) error {
+		err := error(auth.ErrDenied)
+		for i := 0; i < wraps; i++ {
+			err = fmt.Errorf("wrap %d: %w", i, err)
+		}
+		return err
+	}
+	fixture := loadFixture(t)[:2]
+
+	authorizer := &sequenceAuthorizer{results: []error{nil, buildChain(64)}}
+	got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+	if err != nil {
+		t.Fatalf("64-level pure denial rejected: %v", err)
+	}
+	if want := []string{"node-online-a"}; !slices.Equal(ids(got), want) {
+		t.Fatalf("Visible ids = %v, want %v", ids(got), want)
+	}
+
+	authorizer = &sequenceAuthorizer{results: []error{nil, buildChain(65)}}
+	got, err = nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+	if err == nil {
+		t.Fatalf("65-level denial chain accepted with result %v", ids(got))
+	}
+	if got != nil {
+		t.Fatalf("Visible returned partial list %v with error", ids(got))
+	}
+}
+
+func TestVisibleTreatsFatalIsClassificationAsImpure(t *testing.T) {
+	fixture := loadFixture(t)[:2]
+	for _, fatal := range []error{auth.ErrInvalidCheck, auth.ErrPolicyUnavailable, context.Canceled, context.DeadlineExceeded} {
+		t.Run(fatal.Error(), func(t *testing.T) {
+			authorizer := &sequenceAuthorizer{results: []error{nil, dualCauseError{fatal: fatal}}}
+			got, err := nodes.Visible(context.Background(), authorizer, "user-1", fixture)
+			if !errors.Is(err, fatal) {
+				t.Fatalf("error = %v, want fatal classification %v", err, fatal)
+			}
+			if !errors.Is(err, auth.ErrDenied) {
+				t.Fatalf("error = %v, want the denial chain preserved", err)
+			}
+			if got != nil {
+				t.Fatalf("Visible returned partial list %v with error", ids(got))
+			}
+			if authorizer.calls != 2 {
+				t.Fatalf("authorizer calls = %d, want 2", authorizer.calls)
 			}
 		})
 	}
@@ -462,19 +765,25 @@ func TestVisibleWrappersPropagateFinalCheckCancellation(t *testing.T) {
 	fixture := loadFixture(t)[:1]
 	for _, tc := range []struct {
 		name string
-		call func(context.Context, auth.Authorizer) error
+		call func(context.Context, auth.Authorizer, *testing.T) error
 	}{
 		{
 			name: "VisibleFilter",
-			call: func(ctx context.Context, authorizer auth.Authorizer) error {
-				_, err := nodes.VisibleFilter(ctx, authorizer, "user-1", fixture, nodes.NodeQuery{})
+			call: func(ctx context.Context, authorizer auth.Authorizer, t *testing.T) error {
+				got, err := nodes.VisibleFilter(ctx, authorizer, "user-1", fixture, nodes.NodeQuery{})
+				if got != nil {
+					t.Fatalf("VisibleFilter returned partial list %v", ids(got))
+				}
 				return err
 			},
 		},
 		{
 			name: "VisibleClassify",
-			call: func(ctx context.Context, authorizer auth.Authorizer) error {
-				_, err := nodes.VisibleClassify(ctx, authorizer, "user-1", fixture, nodes.DimensionRegion)
+			call: func(ctx context.Context, authorizer auth.Authorizer, t *testing.T) error {
+				buckets, err := nodes.VisibleClassify(ctx, authorizer, "user-1", fixture, nodes.DimensionRegion)
+				if buckets != nil {
+					t.Fatalf("VisibleClassify returned partial buckets %+v", buckets)
+				}
 				return err
 			},
 		},
@@ -486,7 +795,7 @@ func TestVisibleWrappersPropagateFinalCheckCancellation(t *testing.T) {
 				cancel()
 				return context.Canceled
 			})
-			if err := tc.call(ctx, authorizer); !errors.Is(err, context.Canceled) {
+			if err := tc.call(ctx, authorizer, t); !errors.Is(err, context.Canceled) {
 				t.Fatalf("error = %v, want context.Canceled", err)
 			}
 		})
