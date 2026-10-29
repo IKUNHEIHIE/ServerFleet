@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -45,6 +46,11 @@ func newAgentExecutor(ledgerPath string, actions map[string]agentAction) (*agent
 	}
 	root, err := os.OpenRoot(ledgerPath)
 	if err != nil {
+		return nil, errExecutionRejected
+	}
+	info, err := root.Stat(".")
+	if err != nil || !info.IsDir() || runtime.GOOS == "linux" && info.Mode().Perm()&0077 != 0 {
+		_ = root.Close()
 		return nil, errExecutionRejected
 	}
 	copyActions := make(map[string]agentAction, len(actions))
@@ -99,12 +105,12 @@ func (e *agentExecutor) execute(ctx context.Context, offer *agentv1.TaskOffer) (
 	err := e.ledger.Mkdir(name, 0700)
 	claim := executionClaim{offer.TaskId, offer.ExecutionId, offerDigest(offer)}
 	if errors.Is(err, os.ErrExist) {
-		data, readErr := e.ledger.ReadFile(name + "/claim.json")
+		data, readErr := e.readRecord(name+"/claim.json", 1024)
 		var prior executionClaim
 		if readErr != nil || json.Unmarshal(data, &prior) != nil || prior != claim {
 			return unknown, true, errExecutionRejected
 		}
-		data, readErr = e.ledger.ReadFile(name + "/result.json")
+		data, readErr = e.readRecord(name+"/result.json", 128<<10)
 		if readErr != nil {
 			return unknown, true, nil
 		}
@@ -154,6 +160,23 @@ func (e *agentExecutor) execute(ctx context.Context, offer *agentv1.TaskOffer) (
 		return unknown, false, errExecutionRejected
 	}
 	return result, false, nil
+}
+
+func (e *agentExecutor) readRecord(name string, limit int64) ([]byte, error) {
+	f, err := e.ledger.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() > limit {
+		return nil, errExecutionRejected
+	}
+	b, err := io.ReadAll(io.LimitReader(f, limit+1))
+	if err != nil || int64(len(b)) > limit {
+		return nil, errExecutionRejected
+	}
+	return b, nil
 }
 
 func (e *agentExecutor) writeRecord(name string, value any) error {

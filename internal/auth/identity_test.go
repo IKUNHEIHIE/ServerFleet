@@ -313,6 +313,38 @@ func TestIdentityConcurrentBootstrap(t *testing.T) {
 	}
 }
 
+func TestIdentityCannotRevokeAnotherSubjectsRealSession(t *testing.T) {
+	s, m, _ := identityFixture(t)
+	first := identityLogin(t, s)
+	var st identityState
+	if err := json.Unmarshal(m.data, &st); err != nil {
+		t.Fatal(err)
+	}
+	var template identityUser
+	for _, u := range st.Users {
+		template = u
+	}
+	id, err := randomIdentity(s.random)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template.ID = id
+	template.Username = "other"
+	template.Administrator = false
+	st.Users[id] = template
+	m.data, _ = json.Marshal(st)
+	other, err := s.Login(context.Background(), "other", identityTestPassword, "other-ip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.RevokeSession(context.Background(), first.Secret, first.CSRF, other.Identity.SessionID); err != ErrDenied {
+		t.Fatal("cross-subject revoke accepted", err)
+	}
+	if _, err = s.Authenticate(context.Background(), other.Secret, "", false); err != nil {
+		t.Fatal("other subject session changed", err)
+	}
+}
+
 func TestBrowserOriginCredentialAndCookieBoundaries(t *testing.T) {
 	g, e := NewBrowserGuard("https://fleet.example")
 	if e != nil {

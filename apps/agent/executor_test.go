@@ -135,3 +135,31 @@ func TestAgentExecutorLostCompletionRemainsUnknown(t *testing.T) {
 		t.Fatal(duplicate, err)
 	}
 }
+
+func TestAgentExecutorRechecksExpiryBeforeActionAndBoundsRecords(t *testing.T) {
+	var calls int
+	e, err := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult { calls++; return executionResult{} }))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	offer := testOffer()
+	now := time.Now()
+	checks := 0
+	e.now = func() time.Time {
+		checks++
+		if checks == 1 {
+			return now
+		}
+		return now.Add(2 * time.Minute)
+	}
+	if _, _, err = e.execute(context.Background(), offer); err == nil || calls != 0 {
+		t.Fatal("expired while claiming then executed", err, calls)
+	}
+	if err = e.ledger.WriteFile("too-large", make([]byte, 2048), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = e.readRecord("too-large", 1024); err == nil {
+		t.Fatal("oversized ledger record accepted")
+	}
+}

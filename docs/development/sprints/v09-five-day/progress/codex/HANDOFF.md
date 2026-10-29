@@ -61,6 +61,8 @@ Xray累计组件：稳定用户/实例/维度key，计数段、首样本基线�
 
 ## 06 / CX-02/07 凭据加密、更新验签与恢复隔离组件
 
+SHA `7303301d936d9a1ff1aa509265979d4d081c5696`。
+
 文件 internal/auth/credential_cipher{,_test}.go、internal/updates/verify{,_test}.go、internal/recovery/reconcile{,_test}.go。AES-256-GCM随机nonce+对象/用途/owner/修订/keyID的AAD绑定、过期/撤销拒绝、新key重加密/旧key退出；仅auth私有函数，无普通API明文GET，不接受CA/恢复密钥用途。全局key使用量/存储/当前权限仍需适配，不把该组件称为凭据管理完成。
 
 更新校验：固定版本/组件/平台/架构/单调发布序列、Ed25519域分离签名+摘要、限量流式读取、取消/短包/尾随/篡改拒绝。没有替换二进制、启动服务、健康/迁移回退或伪造installed。签名格式是新候选，缺UPDATE原文，不默认采用生产。
@@ -68,3 +70,9 @@ Xray累计组件：稳定用户/实例/维度key，计数段、首样本基线�
 恢复组件：信任根/世代与撤销序列不能回退，撤销并集保留；running/offered/acknowledged归UNKNOWN，未启动过期归expired，全部旧session/approval待作废；输出恒为quarantine计划，不能开调度。不接触恢复私钥，不因可解码就声称可恢复；实际离线解密/备份完整性/旧主控fencing与DS原子写入仍缺。
 
 组合命令 `go test ./internal/auth ./internal/ai ./internal/plugins ./internal/workflows ./internal/updates ./internal/recovery ./plugins/xray-manager ./apps/agent ./internal/transport ./tests/architecture -count=1`：10包PASS，详见reports/platform-modules.log（auth 6.752s；其余1.345–3.341s）。单元测试用合成key/字节，不是真实更新或POC-08。第二次 `npm run check` 五套全部PASS；`npm run check:security` PASS。这些检查不能关闭AC或缺失E2E。
+
+## 06a / 负向加固
+
+Agent保留目录Linux模式要求无group/other访问；读取保留/结果文件按1024字节/128KiB限量，损坏记录不触发执行；落盘后再次检查未启动期限。补测真实两个主体会话，跨主体撤销拒绝且另一会话保持有效。插件即使可信capability配置误列shell.root，也拒绝非xray命名空间；工作流ID拒绝Unicode空白/控制符。
+
+`go test ./apps/agent ./internal/auth -count=1` PASS 2.291s/6.371s；`go test ./internal/plugins ./internal/workflows -count=1` PASS 1.718s/1.647s。没有扩展root权限或开放未审路由。

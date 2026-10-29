@@ -9,6 +9,7 @@ import (
 	"errors"
 	"net/url"
 	"regexp"
+	"strings"
 )
 
 var ErrPackageRejected = errors.New("plugins: package rejected")
@@ -73,7 +74,7 @@ func VerifyPackage(raw, signature, payload []byte, keyID string, trust PackageTr
 	}
 	seen := map[string]bool{}
 	for _, capability := range m.Capabilities {
-		if seen[capability] || !trust.Capabilities[capability] {
+		if seen[capability] || !trust.Capabilities[capability] || !strings.HasPrefix(capability, "xray.") || strings.ContainsAny(capability, "*?[] \t\r\n\x00") {
 			return PackageManifest{}, ErrPackageRejected
 		}
 		seen[capability] = true

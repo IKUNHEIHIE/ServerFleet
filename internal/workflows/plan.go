@@ -8,6 +8,8 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 )
 
 var ErrWorkflowDenied = errors.New("workflows: plan rejected")
@@ -49,7 +51,7 @@ type Plan struct {
 }
 
 func validID(s string) bool {
-	return s != "" && len(s) <= 128 && !strings.ContainsAny(s, "*?[] \t\r\n\x00")
+	return s != "" && len(s) <= 128 && utf8.ValidString(s) && !strings.ContainsAny(s, "*?[]") && !strings.ContainsFunc(s, func(r rune) bool { return unicode.IsSpace(r) || unicode.IsControl(r) })
 }
 
 // Prepare does not authorize or execute. The trusted trigger producer supplies
