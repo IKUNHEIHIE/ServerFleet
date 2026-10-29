@@ -150,10 +150,11 @@ func (api *httpAPI) authorize(w http.ResponseWriter, r *http.Request, principal 
 func queryFromRequest(r *http.Request) (Query, error) {
 	values := r.URL.Query()
 	query := Query{
-		SubjectID: values.Get("actorId"),
-		Action:    values.Get("action"),
-		Result:    values.Get("result"),
-		TaskID:    values.Get("taskId"),
+		SubjectID:  values.Get("actorId"),
+		Action:     values.Get("action"),
+		Result:     values.Get("result"),
+		TaskID:     values.Get("taskId"),
+		ResourceID: values.Get("resourceId"),
 	}
 	if source := values.Get("source"); source != "" {
 		query.Source = Source(source)

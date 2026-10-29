@@ -33,10 +33,12 @@ type Query struct {
 	RequestID string
 	TaskID    string
 	Source    Source
-	Since     time.Time
-	Until     time.Time
-	Offset    int
-	Limit     int
+	// ResourceID matches the task id or any node id in the event.
+	ResourceID string
+	Since      time.Time
+	Until      time.Time
+	Offset     int
+	Limit      int
 }
 
 // Page is a restricted read result. Limit reports the resolved page size.
@@ -132,6 +134,9 @@ func matchesQuery(event Event, q Query) bool {
 	if q.Source != "" && event.Source != q.Source {
 		return false
 	}
+	if q.ResourceID != "" && q.ResourceID != event.TaskID && !containsString(event.NodeIDs, q.ResourceID) {
+		return false
+	}
 	if !q.Since.IsZero() && event.At.Before(q.Since) {
 		return false
 	}
@@ -139,6 +144,15 @@ func matchesQuery(event Event, q Query) bool {
 		return false
 	}
 	return true
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }
 
 func project(event Event) EventView {

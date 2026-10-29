@@ -214,6 +214,10 @@ func auditWhere(q Query) (string, []any) {
 	add("request_id", q.RequestID)
 	add("task_id", q.TaskID)
 	add("source", string(q.Source))
+	if q.ResourceID != "" {
+		clauses = append(clauses, "(task_id = ? OR EXISTS (SELECT 1 FROM json_each(audit_events.node_ids) WHERE json_each.value = ?))")
+		args = append(args, q.ResourceID, q.ResourceID)
+	}
 	if !q.Since.IsZero() {
 		clauses = append(clauses, "at >= ?")
 		args = append(args, q.Since.UTC().Format(time.RFC3339Nano))

@@ -34,7 +34,7 @@ func newHTTPFixture(t *testing.T, gate audit.ReadGate) (*audit.SQLRecorder, *htt
 	}
 	if err := recorder.Append(context.Background(), audit.Event{
 		SubjectID: "user-1", Action: "nodes.update", Result: "success", RequestID: "req-1",
-		Source: audit.SourceWeb, At: time.Now().UTC(),
+		Source: audit.SourceWeb, NodeIDs: []string{"node-1"}, At: time.Now().UTC(),
 	}); err != nil {
 		t.Fatal(err)
 	}
@@ -86,6 +86,20 @@ func TestAuditHTTPListAndGet(t *testing.T) {
 		t.Fatalf("get status = %d", get.StatusCode)
 	}
 	get.Body.Close()
+	resource, err := http.Get(server.URL + "/api/v1/audit/events?resourceId=node-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var resourcePage struct {
+		Items []struct {
+			EventID string `json:"eventId"`
+		} `json:"items"`
+	}
+	json.NewDecoder(resource.Body).Decode(&resourcePage)
+	resource.Body.Close()
+	if len(resourcePage.Items) != 1 {
+		t.Fatalf("resource filter = %+v", resourcePage)
+	}
 	bad, _ := http.Get(server.URL + "/api/v1/audit/events/not-a-number")
 	if bad.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bad id status = %d", bad.StatusCode)
