@@ -1,5 +1,7 @@
 # V09-5D-CX / codex-02
 
+**ACTIVE：用户要求继续完成，已恢复实施。下表与“停止判断”为b61ad15时历史检查点，不能作为当前已无独立工作的证明；该判断已撤回。当前新增实现与实际验证持续记录在RESUMED.md。**
+
 基线 `8a7dd4707d2d7e142e137d098296788d2c80eddd`；审查 codex-review-01 + 安全/契约/模块 owner。2026-10-30，Asia/Shanghai。
 
 实际目录为任务单/Git 已登记的 `ks/.worktrees/feature--v09-platform-cx02`；用户消息中的同名外置目录不存在。没有移动工作目录、切换他人分支或修改 main。

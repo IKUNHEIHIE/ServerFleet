@@ -33,6 +33,8 @@ S01目标为**独立契约修订候选**，原始受字节保护的 api/openapi/
 
 ## S02 storage 事务接缝（DS owner）
 
+**更新：原通用RecordTx申请由auth专用SQL适配替代（仍待接收）**。已核对DS提交bb8954988fe7b2f832edf291803529d7745e4f0a的InTx/Queryer方案；精确适配与两条业务建表语句在`internal/auth/identity_sql.go`，不要求DS新增KV。`IdentitySQLBackend.Read`映射一条QueryRow.Scan(payload,ever_initialized)，InTx映射DS单一事务Read/Exec/RowsAffected；事务回调一次，取消回滚。总控注册迁移编号，本包不抢占编号。真实WAL/重启/并发/回滚证据见RESUMED.md；隔离实验不代表公共接收。下文原申请保留追溯，不再作为实施前置。
+
 文件候选 `internal/storage/records.go`（本包不写入）；精确新增接口建议：
 
 ```go
