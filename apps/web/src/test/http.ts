@@ -11,10 +11,10 @@ export function textResponse(body: string, status = 200, contentType = "text/pla
   return new Response(body, { status, headers: { "Content-Type": contentType } });
 }
 
-type Handler = (init: RequestInit | undefined) => Response | Promise<Response>;
-type Routes = Record<string, Handler>;
+export type FetchHandler = (init: RequestInit | undefined, url: URL) => Response | Promise<Response>;
+export type FetchRoutes = Record<string, FetchHandler>;
 
-export function installFetch(routes: Routes) {
+export function installFetch(routes: FetchRoutes) {
   const calls: { method: string; url: string; init: RequestInit | undefined }[] = [];
   const mock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const raw = typeof input === "string" ? input : input instanceof URL ? input.toString() : input.url;
@@ -23,7 +23,7 @@ export function installFetch(routes: Routes) {
     calls.push({ method, url: parsed.pathname + parsed.search, init });
     const handler = routes[`${method} ${parsed.pathname}`];
     if (!handler) return jsonResponse({ code: "NOT_FOUND", message: "no fixture" }, 404);
-    return handler(init);
+    return handler(init, parsed);
   });
   vi.stubGlobal("fetch", mock);
   return { mock, calls };
@@ -54,7 +54,7 @@ export const IDENTITY = {
   isBootstrapAdmin: true,
 };
 
-export function coreRoutes(): Routes {
+export function coreRoutes(): FetchRoutes {
   return {
     "GET /api/v1/auth/bootstrap-status": () => jsonResponse(authenticatedSession()),
     "GET /api/v1/auth/me": () =>

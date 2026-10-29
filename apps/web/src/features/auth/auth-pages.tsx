@@ -70,9 +70,8 @@ export function LoginPage({ next }: { readonly next: string | null }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [secondFactor, setSecondFactor] = useState("");
-  const [notice] = useState<string | null>(
-    session.state.kind === "anonymous" || session.state.kind === "authenticated" ? session.state.notice : null,
-  );
+  const notice =
+    session.state.kind === "anonymous" || session.state.kind === "authenticated" ? session.state.notice : null;
 
   useEffect(() => {
     usernameRef.current?.focus();

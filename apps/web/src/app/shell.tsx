@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Notice } from "@/components/ui/feedback";
 import { describeApiError } from "@/lib/api/errors";
+import { formatDateTime } from "@/lib/format";
 
 function isActive(path: string, target: string): boolean {
   if (path === target) return true;
@@ -166,7 +167,10 @@ export function Shell({ children }: { readonly children: ReactNode }) {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               <span className="hidden text-xs text-muted-foreground sm:inline">
-                会话到期：{session.state.kind === "authenticated" && session.state.sessionExpiresAt ? session.state.sessionExpiresAt.replace("T", " ").replace(/\..*$/, " UTC") : "刷新后未知"}
+                会话到期：
+                {session.state.kind === "authenticated" && session.state.sessionExpiresAt
+                  ? formatDateTime(session.state.sessionExpiresAt) ?? "时间无法解析"
+                  : "刷新后未知"}
               </span>
               <Button type="button" size="sm" onClick={() => session.revalidate()}>
                 同步身份

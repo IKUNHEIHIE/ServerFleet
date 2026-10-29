@@ -38,7 +38,7 @@ describe("management console shell", () => {
     expect(login).toBeDefined();
     const body = JSON.parse(String(login?.init?.body));
     expect(body).toEqual({ username: "admin", password: "secret" });
-    expect(calls.some(call => call.url.startsWith("/api/v1/nodes"))).toBe(true);
+    await waitFor(() => expect(calls.some(call => call.url.startsWith("/api/v1/nodes"))).toBe(true));
   });
 
   it("keeps the existing badge semantics", () => {

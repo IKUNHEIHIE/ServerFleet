@@ -7,6 +7,7 @@ import { Shell } from "@/app/shell";
 import { SessionChecking, SessionUnavailable } from "@/app/session-screens";
 import { BootstrapPage, LoginPage } from "@/features/auth/auth-pages";
 import { OverviewPage } from "@/features/overview/overview-page";
+import { NodesPage } from "@/features/nodes/nodes-page";
 import { NotFoundPage, PendingPage } from "@/features/pending/pending-page";
 
 export interface RouteContext {
@@ -25,7 +26,7 @@ function pending(title: string, description: string) {
 
 export const ROUTES: readonly RouteEntry[] = [
   { path: "/overview", render: () => <OverviewPage /> },
-  { path: "/nodes", render: pending("节点列表", "服务器资产、在线状态、资源与详情。") },
+  { path: "/nodes", render: () => <NodesPage /> },
   { path: "/nodes/new", render: pending("添加节点", "短期接入凭证、安装引导、接入审批与历史。") },
   { path: "/nodes/:nodeId", render: pending("节点详情", "身份、能力、状态、诊断与流量配额。") },
   { path: "/groups", render: pending("分组管理", "自定义分组与只读自动分类；与服务组严格区分。") },

@@ -6,9 +6,31 @@
 
 | 检查点 | SHA | 范围 | 页面/接口 | 测试 | 阻塞 |
 |---|---|---|---|---|---|
-| GM-01 | 本轮首个提交（见 `git log`） | 应用壳、路由/导航、API 客户端、SSE、会话/权限上下文、登录/初始化/概览 | `/overview` ← `/healthz`、`/api/v1/nodes`、`/api/v1/tasks`、`/api/v1/audit/events`；登录 ← `POST /api/v1/auth/login`；刷新恢复 ← `GET /api/v1/auth/me` | `npm test --workspace @serverfleet/web` 207 PASS；`npm run build --workspace @serverfleet/web` PASS；`node scripts/web-boundaries.mjs` PASS | 后端管理 API 仍未实现：真实 Controller 仅 `/healthz`，登录/概览在真实环境会显示不可用 |
+| GM-01 | 4155b9c | 应用壳、路由/导航、API 客户端、SSE、会话/权限上下文、登录/初始化/概览 | `/overview` ← `/healthz`、`/api/v1/nodes`、`/api/v1/tasks`、`/api/v1/audit/events`；登录 ← `POST /api/v1/auth/login`；刷新恢复 ← `GET /api/v1/auth/me` | `npm test --workspace @serverfleet/web` 207 PASS；`npm run build --workspace @serverfleet/web` PASS；`node scripts/web-boundaries.mjs` PASS | 后端管理 API 仍未实现：真实 Controller 仅 `/healthz`，登录/概览在真实环境会显示不可用 |
+| GM-02/03 | 本轮后续提交（见 `git log`） | 会话失效/恢复语义、W07 legacy 列表、真实节点列表 | `/nodes` ← `GET /api/v1/nodes?onlineOnly=`；富化视图 ← `GET /api/v1/nodes/{nodeId}`（候选详情，需显式切换） | 235 PASS；build PASS；boundaries PASS | 详情契约 D02–D04 未冻结；真实管理 API 未提供，浏览器验证待 GM-09 |
 
-## 结构说明（GM-01）
+## GM-02/03 交付细节
+
+### 会话与权限（GM-02）
+
+- 401：全局终止门控，清空身份并回到登录页；同一时刻只处理一次，不自动重试或循环。
+- 403：只清当前资源，保留 Cookie 会话与导航；手动刷新再次 403 也不登出。
+- 503：保留会话；初次加载显示可重试错误，静默刷新失败保留上次成功数据并显式提示“可能已过期”。
+- 刷新恢复：`/auth/me` 成功补回身份；因契约不含 CSRF，写操作锁定并展示原因，不用会话 SID 伪造。
+- 跨标签：BroadcastChannel 内存同步登录/退出/失效；CSRF 不写 localStorage/sessionStorage。
+- BFCache/pageshow/visibility：暂停 SSE、复核身份、`viewEpoch` 自增使当前资源重新请求，旧响应按序号丢弃。
+- 登录表单不持久化密码/令牌；退出请求带 `X-CSRF-Token`，失败时本地清除并提示服务器撤销未确认。
+
+### 节点列表（GM-03 / W07）
+
+- 默认兼容视图只消费 `GET /api/v1/nodes` 的已批准字段：`id/name/online` 与可空指标，`onlineOnly` 由服务端过滤。
+- 适配规则：缺 `items`/非数组、非对象行、坏 `id`/`online`、重复 `id` 整次失败且无部分表格/计数；name 空/非法回退 ID 并固定提示；region/provider 非法显示缺失。
+- 指标：离线一律不显示历史百分比；在线有限 0–100（含 0/100）显示并标“无采样时间”；`null`→无读数，非有限→读数非法，越界→超出范围；不夹取、不补 0、不补造采样时间。
+- 搜索仅作用于已加载 name/id；服务端空集与本地无命中是不同文案；行不可聚焦、无详情/执行入口、无行内按钮。
+- 富化视图需用户显式切换，才逐节点请求候选详情；若任一详情缺失/重复/ID 不匹配则整次失败。列表 DTO 无采样时间，CPU/内存不会被显示为当前读数。
+- 保留原有 179 个测试与富化组件；新增 legacy/rich 适配测试与页面集成测试。
+
+## 结构说明
 
 - `apps/web/src/app/router.ts`：hash 路由、路径参数匹配、查询串构建；`app/navigation.ts` 保留完整 v0.9 功能地图入口。
 - `apps/web/src/lib/api/client.ts`：`credentials: include`、Cookie 会话、固定错误分类、CSRF 头、超时/中止、401 全局事件；不把非 JSON 200/404 当 DTO，不回显原始错误体。
@@ -23,4 +45,4 @@
 
 ## 下一步
 
-GM-02 强化登录/会话恢复测试与浏览器验证；GM-03 接入真实 `GET /api/v1/nodes?onlineOnly=` 与 W07 legacy 列表。
+GM-04：节点添加/审批/详情/分组双视图/服务组；用户角色与资源授权；审计与凭据。GM-09 统一做真实浏览器证据。
