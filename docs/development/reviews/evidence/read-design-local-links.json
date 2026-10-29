@@ -1,0 +1,207 @@
+[
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/BATCH-01-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/SECOND-BATCH-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/BATCH-02-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/THIRD-BATCH-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/BATCH-03-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/FOURTH-BATCH-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/BATCH-04-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/FIFTH-BATCH-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/BATCH-05-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/SIXTH-BATCH-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/BATCH-06-PARTIAL-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/G2-R02A-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/FOLLOWUP-01-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/PARALLEL-FOLLOWUP-02.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/AUTH-01B-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/CODEX-N03A-WORK-PACKAGE.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/FOLLOWUP-02-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/PARALLEL-FOLLOWUP-03.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/N03-A-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/CODEX-READ-SEC01-WORK-PACKAGE.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/FOLLOWUP-03-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/PARALLEL-FOLLOWUP-04.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/READ-SEC-01-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/contracts/decisions/node-read-security-01/SECURITY-ACCEPTANCE.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/FOLLOWUP-04-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/PARALLEL-FOLLOWUP-05.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/reviews/W06-R1-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/contracts/decisions/node-read-01/OWNER-CHOICES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/READ-DESIGN-01-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/TOOLCHAIN.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "AGENTS.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/architecture/README.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/MODULE-OWNERSHIP.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/DEPENDENCY-RULES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/MULTI-AGENT-WORKFLOW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/WORKTREE-GUIDE.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/contracts/P1-CANDIDATE-REVIEW.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/FIRST-BATCH-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "README.md",
+    "target": "docs/development/P1-VALIDATION.md",
+    "exists": true
+  },
+  {
+    "document": "docs/contracts/decisions/node-read-01/OWNER-CHOICES.md",
+    "target": "../../../development/READ-DESIGN-01-WORK-PACKAGES.md",
+    "exists": true
+  },
+  {
+    "document": "docs/development/READ-DESIGN-01-WORK-PACKAGES.md",
+    "target": "../contracts/decisions/node-read-01/OWNER-CHOICES.md",
+    "exists": true
+  }
+]

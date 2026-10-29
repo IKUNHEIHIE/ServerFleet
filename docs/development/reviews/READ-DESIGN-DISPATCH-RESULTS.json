@@ -1,0 +1,22 @@
+{
+  "task":"READ-DESIGN-DISPATCH",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"0569c1a5ae01ea7715b53a979a3dbb0af50b6b3c",
+  "userAuthorization":{"source":"direct human message in this chat","verbatim":"按推荐 A1+B1","directions":["A1","B1"],"scope":"three proposed designs, compatibility differences, executable acceptance plans","implementationAuthorized":false},
+  "taskConfigurationHead":"85e87cb859ebbe205bdffa8ee62938e3412bffae",
+  "assignments":[
+    {"task":"READ-AUTH-DESIGN-01","session":"codex-01","branch":"docs/node-read-auth-design-cx01","allowedDirectory":"docs/contracts/decisions/node-read-auth-01"},
+    {"task":"READ-HTTP-DESIGN-01","session":"deepseek-01","branch":"docs/node-read-http-design-ds01","allowedDirectory":"docs/contracts/decisions/node-read-http-01"},
+    {"task":"READ-WEB-DESIGN-01","session":"gemini-01","branch":"docs/node-read-web-design-gm01","allowedDirectory":"docs/contracts/decisions/node-read-web-01"}
+  ],
+  "allowedFilesPerTask":["DESIGN.md","ACCEPTANCE.md","HANDOFF.md"],
+  "dispatch":"prepared for manual dispatch; not automatically started or messaged",
+  "checks":{"scopeAndPathPreflight":"PASS","localLinks":41,"npmCi":"PASS","toolsInstall":"PASS","combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":212,"goSubtestsPassed":805,"goFailures":0,"webPassed":179,"webFailures":0},"combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},"originalFilesVerified":69,"byteExactOriginalCandidatesVerified":3,"g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd","productionCodeChanged":false},
+  "worktreeCreation":"after main fast-forward, same final main head, verify paths/branches/clean status before handoff; actual creation output in main reports/read-design-worktrees.json",
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}
