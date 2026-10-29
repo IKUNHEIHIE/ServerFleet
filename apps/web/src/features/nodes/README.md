@@ -119,6 +119,11 @@ const items = toNodeListItems(details, metricsById, {
 可见集合），因此不会指向旧节点或已卸载元素。列表区域本身 `tabIndex=-1`，作为
 加载/失败时控件被禁用后的稳定兜底，不增加额外 Tab 停靠点。
 
+**重复选择同一节点（W04-R1）**：`selectedId` 不变时 React 不会提交更新，
+依赖提交的 effect 不会执行，因此键盘激活走“同 ID 直接聚焦已挂载详情”的同步路径，
+鼠标选中后再按 `Enter`/`Space`、或键盘再次激活都会立即进入详情。未执行的聚焦意图在
+关闭、来源失效和指针操作时清除，不会被下一次后台刷新消费而抢走搜索框焦点。
+
 已知限制：详情出现时不做额外播报（没有 `aria-live`），也故意不逐格播报指标；后台数据
 更新不会重新抢焦点。jsdom 只能证明程序化焦点与事件处理，真实 Tab 顺序由
 `reports/_review/tab-check.mjs`（Chrome DevTools Protocol）在真实浏览器里验收，产物在

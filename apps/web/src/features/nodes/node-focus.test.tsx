@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { NodeListWorkspace } from "./node-list-workspace";
 import {
   FIXED_NOW,
+  allNodeDetails,
   buildReadyState,
   emptyState,
   failedState,
@@ -167,6 +168,66 @@ describe("焦点 · 详情被动消失", () => {
 
     expect(detailRegion()).toHaveFocus();
     expect(within(detailRegion()).getByText("64%")).toBeVisible();
+  });
+});
+
+describe("焦点 · 重复选择同一节点（W04-R1）", () => {
+  it("鼠标选中后用 Enter 激活同一节点，立即把焦点移入详情（不依赖重渲染）", () => {
+    render(<NodeListWorkspace state={readyState} />);
+    const row = listRows()[0];
+
+    row.focus();
+    fireEvent.click(row);
+    expect(detailRegion()).not.toHaveFocus();
+
+    // selectedId 未变化，React 不会提交更新；焦点必须当场转移。
+    fireEvent.keyDown(row, { key: "Enter" });
+
+    expect(detailRegion()).toHaveFocus();
+    expect(within(detailRegion()).getByText("aws-tokyo-01")).toBeVisible();
+  });
+
+  it("键盘再次激活同一节点同样立即聚焦详情", () => {
+    render(<NodeListWorkspace state={readyState} />);
+    openByKeyboard(0);
+
+    const row = listRows()[0];
+    row.focus();
+    expect(row).toHaveFocus();
+
+    fireEvent.keyDown(row, { key: " " });
+
+    expect(detailRegion()).toHaveFocus();
+  });
+
+  it("重复选择后转向搜索框，后台刷新不会执行残留意图抢走焦点", () => {
+    const { rerender } = render(<NodeListWorkspace state={readyState} />);
+    const row = listRows()[0];
+
+    row.focus();
+    fireEvent.click(row);
+    fireEvent.keyDown(row, { key: "Enter" });
+
+    searchBox().focus();
+    expect(searchBox()).toHaveFocus();
+
+    rerender(<NodeListWorkspace state={buildReadyState(allNodeDetails, nodeMetrics)} />);
+
+    expect(searchBox()).toHaveFocus();
+    expect(detailRegion()).not.toHaveFocus();
+  });
+
+  it("关闭后数据刷新不会把焦点重新移入详情", () => {
+    const { rerender } = render(<NodeListWorkspace state={readyState} />);
+    openByKeyboard(0);
+
+    fireEvent.keyDown(detailRegion(), { key: "Escape" });
+    searchBox().focus();
+
+    rerender(<NodeListWorkspace state={buildReadyState(allNodeDetails, nodeMetrics)} />);
+
+    expect(searchBox()).toHaveFocus();
+    expect(screen.queryByRole("region", { name: "节点详情" })).toBeNull();
   });
 });
 

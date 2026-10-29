@@ -63,27 +63,44 @@ export function NodeListWorkspace({
   // 键盘选择后把焦点移入详情；只在详情确实渲染出来时执行一次。
   useEffect(() => {
     if (!focusDetailNext.current) return;
-    const detail = detailRef.current;
-    if (!detail) return;
+    // 先清标志再聚焦：即使详情此刻不存在（已关闭/已失效），也不能把意图留给后台刷新。
     focusDetailNext.current = false;
-    detail.focus();
+    detailRef.current?.focus();
   });
 
-  // 详情因来源变化、加载或失败而消失：若焦点原本在其中，落到稳定位置。
+  // 详情因来源变化、加载或失败而消失：清掉未执行的聚焦意图，并在需要时落到稳定位置。
   useEffect(() => {
     if (hasSelection) return;
+    focusDetailNext.current = false;
     if (!detailHadFocus.current) return;
     detailHadFocus.current = false;
     restoreFocus(selectedId);
   }, [hasSelection, selectedId]);
 
   const handleActivate = (node: NodeListItemView, origin: NodeActivateOrigin) => {
+    const alreadySelected = node.id === selectedId;
     setSelectedId(node.id);
-    focusDetailNext.current = origin === "keyboard";
+
+    if (origin !== "keyboard") {
+      // 指针操作取代未执行的键盘意图，避免旧请求稍后抢焦点。
+      focusDetailNext.current = false;
+      return;
+    }
+
+    // 同一节点重复激活时 selectedId 不变，React 不会提交更新，effect 也就不会执行；
+    // 必须当场聚焦已挂载的详情，否则意图会漂到下一次无关渲染（例如后台刷新）才生效。
+    if (alreadySelected && detailRef.current) {
+      focusDetailNext.current = false;
+      detailRef.current.focus();
+      return;
+    }
+
+    focusDetailNext.current = true;
   };
 
   const handleClose = () => {
     const previousId = selectedId;
+    focusDetailNext.current = false;
     detailHadFocus.current = false;
     setSelectedId(null);
     // 详情此时仍在 DOM 中，可以立即把焦点交还给仍存在的行或兜底位置。
