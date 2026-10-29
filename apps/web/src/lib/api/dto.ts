@@ -1,0 +1,256 @@
+/** Controller 契约 DTO（仅声明控制台消费的字段；未知字段一律忽略）。 */
+
+export interface PageMeta {
+  readonly nextCursor: string | null;
+  readonly limit: number;
+  readonly hasMore: boolean;
+}
+
+export interface ItemList<T> {
+  readonly items: readonly T[];
+}
+
+export interface Page<T> extends ItemList<T> {
+  readonly page: PageMeta;
+}
+
+export interface Identity {
+  readonly userId: string;
+  readonly displayName: string;
+  readonly roles: readonly string[];
+  /** 服务端权限结果。缺失表示被告知“无结果”，不能由客户端按角色推断。 */
+  readonly permissions?: readonly string[];
+  readonly isBootstrapAdmin?: boolean;
+}
+
+export interface LoginRequest {
+  readonly username: string;
+  readonly password: string;
+  readonly secondFactorCode?: string;
+}
+
+export interface LoginResult {
+  readonly identity: Identity;
+  readonly sessionExpiresAt: string;
+  readonly csrfToken?: string;
+}
+
+export interface BootstrapState {
+  readonly bootstrapAvailable: boolean;
+  readonly initialized: boolean;
+  readonly setupMethod?: "local-console-token";
+}
+
+export interface BootstrapRequest {
+  readonly setupToken: string;
+  readonly username: string;
+  readonly password: string;
+}
+
+export interface Session {
+  readonly sessionId: string;
+  readonly createdAt?: string;
+  readonly expiresAt: string;
+  readonly lastSeenAt?: string;
+  readonly current: boolean;
+}
+
+export interface NodeSummary {
+  readonly id: string;
+  readonly name: string;
+  readonly online: boolean;
+  readonly region?: string;
+  readonly provider?: string;
+  readonly countryCode?: string;
+  readonly ip?: string;
+  readonly tags?: readonly string[];
+  readonly cpuPercent?: number | null;
+  readonly memoryPercent?: number | null;
+}
+
+export type NodeStatus = "online" | "offline" | "suspended" | "revoked" | "unknown";
+
+export interface NodeDetail {
+  readonly nodeId: string;
+  readonly displayName: string;
+  readonly status: NodeStatus;
+  readonly lastSeenAt?: string;
+  readonly agentVersion?: string;
+  readonly platform?: string;
+  readonly revision: number;
+}
+
+export interface NodeIdentity {
+  readonly nodeId: string;
+  readonly certificateFingerprintSha256?: string;
+  readonly issuerFingerprintSha256?: string;
+  readonly serial?: string;
+  readonly notAfter?: string;
+  readonly revoked: boolean;
+  readonly lastVerifiedAt?: string;
+}
+
+export interface NodeCapabilities {
+  readonly nodeId: string;
+  readonly protocolMajor: number;
+  readonly protocolMinor: number;
+  readonly capabilities: readonly string[];
+  readonly observedAt?: string;
+}
+
+export type NodeGroupKind = "manual" | "automatic";
+
+export interface NodeGroup {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: NodeGroupKind;
+  readonly description?: string;
+  readonly memberNodeIds?: readonly string[];
+  readonly revision: number;
+  readonly memberCount?: number;
+}
+
+export interface NodeGroupFacet {
+  readonly dimension: "region" | "provider" | "tag";
+  readonly items: readonly { readonly value: string; readonly label?: string; readonly nodeCount: number }[];
+}
+
+export interface NodeGroupResults {
+  readonly items: readonly NodeSummary[];
+  readonly total: number;
+  readonly nextCursor?: string | null;
+}
+
+export interface NodeEnrollmentToken {
+  readonly id: string;
+  readonly token: string;
+  readonly expiresAt: string;
+}
+
+export interface NodeEnrollment {
+  readonly id: string;
+  readonly name: string;
+  readonly status: "pending" | "approved" | "rejected";
+  readonly countryCode?: string;
+  readonly region?: string;
+}
+
+export interface User {
+  readonly userId: string;
+  readonly username: string;
+  readonly displayName?: string;
+  readonly roleIds: readonly string[];
+  readonly enabled: boolean;
+  readonly revision: number;
+}
+
+export interface Role {
+  readonly roleId: string;
+  readonly label: string;
+  readonly permissions: readonly string[];
+  readonly builtIn?: boolean;
+}
+
+export interface Permission {
+  readonly key: string;
+  readonly description: string;
+  readonly resourceType?: string;
+}
+
+export interface Grant {
+  readonly grantId: string;
+  readonly principalId: string;
+  readonly resourceType: string;
+  readonly resourceId: string;
+  readonly permissions: readonly string[];
+  readonly createdAt?: string;
+  readonly expiresAt?: string;
+}
+
+export interface AuditEvent {
+  readonly eventId: string;
+  readonly occurredAt: string;
+  readonly actorType: "user" | "agent" | "plugin" | "ai" | "system";
+  readonly actorId?: string;
+  readonly action: string;
+  readonly resourceType?: string;
+  readonly resourceId?: string;
+  readonly result: "allowed" | "denied" | "success" | "failure" | "partial";
+  readonly requestId: string;
+  readonly taskId?: string;
+  readonly redactedSummary?: string;
+}
+
+export type TaskState =
+  | "awaiting_approval"
+  | "queued"
+  | "waiting_node"
+  | "running"
+  | "paused"
+  | "completed"
+  | "partially_failed"
+  | "failed"
+  | "canceling"
+  | "canceled"
+  | "unknown"
+  | "expired";
+
+export interface TaskSummary {
+  readonly taskId: string;
+  readonly state: TaskState;
+  readonly createdAt: string;
+  readonly createdBy?: string;
+  readonly targetNodeIdsSnapshot: readonly string[];
+  readonly revision: number;
+  readonly planDigest: string;
+  readonly expiresAt?: string;
+}
+
+export interface TaskExecution {
+  readonly executionId: string;
+  readonly taskId: string;
+  readonly nodeId: string;
+  readonly state: string;
+  readonly startedAt?: string;
+  readonly finishedAt?: string;
+  readonly exitCode?: number | null;
+  readonly outputTruncated?: boolean;
+  readonly lastSequence: number;
+}
+
+export interface BatchTaskPreview {
+  readonly targetNodeIdsSnapshot: readonly string[];
+  readonly eligibleNodeIds: readonly string[];
+  readonly deniedNodeIds: readonly string[];
+  readonly requiresApproval: boolean;
+}
+
+export interface BatchTaskJob {
+  readonly jobId: string;
+  readonly name?: string;
+  readonly targetType: string;
+  readonly targetResourceId?: string;
+  readonly targetNodeIdsSnapshot: readonly string[];
+  readonly state: string;
+  readonly results?: readonly { readonly nodeId: string; readonly state: string; readonly error?: string }[];
+  readonly createdAt?: string;
+}
+
+export interface ServiceGroup {
+  readonly id: string;
+  readonly revision: number;
+  readonly name: string;
+  readonly description?: string;
+  readonly memberNodeIds: readonly string[];
+  readonly service?: { readonly port?: number; readonly protocol?: string; readonly healthCheck?: string };
+  readonly loadBalancing: { readonly enabled: boolean; readonly strategy?: string };
+  readonly gatewayIds?: readonly string[];
+  readonly healthyNodeIds?: readonly string[];
+  readonly dispatchEligibleNodeIds?: readonly string[];
+  readonly createdAt?: string;
+}
+
+export interface HealthPayload {
+  readonly status: string;
+  readonly stage?: string;
+}
