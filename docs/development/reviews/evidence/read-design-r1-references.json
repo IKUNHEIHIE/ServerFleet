@@ -1,0 +1,688 @@
+[
+  {
+    "task": "READ-HTTP-DESIGN-01-R1",
+    "head": "4fbdcf5126b02981f8f3fcf5cb403641693172fb",
+    "prior": "ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734",
+    "reviewedDocumentRef": "4fbdcf5126b02981f8f3fcf5cb403641693172fb",
+    "baseline": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05",
+    "acceptedMain": "3c817f881bd9f96f23f525af50199aa56e3a5291",
+    "scope": [
+      "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+      "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+      "docs/contracts/decisions/node-read-http-01/HANDOFF.md"
+    ],
+    "documents": [
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "sha256": "6835f482447f6a710325029bae9b7a5e2b49db66bfe20ecf1c7c4942681d7c7d"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "sha256": "0e6d2b8c09b8b465f1c6847c2e62b784ca55846ca386b236f4514c46950629b7"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/HANDOFF.md",
+        "sha256": "bc4b32fcb45e387bd9dee81d9cd28de91adcf72d46891baef1d4868071f314bc"
+      }
+    ],
+    "referenceCount": 78,
+    "referencedFiles": 25,
+    "rangeProblems": [],
+    "references": [
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/development/READ-DESIGN-01-WORK-PACKAGES.md",
+        "ranges": "8",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-01/OWNER-CHOICES.md",
+        "ranges": "16-32",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "18-114,217-302",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/revisions/g2-r03/MATRIX.md",
+        "ranges": "9-31",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/revisions/g2-r03/DECISIONS.md",
+        "ranges": "7-13",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "86-113,6205-6213,6865-6883,10357-10362",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-security-01/SOURCES.md",
+        "ranges": "42-49",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "99-113,354-483",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/development/reviews/G2-R02A-REVIEW.md",
+        "ranges": "7-28",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "44-54,66,132-140",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "40,44-54,144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "27-96",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "internal/auth/node_read_scope.go",
+        "ranges": "23-74",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "7-15,17-21,31-40",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "52,127,144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-security-01/SECURITY-ACCEPTANCE.md",
+        "ranges": "18-30",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "6865-6883,9650-9678,10357-10362",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "354-483",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-security-01/SECURITY-ACCEPTANCE.md",
+        "ranges": "16-24",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "40,44-54,64-68,132-140,144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "internal/auth/node_policy.go",
+        "ranges": "69-78",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "15-19",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "27-96",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "7-15,17-21,31-40",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "apps/controller/main.go",
+        "ranges": "17-35",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "apps/controller/health/handler.go",
+        "ranges": "1-12",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "apps/web/src/App.tsx",
+        "ranges": "3-17",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "99-103",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "docs/contracts/revisions/g2-r03/COMPATIBILITY.md",
+        "ranges": "57",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/README.md",
+        "ranges": "45-52",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/AUTH-01B-REVIEW.md",
+        "ranges": "9-19,29-36",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "44-54",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "apps/controller/main.go",
+        "ranges": "17-35",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "24-29",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "94-98",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "7-15,17-21,31-40",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "27-59",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/revisions/g2-r03/COMPATIBILITY.md",
+        "ranges": "61-63",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/auth/node_read_scope.go",
+        "ranges": "23-74,80-101",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/AUTH-01B-REVIEW.md",
+        "ranges": "9-19",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "7-15,17-21",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "9-15,17-21,31-40",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "217-302",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/node.go",
+        "ranges": "29-49",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/node.go",
+        "ranges": "29-49",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/revisions/g2-r03/DECISIONS.md",
+        "ranges": "8",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "apps/web/src/features/nodes/candidate-adapter.ts",
+        "ranges": "81-107",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/node.go",
+        "ranges": "53-67",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "354-483",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "9-21",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-security-01/SECURITY-ACCEPTANCE.md",
+        "ranges": "18-30",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "44-54,127,144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "27-95",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "31-40",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "99-103",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/revisions/g2-r03/COMPATIBILITY.md",
+        "ranges": "57",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "apps/web/src/features/nodes/README.md",
+        "ranges": "22-53",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/W06-R1-REVIEW.md",
+        "ranges": "7-39",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/G2-R02A-REVIEW.md",
+        "ranges": "15-20",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/revisions/g2-r03/MATRIX.md",
+        "ranges": "9-31",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/revisions/g2-r03/COMPATIBILITY.md",
+        "ranges": "31-35",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "132-140",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "9-21,31-40",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "60-95",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/auth/node_read_scope.go",
+        "ranges": "18-74",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "15-27",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "apps/controller/main.go",
+        "ranges": "17-35",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "apps/web/src/App.tsx",
+        "ranges": "3-17",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "44-54,52,127,144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/AUTH-01B-REVIEW.md",
+        "ranges": "9-19",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/auth/node_read_scope.go",
+        "ranges": "18-74",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "internal/nodes/read_usecase.go",
+        "ranges": "15-27",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+        "file": "docs/development/reviews/N03-A-REVIEW.md",
+        "ranges": "7-21",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/HANDOFF.md",
+        "file": "docs/development/READ-DESIGN-01-REPAIR.md",
+        "ranges": "19-21",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/HANDOFF.md",
+        "file": "docs/development/reviews/READ-DESIGN-01-REVIEW.md",
+        "ranges": "29-39",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-http-01/HANDOFF.md",
+        "file": "docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+        "ranges": "40,44-54,64-68,132-140,144-151",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      }
+    ],
+    "semanticReviewRequired": true,
+    "scopeValid": true
+  },
+  {
+    "task": "READ-WEB-DESIGN-01-R1",
+    "head": "39b2b7cd1bf047c9691206c08bc489ff4ef112c9",
+    "prior": "63b0feb8dffad7dc88252dd7dd786b80c7e54e7c",
+    "reviewedDocumentRef": "39b2b7cd1bf047c9691206c08bc489ff4ef112c9",
+    "baseline": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05",
+    "acceptedMain": "3c817f881bd9f96f23f525af50199aa56e3a5291",
+    "scope": [
+      "docs/contracts/decisions/node-read-web-01/ACCEPTANCE.md",
+      "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+      "docs/contracts/decisions/node-read-web-01/HANDOFF.md"
+    ],
+    "documents": [
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "sha256": "ba50f934edcae3c97a7a9dcaba666275e1bebea9f657375994bf4eaf693499cf"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/ACCEPTANCE.md",
+        "sha256": "5348c7136ee27b32ac2c1b471d8862187b783f99c6e99da44b89f0936be3774b"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/HANDOFF.md",
+        "sha256": "7547d9513125ab9140a19e8e5f85c868a9a87b2919dff784cd73e3bb044c3378"
+      }
+    ],
+    "referenceCount": 25,
+    "referencedFiles": 12,
+    "rangeProblems": [],
+    "references": [
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "6639-6678",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r02/merged-candidate.yaml",
+        "ranges": "12905-12944",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "90-112",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "20-35",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "217-302",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "docs/contracts/revisions/g2-r03/DECISIONS.md",
+        "ranges": "7-12",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/types.ts",
+        "ranges": "66-78",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "docs/development/READ-DESIGN-01-REPAIR.md",
+        "ranges": "34",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-01/PROPOSAL.md",
+        "ranges": "54-78,79-92",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "docs/contracts/decisions/node-read-01/ACCEPTANCE.md",
+        "ranges": "17-33",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "90-112,6639-6678",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r02/merged-candidate.yaml",
+        "ranges": "12905-12944",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "9-10,20-35,41-49,193-196,209-217,217-302",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "docs/contracts/revisions/g2-r03/DECISIONS.md",
+        "ranges": "7-12",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/types.ts",
+        "ranges": "40-50,66-78,86-89",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/node-loader.tsx",
+        "ranges": "9,22-25,54-69",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/node-list.tsx",
+        "ranges": "58,153",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/node-filters.ts",
+        "ranges": "39",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "apps/web/src/features/nodes/candidate-adapter.ts",
+        "ranges": "81-107",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/DESIGN.md",
+        "file": "docs/development/READ-DESIGN-01-REPAIR.md",
+        "ranges": "33-35",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/ACCEPTANCE.md",
+        "file": "docs/contracts/decisions/node-read-01/ACCEPTANCE.md",
+        "ranges": "7-15",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/HANDOFF.md",
+        "file": "docs/development/READ-DESIGN-01-REPAIR.md",
+        "ranges": "33-35",
+        "ref": "3c817f881bd9f96f23f525af50199aa56e3a5291"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/HANDOFF.md",
+        "file": "api/openapi/g2-merged-candidate.yaml",
+        "ranges": "90-112,6639-6678",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/HANDOFF.md",
+        "file": "api/openapi/revisions/g2-r02/merged-candidate.yaml",
+        "ranges": "12905-12944",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      },
+      {
+        "document": "docs/contracts/decisions/node-read-web-01/HANDOFF.md",
+        "file": "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml",
+        "ranges": "9-10,20-35,41-49,193-196,209-217,217-302",
+        "ref": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05"
+      }
+    ],
+    "semanticReviewRequired": true,
+    "scopeValid": true
+  }
+]

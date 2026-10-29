@@ -36,6 +36,8 @@ W06-R1现已接收，W06-R01/R02关闭：作者同ID/关闭键盘与迟到结果
 
 三份具体设计首次复审接收认证提案48409bac；HTTP ece5efd、Web 63b0feb各因2个P2退回，见[复审](docs/development/reviews/READ-DESIGN-01-REVIEW.md)及[限定返修](docs/development/READ-DESIGN-01-REPAIR.md)。Codex完成停止，两位原分支只修各自3文档；[组合清单](docs/contracts/decisions/node-read-01/DESIGN-INTEGRATION-STATUS.md)保留Cookie/Token迁移、可信来源/Tgate、Web失效/指标等待对齐项。设计文档接收不批准具体安全参数、契约或真实实现，A1+B1不重问，D01–D07/P1-C10仍OPEN。
 
+HTTP返修4fbdcf5与Web返修39b2b7c现已接收为PROPOSED，原四个P2关闭；总控澄清有状态凭据的权威查询顺序及Web展示世代/终止错误门控。三位当前设计任务完成停止，详见[返修复审](docs/development/reviews/READ-DESIGN-R1-REVIEW.md)。三份设计齐备仍不代表认证/HTTP/App已实现；下一步建议的[W07旧列表展示组件](docs/development/W07-LEGACY-VIEW-PROPOSAL.md)已列清范围、等待新实施批准，未创建作者目录或派发任务。D01–D07/P1-C10仍OPEN，G2未冻结。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

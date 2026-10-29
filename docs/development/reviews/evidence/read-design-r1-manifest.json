@@ -1,0 +1,173 @@
+{
+  "date": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "technicalHead": "1600197342da79c2d9cee209a499ff1f88d32e5c",
+  "note": "UTC check timestamps are 2026-10-29; local Asia/Shanghai date is 2026-10-30. No output trimming or test suppression.",
+  "archiveAttempts": [
+    {
+      "attempt": 1,
+      "status": "FAIL",
+      "reason": "ENOENT: reviewer expected author reports/check-policy-r1.log; actual author output has per-step logs"
+    },
+    {
+      "attempt": 2,
+      "status": "PASS",
+      "correction": "Read existing author tooling-tests.log with policy JSON; no author evidence created or altered"
+    }
+  ],
+  "artifacts": [
+    {
+      "label": "npm-ci",
+      "source": "reports/read-design-r1-npm-ci.log",
+      "artifact": "read-design-r1-npm-ci.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 341,
+      "sha256": "fa121a31df845f4df943d43ba16fa8a13f6abb612aa580c21573dcd0ff2334d6",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "tools-install",
+      "source": "reports/read-design-r1-tools-install.log",
+      "artifact": "read-design-r1-tools-install.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 393,
+      "sha256": "e889f4db965670aef2d2ded045e8bfe7105b4a3f51e26909061794c1d330cec0",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "check",
+      "source": "reports/read-design-r1-check.log",
+      "artifact": "read-design-r1-check.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 1051737,
+      "sha256": "66d78f1750f24a29594b8dca571b21e00822a1bfa3a7a10e9fac58f289eb5eda",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "security",
+      "source": "reports/read-design-r1-security.log",
+      "artifact": "read-design-r1-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "source-integrity",
+      "source": "reports/source-integrity.log",
+      "artifact": "read-design-r1-source-integrity.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 52,
+      "sha256": "ce1d0e3452868ac1db94258f2f5e9016dc21a8df0180b0689c0285867ff9c96d",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "check-all",
+      "source": "reports/check-all.json",
+      "artifact": "read-design-r1-check-all.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 359,
+      "sha256": "d8ddf647818dc8c5c5ac78573ae701646a3f8ee158aa9d95111193b65fc67cf6",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "check-security",
+      "source": "reports/check-security.json",
+      "artifact": "read-design-r1-check-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 128,
+      "sha256": "8c98df3ecfd2172525de7d65f8c9bb83cf6785eef360ea31032f081f456aeda7",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "g2r02-results",
+      "source": "reports/g2r02-results.json",
+      "artifact": "read-design-r1-g2r02-results.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 797,
+      "sha256": "1abc8a461982a264e99e2629edd4c3cd5d6f5a4adeac85260117901976321af3",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "g2r03-results",
+      "source": "reports/g2r03-results.json",
+      "artifact": "read-design-r1-g2r03-results.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 636,
+      "sha256": "0c9519766e7e2e081796a4e83b48ba5d88c92313339dc063cdfed2481cbacb2a",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "test-counts",
+      "source": "reports/read-design-r1-test-counts.json",
+      "artifact": "read-design-r1-test-counts.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 135,
+      "sha256": "076a65b7204e93286c0a79d0c4c3233531a74af8b4896e7a1497404d8dc07dcb",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "web-junit",
+      "source": "reports/web-junit.xml",
+      "artifact": "read-design-r1-web-junit.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 39814,
+      "sha256": "5eca1f99576be240443da660be1a1c50431d45678841cbb8ae79705e330e8364",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "author-http-policy",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-http-design-ds01/reports/check-policy.json",
+      "artifact": "read-design-r1-author-http-policy.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 126,
+      "sha256": "1056a2c6a6c416b11b4ff87208f0fb582502acc2c74375eb998d30f31e70e52c",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "author-http-tooling-tests",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-http-design-ds01/reports/tooling-tests.log",
+      "artifact": "read-design-r1-author-http-tooling-tests.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 518,
+      "sha256": "d4d173a34a29999f8c4fc1f20245ba2097ff344ce11f7d01d4d1e49da835f199",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "author-web-policy",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-web-design-gm01/reports/check-policy.json",
+      "artifact": "read-design-r1-author-web-policy.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 126,
+      "sha256": "781332b0a4a0c477c5ee899822e0e745ebaef5cf6a3ef9933b1ae503f0b8c785",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "author-web-junit",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-web-design-gm01/reports/web-junit.xml",
+      "artifact": "read-design-r1-author-web-junit.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 6744,
+      "sha256": "72a9e0a12d979f178734123486e0829f94890d325dc2aadb0d9f8befa9448a77",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "final-policy",
+      "source": "reports/read-design-r1-final-policy.log",
+      "artifact": "read-design-r1-final-policy.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 1229,
+      "sha256": "49fd39dbc677fcd5e05c2de4e3fe5719133d717fccb8ba09eeaadb97af190b12",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "final-policy-result",
+      "source": "reports/check-policy.json",
+      "artifact": "read-design-r1-final-policy-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 126,
+      "sha256": "e4425deb649be82a67cca80bf874d1f01740c3255674552a9b83be6912a8357a",
+      "roundTrip": "PASS"
+    }
+  ]
+}

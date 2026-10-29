@@ -1,0 +1,24 @@
+{
+  "date": "2026-10-30",
+  "status": "PASS",
+  "baseMain": "3c817f881bd9f96f23f525af50199aa56e3a5291",
+  "technicalHead": "1600197342da79c2d9cee209a499ff1f88d32e5c",
+  "evidenceRoundTrips": 17,
+  "authorDocumentsHashed": 6,
+  "localMarkdownLinks": 53,
+  "linkProblems": [],
+  "authorAncestors": true,
+  "runtimeAndProtectedPathsUnchanged": true,
+  "allChangesDocumentationOnly": true,
+  "proposedAuthorWorktreeCreated": false,
+  "finalPolicy": {
+    "executedAt": "2026-10-29T16:58:11.760Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      }
+    ]
+  },
+  "note": "Run before documentation/evidence commit; final main fast-forward and cleanliness checked separately."
+}

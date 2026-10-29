@@ -41,6 +41,8 @@ N03-A已接收先预检、同次范围读取库存的离线用例。Controller�
 
 三项已按A1+B1登记，详细分支/独立目录、3份允许文件、验收与停止条件见[READ-DESIGN-01-WORK-PACKAGES](../../../development/READ-DESIGN-01-WORK-PACKAGES.md)。三位旧任务保持完成停止；新设计任务待负责人复制提示词派发，目录从本轮已验证main准备。总控不自动启动或工具代发消息。
 
-具体设计首次复审更新：认证48409bac文档已接收为PROPOSED，任务完成停止；HTTP/Web各有2项P2待限定返修，尚未合入main。A1+B1方向不重问，具体方案仍须组合审查；当前状态及未定项见[DESIGN-INTEGRATION-STATUS](DESIGN-INTEGRATION-STATUS.md)，本包不批准真实接线。
+具体设计首次复审更新（历史）：认证48409bac文档接收为PROPOSED；当时HTTP/Web各有2项P2待限定返修，未合入main。
+
+2026-10-30返修更新：HTTP 4fbdcf5与Web 39b2b7c接收为PROPOSED，原四P2关闭，三位当前任务均完成停止。A1+B1方向不重问；具体参数/契约与实现准入仍待批准。组合差异见[DESIGN-INTEGRATION-STATUS](DESIGN-INTEGRATION-STATUS.md)；下一步建议的[W07旧列表展示组件](../../../development/W07-LEGACY-VIEW-PROPOSAL.md)已列出局部范围和验收，尚未授权开工或自动派发。
 
 本次方向选择只授权形成上述设计、兼容差异和可执行验收计划。后续具体契约/安全决定仍需审查与明确批准，未授权运行时profile、真实认证/HTTP/执行、G2冻结、生产/VPS/云/远程操作。无真实凭据、默认放行mock或未经批准的公共文件修改。
