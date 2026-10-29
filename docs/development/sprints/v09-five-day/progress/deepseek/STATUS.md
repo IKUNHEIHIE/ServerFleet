@@ -73,3 +73,32 @@
 - 实现：HTTP/TCP/TLS 监测、SSRF 目标策略与逃逸形式拒绝、维护窗、上下线迁移告警、注入 Prober（nil fail-closed）；SMTP/QQ 仅存 secretRef、去重窗口、QQ→SMTP 备用一次、显式重试上限/退避、未知结果不重试；流量周期/权威修正、缺失≠0、估算门控、提醒去重、超额仅告警不断网。通知 HTTP 注册（读取需注入 gate，响应不含 secretRef）。
 - 测试：`go test ./internal/monitoring/ ./internal/notifications/ ./internal/quota/` → ok；staticcheck 通过。
 - 未覆盖/风险：监控先持久状态后发通知，告警投递失败不会下轮自动重发；SSRF 不做 DNS 解析，需真实 Prober 复核；真实 SMTP/QQ/网络目标 UNTESTED。
+
+## 检查点 C9 · DS-08 网关/发布
+
+- SHA：`ab4510a`。迁移 `ds/0070_gateway`、`ds/0080_publishing`。
+- 实现：网关与节点绑定、准入由实时 online+ready+installed+checked+enabled 派生；接管现有站点必须显式批准；provision 只提交一个统一任务并回写分步结果；路由域名唯一、upstream/serviceGroup 二选一、启用需 Checker 通过、记录服务组 revision 快照；发布固定 DNS→证书→网关顺序、逐阶段持久、失败停止、重试跳过已成功阶段、显式补偿且不宣称 DNS 缓存即时回滚。
+- HTTP：网关列表/详情/启用/provision/provision 查询/路由 CRUD；`/checks` 与 publishing HTTP 未注册（避免推断/缺契约）。
+- 测试：`go test ./internal/gateway/ ./internal/publishing/` → ok；staticcheck 通过。真实 Nginx、节点、POC-05 未执行。
+
+## 最终验证（2026-10-30）
+
+- `npm run check`：PASS（policy/contracts/go/web/git；Go 全包测试、vet、staticcheck；Web 179 项、build）。
+- `npm run check:security`：PASS（npm audit 0，govulncheck 无漏洞）。
+- `go test ./...`：PASS（含 architecture、contracts、integration、POC）。
+- `go mod tidy -diff` / `go mod verify`：PASS。
+- 跨 13 个迁移的备份/恢复/损坏拒绝：`go test ./tests/integration/v09/services/` PASS。
+- POC-07 本机：10/30/100 代理 9370.9/5680.9/5298.8 writes/s，DB ≤980KB，checkpoint 后 WAL 0，SSE 3 事件 <1ms；环境 Windows，不代表 1C1G/Linux 验收。
+- 工作区在最终提交前 clean；最终 HEAD 见下一条提交。
+
+## 未完成清单（不得当作完整 v0.9 已验收）
+
+1. 真实 Linux Debian/Ubuntu amd64/arm64、1 核 1GB 压测、mTLS Agent/WSS 端到端：BLOCKED（无授权隔离环境）。
+2. Cloudflare 多账号、ACME/内部 CA、QQ/SMTP、Nginx 真实供应商/节点、POC-05：UNTESTED/BLOCKED（仅注入端口与 fake 测试）。
+3. certificates HTTP 未注册：候选“节点本地 CSR/信任包”与 KeyRef 模型冲突，需契约决策。
+4. publishing HTTP 未注册：g2-merged 候选无对应路径；服务层端口已备。
+5. gateway `/checks` 未注册：无独立 serviceRunning 观测，不用推断值冒充。
+6. monitoring/quota HTTP 未注册：候选无路径；服务层已备。
+7. CX 仍需实现 tasks.ReadGate、audit ReadGate、notifications ReadGate、ApprovalConsumer、Dispatcher、NodeLookup、GroupResolver/ClassResolver 等组合端口；Controller 入口未接线。
+8. `go.mod/go.sum`、迁移编号、HTTP/SSE 契约仍未获总控接收/冻结。
+9. 监控告警失败不自动重发；SSRF 需 Prober 复核 DNS 解析地址；quota 可信采集入口不得直接暴露。

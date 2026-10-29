@@ -11,7 +11,7 @@
 | DS-05 文件 | `internal/files/**` | ds/0040 | `go test ./internal/files/`：路径矩阵/双端授权/dry run/提交失败/取消/恢复/断点/校验/重试/下载拒绝/幂等 HTTP | PASS（fake 字节通道）；真实文件字节/节点断线 UNTESTED |
 | DS-06 监控/通知/配额 | `internal/monitoring/**`、`internal/notifications/**`、`internal/quota/**` | ds/0050, 0051, 0052 | `go test` 三包通过；SSRF 矩阵/状态迁移/维护窗、去重/QQ→SMTP 一次备用/重试上限、缺失≠0、不自动断网；通知 HTTP 已注册 | PASS（fake 供应商）；真实 SMTP/QQ/网络探测 UNTESTED |
 | DS-07 DNS/证书 | `internal/dns/**`、`internal/certificates/**` | ds/0060, 0061 | `go test ./internal/dns/ ./internal/certificates/`：credentialRef 不回显、默认切换、记录冲突、KeyRef/PEM 拒绝、分发 revision、审计回滚 | PASS（fake provider/issuer）；Cloudflare/ACME UNTESTED |
-| DS-08 网关/发布 | `internal/gateway/**`、`internal/publishing/**` | ds/0070, 0080 | 见子包 `go test`；接管批准、探针/端口、准入、分期/重试/回滚 | 见下方子代理报告（待最终核验）；Nginx/真实节点 UNTESTED |
+| DS-08 网关/发布 | `internal/gateway/**`、`internal/publishing/**` | ds/0070, 0080 | `go test` 两包通过；接管批准、探针/端口、准入、分期/重试/回滚；网关 HTTP 部分注册 | PASS（fake checker/task）；Nginx/真实节点/POC-05 UNTESTED |
 | DS-09 HTTP/备份/POC | nodes/tasks/audit/files/servicegroups/dns/notifications HTTP；`storage.BackupTo`；`tests/integration/v09/services`、`tests/poc/v09/services` | 全部 13 | 13 迁移备份恢复+损坏拒绝；POC-07 10/30/100 代理；SSE 游标/撤权；固定错误 | PASS（本机）；1C1G/Linux BLOCKED |
 
 ## POC-07 本机数据（2026-10-30）
@@ -26,9 +26,9 @@ SSE 读取 3 事件 <1ms。报告：`reports/_review/v09-services/poc07-report.j
 
 ## 未完成/缺口
 
-- DS-08 子代理报告与最终核验未回填。
+- DS-08 已知限制：`/gateways/{id}/checks` 未注册（缺少独立 serviceRunning 观测）；`/gateway-routes` 创建要求 `gatewayId` 扩展字段；POC-05 需要真实隔离 Nginx 节点。
 - DS-06 已知限制：监控先持久状态再发通知，通知失败不会在下一轮重发；SSRF 校验不做 DNS 解析，需可信 Prober 复核解析地址；quota `RecordUsage` 是可信内部入口，禁止直接暴露给未认证适配器。
 - certificates HTTP、gateway/publishing HTTP 未注册：契约语义与实现模型存在差异，需契约 owner 决策（见 `INTEGRATION.md`）。
 - monitoring/quota HTTP 未注册：g2-merged 候选无相应路径。
-- 真实 Cloudflare/ACME/QQ/SMTP/Nginx、Debian/Ubuntu 双架构、1C1G、mTLS Agent 全部 UNTESTED/BLOCKED。
+- 真实 Cloudflare/ACME/QQ/SMTP/Nginx、Debian/Ubuntu 双架构、1C1G、mTLS Agent 全部 UNTESTED/BLOCKED；publishing 只有注入端口，无真实供应商端到端。
 - `go.mod/go.sum`、迁移编号、HTTP 契约仍待总控接收。
