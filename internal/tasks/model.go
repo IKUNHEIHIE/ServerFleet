@@ -154,4 +154,5 @@ var (
 	ErrNodeLookupAbsent       = errors.New("tasks: node availability source is not configured")
 	ErrRequestIDRequired      = errors.New("tasks: request id is required")
 	ErrApprovalConsumerAbsent = errors.New("tasks: external approval consumer is not configured")
+	ErrIdempotencyMismatch    = errors.New("tasks: idempotency key reused with a different request")
 )

@@ -253,6 +253,10 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 	if existing, found, err := s.repo.GetByIdempotencyKey(ctx, request.SubjectID, request.IdempotencyKey); err != nil {
 		return Task{}, err
 	} else if found {
+		if existing.ActionID != request.ActionID || existing.OperationClass != request.OperationClass ||
+			existing.Params != params || !sameTargetSet(existing.Targets, snapshot.IDs()) {
+			return Task{}, ErrIdempotencyMismatch
+		}
 		return existing, nil
 	}
 
@@ -323,12 +327,15 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 			}, now); err != nil {
 				return err
 			}
-			if err := s.audit.AppendTx(txCtx, tx, s.event(approver, ActionApprovalConsumed, "success", request.RequestID, snapshot.IDs(), "")); err != nil {
+			consumed := s.event(approver, ActionApprovalConsumed, "success", request.RequestID, snapshot.IDs(), "")
+			consumed.TaskID = task.ID
+			if err := s.audit.AppendTx(txCtx, tx, consumed); err != nil {
 				return err
 			}
 		}
 		event := s.event(request.SubjectID, ActionSubmit, "success", request.RequestID, snapshot.IDs(), "")
 		event.Source = source
+		event.TaskID = task.ID
 		return s.audit.AppendTx(txCtx, tx, event)
 	})
 	if errors.Is(err, errDuplicateSubmit) {
@@ -423,7 +430,9 @@ func (s *Service) Decide(ctx context.Context, taskID string, expectedRevision ui
 		}, now); err != nil {
 			return err
 		}
-		return s.audit.AppendTx(txCtx, tx, s.event(decision.ApproverID, ActionApprove, record, decision.RequestID, targetIDs, decision.Reason))
+		event := s.event(decision.ApproverID, ActionApprove, record, decision.RequestID, targetIDs, decision.Reason)
+		event.TaskID = taskID
+		return s.audit.AppendTx(txCtx, tx, event)
 	})
 	if err != nil {
 		return Task{}, err
@@ -499,7 +508,9 @@ func (s *Service) Revise(ctx context.Context, taskID string, request ReviseReque
 		}, s.now()); err != nil {
 			return err
 		}
-		return s.audit.AppendTx(txCtx, tx, s.event(request.SubjectID, ActionRevise, "success", request.RequestID, snapshot.IDs(), ""))
+		event := s.event(request.SubjectID, ActionRevise, "success", request.RequestID, snapshot.IDs(), "")
+		event.TaskID = taskID
+		return s.audit.AppendTx(txCtx, tx, event)
 	})
 	if err != nil {
 		return Task{}, err
@@ -565,7 +576,9 @@ func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID strin
 		}, now); err != nil {
 			return err
 		}
-		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionCancel, "success", requestID, targetIDs, ""))
+		event := s.event(subjectID, ActionCancel, "success", requestID, targetIDs, "")
+		event.TaskID = taskID
+		return s.audit.AppendTx(txCtx, tx, event)
 	})
 	if err != nil {
 		return Task{}, err
@@ -704,6 +717,22 @@ func (s *Service) lockTask(taskID string) func() {
 	mutex := value.(*sync.Mutex)
 	mutex.Lock()
 	return mutex.Unlock
+}
+
+func sameTargetSet(targets []Target, ids []string) bool {
+	if len(targets) != len(ids) {
+		return false
+	}
+	want := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		want[id] = struct{}{}
+	}
+	for _, target := range targets {
+		if _, ok := want[target.NodeID]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 func paramsFromSubmit(request SubmitRequest) (string, error) {

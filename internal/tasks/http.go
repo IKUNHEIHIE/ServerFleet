@@ -591,7 +591,7 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
 	case errors.Is(err, ErrApprovalInvalid), errors.Is(err, ErrSelfApproval),
-		errors.Is(err, ErrInvalidStatus), errors.Is(err, ErrDuplicateResult):
+		errors.Is(err, ErrInvalidStatus), errors.Is(err, ErrDuplicateResult), errors.Is(err, ErrIdempotencyMismatch):
 		writeFixed(w, http.StatusConflict, "conflict", "task state changed")
 	case errors.Is(err, ErrInvalidTask), errors.Is(err, ErrUnknownOperationClass),
 		errors.Is(err, ErrTargetNotFound), errors.Is(err, ErrRequestIDRequired):

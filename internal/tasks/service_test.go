@@ -571,3 +571,20 @@ func TestCanonicalParamsAndSourceValidation(t *testing.T) {
 		t.Fatal("accepted plugin source without plugin id")
 	}
 }
+
+func TestIdempotencyKeyRejectsDifferentRequest(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "n1", "n2")
+	first := f.submit(t, tasks.SubmitRequest{TargetNodeIDs: []string{"n1"}, IdempotencyKey: "same-key"})
+	if _, err := f.service.Submit(context.Background(), tasks.SubmitRequest{
+		SubjectID: "user-1", RequestID: "req-2", Name: "test task", ActionID: "host.patch",
+		OperationClass: tasks.OperationClassStandard, TargetNodeIDs: []string{"n1", "n2"},
+		IdempotencyKey: "same-key",
+	}); !errors.Is(err, tasks.ErrIdempotencyMismatch) {
+		t.Fatalf("mismatch err = %v", err)
+	}
+	task, err := f.service.Get(context.Background(), first.ID)
+	if err != nil || len(task.Targets) != 1 {
+		t.Fatalf("first task changed: %+v, %v", task, err)
+	}
+}
