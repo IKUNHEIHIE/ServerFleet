@@ -80,6 +80,16 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R08 两套Xray模板与真实目标版本测试
 
+提交 `67c4c1d229cc2c9bf498014d1ded5eb23085f27f`；可复现run-xray.mjs复验PASS 2.990s。
+
 可选包新增固定26.6.1两套RAW/Vision模板、当前预检/插件/版本/接管/revision/端口/证书/REALITY校验、指定业务凭据借用与短时配置回调。默认仅声明UI，不引入WASM生产runtime、不import核心、不调用Shell/SSH。详细输入/接线/边界见XRAY-TEMPLATES.md。
 
 下载公开官方Windows64发布物，核对release asset SHA256和解包exe SHA256，未下载/接入Linux节点。真实Xray -test与两套回环inbound/API进程启动通过。初轮TLS临时证书测试把旧解析parent与新key混用，x509正确拒绝；改为新临时template/匹配key并同步预检DER后全通过，没放宽生产校验。显式SF_XRAY_LOCAL_TEST_BINARY的`go test ./plugins/xray-manager -count=1 -v` PASS 3.082s；staticcheck PASS。通用未供binary的运行SKIP该项。Linux双架构/完整客户端流量仍未验证，继续平台生命周期和其他子项。
+
+## R09 持久工作流编排
+
+新增Engine/SQLWorkflowBackend：固定action规范化、CAS定义、可信触发/等值条件、冻结计划、step幂等、统一taskId顺序推进/审批等待/失败停止/UNKNOWN暂停、禁用和修订后的派发checker、同Tx域/审计/提交端口。严格校验持久计划摘要与状态，没把unknown重新当pending。精确接缝WORKFLOW-WIRING.md；发现DS pin提交没有SubmitTx，已明确列为具体S03依赖，不在写事务内调用另一个Submit造成死锁，不复制第二套任务服务。
+
+`go test ./internal/workflows -count=1 -v` PASS 2.031s；第一次staticcheck发现测试中的重复db赋值未使用，修正后staticcheck PASS；architecture PASS 2.083s。单元正向任务为明确double；真实SQLite组合只验证真实持久/重启/审计回滚与缺端口不能推进，不伪造任务成功。继续AI/插件/更新恢复包内项。
+
+固定锁SQLite组合八项PASS 8.306s，包含实际workflow定义/冻结计划重开、域+audit提交前故障一起回滚及缺统一任务端口拒绝。
