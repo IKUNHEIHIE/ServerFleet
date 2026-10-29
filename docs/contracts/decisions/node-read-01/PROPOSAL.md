@@ -39,7 +39,7 @@
 |---|---|---|---|
 | `status` | **已有** `internal/nodes.Status` 五值 | 内部字段存在；五状态权威来源、暂停/吊销与连接在线优先级仍是 **D02 待批提案**，不是已批准事实 | R1-A 不输出 status；R1-B 只有在 D02 批准且来源一致后输出 |
 | `revision` | **缺失** | D03 待批；候选详情必填 `>=1`、列表可选；没有来源/存储/精度结论 | 详情阻塞在 R1-B；R1-A 不输出、不填 1/时间/序号 |
-| `platform`/`agentVersion` | **缺失** | 公开 DTO 为**可选** string；Web 局部值可为 null | 不是详情/R1-B 的非空前置；缺失可省略/null，不阻塞 |
+| `platform`/`agentVersion` | **缺失** | 公开 DTO 为**可选** string；Web 局部值可为 null | 不是详情/R1-B 的非空前置；公开 DTO 缺失时省略，局部 VM 可用 null，不阻塞 |
 | `lastSeenAt` | 已有 `LastSeenAt` | 公开可选 date-time；与采样时间不是同一概念 | 可用于最近在线展示；不得当 sampledAt |
 | `Metrics.ObservedAt` | **已有**原始采样时间（可为零值） | 只是一次原始样本时间；**共同 sampledAt 的公共形状/时效语义仍是 D04 待批提案** | R1-A 无公共 sampledAt 时不得显示为新鲜；R1-B 只在同一真实样本时输出 |
 | `online` | 可由内部 Status 计算 | 旧列表必填布尔；D02 提案的 `online==status==online` 尚未批准 | R1-A 只保留旧布尔，不从 false 猜具体状态 |
@@ -116,7 +116,7 @@ D08 的工具/注释协调已完成，不在此重复；它不批准 D01–D07 �
 | 2 | 认证/会话/凭据实现与主体绑定 | 依赖 Q2/D05；可与机制设计并行 | 伪造 subject 被忽略、过期/撤销拒绝、双凭据规则测试 |
 | 3 | Controller R1-A 列表端点：scope → inventory → check → 可见集合 → `onlineOnly` → legacy DTO/错误/no-store | 依赖 0/1/2；与元数据任务可并行 | httptest 正反用例、空库存、策略失败、隐藏计数、onlineOnly 全部取值、取消 |
 | 4 | Web R1-A legacy source/列表 VM | 依赖 3；当前主线 W05 `NodeLoader` 已接收（`b44352f`）可复用 loading/世代隔离，但真实 fetch/DTO 适配仍需实现；不要读取 W05 未提交内容 | 组件/适配测试、源切换首提交、无网络、指标缺失不显示新鲜 |
-| 5 | 节点元数据源：revision（详情必需）、status 权威/优先级（D02）、共同采样时间（D04）；`platform/agentVersion` 仅可选 | 依赖 Q3/D02–D04，可与 3/4 并行；阻塞详情/R1-B | 权威来源、原子读、版本/精度/新鲜度测试；platform/agent 缺失可省略/null，不阻塞 |
+| 5 | 节点元数据源：revision（详情必需）、status 权威/优先级（D02）、共同采样时间（D04）；`platform/agentVersion` 仅可选 | 依赖 Q3/D02–D04，可与 3/4 并行；阻塞详情/R1-B | 权威来源、原子读、版本/精度/新鲜度测试；platform/agent 公开 DTO 缺失时省略，局部 VM 可用 null，不阻塞 |
 | 6 | R1-B 富化列表 + 详情 + 当前 Web ViewModel | 依赖 0/2/5，可能部分依赖 3 | 详情字段不伪造、状态一致性、旧客户端兼容、错误/缓存测试 |
 | 7 | 端到端验收（HTTP/浏览器/安全） | 依赖 3/4（及 R1-B 时的 5/6） | 真实验收输出；本轮不运行、不声称已完成 |
 

@@ -23,7 +23,7 @@
 
 ## 本次返修
 
-- **RP01-R01（字段/来源事实）**：PROPOSAL 新增“字段存在/权威/公开形状”分层表；明确 Node 已有 `Status` 和 `Metrics.ObservedAt`，真正缺 `revision/platform/agentVersion`；`Status` 权威/暂停吊销优先级与公共 `sampledAt` 语义仍是 D02/D04 待批提案；`platform/agentVersion` 是可选公开字段，缺失可省略/null，不是详情/R1-B 的非空前置。
+- **RP01-R01（字段/来源事实）**：PROPOSAL 新增“字段存在/权威/公开形状”分层表；明确 Node 已有 `Status` 和 `Metrics.ObservedAt`，真正缺 `revision/platform/agentVersion`；`Status` 权威/暂停吊销优先级与公共 `sampledAt` 语义仍是 D02/D04 待批提案；`platform/agentVersion` 是可选公开字段，公开 DTO 缺失时省略、局部 VM 可为 null，不是详情/R1-B 的非空前置。
 - **RP01-R02（onlineOnly）**：R1-A、D01/D06/D07、Controller 拆分和 ACCEPTANCE 均补上 `onlineOnly:boolean` 默认 false；明确“先认证/策略预检 → 授权可见集合 → onlineOnly 过滤”；新增 COMPAT-02 覆盖省略/false/true、隐藏在线节点、过滤后空集、策略故障和坏 query（解析/HTTP 码待 D06）。
 - **选择题**：Q1 只保留首版范围；Q3 改为独立的状态权威问题（legacy online 布尔 vs 五状态权威），不再用“现在/以后”的重复阶段选择；Q1 选 R1-full 时 Q3 必须选五状态权威，选项互相一致。
 - **当前事实**：保留 98a1f6b 历史基线语境，同时标注当前主线 `ddf8c5b` 已接收 N03-A 与 W05；两者只是离线用例/隔离加载容器，不是真实 HTTP/fetch/浏览器闭环。
@@ -41,7 +41,7 @@
 
 ## 负责人需选择的问题（最多 3 个，未回复不构成批准）
 
-1. **首版范围**：推荐 **R1-A legacy 列表**；替代为 **R1-full 列表+详情**。R1-A 先闭环身份、可见过滤、`onlineOnly` 兼容和旧列表，但首版 Web 没有详情/状态/版本/新鲜指标；R1-full 体验完整，但详情真正需要 status（D02）与 revision（D03）来源，`platform/agentVersion` 只是可选/nullable，不要求非空来源，且仍需存储原子性，首条闭环推迟。
+1. **首版范围**：推荐 **R1-A legacy 列表**；替代为 **R1-full 列表+详情**。R1-A 先闭环身份、可见过滤、`onlineOnly` 兼容和旧列表，但首版 Web 没有详情/状态/版本/新鲜指标；R1-full 体验完整，但详情真正需要 status（D02）与 revision（D03）来源，`platform/agentVersion` 公开可省略、局部 VM 可为 null，不要求非空来源，且仍需存储原子性，首条闭环推迟。
 2. **Web 首版凭证**：推荐**服务端会话 Cookie（HttpOnly/SameSite）**绑定可信主体，Bearer 仅供非浏览器；需批准列表增加 Cookie 认证及会话/CSRF/撤销设计。替代为 Bearer-only API 先行，但 Web 安全 Token 获取/存储未解决，可能不是完整 Web 闭环。
 3. **状态权威**：推荐首版只用 legacy `online` 布尔，`status` 留到 R1-B；替代为现在批准五状态为权威并明确暂停/吊销与连接在线优先级（若 Q1 选 R1-full，本项必须选替代，才能生成详情必填 `status`）。
 
@@ -52,7 +52,7 @@
 3. 认证/会话/可信主体绑定；依赖 Q2/D05。
 4. Controller R1-A：scope → inventory → check → 授权可见集合 → `onlineOnly` → legacy DTO/错误/no-store；依赖 1–3。
 5. Web R1-A legacy source/列表 VM；依赖 4；当前主线 W05 `NodeLoader` 已接收（`b44352f`）可复用 loading/世代隔离，但真实 fetch/DTO 适配仍需实现。
-6. 节点元数据源：revision（详情必需）、status 权威/优先级（D02）、共同采样时间（D04）；`platform/agentVersion` 仅可选，缺失可省略/null，不作为非空前置。
+6. 节点元数据源：revision（详情必需）、status 权威/优先级（D02）、共同采样时间（D04）；`platform/agentVersion` 仅可选，公开 DTO 缺失时省略、局部 VM 可为 null，不作为非空前置。
 7. R1-B 富化列表/详情/当前 Web ViewModel；依赖 1/3/6。
 8. 真实 HTTP/浏览器/安全验收；依赖 4/5（R1-B 时加 6/7）。本轮未执行。
 
@@ -62,7 +62,7 @@
 
 - 认证/会话/CSRF/Token 撤销 ADR 与实现缺失；D05。
 - 节点 revision 来源/存储原子性缺失；D03；当前 Node **已有 Status 和 Metrics.ObservedAt**，真正缺 revision/platform/agentVersion；Status 权威/优先级与公共 sampledAt 语义仍待 D02/D04，不是结构缺失。
-- `platform/agentVersion` 是公开可选字段，缺失可省略/null，不是详情或 R1-B 的非空前置；不能把它们与 revision/status 真正前置条件混为一谈。
+- `platform/agentVersion` 是公开可选字段，公开 DTO 缺失时省略、局部 VM 可为 null，不是详情或 R1-B 的非空前置；不能把它们与 revision/status 真正前置条件混为一谈。
 - `onlineOnly` 参数/默认 false 已存在于原 Merged/r03，但真实 HTTP 的预检→可见集合→过滤顺序、true/false/省略、隐藏在线节点、过滤后空集、坏 query 均无接线证据；坏 query 解析/HTTP 码待 D06。
 - 真实旧客户端未知字段/扩展名兼容、真实 HTTP 错误/防枚举/限流、跨主体缓存均无证据；D01/D06/D07。
 - N03-A 与 W05 已在当前主线接收（离线用例/隔离加载容器），但都不等于 Controller/HTTP/真实 fetch/浏览器；W06 真实浏览器验收尚未执行。
