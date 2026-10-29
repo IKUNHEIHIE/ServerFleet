@@ -54,6 +54,14 @@ auth/credentials及HTTP可选接线、单元与真实SQLite测试；详细候选
 
 ## R05 受限Bearer
 
+提交 `fce5ea844b8bcc192e702cbc43fcbc5eaeb26111`。
+
 实现auth/bearer及候选HTTP（默认未启用），详见RESTRICTED-BEARER.md。令牌256位一次交付、持久摘要/epoch/期限/用途/只读动作/精确节点上限，签发与每次使用求交当前RBAC/grant/组成员。单独BearerIdentity/CommitGate避免subject适配丢失上限；拒绝浏览器头/混合凭据/重复头，不可认证Cookie管理API/执行/AI/Host。认证观察保存时钟底线，撤销和口令epoch变化均立即失效。
 
 `go test ./internal/auth -count=1` PASS 9.322s，staticcheck PASS。第一轮两个测试resolver对node返回多个ID导致invalid check，修正测试资源fixture后通过，未放宽生产校验。固定锁真实SQLite组合六项PASS 6.026s，令牌摘要持久、重启后可使用、撤销后再次重启不复活。尚未与DS节点list prepare/SSE接线，也不声称Bearer迁移已获批准。继续Agent接入/传输平台。
+
+## R06 生产连接状态机与真实WSS组合实验
+
+internal/transport/controller_link.go实现既有Sender和ControllerLinks连接状态机；握手阶段、能力求交、每帧当前证书重查、事件与发送回调、连接替换、读写超时/有界帧、写失败UNKNOWN和禁止盲目重发。精确接线候选CONTROLLER-LINK-WIRING.md；FrameSocket不绑定待审第三方运行时，实际适配在独立固定依赖PoC，根锁未变。
+
+`go test ./internal/transport -count=1` PASS 3.675s；固定`node tests/poc/v09/platform/run.mjs` PASS 5.311s。真实本机WSS执行生产hub的Hello→offer→ack事件，未准入发送被拒、重连关闭旧连接、旧离线不污染新连接、吊销后收发均拒绝。业务回调/Admit是fixture，未替代DS任务/节点实现，未把局部实验记为完整Agent执行验收。继续接入身份/其他平台功能。

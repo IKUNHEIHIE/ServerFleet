@@ -26,7 +26,7 @@ require golang.org/x/sys v0.44.0 // indirect
 replace serverfleet.local/serverfleet => ${JSON.stringify(root.replaceAll("\\", "/").replace(/\/$/, ""))}
 `);
 writeFileSync(path.join(work,"go.sum"),readFileSync(new URL("dependency-sums.txt",import.meta.url)));
-for (const name of ["wss_test", "wasm_test"]) {
+for (const name of ["wss_test", "wasm_test", "controller_link_test"]) {
   writeFileSync(path.join(work, `${name}.go`), readFileSync(new URL(`${name}.go.txt`, import.meta.url)));
 }
 try {
