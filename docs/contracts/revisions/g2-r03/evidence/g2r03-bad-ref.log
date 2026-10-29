@@ -1,0 +1,8 @@
+reports\g2r03-negative\bad-ref.yaml:
+  227:11  error    no-unresolved-refs  Can't resolve $ref
+
+validating reports\g2r03-negative\bad-ref.yaml...
+reports\g2r03-negative\bad-ref.yaml: validated in 44ms
+
+❌ Validation failed with 1 error.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.

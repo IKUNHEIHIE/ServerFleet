@@ -1,0 +1,13 @@
+extends:
+  - spec
+rules:
+  operation-operationId: error
+  operation-operationId-unique: error
+  path-parameters-defined: error
+  no-unresolved-refs: error
+  no-invalid-media-type-examples:
+    severity: error
+    allowAdditionalProperties: true
+  no-invalid-schema-examples:
+    severity: error
+    allowAdditionalProperties: true

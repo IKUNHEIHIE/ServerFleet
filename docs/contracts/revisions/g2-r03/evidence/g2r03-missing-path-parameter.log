@@ -1,0 +1,8 @@
+reports\g2r03-negative\missing-path-parameter.yaml:
+  188:7  error    path-parameters-defined  The operation does not define the path parameter `{nodeId}` expected by path `/api/v1/nodes/{nodeId}`.
+
+validating reports\g2r03-negative\missing-path-parameter.yaml...
+reports\g2r03-negative\missing-path-parameter.yaml: validated in 45ms
+
+❌ Validation failed with 1 error.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.

@@ -1,0 +1,151 @@
+✔ candidate YAML parses, resolves all refs, has exactly the two existing GET operations and is reproducible (205.687ms)
+✔ provenance, operation matrix and Markdown field matrix are recomputed from real sources (7.0329ms)
+✔ legacy list request, envelope and every original summary field remain unchanged (0.1769ms)
+✔ detail keeps original fields/required/closed shape; optional extensions share list metric schemas (0.1783ms)
+✔ authentication remains explicit; no anonymous branch, profile, fake revision or new list parameters (0.203ms)
+✔ error schemas preserve original formats; detail status is tied to HTTP status by proposal (0.1385ms)
+✔ positive examples cover all five states, zero/100, nullable metrics, absent time/revision and empty inventory (0.1387ms)
+> g2r03-bad-ref: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js exec -- redocly lint --config tests/contracts/g2r03/redocly.yaml reports/g2r03-negative/bad-ref.yaml --format=stylish
+reports\g2r03-negative\bad-ref.yaml:
+  227:11  error    no-unresolved-refs  Can't resolve $ref
+
+validating reports\g2r03-negative\bad-ref.yaml...
+reports\g2r03-negative\bad-ref.yaml: validated in 46ms
+
+❌ Validation failed with 1 error.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.
+> g2r03-duplicate-operation: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js exec -- redocly lint --config tests/contracts/g2r03/redocly.yaml reports/g2r03-negative/duplicate-operation.yaml --format=stylish
+reports\g2r03-negative\duplicate-operation.yaml:
+  118:7  error    operation-operationId-unique  Every operation must have a unique `operationId`.
+
+validating reports\g2r03-negative\duplicate-operation.yaml...
+reports\g2r03-negative\duplicate-operation.yaml: validated in 45ms
+
+❌ Validation failed with 1 error.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.
+> g2r03-missing-path-parameter: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js exec -- redocly lint --config tests/contracts/g2r03/redocly.yaml reports/g2r03-negative/missing-path-parameter.yaml --format=stylish
+reports\g2r03-negative\missing-path-parameter.yaml:
+  188:7  error    path-parameters-defined  The operation does not define the path parameter `{nodeId}` expected by path `/api/v1/nodes/{nodeId}`.
+
+validating reports\g2r03-negative\missing-path-parameter.yaml...
+reports\g2r03-negative\missing-path-parameter.yaml: validated in 44ms
+
+❌ Validation failed with 1 error.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.
+> g2r03-invalid-examples: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js exec -- redocly lint --config tests/contracts/g2r03/redocly.yaml reports/g2r03-negative/invalid-examples.yaml --format=stylish
+reports\g2r03-negative\invalid-examples.yaml:
+  42:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must have required property 'id'.
+  47:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+  49:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+  50:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "offline", "suspended", "revoked", "unknown".
+  49:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+  47:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+  49:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property type must be boolean.
+  61:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+  64:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to constant.
+  64:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "offline", "suspended", "revoked", "unknown".
+  63:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+  61:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+  64:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "online", "offline", "suspended", "revoked", "unknown".
+  75:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+  77:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+  78:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "offline", "suspended", "revoked", "unknown".
+  75:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+  89:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+  92:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to constant.
+  91:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+  89:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+  107:35  error    no-invalid-media-type-examples  Example value must conform to the schema: `revision` property must be >= 1.
+  122:37  error    no-invalid-media-type-examples  Example value must conform to the schema: `cpuPercent` property must be <= 100.
+  137:40  error    no-invalid-media-type-examples  Example value must conform to the schema: `memoryPercent` property must be >= 0.
+  150:37  error    no-invalid-media-type-examples  Example value must conform to the schema: `cpuPercent` property type must be number,null.
+  166:36  error    no-invalid-media-type-examples  Example value must conform to the schema: `sampledAt` property must match format "date-time".
+  203:21  error    no-invalid-media-type-examples  Example value must conform to the schema: must have required property 'revision'.
+  213:29  error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "online", "offline", "suspended", "revoked", "unknown".
+  227:33  error    no-invalid-media-type-examples  Example value must conform to the schema: `lastSeenAt` property type must be string.
+  237:21  error    no-invalid-media-type-examples  Example value must conform to the schema: must NOT have additional properties `arbitrary`.
+  610:25  error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to constant.
+
+validating reports\g2r03-negative\invalid-examples.yaml...
+reports\g2r03-negative\invalid-examples.yaml: validated in 52ms
+
+❌ Validation failed with 31 errors.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.
+> g2r03-allowed-shapes: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js exec -- redocly lint --config tests/contracts/g2r03/redocly.yaml reports/g2r03-negative/allowed-shapes.yaml --format=stylish
+validating reports\g2r03-negative\allowed-shapes.yaml...
+reports\g2r03-negative\allowed-shapes.yaml: validated in 39ms
+
+Woohoo! Your API description is valid. 🎉
+✔ real structural and Redocly checks reject bad-ref (1925.9839ms)
+✔ real structural and Redocly checks reject duplicate-operation (1828.1077ms)
+✔ real structural and Redocly checks reject missing-path-parameter (1862.3117ms)
+✖ real schema example validation rejects malformed list/detail/metric/error payloads (1874.7553ms)
+✔ schema accepts genuine legacy/nullable/stored/future-shaped samples but proves no freshness (1826.191ms)
+ℹ tests 12
+ℹ suites 0
+ℹ pass 11
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 9475.9552
+
+✖ failing tests:
+
+test at tests\contracts\g2r03\negative.test.mjs:34:1
+✖ real schema example validation rejects malformed list/detail/metric/error payloads (1874.7553ms)
+  AssertionError [ERR_ASSERTION]: No actual validation diagnostic for negative_missing_id:
+  reports\g2r03-negative\invalid-examples.yaml:
+    42:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must have required property 'id'.
+    47:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+    49:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+    50:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "offline", "suspended", "revoked", "unknown".
+    49:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+    47:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+    49:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property type must be boolean.
+    61:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+    64:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to constant.
+    64:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "offline", "suspended", "revoked", "unknown".
+    63:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+    61:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+    64:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "online", "offline", "suspended", "revoked", "unknown".
+    75:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+    77:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+    78:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "offline", "suspended", "revoked", "unknown".
+    75:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+    89:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must NOT be valid.
+    92:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to constant.
+    91:33   error    no-invalid-media-type-examples  Example value must conform to the schema: `online` property must be equal to constant.
+    89:25   error    no-invalid-media-type-examples  Example value must conform to the schema: `0` property must match exactly one schema in oneOf.
+    107:35  error    no-invalid-media-type-examples  Example value must conform to the schema: `revision` property must be >= 1.
+    122:37  error    no-invalid-media-type-examples  Example value must conform to the schema: `cpuPercent` property must be <= 100.
+    137:40  error    no-invalid-media-type-examples  Example value must conform to the schema: `memoryPercent` property must be >= 0.
+    150:37  error    no-invalid-media-type-examples  Example value must conform to the schema: `cpuPercent` property type must be number,null.
+    166:36  error    no-invalid-media-type-examples  Example value must conform to the schema: `sampledAt` property must match format "date-time".
+    203:21  error    no-invalid-media-type-examples  Example value must conform to the schema: must have required property 'revision'.
+    213:29  error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to one of the allowed values "online", "offline", "suspended", "revoked", "unknown".
+    227:33  error    no-invalid-media-type-examples  Example value must conform to the schema: `lastSeenAt` property type must be string.
+    237:21  error    no-invalid-media-type-examples  Example value must conform to the schema: must NOT have additional properties `arbitrary`.
+    610:25  error    no-invalid-media-type-examples  Example value must conform to the schema: `status` property must be equal to constant.
+
+  validating reports\g2r03-negative\invalid-examples.yaml...
+  reports\g2r03-negative\invalid-examples.yaml: validated in 52ms
+
+  ❌ Validation failed with 31 errors.
+  run `redocly lint --generate-ignore-file` to add all problems to the ignore file.
+
+
+      at TestContext.<anonymous> (file:///D:/admin/desktop/codex/myproject/ks.worktrees/contract--nodes-read-cx01/tests/contracts/g2r03/negative.test.mjs:68:115)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1402:25)
+      at Test.processPendingSubtests (node:internal/test_runner/test:974:18)
+      at Test.postRun (node:internal/test_runner/test:1542:19)
+      at Test.run (node:internal/test_runner/test:1467:12)
+      at async Test.processPendingSubtests (node:internal/test_runner/test:974:7) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: false,
+    expected: true,
+    operator: '==',
+    diff: 'simple'
+  }

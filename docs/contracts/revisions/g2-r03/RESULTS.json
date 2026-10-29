@@ -1,0 +1,228 @@
+{
+  "task": "G2-R02A",
+  "session": "codex-01",
+  "reviewer": "codex-review-01",
+  "recordedAt": "2026-10-29T08:10:40.441Z",
+  "workdir": "D:\\admin\\desktop\\codex\\myproject\\ks.worktrees\\contract--nodes-read-cx01",
+  "branch": "contract/nodes-read-cx01",
+  "base": "0fef8ba9d42bc50d442721b4ab382af961604e72",
+  "environment": {
+    "node": "v24.22.1",
+    "npm": "11.19.1",
+    "go": "go1.27.3 windows/amd64",
+    "redocly": "2.72.0",
+    "yaml": "2.9.1",
+    "buf": "1.75.0"
+  },
+  "candidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+  "originalContracts": {
+    "executedAt": "2026-10-29T08:02:33.701Z",
+    "results": [
+      {
+        "name": "contracts",
+        "status": "PASS"
+      }
+    ]
+  },
+  "independentR03": {
+    "task": "G2-R02A",
+    "executedAt": "2026-10-29T08:08:02.672Z",
+    "node": "v24.22.1",
+    "candidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "runtimeHTTP": "UNTESTED",
+    "runtimeAuthentication": "UNTESTED",
+    "results": [
+      {
+        "name": "structure",
+        "status": "PASS",
+        "paths": 2,
+        "operations": 2
+      },
+      {
+        "name": "candidate-lint-and-examples",
+        "status": "PASS"
+      },
+      {
+        "name": "source-matrix-and-real-negative-contract-checks",
+        "status": "PASS"
+      },
+      {
+        "name": "actual-offline-read-boundaries",
+        "status": "PASS"
+      }
+    ]
+  },
+  "policy": {
+    "executedAt": "2026-10-29T08:04:15.171Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      }
+    ]
+  },
+  "security": {
+    "executedAt": "2026-10-29T08:04:29.934Z",
+    "results": [
+      {
+        "name": "security",
+        "status": "PASS"
+      }
+    ]
+  },
+  "nodeTests": {
+    "tests": 14,
+    "pass": 14,
+    "fail": 0
+  },
+  "realNegativeCases": {
+    "structural": 3,
+    "payloads": 16,
+    "schemaErrors": 32,
+    "cases": [
+      "negative_missing_id",
+      "negative_online_type",
+      "negative_unknown_status",
+      "negative_status_disagrees",
+      "negative_offline_disagrees",
+      "negative_revision_zero",
+      "negative_cpu_over",
+      "negative_memory_under",
+      "negative_cpu_string",
+      "negative_sampled_time",
+      "negative_detail_revision_missing",
+      "negative_detail_status",
+      "negative_detail_last_seen_null",
+      "negative_detail_extra_field",
+      "negative_error_status",
+      "negative_legacy_error"
+    ],
+    "expectedLintExit": 1
+  },
+  "offlineGoProbes": {
+    "topLevel": 4,
+    "subtests": 5,
+    "status": "PASS",
+    "limitations": [
+      "empty inventory bypasses policy reads",
+      "per-node current policy reads are not an atomic list-wide snapshot"
+    ]
+  },
+  "firstAttempt": {
+    "task": "G2-R02A",
+    "executedAt": "2026-10-29T08:01:56.587Z",
+    "node": "v24.22.1",
+    "candidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "runtimeHTTP": "UNTESTED",
+    "runtimeAuthentication": "UNTESTED",
+    "results": [
+      {
+        "name": "structure",
+        "status": "PASS",
+        "paths": 2,
+        "operations": 2
+      },
+      {
+        "name": "candidate-lint-and-examples",
+        "status": "PASS"
+      },
+      {
+        "name": "source-matrix-and-real-negative-contract-checks",
+        "status": "FAIL",
+        "error": "g2r03-contract-tests failed (exit 1)"
+      }
+    ]
+  },
+  "rootCheckDiscoversR03": false,
+  "sharedPatch": {
+    "applied": false,
+    "gitApplyCheck": "PASS"
+  },
+  "unverified": [
+    "HTTP",
+    "trusted authentication/session and revocation",
+    "atomic authorized inventory and counts",
+    "cross-subject caches",
+    "runtime metric freshness",
+    "actual legacy clients",
+    "G2 freeze"
+  ],
+  "evidence": [
+    {
+      "file": "evidence/g2r03-openapi-lint.log",
+      "sha256": "c27b0ff517804f983bf01e1bc63715ac71fa33766ea226b08b3260613031b13d"
+    },
+    {
+      "file": "evidence/g2r03-read-boundaries.log",
+      "sha256": "ad4b5af679e61375d5a5335f58d67a46e0892a4c2f0fff7f0d76edacec838e81"
+    },
+    {
+      "file": "evidence/g2r03-bad-ref.log",
+      "sha256": "282dae641c72b3b95d24e95be5999822b48f0eef3f7eec8b86c588af677883c6"
+    },
+    {
+      "file": "evidence/g2r03-duplicate-operation.log",
+      "sha256": "2d5cac04312e642bcd1f6a9c198e4a517e855d96339897c488f01352991b8eec"
+    },
+    {
+      "file": "evidence/g2r03-missing-path-parameter.log",
+      "sha256": "343ae15e290bcf8a9024ba57d4fae66feae5c1a8f5943e0d8b37736729ef82f0"
+    },
+    {
+      "file": "evidence/g2r03-allowed-shapes.log",
+      "sha256": "7de2e0e1b19892f8c68cc4412e2caabebf0ad321d7a856ea169995f41330ff22"
+    },
+    {
+      "file": "evidence/g2r03-legacy-extension-collision.log",
+      "sha256": "013edd19b995f2e24a13a41729d01fb25222716d8c76ec678b1f5e8cc329b8a1"
+    }
+  ],
+  "logNormalization": "Archived text logs remove line-ending whitespace and trailing blank lines only; original runtime reports remain ignored.",
+  "archivedLogs": [
+    {
+      "file": "evidence/contract-tests-summary.log",
+      "rawSha256": "116a4f3b9b10c88ec53934106d5b0504b100bba346e43497d51a2b6087b6d365",
+      "sha256": "116a4f3b9b10c88ec53934106d5b0504b100bba346e43497d51a2b6087b6d365"
+    },
+    {
+      "file": "evidence/g2r03-allowed-shapes.log",
+      "rawSha256": "d9b9551a8c03385ba982fc4dc2bc5a5145bc46b27eafcf3fa1ef8f4c8d389e0f",
+      "sha256": "7de2e0e1b19892f8c68cc4412e2caabebf0ad321d7a856ea169995f41330ff22"
+    },
+    {
+      "file": "evidence/g2r03-bad-ref.log",
+      "rawSha256": "eae9764c0ac967e2b1bc8ae65daeacf699ec9150d028bbe596ca41ad394da1d3",
+      "sha256": "282dae641c72b3b95d24e95be5999822b48f0eef3f7eec8b86c588af677883c6"
+    },
+    {
+      "file": "evidence/g2r03-duplicate-operation.log",
+      "rawSha256": "28a208d4897942319c1184f905edb6aa08e66a11194d8167d96da20c52ae39a9",
+      "sha256": "2d5cac04312e642bcd1f6a9c198e4a517e855d96339897c488f01352991b8eec"
+    },
+    {
+      "file": "evidence/g2r03-legacy-extension-collision.log",
+      "rawSha256": "54ef10f1232b9b7205f41fd03ece8608ff26095e0af2a6a1622c4c609c08fe7f",
+      "sha256": "013edd19b995f2e24a13a41729d01fb25222716d8c76ec678b1f5e8cc329b8a1"
+    },
+    {
+      "file": "evidence/g2r03-missing-path-parameter.log",
+      "rawSha256": "0903cd4b22d0944435f427d092e57caf9b3c0d680cfbc05a38d2862b97f23d5f",
+      "sha256": "343ae15e290bcf8a9024ba57d4fae66feae5c1a8f5943e0d8b37736729ef82f0"
+    },
+    {
+      "file": "evidence/g2r03-openapi-lint.log",
+      "rawSha256": "a5165f026a760b86686b721f35b3b66288b35a0f92edcd6e652f3df8e8bc53ec",
+      "sha256": "c27b0ff517804f983bf01e1bc63715ac71fa33766ea226b08b3260613031b13d"
+    },
+    {
+      "file": "evidence/g2r03-read-boundaries.log",
+      "rawSha256": "ad4b5af679e61375d5a5335f58d67a46e0892a4c2f0fff7f0d76edacec838e81",
+      "sha256": "ad4b5af679e61375d5a5335f58d67a46e0892a4c2f0fff7f0d76edacec838e81"
+    },
+    {
+      "file": "evidence/initial-contract-tests.log",
+      "rawSha256": "4676c1df9e4913928018b3edd31673461d7b85ea7d57a283e7045982e8b3f802",
+      "sha256": "7736320b5db89916ec0c0bf36db487d2c79d332ab769d3949d2487eb52cb998f"
+    }
+  ]
+}

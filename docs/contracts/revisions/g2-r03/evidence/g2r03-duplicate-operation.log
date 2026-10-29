@@ -1,0 +1,8 @@
+reports\g2r03-negative\duplicate-operation.yaml:
+  118:7  error    operation-operationId-unique  Every operation must have a unique `operationId`.
+
+validating reports\g2r03-negative\duplicate-operation.yaml...
+reports\g2r03-negative\duplicate-operation.yaml: validated in 45ms
+
+❌ Validation failed with 1 error.
+run `redocly lint --generate-ignore-file` to add all problems to the ignore file.

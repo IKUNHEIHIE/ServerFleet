@@ -1,0 +1,284 @@
+{
+  "cases": [
+    "negative_missing_id",
+    "negative_online_type",
+    "negative_unknown_status",
+    "negative_status_disagrees",
+    "negative_offline_disagrees",
+    "negative_revision_zero",
+    "negative_cpu_over",
+    "negative_memory_under",
+    "negative_cpu_string",
+    "negative_sampled_time",
+    "negative_detail_revision_missing",
+    "negative_detail_status",
+    "negative_detail_last_seen_null",
+    "negative_detail_extra_field",
+    "negative_error_status",
+    "negative_legacy_error"
+  ],
+  "totals": {
+    "errors": 32,
+    "warnings": 0,
+    "ignored": 0
+  },
+  "version": "2.72.0",
+  "problems": [
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must have required property 'id'.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_missing_id/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/online"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/online"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property type must be boolean.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/online"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/online"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"online\", \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0/online"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0/online"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `revision` property must be >= 1.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_revision_zero/value/items/0/revision"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `cpuPercent` property must be <= 100.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_cpu_over/value/items/0/cpuPercent"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `memoryPercent` property must be >= 0.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_memory_under/value/items/0/memoryPercent"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `cpuPercent` property type must be number,null.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_cpu_string/value/items/0/cpuPercent"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `sampledAt` property must match format \"date-time\".",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_sampled_time/value/items/0/sampledAt"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: must have required property 'code'.",
+      "pointers": [
+        "#/components/responses/Unauthorized/content/application~1json/examples/negative_legacy_error/value"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: must have required property 'revision'.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_revision_missing/value"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"online\", \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_status/value/status"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `lastSeenAt` property type must be string.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_last_seen_null/value/lastSeenAt"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: must NOT have additional properties `arbitrary`.",
+      "pointers": [
+        "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_extra_field/value/arbitrary"
+      ]
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to constant.",
+      "pointers": [
+        "#/components/responses/Error401/content/application~1problem+json/examples/negative_error_status/value/status"
+      ]
+    }
+  ]
+}

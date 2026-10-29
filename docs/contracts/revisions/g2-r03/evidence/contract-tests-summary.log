@@ -1,0 +1,22 @@
+✔ candidate YAML parses, resolves all refs, has exactly the two existing GET operations and is reproducible (200.8466ms)
+✔ provenance, operation matrix and Markdown field matrix are recomputed from real sources (7.2201ms)
+✔ legacy list request, envelope and every original summary field remain unchanged (0.1955ms)
+✔ detail keeps original fields/required/closed shape; optional extensions share list metric schemas (0.1727ms)
+✔ matrix source absences are real, including unchanged r02 success schemas and Web's local boundary (0.4422ms)
+✔ authentication remains explicit; no anonymous branch, profile, fake revision or new list parameters (0.2018ms)
+✔ error schemas preserve original formats; detail status is tied to HTTP status by proposal (0.1502ms)
+✔ positive examples cover all five states, zero/100, nullable metrics, absent time/revision and empty inventory (0.1329ms)
+✔ real structural and Redocly checks reject bad-ref (1982.5412ms)
+✔ real structural and Redocly checks reject duplicate-operation (1979.4452ms)
+✔ real structural and Redocly checks reject missing-path-parameter (1808.7604ms)
+✔ real schema example validation rejects malformed list/detail/metric/error payloads (1883.977ms)
+✔ schema accepts genuine legacy/nullable/stored/future-shaped samples but proves no freshness (1774.9871ms)
+✔ original open summary accepts conflicting extension names; r03 narrowing needs explicit approval (2166.9701ms)
+ℹ tests 14
+ℹ suites 0
+ℹ pass 14
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 11748.5631
