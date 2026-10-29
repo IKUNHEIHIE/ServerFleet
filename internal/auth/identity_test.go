@@ -331,6 +331,7 @@ func TestIdentityCannotRevokeAnotherSubjectsRealSession(t *testing.T) {
 	template.ID = id
 	template.Username = "other"
 	template.Administrator = false
+	template.RoleIDs = []string{"reader"}
 	st.Users[id] = template
 	m.data, _ = json.Marshal(st)
 	other, err := s.Login(context.Background(), "other", identityTestPassword, "other-ip")

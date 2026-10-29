@@ -4,6 +4,8 @@
 
 ## R01 真实身份持久化组合
 
+提交 `39ad9ca2928ab87e75fbbd4390bf05df4c8919c9`。
+
 主线仍8a7dd470，没有新的接口接收；只读核对已提交DS方案（pin bb8954988fe7b2f832edf291803529d7745e4f0a），未合并/改写他人目录。原S02通用RecordTx申请由本轮auth专用SQL适配替代；auth定义业务表和永久初始化标记，不分配公共迁移编号，不在storage中建KV域逻辑。
 
 代码：internal/auth/identity_sql.go。通过窄函数把DS Queryer/Tx映射到auth自有IdentityStore，不导入database/sql，不猜不存在的公共API。构造不自动建表，IdentitySchemaStatements只提供待注册的业务迁移语句；缺表/缺行拒绝，绝不解释为未初始化。Update必须同一BEGIN IMMEDIATE、回调一次、取消/失败回滚；永久ever_initialized防止业务payload被错误清空后重开setup。
@@ -11,3 +13,19 @@
 实验：tests/poc/v09/platform/run-identity.mjs将指定提交的storage生产源读入本任务忽略reports目录，使用单独固定module/sum（modernc.org/sqlite v1.61.0）。不改根锁/依赖，不使DS候选成为共同接口。`node tests/poc/v09/platform/run-identity.mjs --bootstrap-lock` 首轮PASS 4.265s；随后固定锁使用-mod=readonly重验。真实SQLite文件/WAL双连接并发初始化、关闭重开后会话撤销/initialized、取消回滚、反初始化/删除状态均验证。没有生产数据库或真实凭据。
 
 仍待审：auth业务schema/存储接缝正式接收、审计消费、主入口接线、完整安全候选。继续实施用户/RBAC/显式授权与HTTP；不以这些未接收事项停止包内其他工作。
+
+## R02 认证HTTP、用户/RBAC/显式授权与重放
+
+实现文件：identity.go、management.go、idempotency.go、session_views.go、browser_guard.go、http.go及对应测试。增加用户创建/修订/停用、内置administrator/operator/reader角色及服务器权限目录、当前资源解析+组成员快照、逐动作/逐目标授权、授权到期/撤销、用户修订CAS、角色降权epoch撤销和最后有效管理员保护。管理员仍零节点授权；角色的操作能力与资源grant取交集，组新增成员不继承旧grant、删除成员失权；NodeReadPolicy适配既有一次prepare路径，不读库存。
+
+HTTP为真实但**尚未由主入口挂载的候选handler**：现有auth/bootstrap-status/bootstrap/login/logout/me/sessions、users、roles、permissions、resource-grants路径，保留既有DTO分页/ETag形状；me-CSRF和bootstrap204按独立S01候选。TLS必需，同源/CSRF/双凭据防护、严格有界JSON/重复键/未知字段/null/重复参数拒绝、错误脱敏、no-store、读结果先缓冲后世代闸门。A→B登录原子撤旧Cookie会话；会话管理ID不能当秘密。未配置第二因素验证器时明确拒绝要求MFA的配置或secondFactorCode，不假装验证通过。
+
+幂等：bootstrap只在原setup期限内同键/同主体参数/同秘密证明返回相同无秘密确认；用户/授权创建1小时持久receipt，同键改参拒绝，重放不复活已撤grant。密码请求不写快SHA摘要：只哈希非秘密元数据，并保留原加盐PBKDF2记录校验重放密码；初始化token是高熵随机量，仍仅摘要保存。根契约/锁/迁移编号未动，候选等待审查，不冻结G2。
+
+实际测试：
+
+- `go test ./internal/auth ./tests/architecture -count=1` PASS 8.892s/1.483s；`go vet ./internal/auth` PASS；固定staticcheck PASS（第一次工具调用PATH缺go失败，补本worktree固定Go PATH后重跑通过）。
+- `node tests/poc/v09/platform/run-identity.mjs` 固定锁-mod=readonly PASS 4.900s；真实本机HTTPS客户端+SQLite/WAL验证初始化→登录→幂等创建用户→显式授权→管理员无默认节点→退出→数据库关闭报503→重开旧Cookie仍401→用户/grant持久化与只读403。资源解析仅用固定测试资源集合，此证据**不是**真实Agent/节点/浏览器完整验收。
+- 单元HTTP负向涵盖重复JSON键/非法null/未知角色字段/双凭据/Origin/CSRF/弱或坏If-Match/旧修订/重复查询、源故障、提交前撤权不输出缓冲的身份/CSRF。null密码首轮错误地归401，补严格JSON-null校验后重跑PASS；未删测试。
+
+仍待完成：凭据CRUD/受控服务使用、审计最终sink事务消费、受限Bearer、MFA验证器/完整政策、跨存储资源世代的输出窗口、实际Controller组合与页面、1C1G及真实Linux端到端。继续包内实现。

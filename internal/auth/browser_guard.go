@@ -39,6 +39,9 @@ func (g *BrowserGuard) Check(r *http.Request, mutation bool) error {
 	if mutation && len(origins) != 1 {
 		return ErrDenied
 	}
+	if len(r.Header.Values("Sec-Fetch-Site")) > 1 {
+		return ErrDenied
+	}
 	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
 		return ErrDenied
 	}
@@ -49,6 +52,9 @@ func (g *BrowserGuard) Check(r *http.Request, mutation bool) error {
 // Restricted bearer is intentionally unavailable until its cap intersection and
 // issue/revoke contract are accepted. An empty Authorization still counts.
 func SessionCredential(r *http.Request) (string, error) {
+	return selectSessionCredential(r, false)
+}
+func selectSessionCredential(r *http.Request, allowNone bool) (string, error) {
 	if r == nil {
 		return "", ErrCredential
 	}
@@ -57,6 +63,10 @@ func SessionCredential(r *http.Request) (string, error) {
 	for _, header := range r.Header.Values("Cookie") {
 		for _, part := range strings.Split(header, ";") {
 			name, _, ok := strings.Cut(strings.TrimSpace(part), "=")
+			trimmed := strings.TrimSpace(name)
+			if (trimmed == SessionCookieName || trimmed == "sf_session") && name != trimmed {
+				return "", ErrCredential
+			}
 			if name == SessionCookieName {
 				count++
 				if !ok {
@@ -68,7 +78,13 @@ func SessionCredential(r *http.Request) (string, error) {
 			}
 		}
 	}
-	if len(r.Header.Values("Authorization")) > 0 || legacy > 0 || count != 1 {
+	if len(r.Header.Values("Authorization")) > 0 || legacy > 0 || count > 1 {
+		return "", ErrCredential
+	}
+	if count == 0 {
+		if allowNone {
+			return "", nil
+		}
 		return "", ErrCredential
 	}
 	cookies := r.CookiesNamed(SessionCookieName)
@@ -101,6 +117,10 @@ func IdentityHTTPStatus(err error) int {
 		return http.StatusTooManyRequests
 	case errors.Is(err, ErrAlreadyInitialized):
 		return http.StatusConflict
+	case errors.Is(err, ErrIdempotencyConflict):
+		return http.StatusConflict
+	case errors.Is(err, ErrRevisionConflict):
+		return http.StatusPreconditionFailed
 	case errors.Is(err, ErrInvalidCheck):
 		return http.StatusBadRequest
 	default:

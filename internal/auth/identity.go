@@ -3,7 +3,6 @@ package auth
 import (
 	"context"
 	"crypto/pbkdf2"
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -49,8 +48,12 @@ type identityUser struct {
 	Username      string
 	Password      passwordRecord
 	Administrator bool
+	Bootstrap     bool
 	Disabled      bool
 	Epoch         uint64
+	DisplayName   string
+	RoleIDs       []string
+	Revision      uint64
 }
 type passwordRecord struct {
 	Salt       []byte
@@ -87,21 +90,25 @@ type identityState struct {
 	Sessions       map[string]identitySession
 	Failures       map[string]loginWindow
 	Outbox         []identityAudit
+	Grants         map[string]identityGrant
+	Receipts       map[string]identityReceipt
 }
 
 // IdentityService implements auth-local lifecycle logic. The public contract and
 // adapter are candidates; no Controller route consumes this before review.
 type IdentityService struct {
-	store  IdentityStore
-	now    func() time.Time
-	random io.Reader
+	store       IdentityStore
+	now         func() time.Time
+	random      io.Reader
+	resources   ResourceResolver
+	permissions map[string]PermissionDefinition
 }
 
 func NewIdentityService(store IdentityStore) (*IdentityService, error) {
 	if store == nil {
 		return nil, ErrIdentityUnavailable
 	}
-	return &IdentityService{store: store, now: time.Now, random: rand.Reader}, nil
+	return newIdentityService(store, nil, nil)
 }
 
 func decodeIdentity(data []byte) (*identityState, error) {
@@ -125,6 +132,18 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	if s.Failures == nil {
 		s.Failures = map[string]loginWindow{}
 	}
+	if s.Grants == nil {
+		s.Grants = map[string]identityGrant{}
+	}
+	if s.Receipts == nil {
+		s.Receipts = map[string]identityReceipt{}
+	}
+	if len(s.Receipts) > 5000 {
+		return nil, ErrIdentityUnavailable
+	}
+	if len(s.Grants) > 10000 {
+		return nil, ErrIdentityUnavailable
+	}
 	if len(s.Users) > 10000 || len(s.Sessions) > 10000 || len(s.Failures) > 20002 || len(s.Outbox) > 10000 {
 		return nil, ErrIdentityUnavailable
 	}
@@ -134,6 +153,27 @@ func decodeIdentity(data []byte) (*identityState, error) {
 			return nil, ErrIdentityUnavailable
 		}
 		names[u.Username] = true
+		if u.Revision == 0 {
+			u.Revision = 1
+		}
+		if u.DisplayName == "" {
+			u.DisplayName = u.Username
+		}
+		if u.RoleIDs == nil && u.Administrator {
+			u.RoleIDs = []string{"administrator"}
+		}
+		if !validRoleIDs(u.RoleIDs) {
+			return nil, ErrIdentityUnavailable
+		}
+		if u.Administrator != containsAdministrator(u.RoleIDs) {
+			return nil, ErrIdentityUnavailable
+		}
+		s.Users[id] = u
+	}
+	for id, grant := range s.Grants {
+		if id != grant.Value.GrantID || !validSecret(id) || s.Users[grant.Value.PrincipalID].ID == "" || !validResourceType(grant.Value.ResourceType) || !validPolicyID(grant.Value.ResourceID) || !validExactIDs(grant.Nodes) || !validExactIDs(grant.Value.Permissions) {
+			return nil, ErrIdentityUnavailable
+		}
 	}
 	for digest, se := range s.Sessions {
 		if digest != se.Digest || !validSecret(digest) || !validSecret(se.ID) || !validSecret(se.CSRF) || s.Users[se.Subject].ID == "" || se.Epoch == 0 || se.Created.IsZero() || se.Seen.Before(se.Created) || !se.Expires.After(se.Created) {
@@ -175,7 +215,7 @@ func identityStoreError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	for _, category := range []error{ErrCredential, ErrIdentityUnavailable, ErrRateLimited, ErrAlreadyInitialized, ErrDenied, ErrInvalidCheck} {
+	for _, category := range []error{ErrCredential, ErrIdentityUnavailable, ErrRateLimited, ErrAlreadyInitialized, ErrDenied, ErrInvalidCheck, ErrRevisionConflict, ErrPolicyUnavailable, ErrIdempotencyConflict} {
 		if errors.Is(err, category) {
 			return category
 		}
@@ -292,10 +332,27 @@ func (s *IdentityService) PrepareSetup(ctx context.Context) (string, error) {
 }
 
 func (s *IdentityService) Bootstrap(ctx context.Context, setup, username, password string) error {
+	return s.bootstrap(ctx, setup, username, password, "")
+}
+func (s *IdentityService) BootstrapIdempotent(ctx context.Context, setup, username, password, key string) error {
+	return s.bootstrap(ctx, setup, username, password, key)
+}
+func (s *IdentityService) bootstrap(ctx context.Context, setup, username, password, key string) error {
 	if !validUsername(username) {
 		return ErrInvalidCheck
 	}
 	return s.update(ctx, func(st *identityState, now time.Time) error {
+		digest := requestDigest(struct{ Username, SetupDigest string }{username, credentialDigest(setup)})
+		receipt, replay, err := loadReceipt(st, "installer", "auth.bootstrap", key, digest, now)
+		if err != nil {
+			return err
+		}
+		if replay {
+			if !st.Initialized || !checkPassword(password, receipt.Password) {
+				return ErrCredential
+			}
+			return nil
+		}
 		if st.Initialized {
 			return ErrAlreadyInitialized
 		}
@@ -310,7 +367,14 @@ func (s *IdentityService) Bootstrap(ctx context.Context, setup, username, passwo
 		if err != nil {
 			return err
 		}
-		st.Users[id] = identityUser{ID: id, Username: username, Password: pw, Administrator: true, Epoch: 1}
+		st.Users[id] = identityUser{ID: id, Username: username, Password: pw, Administrator: true, Bootstrap: true, Epoch: 1}
+		saveReceipt(st, "installer", "auth.bootstrap", key, digest, id, pw, now)
+		if key != "" {
+			cacheKey := receiptKey("installer", "auth.bootstrap", key)
+			cached := st.Receipts[cacheKey]
+			cached.Expires = st.SetupExpires
+			st.Receipts[cacheKey] = cached
+		}
 		st.Initialized = true
 		st.SetupDigest = ""
 		st.SetupExpires = time.Time{}
@@ -320,14 +384,27 @@ func (s *IdentityService) Bootstrap(ctx context.Context, setup, username, passwo
 }
 
 type LoginSession struct {
-	Identity Identity
-	Secret   string `json:"-"`
-	CSRF     string
+	Identity Identity     `json:"-"`
+	Secret   string       `json:"-"`
+	CSRF     string       `json:"csrfToken"`
+	Profile  IdentityView `json:"identity"`
 }
 
 // Login requires the canonical source IP from the trusted listener, never an
 // untrusted forwarding header. Rate limits are persisted with identity state.
 func (s *IdentityService) Login(ctx context.Context, username, password, source string) (LoginSession, error) {
+	return s.login(ctx, username, password, source, "")
+}
+
+// LoginReplacing atomically revokes the browser's old session when login
+// succeeds, including switching subjects. It never reuses a supplied secret.
+func (s *IdentityService) LoginReplacing(ctx context.Context, username, password, source, oldSecret string) (LoginSession, error) {
+	if oldSecret != "" && !validSecret(oldSecret) {
+		return LoginSession{}, ErrCredential
+	}
+	return s.login(ctx, username, password, source, oldSecret)
+}
+func (s *IdentityService) login(ctx context.Context, username, password, source, oldSecret string) (LoginSession, error) {
 	var result LoginSession
 	var outcome error
 	if len(username) > 64 || len(password) > 1024 || source == "" || len(source) > 256 {
@@ -400,8 +477,12 @@ func (s *IdentityService) Login(ctx context.Context, username, password, source 
 		}
 		se := identitySession{ID: id, Subject: user.ID, Digest: credentialDigest(secret), CSRF: csrf, Epoch: user.Epoch, Created: now, Seen: now, Expires: now.Add(8 * time.Hour)}
 		st.Sessions[se.Digest] = se
+		if prior, ok := st.Sessions[credentialDigest(oldSecret)]; oldSecret != "" && ok {
+			prior.Revoked = true
+			st.Sessions[prior.Digest] = prior
+		}
 		delete(st.Failures, accountKey) // Source failures are not cleared by another account's success.
-		result = LoginSession{identityFor(user, se, st.PolicyRevision), secret, csrf}
+		result = LoginSession{identityFor(user, se, st.PolicyRevision), secret, csrf, s.identityProfile(user)}
 		return appendIdentityAudit(st, user.ID, "auth.login", "succeeded", now)
 	})
 	if err != nil {
