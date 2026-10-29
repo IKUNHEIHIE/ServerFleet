@@ -76,3 +76,11 @@
 - 兼容性：旧 `internal/tasks/ports.go` 未改；新字段只加在 Service 层请求，旧离线测试继续通过。没有第二队列或旁路。
 - 迁移：`ds/0030_tasks` 保持原 checksum；新增 `ds/0031_tasks_cx_fields` 增补 scope_revision/plugin_id/source/approval_ref。若总控已把 0030 应用到持久库，直接顺序应用 0031，不修改 0030。
 
+
+## 6. 模块 HTTP 注册现状（候选，未接收）
+
+- 已注册：`nodes.RegisterHTTP`、`servicegroups.RegisterHTTP`、`tasks.Register`、`files.RegisterHTTP`、`audit.Register`、`dns.RegisterHTTP`、`notifications.RegisterHTTP`、`gateway.RegisterHTTP`（部分）。
+- 所有注册函数都要求 Controller 注入 `Authenticator`（主体+request id）；不解析 Cookie/CSRF、不做 401/503 语义替代。
+- 未注册：monitoring/quota（g2-merged 无路径）、certificates（候选节点本地 CSR/信任包与 KeyRef 模型冲突）、publishing（候选无路径）、gateway `/checks`（缺独立 serviceRunning 观测）。
+- 契约差异：DNS 以 `credentialRef` 取代 `apiToken`（DS 永不接收原始令牌）；文件上传 HTTP 仅会话创建/完成，字节通道待 CX；gateway 路由创建需 `gatewayId` 扩展字段；任务审批需先取 `planDigest`；审计 eventId 为数字字符串。
+- 上述若需并入主线，请总控按 OpenAPI/契约流程裁决；本包未改 API/Proto/gen。
