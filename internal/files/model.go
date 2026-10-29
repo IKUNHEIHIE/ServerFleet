@@ -123,6 +123,7 @@ type Transfer struct {
 	CopiedBytes       int64
 	ErrorMessage      string
 	RequestID         string
+	IdempotencyKey    string
 	Items             []TransferItem
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -143,6 +144,7 @@ type CreateTransferInput struct {
 	FollowSymlinks    bool
 	DryRun            bool
 	Checksums         map[string]string
+	IdempotencyKey    string
 }
 
 type Upload struct {

@@ -22,19 +22,19 @@ func NewRepo(db *storage.DB) (*Repo, error) {
 
 const transferSelect = `SELECT id, task_id, submitter_id, source_node_id, destination_node_id,
 	destination_dir, conflict_policy, follow_symlinks, dry_run, status, progress, total_bytes,
-	copied_bytes, error_message, request_id, created_at, updated_at, started_at, completed_at
+	copied_bytes, error_message, request_id, idempotency_key, created_at, updated_at, started_at, completed_at
 	FROM file_transfers`
 
 func (r *Repo) CreateTransfer(ctx context.Context, q storage.Queryer, transfer Transfer) error {
 	_, err := q.Exec(ctx, `INSERT INTO file_transfers
 		(id, task_id, submitter_id, source_node_id, destination_node_id, destination_dir,
 		 conflict_policy, follow_symlinks, dry_run, status, progress, total_bytes, copied_bytes,
-		 error_message, request_id, created_at, updated_at, started_at, completed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, '', ?, ?, ?, NULL, NULL)`,
+		 error_message, request_id, idempotency_key, created_at, updated_at, started_at, completed_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, '', ?, ?, ?, ?, NULL, NULL)`,
 		transfer.ID, transfer.TaskID, transfer.SubmitterID, transfer.SourceNodeID,
 		transfer.DestinationNodeID, transfer.DestinationDir, string(transfer.ConflictPolicy),
 		boolInt(transfer.FollowSymlinks), boolInt(transfer.DryRun), string(transfer.Status),
-		transfer.Progress, transfer.RequestID, encodeTime(transfer.CreatedAt), encodeTime(transfer.UpdatedAt))
+		transfer.Progress, transfer.RequestID, transfer.IdempotencyKey, encodeTime(transfer.CreatedAt), encodeTime(transfer.UpdatedAt))
 	if err != nil {
 		return err
 	}
@@ -80,6 +80,25 @@ func (r *Repo) GetTransferByTask(ctx context.Context, taskID string) (Transfer, 
 	}
 	transfer.Items = items
 	return transfer, nil
+}
+
+func (r *Repo) GetTransferByIdempotency(ctx context.Context, submitterID, key string) (Transfer, bool, error) {
+	if key == "" {
+		return Transfer{}, false, nil
+	}
+	transfer, err := scanTransfer(r.db.QueryRow(ctx, transferSelect+" WHERE submitter_id = ? AND idempotency_key = ?", submitterID, key))
+	if storage.IsNotFound(err) {
+		return Transfer{}, false, nil
+	}
+	if err != nil {
+		return Transfer{}, false, err
+	}
+	items, err := transferItems(ctx, r.db, transfer.ID)
+	if err != nil {
+		return Transfer{}, false, err
+	}
+	transfer.Items = items
+	return transfer, true, nil
 }
 
 func (r *Repo) ListTransfers(ctx context.Context, limit int) ([]Transfer, error) {
@@ -192,7 +211,7 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 	if err := row.Scan(&transfer.ID, &transfer.TaskID, &transfer.SubmitterID, &transfer.SourceNodeID,
 		&transfer.DestinationNodeID, &transfer.DestinationDir, &policy, &follow, &dry, &status,
 		&transfer.Progress, &total, &transfer.CopiedBytes, &transfer.ErrorMessage, &transfer.RequestID,
-		&created, &updated, &started, &completed); err != nil {
+		&transfer.IdempotencyKey, &created, &updated, &started, &completed); err != nil {
 		return Transfer{}, err
 	}
 	transfer.ConflictPolicy = ConflictPolicy(policy)

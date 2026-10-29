@@ -35,7 +35,7 @@ func (s *Service) CreateUpload(ctx context.Context, subjectID, requestID, nodeID
 	if destinationPath == "/" {
 		return Upload{}, fmt.Errorf("%w: destination must be a file", ErrInvalidTransfer)
 	}
-	if expectedSize != nil && (*expectedSize <= 0 || *expectedSize > s.maxUploadBytes) {
+	if expectedSize != nil && (*expectedSize < 0 || *expectedSize > s.maxUploadBytes) {
 		return Upload{}, ErrUploadTooLarge
 	}
 	if sha256Expected != "" && !sha256Pattern.MatchString(sha256Expected) {

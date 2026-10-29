@@ -521,3 +521,41 @@ func encodeTime(value time.Time) any {
 	}
 	return value.UTC().Format(time.RFC3339Nano)
 }
+
+// List returns tasks newest first. Target rows are loaded for each task so the
+// caller can render an accurate per-node state.
+func (r *Repo) List(ctx context.Context, limit, offset int) ([]Task, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 200 {
+		return nil, fmt.Errorf("%w: limit", ErrInvalidTask)
+	}
+	if offset < 0 {
+		return nil, fmt.Errorf("%w: offset", ErrInvalidTask)
+	}
+	rows, err := r.db.Query(ctx, taskSelect+" ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?", limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	tasks := make([]Task, 0)
+	for rows.Next() {
+		task, err := scanTask(rows)
+		if err != nil {
+			return nil, err
+		}
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for index := range tasks {
+		targets, err := TaskTargets(ctx, r.db, tasks[index].ID)
+		if err != nil {
+			return nil, err
+		}
+		tasks[index].Targets = targets
+	}
+	return tasks, nil
+}

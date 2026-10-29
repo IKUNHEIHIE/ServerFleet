@@ -20,6 +20,7 @@ import (
 const (
 	ActionRead                 = "files.read"
 	ActionWrite                = "files.write"
+	ActionTransfer             = "files.transfer"
 	ActionTransferCreate       = "files.transfer_create"
 	ActionTransferSubmitFailed = "files.transfer_submit_failed"
 	ActionTransferCancel       = "files.transfer_cancel"
@@ -30,7 +31,7 @@ const (
 )
 
 func ServiceActions() []string {
-	return []string{ActionDownload, ActionRead, ActionTransferCancel, ActionTransferCreate,
+	return []string{ActionDownload, ActionRead, ActionTransfer, ActionTransferCancel, ActionTransferCreate,
 		ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite}
 }
 
@@ -150,8 +151,21 @@ func (s *Service) CreateTransfer(ctx context.Context, input CreateTransferInput)
 	if err := s.authorizeNode(ctx, input.SubjectID, ActionWrite, input.RequestID, input.DestinationNodeID, "file_destination_write"); err != nil {
 		return Transfer{}, err
 	}
+	if err := s.authorizeNode(ctx, input.SubjectID, ActionTransfer, input.RequestID, input.SourceNodeID, "file_transfer"); err != nil {
+		return Transfer{}, err
+	}
+	if err := s.authorizeNode(ctx, input.SubjectID, ActionTransfer, input.RequestID, input.DestinationNodeID, "file_transfer"); err != nil {
+		return Transfer{}, err
+	}
 	if input.DryRun {
 		return transfer, nil
+	}
+	if input.IdempotencyKey != "" {
+		if existing, found, err := s.repo.GetTransferByIdempotency(ctx, input.SubjectID, input.IdempotencyKey); err != nil {
+			return Transfer{}, err
+		} else if found {
+			return existing, nil
+		}
 	}
 	if s.submitter == nil {
 		return Transfer{}, ErrTaskSubmitter
@@ -379,6 +393,9 @@ func buildTransfer(input CreateTransferInput, now time.Time) (Transfer, error) {
 	if !validToken(input.SubjectID, 128) || !validToken(input.SourceNodeID, 128) || !validToken(input.DestinationNodeID, 128) {
 		return Transfer{}, fmt.Errorf("%w: subject/nodes", ErrInvalidTransfer)
 	}
+	if input.IdempotencyKey != "" && !validToken(input.IdempotencyKey, 128) {
+		return Transfer{}, fmt.Errorf("%w: idempotency key", ErrInvalidTransfer)
+	}
 	if len(input.SourcePaths) == 0 || len(input.SourcePaths) > 500 {
 		return Transfer{}, fmt.Errorf("%w: source paths count", ErrInvalidTransfer)
 	}
@@ -426,8 +443,8 @@ func buildTransfer(input CreateTransferInput, now time.Time) (Transfer, error) {
 		ID: newID("xfer"), SubmitterID: input.SubjectID, SourceNodeID: input.SourceNodeID,
 		DestinationNodeID: input.DestinationNodeID, DestinationDir: input.DestinationDir,
 		ConflictPolicy: input.ConflictPolicy, FollowSymlinks: input.FollowSymlinks,
-		DryRun: input.DryRun, Status: TransferQueued, RequestID: input.RequestID, Items: items,
-		CreatedAt: now, UpdatedAt: now,
+		DryRun: input.DryRun, Status: TransferQueued, RequestID: input.RequestID,
+		IdempotencyKey: input.IdempotencyKey, Items: items, CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
 

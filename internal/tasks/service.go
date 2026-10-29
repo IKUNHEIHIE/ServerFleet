@@ -447,7 +447,7 @@ func (s *Service) Revise(ctx context.Context, taskID string, request ReviseReque
 // Cancel stops an unstarted task immediately and asks the transport to interrupt
 // dispatched targets. Unknown transport answers leave the task cancelling rather
 // than claiming the side effects stopped.
-func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID string) (Task, error) {
+func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID string, expectedRevision ...uint64) (Task, error) {
 	if err := s.requireRequest(requestID); err != nil {
 		return Task{}, err
 	}
@@ -456,6 +456,9 @@ func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID strin
 	task, err := s.repo.Get(ctx, taskID)
 	if err != nil {
 		return Task{}, err
+	}
+	if len(expectedRevision) > 0 && expectedRevision[0] > 0 && task.Revision != expectedRevision[0] {
+		return Task{}, ErrInvalidStatus
 	}
 	if task.Status.Terminal() {
 		return Task{}, ErrTaskTerminal

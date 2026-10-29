@@ -26,12 +26,15 @@ func Migrations() []storage.Migration {
 				copied_bytes INTEGER NOT NULL DEFAULT 0,
 				error_message TEXT NOT NULL DEFAULT '',
 				request_id TEXT NOT NULL,
+				idempotency_key TEXT NOT NULL DEFAULT '',
 				created_at TEXT NOT NULL,
 				updated_at TEXT NOT NULL,
 				started_at TEXT,
 				completed_at TEXT
 			)`,
 			`CREATE INDEX file_transfers_task ON file_transfers (task_id)`,
+			`CREATE UNIQUE INDEX file_transfers_idempotency ON file_transfers (submitter_id, idempotency_key)
+				WHERE idempotency_key <> ''`,
 			`CREATE TABLE file_transfer_items (
 				transfer_id TEXT NOT NULL REFERENCES file_transfers (id) ON DELETE CASCADE,
 				sequence INTEGER NOT NULL,

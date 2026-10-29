@@ -176,6 +176,7 @@ func (r *SQLRecorder) Query(ctx context.Context, q Query) (StoredPage, error) {
 			&event.TaskID, &nodeJSON, &event.Source, &event.ReasonCode, &at); err != nil {
 			return StoredPage{}, err
 		}
+		event.ID = eventID
 		nodes := []string{}
 		if nodeJSON != "" {
 			if err := json.Unmarshal([]byte(nodeJSON), &nodes); err != nil {
@@ -303,3 +304,40 @@ func (r *SQLRecorder) Count(ctx context.Context) (int, error) {
 }
 
 var _ Recorder = (*SQLRecorder)(nil)
+
+var ErrEventNotFound = errors.New("audit: event not found")
+
+// Get returns one durable event by its numeric id.
+func (r *SQLRecorder) Get(ctx context.Context, id int64) (Event, error) {
+	if r == nil || r.db == nil {
+		return Event{}, errors.New("audit: recorder is not configured")
+	}
+	var (
+		event    Event
+		nodeJSON string
+		at       string
+	)
+	err := r.db.QueryRow(ctx, `SELECT subject_id, action, result, request_id, task_id, node_ids,
+		source, reason_code, at FROM audit_events WHERE id = ?`, id).Scan(
+		&event.SubjectID, &event.Action, &event.Result, &event.RequestID, &event.TaskID,
+		&nodeJSON, &event.Source, &event.ReasonCode, &at)
+	if storage.IsNotFound(err) {
+		return Event{}, ErrEventNotFound
+	}
+	if err != nil {
+		return Event{}, err
+	}
+	nodes := []string{}
+	if nodeJSON != "" {
+		if err := json.Unmarshal([]byte(nodeJSON), &nodes); err != nil {
+			return Event{}, fmt.Errorf("audit: decode stored nodes: %w", err)
+		}
+	}
+	event.ID = id
+	event.NodeIDs = nodes
+	event.At, err = storage.DecodeTime(at)
+	if err != nil {
+		return Event{}, err
+	}
+	return event, nil
+}

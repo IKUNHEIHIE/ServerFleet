@@ -7,6 +7,9 @@ import (
 )
 
 type Event struct {
+	// ID is assigned by the durable recorder; in-memory events leave it zero.
+	ID int64
+
 	SubjectID string
 	Action    string
 	Result    string
