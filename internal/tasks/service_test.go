@@ -2,6 +2,7 @@ package tasks_test
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -446,5 +447,127 @@ func TestCancelBeforeAndAfterDispatch(t *testing.T) {
 	}
 	if final.Status != tasks.StatusCanceled {
 		t.Fatalf("final = %+v", final)
+	}
+}
+
+type fakeApprovalConsumer struct {
+	mu       sync.Mutex
+	calls    int
+	approver string
+	err      error
+}
+
+func (c *fakeApprovalConsumer) ConsumeApproval(_ context.Context, _ storage.Tx, approvalID, subjectID, planDigest string, nodeIDs []string) (string, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.calls++
+	if c.err != nil {
+		return "", c.err
+	}
+	if c.approver == "" {
+		return "admin-2", nil
+	}
+	return c.approver, nil
+}
+
+func TestExternalApprovalIsConsumedAtomically(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "n1")
+	consumer := &fakeApprovalConsumer{}
+	service, err := tasks.NewService(tasks.Options{
+		DB: f.db, Repo: f.repo, Audit: f.audit, Authorizer: f.authorizer,
+		Dispatcher: f.dispatcher, Nodes: f.nodes, Approvals: consumer, Now: f.clock.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := service.Submit(context.Background(), tasks.SubmitRequest{
+		SubjectID: "user-1", RequestID: "req-ext", Name: "root", ActionID: "host.root",
+		OperationClass: tasks.OperationClassRoot, TargetNodeIDs: []string{"n1"},
+		ApprovalID: "approval-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Status != tasks.StatusQueued || task.ApprovalRef != "approval-1" || !task.ApprovalRequired {
+		t.Fatalf("task = %+v", task)
+	}
+	if consumer.calls != 1 {
+		t.Fatalf("consumer calls = %d", consumer.calls)
+	}
+	page, err := f.audit.Query(context.Background(), audit.Query{Action: tasks.ActionApprovalConsumed})
+	if err != nil || page.Total != 1 {
+		t.Fatalf("approval audit = %+v, %v", page, err)
+	}
+	if err := service.RunOnce(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if len(f.dispatcher.commands()) != 1 {
+		t.Fatalf("dispatched %d commands after consumed approval", len(f.dispatcher.commands()))
+	}
+}
+
+func TestExternalApprovalFailureRollsBackSubmit(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "n1")
+	consumer := &fakeApprovalConsumer{err: errors.New("approval already used")}
+	service, err := tasks.NewService(tasks.Options{
+		DB: f.db, Repo: f.repo, Audit: f.audit, Authorizer: f.authorizer,
+		Dispatcher: f.dispatcher, Nodes: f.nodes, Approvals: consumer, Now: f.clock.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := service.Submit(context.Background(), tasks.SubmitRequest{
+		SubjectID: "user-1", RequestID: "req-ext", Name: "root", ActionID: "host.root",
+		OperationClass: tasks.OperationClassRoot, TargetNodeIDs: []string{"n1"},
+		ApprovalID: "approval-used",
+	}); err == nil {
+		t.Fatal("submission succeeded with a rejected external approval")
+	}
+	if tasksList, _ := f.repo.List(context.Background(), 10, 0); len(tasksList) != 0 {
+		t.Fatalf("failed approval left %d tasks", len(tasksList))
+	}
+}
+
+func TestCanonicalParamsAndSourceValidation(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "n1")
+	consumer := &fakeApprovalConsumer{}
+	service, err := tasks.NewService(tasks.Options{
+		DB: f.db, Repo: f.repo, Audit: f.audit, Authorizer: f.authorizer,
+		Dispatcher: f.dispatcher, Nodes: f.nodes, Approvals: consumer, Now: f.clock.Now,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	task, err := service.Submit(context.Background(), tasks.SubmitRequest{
+		SubjectID: "ai-1", RequestID: "req-ai", Name: "ai task", ActionID: "host.patch",
+		OperationClass: tasks.OperationClassStandard, TargetNodeIDs: []string{"n1"},
+		CanonicalParams: []byte(`{"mode":"safe"}`), Source: audit.SourceAI,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if task.Params != `{"mode":"safe"}` || task.Source != string(audit.SourceAI) {
+		t.Fatalf("task = %+v", task)
+	}
+	page, err := f.audit.Query(context.Background(), audit.Query{Action: tasks.ActionSubmit, Source: audit.SourceAI})
+	if err != nil || page.Total != 1 {
+		t.Fatalf("source audit = %+v, %v", page, err)
+	}
+	if _, err := service.Submit(context.Background(), tasks.SubmitRequest{
+		SubjectID: "ai-1", RequestID: "req-ai", Name: "ai task", ActionID: "host.patch",
+		OperationClass: tasks.OperationClassStandard, TargetNodeIDs: []string{"n1"},
+		Params: map[string]string{"mode": "safe"}, CanonicalParams: []byte(`{}`),
+	}); err == nil {
+		t.Fatal("accepted both params and canonical params")
+	}
+	if _, err := service.Submit(context.Background(), tasks.SubmitRequest{
+		SubjectID: "ai-1", RequestID: "req-ai", Name: "ai task", ActionID: "host.patch",
+		OperationClass: tasks.OperationClassStandard, TargetNodeIDs: []string{"n1"},
+		Source: audit.SourcePlugin,
+	}); err == nil {
+		t.Fatal("accepted plugin source without plugin id")
 	}
 }

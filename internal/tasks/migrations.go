@@ -77,5 +77,14 @@ func Migrations() []storage.Migration {
 			)`,
 			`CREATE INDEX task_logs_task ON task_logs (task_id, id)`,
 		},
+	}, {
+		Version: "ds/0031_tasks_cx_fields",
+		Name:    "trusted source, scope revision and external approval ref",
+		Statements: []string{
+			`ALTER TABLE tasks ADD COLUMN scope_revision INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE tasks ADD COLUMN plugin_id TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE tasks ADD COLUMN source TEXT NOT NULL DEFAULT 'web'`,
+			`ALTER TABLE tasks ADD COLUMN approval_ref TEXT NOT NULL DEFAULT ''`,
+		},
 	}}
 }

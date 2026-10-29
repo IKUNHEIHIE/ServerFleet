@@ -31,6 +31,12 @@ type GroupResolver interface {
 	ResolveTargets(ctx context.Context, targetType, groupID string) ([]string, error)
 }
 
+// ReadGate re-checks task visibility for every read and every SSE poll. An empty
+// taskID asks for list visibility. A nil gate fails closed.
+type ReadGate interface {
+	AuthorizeTaskRead(ctx context.Context, subjectID, taskID string) error
+}
+
 // ClassResolver maps a trusted action id to its operation class. Without one all
 // actions are treated as modifying and therefore require human approval.
 type ClassResolver func(actionID string) (OperationClass, error)
@@ -40,11 +46,12 @@ type httpAPI struct {
 	authenticator Authenticator
 	groups        GroupResolver
 	classes       ClassResolver
+	reads         ReadGate
 }
 
 // Register mounts the task endpoints on the Controller mux. CSRF, cookie/session
 // authentication, rate limits and idempotency middleware remain Controller-owned.
-func Register(mux *http.ServeMux, service *Service, authenticator Authenticator, groups GroupResolver, classes ClassResolver) error {
+func Register(mux *http.ServeMux, service *Service, authenticator Authenticator, groups GroupResolver, classes ClassResolver, reads ReadGate) error {
 	if mux == nil {
 		return errors.New("tasks: mux is required")
 	}
@@ -54,7 +61,7 @@ func Register(mux *http.ServeMux, service *Service, authenticator Authenticator,
 	if authenticator == nil {
 		return errors.New("tasks: authenticator is required")
 	}
-	api := &httpAPI{service: service, authenticator: authenticator, groups: groups, classes: classes}
+	api := &httpAPI{service: service, authenticator: authenticator, groups: groups, classes: classes, reads: reads}
 	mux.HandleFunc("POST /api/v1/tasks/preview", api.preview)
 	mux.HandleFunc("POST /api/v1/tasks", api.create)
 	mux.HandleFunc("GET /api/v1/tasks", api.list)
@@ -200,7 +207,11 @@ func (api *httpAPI) create(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *httpAPI) list(w http.ResponseWriter, r *http.Request) {
-	if _, ok := api.principal(w, r); !ok {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if !api.authorizeRead(w, r, principal, "") {
 		return
 	}
 	limit, offset, err := pageParams(r)
@@ -221,7 +232,11 @@ func (api *httpAPI) list(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *httpAPI) get(w http.ResponseWriter, r *http.Request) {
-	if _, ok := api.principal(w, r); !ok {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if !api.authorizeRead(w, r, principal, r.PathValue("jobId")) {
 		return
 	}
 	task, err := api.service.Get(r.Context(), r.PathValue("jobId"))
@@ -291,7 +306,11 @@ func (api *httpAPI) cancel(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *httpAPI) executions(w http.ResponseWriter, r *http.Request) {
-	if _, ok := api.principal(w, r); !ok {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if !api.authorizeRead(w, r, principal, r.PathValue("jobId")) {
 		return
 	}
 	task, err := api.service.Get(r.Context(), r.PathValue("jobId"))
@@ -311,7 +330,11 @@ func (api *httpAPI) executions(w http.ResponseWriter, r *http.Request) {
 }
 
 func (api *httpAPI) events(w http.ResponseWriter, r *http.Request) {
-	if _, ok := api.principal(w, r); !ok {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if !api.authorizeRead(w, r, principal, r.PathValue("jobId")) {
 		return
 	}
 	flusher, ok := w.(http.Flusher)
@@ -331,6 +354,11 @@ func (api *httpAPI) events(w http.ResponseWriter, r *http.Request) {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
+		if api.reads == nil || api.reads.AuthorizeTaskRead(r.Context(), principal.SubjectID, r.PathValue("jobId")) != nil {
+			fmt.Fprint(w, "event: authorization_revoked\ndata: {\"code\":\"authorization_revoked\"}\n\n")
+			flusher.Flush()
+			return
+		}
 		events, err := api.service.Events(r.Context(), r.PathValue("jobId"), after, 200)
 		if err != nil {
 			if errors.Is(err, ErrCursorExpired) {
@@ -379,6 +407,14 @@ func (api *httpAPI) resolveTargets(ctx context.Context, body createRequest) ([]s
 	default:
 		return nil, "", fmt.Errorf("%w: target type", ErrInvalidTask)
 	}
+}
+
+func (api *httpAPI) authorizeRead(w http.ResponseWriter, r *http.Request, principal Principal, taskID string) bool {
+	if api.reads == nil || api.reads.AuthorizeTaskRead(r.Context(), principal.SubjectID, taskID) != nil {
+		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
+		return false
+	}
+	return true
 }
 
 func (api *httpAPI) principal(w http.ResponseWriter, r *http.Request) (Principal, bool) {

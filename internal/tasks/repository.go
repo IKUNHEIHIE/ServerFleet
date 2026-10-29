@@ -26,7 +26,8 @@ func NewRepo(db *storage.DB) (*Repo, error) {
 const taskSelect = `SELECT id, name, submitter_id, action_id, operation_class, params,
 	idempotency_key, revision, status, approval_required, plan_hash, batch_index,
 	cancel_requested, target_type, target_resource_id, unstarted_deadline, request_id,
-	failure_reason, created_at, updated_at, started_at, finished_at FROM tasks`
+	scope_revision, plugin_id, source, approval_ref, failure_reason, created_at, updated_at,
+	started_at, finished_at FROM tasks`
 
 func (r *Repo) Create(ctx context.Context, q storage.Queryer, task Task, targets []Target) error {
 	if len(targets) == 0 {
@@ -35,13 +36,14 @@ func (r *Repo) Create(ctx context.Context, q storage.Queryer, task Task, targets
 	_, err := q.Exec(ctx, `INSERT INTO tasks
 		(id, name, submitter_id, action_id, operation_class, params, idempotency_key,
 		 revision, status, approval_required, plan_hash, batch_index, cancel_requested,
-		 target_type, target_resource_id, unstarted_deadline, request_id, failure_reason,
-		 created_at, updated_at, started_at, finished_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, '', ?, ?, NULL, NULL)`,
+		 target_type, target_resource_id, unstarted_deadline, request_id, scope_revision,
+		 plugin_id, source, approval_ref, failure_reason, created_at, updated_at, started_at, finished_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, NULL, NULL)`,
 		task.ID, task.Name, task.SubmitterID, task.ActionID, string(task.OperationClass),
 		task.Params, task.IdempotencyKey, task.Revision, string(task.Status),
 		boolInt(task.ApprovalRequired), task.PlanHash, task.BatchIndex, task.TargetType,
 		task.TargetResourceID, encodeTime(task.UnstartedDeadline), task.RequestID,
+		task.ScopeRevision, task.PluginID, task.Source, task.ApprovalRef,
 		encodeTime(task.CreatedAt), encodeTime(task.UpdatedAt))
 	if err != nil {
 		return err
@@ -457,17 +459,18 @@ func (r *Repo) Logs(ctx context.Context, taskID string, afterID int64, limit int
 
 func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	var (
-		task                            Task
-		class, status                   string
-		revision, batchIndex            int64
-		approvalRequired, cancelRequest int
-		deadline, created, updated      string
-		started, finished               storage.NullString
+		task                                Task
+		class, status                       string
+		revision, batchIndex, scopeRevision int64
+		approvalRequired, cancelRequest     int
+		deadline, created, updated          string
+		started, finished                   storage.NullString
 	)
 	if err := row.Scan(&task.ID, &task.Name, &task.SubmitterID, &task.ActionID, &class,
 		&task.Params, &task.IdempotencyKey, &revision, &status, &approvalRequired,
 		&task.PlanHash, &batchIndex, &cancelRequest, &task.TargetType, &task.TargetResourceID,
-		&deadline, &task.RequestID, &task.FailureReason, &created, &updated, &started, &finished); err != nil {
+		&deadline, &task.RequestID, &scopeRevision, &task.PluginID, &task.Source, &task.ApprovalRef,
+		&task.FailureReason, &created, &updated, &started, &finished); err != nil {
 		return Task{}, err
 	}
 	task.OperationClass = OperationClass(class)
@@ -478,10 +481,11 @@ func scanTask(row interface{ Scan(...any) error }) (Task, error) {
 	if !task.Status.Valid() {
 		return Task{}, fmt.Errorf("tasks: stored task has invalid status %q", status)
 	}
-	if revision < 1 || batchIndex < 0 {
+	if revision < 1 || batchIndex < 0 || scopeRevision < 0 {
 		return Task{}, fmt.Errorf("tasks: stored task has invalid revision/batch")
 	}
 	task.Revision = uint64(revision)
+	task.ScopeRevision = uint64(scopeRevision)
 	task.BatchIndex = int(batchIndex)
 	task.ApprovalRequired = approvalRequired != 0
 	task.CancelRequested = cancelRequest != 0

@@ -26,7 +26,7 @@ func httpFixture(t *testing.T, class tasks.OperationClass, resolver tasks.GroupR
 				subject = "user-1"
 			}
 			return tasks.Principal{SubjectID: subject, RequestID: "req-http"}, nil
-		}, resolver, func(string) (tasks.OperationClass, error) { return class, nil })
+		}, resolver, func(string) (tasks.OperationClass, error) { return class, nil }, readGateFunc(func(context.Context, string, string) error { return nil }))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,7 +207,7 @@ func TestHTTPUnauthorizedAndDenied(t *testing.T) {
 	mux := http.NewServeMux()
 	if err := tasks.Register(mux, f.service,
 		func(*http.Request) (tasks.Principal, error) { return tasks.Principal{}, context.Canceled },
-		nil, nil); err != nil {
+		nil, nil, readGateFunc(func(context.Context, string, string) error { return nil })); err != nil {
 		t.Fatal(err)
 	}
 	server := httptest.NewServer(mux)
@@ -296,6 +296,12 @@ func TestHTTPGroupResolverAndSSE(t *testing.T) {
 	if err != nil || len(task.Targets) != 2 {
 		t.Fatalf("task = %+v, %v", task, err)
 	}
+}
+
+type readGateFunc func(context.Context, string, string) error
+
+func (f readGateFunc) AuthorizeTaskRead(ctx context.Context, subjectID, taskID string) error {
+	return f(ctx, subjectID, taskID)
 }
 
 type groupResolverFunc func(context.Context, string, string) ([]string, error)

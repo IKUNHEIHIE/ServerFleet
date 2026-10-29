@@ -21,17 +21,19 @@ import (
 )
 
 const (
-	ActionSubmit         = "tasks.submit"
-	ActionApprove        = "tasks.approve"
-	ActionRevise         = "tasks.revise"
-	ActionCancel         = "tasks.cancel"
-	ActionDispatchDenied = "tasks.dispatch_denied"
-	ActionFinished       = "tasks.finished"
+	ActionSubmit           = "tasks.submit"
+	ActionApprove          = "tasks.approve"
+	ActionRevise           = "tasks.revise"
+	ActionCancel           = "tasks.cancel"
+	ActionDispatchDenied   = "tasks.dispatch_denied"
+	ActionFinished         = "tasks.finished"
+	ActionApprovalConsumed = "tasks.approval_consumed"
 )
 
 // ServiceActions returns the audit action catalog this domain emits.
 func ServiceActions() []string {
-	return []string{ActionApprove, ActionCancel, ActionDispatchDenied, ActionFinished, ActionRevise, ActionSubmit}
+	return []string{ActionApprovalConsumed, ActionApprove, ActionCancel, ActionDispatchDenied,
+		ActionFinished, ActionRevise, ActionSubmit}
 }
 
 // AuditSink is the durable audit port.
@@ -69,6 +71,13 @@ type Dispatcher interface {
 	Cancel(ctx context.Context, command CancelCommand) error
 }
 
+// ApprovalConsumer atomically consumes an external approval bound to the subject,
+// plan digest and target snapshot. It MUST use the provided transaction so a
+// failed submission rolls the consumption back. It returns the approver identity.
+type ApprovalConsumer interface {
+	ConsumeApproval(ctx context.Context, tx storage.Tx, approvalID, subjectID, planDigest string, nodeIDs []string) (string, error)
+}
+
 // NodeLookup reports trusted node availability. A nil lookup makes dispatch fail
 // closed rather than assuming nodes are online.
 type NodeLookup interface {
@@ -82,6 +91,7 @@ type Options struct {
 	Audit           AuditSink
 	Authorizer      auth.Authorizer
 	Dispatcher      Dispatcher
+	Approvals       ApprovalConsumer
 	Nodes           NodeLookup
 	Now             func() time.Time
 	ApprovalTTL     time.Duration
@@ -98,6 +108,7 @@ type Service struct {
 	audit           AuditSink
 	authorizer      auth.Authorizer
 	dispatcher      Dispatcher
+	approvals       ApprovalConsumer
 	nodes           NodeLookup
 	now             func() time.Time
 	approvalTTL     time.Duration
@@ -154,7 +165,7 @@ func NewService(options Options) (*Service, error) {
 	}
 	return &Service{
 		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
-		dispatcher: options.Dispatcher, nodes: options.Nodes, now: now,
+		dispatcher: options.Dispatcher, approvals: options.Approvals, nodes: options.Nodes, now: now,
 		approvalTTL: approvalTTL, unstartedTTL: unstartedTTL, interval: interval,
 		concurrency: concurrency, requireApproval: require, onError: onError,
 	}, nil
@@ -172,8 +183,13 @@ type SubmitRequest struct {
 	TargetResourceID string
 	TargetNodeIDs    []string
 	Params           map[string]string
+	CanonicalParams  []byte
 	IdempotencyKey   string
 	RequireApproval  bool
+	ScopeRevision    uint64
+	Source           audit.Source
+	PluginID         string
+	ApprovalID       string
 }
 
 // Submit persists a task and its frozen target snapshot. Authorization runs
@@ -211,12 +227,25 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 	default:
 		return Task{}, fmt.Errorf("%w: target type", ErrInvalidTask)
 	}
-	params, err := normalizeParams(request.Params)
+	params, err := paramsFromSubmit(request)
 	if err != nil {
 		return Task{}, err
 	}
 	if request.IdempotencyKey != "" && !validToken(request.IdempotencyKey, 128) {
 		return Task{}, fmt.Errorf("%w: idempotency key", ErrInvalidTask)
+	}
+	source := request.Source
+	if source == "" {
+		source = audit.SourceWeb
+	}
+	if !knownAuditSource(source) {
+		return Task{}, fmt.Errorf("%w: source", ErrInvalidTask)
+	}
+	if request.PluginID != "" && !validToken(request.PluginID, 128) {
+		return Task{}, fmt.Errorf("%w: plugin id", ErrInvalidTask)
+	}
+	if source == audit.SourcePlugin && request.PluginID == "" {
+		return Task{}, fmt.Errorf("%w: plugin id is required", ErrInvalidTask)
 	}
 	if err := s.authorize(ctx, request.SubjectID, request.ActionID, request.RequestID, snapshot.IDs(), "task_submit"); err != nil {
 		return Task{}, err
@@ -238,6 +267,14 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 	if approvalRequired {
 		status = StatusAwaitingApproval
 	}
+	externalApproval := request.ApprovalID != ""
+	if externalApproval {
+		if s.approvals == nil {
+			return Task{}, ErrApprovalConsumerAbsent
+		}
+		approvalRequired = true
+		status = StatusQueued
+	}
 	task := Task{
 		ID: newTaskID(), Name: request.Name, SubmitterID: request.SubjectID,
 		ActionID: request.ActionID, OperationClass: request.OperationClass, Params: params,
@@ -245,7 +282,8 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 		ApprovalRequired: approvalRequired, BatchIndex: 0, TargetType: targetType,
 		TargetResourceID:  request.TargetResourceID,
 		UnstartedDeadline: now.Add(s.unstartedTTL), RequestID: request.RequestID,
-		CreatedAt: now, UpdatedAt: now, Targets: targets,
+		ScopeRevision: request.ScopeRevision, PluginID: request.PluginID, Source: string(source),
+		ApprovalRef: request.ApprovalID, CreatedAt: now, UpdatedAt: now, Targets: targets,
 	}
 	task.PlanHash = planHash(task)
 	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
@@ -265,7 +303,33 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 		}, now); err != nil {
 			return err
 		}
-		return s.audit.AppendTx(txCtx, tx, s.event(request.SubjectID, ActionSubmit, "success", request.RequestID, snapshot.IDs(), ""))
+		if externalApproval {
+			approver, err := s.approvals.ConsumeApproval(txCtx, tx, request.ApprovalID, request.SubjectID, task.PlanHash, snapshot.IDs())
+			if err != nil {
+				return err
+			}
+			if !validToken(approver, 128) || approver == request.SubjectID {
+				return ErrSelfApproval
+			}
+			if err := s.repo.InsertApproval(txCtx, tx, Approval{
+				TaskID: task.ID, Revision: task.Revision, ApproverID: approver,
+				Decision: "approved", PlanHash: task.PlanHash, Reason: "external approval",
+				DecidedAt: now,
+			}); err != nil {
+				return err
+			}
+			if err := s.repo.AppendEvent(txCtx, tx, task.ID, "approval_consumed", map[string]any{
+				"revision": task.Revision, "approver": approver,
+			}, now); err != nil {
+				return err
+			}
+			if err := s.audit.AppendTx(txCtx, tx, s.event(approver, ActionApprovalConsumed, "success", request.RequestID, snapshot.IDs(), "")); err != nil {
+				return err
+			}
+		}
+		event := s.event(request.SubjectID, ActionSubmit, "success", request.RequestID, snapshot.IDs(), "")
+		event.Source = source
+		return s.audit.AppendTx(txCtx, tx, event)
 	})
 	if errors.Is(err, errDuplicateSubmit) {
 		existing, found, lookupErr := s.repo.GetByIdempotencyKey(ctx, request.SubjectID, request.IdempotencyKey)
@@ -640,6 +704,29 @@ func (s *Service) lockTask(taskID string) func() {
 	mutex := value.(*sync.Mutex)
 	mutex.Lock()
 	return mutex.Unlock
+}
+
+func paramsFromSubmit(request SubmitRequest) (string, error) {
+	if request.CanonicalParams != nil {
+		if request.Params != nil {
+			return "", fmt.Errorf("%w: provide params or canonical params, not both", ErrInvalidTask)
+		}
+		var decoded map[string]string
+		if err := json.Unmarshal(request.CanonicalParams, &decoded); err != nil {
+			return "", fmt.Errorf("%w: canonical params", ErrInvalidTask)
+		}
+		return normalizeParams(decoded)
+	}
+	return normalizeParams(request.Params)
+}
+
+func knownAuditSource(source audit.Source) bool {
+	switch source {
+	case audit.SourceWeb, audit.SourceAI, audit.SourcePlugin, audit.SourceAgent, audit.SourceSystem:
+		return true
+	default:
+		return false
+	}
 }
 
 func (s *Service) requireRequest(requestID string) error {

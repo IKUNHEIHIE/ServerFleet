@@ -96,6 +96,10 @@ type Task struct {
 	TargetResourceID  string
 	UnstartedDeadline time.Time
 	RequestID         string
+	ScopeRevision     uint64
+	PluginID          string
+	Source            string
+	ApprovalRef       string
 	FailureReason     string
 	CreatedAt         time.Time
 	UpdatedAt         time.Time
@@ -137,16 +141,17 @@ type LogEntry struct {
 }
 
 var (
-	ErrTaskNotFound      = errors.New("tasks: task not found")
-	ErrTaskTerminal      = errors.New("tasks: task is terminal")
-	ErrInvalidTask       = errors.New("tasks: invalid task")
-	ErrInvalidStatus     = errors.New("tasks: invalid status transition")
-	ErrApprovalInvalid   = errors.New("tasks: approval is missing or stale")
-	ErrApprovalRequired  = errors.New("tasks: approval is required")
-	ErrSelfApproval      = errors.New("tasks: submitter cannot approve own task")
-	ErrTargetNotFound    = errors.New("tasks: target not found")
-	ErrCursorExpired     = errors.New("tasks: event cursor expired")
-	ErrDispatcherAbsent  = errors.New("tasks: transport dispatcher is not configured")
-	ErrNodeLookupAbsent  = errors.New("tasks: node availability source is not configured")
-	ErrRequestIDRequired = errors.New("tasks: request id is required")
+	ErrTaskNotFound           = errors.New("tasks: task not found")
+	ErrTaskTerminal           = errors.New("tasks: task is terminal")
+	ErrInvalidTask            = errors.New("tasks: invalid task")
+	ErrInvalidStatus          = errors.New("tasks: invalid status transition")
+	ErrApprovalInvalid        = errors.New("tasks: approval is missing or stale")
+	ErrApprovalRequired       = errors.New("tasks: approval is required")
+	ErrSelfApproval           = errors.New("tasks: submitter cannot approve own task")
+	ErrTargetNotFound         = errors.New("tasks: target not found")
+	ErrCursorExpired          = errors.New("tasks: event cursor expired")
+	ErrDispatcherAbsent       = errors.New("tasks: transport dispatcher is not configured")
+	ErrNodeLookupAbsent       = errors.New("tasks: node availability source is not configured")
+	ErrRequestIDRequired      = errors.New("tasks: request id is required")
+	ErrApprovalConsumerAbsent = errors.New("tasks: external approval consumer is not configured")
 )
