@@ -37,15 +37,22 @@ type Metrics struct {
 // may remain populated after a node goes offline; display code must call Usage and never read
 // Metrics directly. Metrics is nil when no sample was ever received.
 type Node struct {
-	ID         string
-	Name       string
-	Address    string
-	Region     string
-	Provider   string
-	Tags       []string
-	Status     Status
-	LastSeenAt time.Time
-	Metrics    *Metrics
+	ID          string
+	Name        string
+	Address     string
+	Region      string
+	Provider    string
+	CountryCode string
+	Tags        []string
+	Status      Status
+	LastSeenAt  time.Time
+	Metrics     *Metrics
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+
+	// eventSeq is the last trusted agent sequence applied to this node. It is not
+	// exposed as an API field; persistence uses it to reject stale events.
+	eventSeq uint64
 }
 
 // Usage returns a sample only for an online node with a present, fresh observation.
