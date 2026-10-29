@@ -1,0 +1,8 @@
+
+> serverfleet@0.0.0 tools:install
+> node scripts/install-go-tools.mjs
+
+> install-protoc-gen-go: install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+> install-staticcheck: install honnef.co/go/tools/cmd/staticcheck@v0.8.2
+> install-govulncheck: install golang.org/x/vuln/cmd/govulncheck@v1.9.0
+> install-actionlint: install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12

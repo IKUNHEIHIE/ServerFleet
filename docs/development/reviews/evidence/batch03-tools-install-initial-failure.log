@@ -1,0 +1,18 @@
+
+> serverfleet@0.0.0 tools:install
+> node scripts/install-go-tools.mjs
+
+> install-protoc-gen-go: install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12
+go: google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12: google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12: Get "https://proxy.golang.org/google.golang.org/protobuf/cmd/protoc-gen-go/@v/v1.36.12.info": dial tcp: lookup proxy.golang.org: no such host
+file:///D:/admin/desktop/codex/myproject/ks/.worktrees/integration--batch03-review/scripts/lib.mjs:30
+  if ((result.status !== 0 || result.error) && !allowFailure) throw new Error(`${name} failed (exit ${result.status ?? "unavailable"})`);
+                                                                    ^
+
+Error: install-protoc-gen-go failed (exit 1)
+    at run (file:///D:/admin/desktop/codex/myproject/ks/.worktrees/integration--batch03-review/scripts/lib.mjs:30:69)
+    at file:///D:/admin/desktop/codex/myproject/ks/.worktrees/integration--batch03-review/scripts/install-go-tools.mjs:9:59
+    at ModuleJob.run (node:internal/modules/esm/module_job:561:25)
+    at async node:internal/modules/esm/loader:647:26
+    at async asyncRunEntryPointWithESMLoader (node:internal/modules/run_main:101:5)
+
+Node.js v24.22.1

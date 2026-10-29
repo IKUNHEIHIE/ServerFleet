@@ -1,0 +1,86 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/audit"
+	audittest "serverfleet.local/serverfleet/internal/audit/testkit"
+)
+
+func assert(name string, ok bool) {
+	if !ok { panic("FAIL " + name) }
+	fmt.Println("PASS " + name)
+}
+
+func main() {
+	ctx := context.Background()
+	p := &auth.NodePolicy{KnownNodes: map[string]struct{}{"n1": {}, "n2": {}}, ReadGrants: map[string]map[string]struct{}{"reader": {"n1": {}}}}
+	c := auth.Check{SubjectID: "reader", Action: auth.NodeReadAction, NodeIDs: []string{"n1"}}
+	assert("auth explicit grant", auth.EvaluateNodePolicy(ctx, c, p) == nil)
+	c.NodeIDs = []string{"n1", "n2"}
+	assert("auth mixed targets deny entire request", errors.Is(auth.EvaluateNodePolicy(ctx, c, p), auth.ErrDenied))
+	c.NodeIDs = nil
+	assert("auth empty targets never global", errors.Is(auth.EvaluateNodePolicy(ctx, c, p), auth.ErrInvalidCheck))
+	c.NodeIDs = []string{"*"}
+	assert("auth wildcard rejected", errors.Is(auth.EvaluateNodePolicy(ctx, c, p), auth.ErrInvalidCheck))
+	c.NodeIDs = []string{"n1"}
+	current := p
+	var sourceErr error
+	a := auth.NewNodePolicyAuthorizer(func(context.Context) (*auth.NodePolicy, error) { return current, sourceErr })
+	assert("auth adapter initial allow", a.Authorize(ctx, c) == nil)
+	current = &auth.NodePolicy{KnownNodes: p.KnownNodes, ReadGrants: map[string]map[string]struct{}{"reader": {}}}
+	assert("auth revocation read on next call", errors.Is(a.Authorize(ctx, c), auth.ErrDenied))
+	current, sourceErr = p, errors.New("synthetic-sensitive-source")
+	err := a.Authorize(ctx, c)
+	assert("auth source failure no stale allow or raw secret", errors.Is(err, auth.ErrPolicyUnavailable) && !strings.Contains(err.Error(), "synthetic-sensitive-source"))
+	cancelCtx, cancel := context.WithCancel(ctx)
+	a = auth.NewNodePolicyAuthorizer(func(context.Context) (*auth.NodePolicy, error) { cancel(); return p, nil })
+	assert("auth cancellation during final read", errors.Is(a.Authorize(cancelCtx, c), context.Canceled))
+	cancel()
+	c.Action = "ai.root.shell"
+	assert("auth node grant cannot authorize root shell", errors.Is(auth.EvaluateNodePolicy(ctx, c, p), auth.ErrDenied))
+
+	now := time.Date(2026, 10, 29, 1, 0, 0, 0, time.UTC)
+	limits := audit.DefaultLimits()
+	limits.MaxFutureSkew, limits.MaxPastAge = 0, time.Hour
+	v, err := audit.NewValidator([]string{"nodes.read"}, limits)
+	if err != nil { panic(err) }
+	e := audit.Event{SubjectID: "reader", Action: "nodes.read", Result: "success", RequestID: "request-same", At: now}
+	assert("audit valid event", v.Validate(e, now) == nil)
+	bad := e
+	bad.Action = "synthetic-secret-action"
+	err = v.Validate(bad, now)
+	assert("audit unknown action no echo", errors.Is(err, audit.ErrInvalidEvent) && !strings.Contains(err.Error(), bad.Action))
+	bad = e; bad.SubjectID = "reader\u202e"
+	assert("audit bidirectional control rejected", errors.Is(v.Validate(bad, now), audit.ErrInvalidEvent))
+	bad = e; bad.At = now.Add(time.Nanosecond)
+	assert("audit future boundary rejected", errors.Is(v.Validate(bad, now), audit.ErrInvalidEvent))
+	bad = e; bad.At = now.Add(-time.Hour)
+	assert("audit past boundary accepted", v.Validate(bad, now) == nil)
+	bad.At = bad.At.Add(-time.Nanosecond)
+	assert("audit past boundary exceeded rejected", errors.Is(v.Validate(bad, now), audit.ErrInvalidEvent))
+	r, err := audittest.NewMemoryRecorder(v, func() time.Time { return now })
+	if err != nil { panic(err) }
+	var wg sync.WaitGroup
+	for i := 0; i < 32; i++ { wg.Add(1); go func() { defer wg.Done(); if err := r.Append(ctx, e); err != nil { panic(err) } }() }
+	wg.Wait()
+	assert("audit 32 concurrent same-request events retained", r.Len() == 32)
+	snapshot := r.Snapshot(); snapshot[0].SubjectID = "mutated"
+	assert("audit snapshot detached", r.Snapshot()[0].SubjectID == "reader")
+	view := r.View()
+	page, err := view.Query(audit.Query{RequestID: e.RequestID, Offset: 31, Limit: 1})
+	assert("audit final page exact total", err == nil && page.Total == 32 && len(page.Items) == 1 && !page.HasMore)
+	page.Items[0].SubjectID = "mutated"
+	again, err := view.Query(audit.Query{Limit: 1})
+	assert("audit projection detached", err == nil && again.Items[0].SubjectID == "reader")
+	canceled, stop := context.WithCancel(ctx); stop()
+	assert("audit canceled append does not write", errors.Is(r.Append(canceled, e), context.Canceled) && r.Len() == 32)
+	_, err = view.Query(audit.Query{Limit: audit.MaxPageLimit+1})
+	assert("audit excessive page limit rejected", errors.Is(err, audit.ErrInvalidQuery))
+}

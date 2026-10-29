@@ -1,0 +1,43 @@
+{
+  "reviewDate": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "reviewer": "codex-review-01",
+  "task": "BATCH03-REVIEW",
+  "baseline": "a103c5f8b83c288e8178d995195140762a7cd122",
+  "testedCodeHead": "d1d7f11211c062efcb4eeaf6164821d44d3aa115",
+  "decisions": [
+    {"task": "AUTH-01A", "head": "8e875705b2e218baeaf8235c5d7d0a6e1681fad2", "decision": "ACCEPT_OFFLINE_CANDIDATE", "coveragePercent": 94.6},
+    {"task": "A01", "head": "d99d7efbe0ccd84a828b2413ec2c7ca099c66e95", "decision": "ACCEPT_OFFLINE_FOUNDATION", "coveragePercent": {"audit": 100, "testkit": 100}},
+    {"task": "W02", "head": "5c6ceff8d689a81d0a186f692a83b8dd833e29de", "decision": "ACCEPT_LOCAL_COMPONENT", "webTests": 100}
+  ],
+  "blockingFindings": [],
+  "integration": {
+    "npmCi": "PASS",
+    "toolsInstall": "PASS_WITH_LOCAL_FILE_MODULE_CACHE",
+    "check": "PASS",
+    "security": "PASS",
+    "goTopLevelTests": 99,
+    "goSubtests": 402,
+    "goFailures": 0,
+    "webTests": 100,
+    "webFailures": 0,
+    "npmVulnerabilities": 0,
+    "govulncheck": "No vulnerabilities found.",
+    "independentGoAssertions": 21,
+    "independentWebCases": 6,
+    "authRevocationAndContextRepetitions": 20
+  },
+  "retainedFailures": [
+    "Initial tools:install: proxy.golang.org DNS lookup failed.",
+    "GOPROXY=off retry: deprecation metadata lookup unavailable; final file-cache proxy rebuild passed without disabling verification."
+  ],
+  "knownFollowups": [
+    "N02: nodes must propagate policy unavailable/invalid/unknown errors instead of returning a successful partial list.",
+    "T01-B: bound raw-byte decoding and reject duplicate known Envelope fields before semantic validation.",
+    "W03: read-only details resolved from the caller's current ready node set."
+  ],
+  "notVerified": ["GitHub CI", "Linux race", "browser Tab and visual acceptance", "real identity or policy storage", "durable audit and read authorization", "raw transport security", "real nodes or execution", "1C1G performance"],
+  "g2Frozen": false,
+  "agentsStarted": false,
+  "remotePushed": false
+}

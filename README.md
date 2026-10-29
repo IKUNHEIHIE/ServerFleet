@@ -8,6 +8,8 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 第二批交付新增离线 Protobuf 语义校验、节点领域规则及已返修的节点列表组件；均未接入真实节点/执行链路，App 仍是开发空壳。最新复审见 [第二批复审](docs/development/reviews/BATCH-02-REVIEW.md)，后续独立任务见 [第三批任务单](docs/development/THIRD-BATCH-WORK-PACKAGES.md)。
 
+第三批已接收默认拒绝的节点读取策略、审计事件校验/受限视图及列表搜索筛选，均为未接线的离线基础。最新结论见 [第三批审查](docs/development/reviews/BATCH-03-REVIEW.md)，下一步见 [第四批任务单](docs/development/FOURTH-BATCH-WORK-PACKAGES.md)：有界帧解码、节点授权错误接线、只读节点详情。G2仍未冻结，不自动启动Agent。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。
