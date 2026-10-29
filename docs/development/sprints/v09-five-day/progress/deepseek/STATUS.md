@@ -66,3 +66,10 @@
 - DS-06 监控/通知/配额、DS-08 网关/发布：子代理实现中。
 - 所有真实外部环境（Linux 双架构、Cloudflare/ACME、QQ/SMTP、Nginx）UNTESTED/BLOCKED；不得以本地假端口计为验收。
 - `go.mod/go.sum`、迁移命名、HTTP 契约仍未获总控接收；按候选处理。
+
+## 检查点 C8 · DS-06 监控/通知/配额
+
+- SHA：`247862d`（通知域）+ `a3eacba`（监控/配额）。迁移 `ds/0050_monitoring`、`ds/0051_notifications`、`ds/0052_quota`。
+- 实现：HTTP/TCP/TLS 监测、SSRF 目标策略与逃逸形式拒绝、维护窗、上下线迁移告警、注入 Prober（nil fail-closed）；SMTP/QQ 仅存 secretRef、去重窗口、QQ→SMTP 备用一次、显式重试上限/退避、未知结果不重试；流量周期/权威修正、缺失≠0、估算门控、提醒去重、超额仅告警不断网。通知 HTTP 注册（读取需注入 gate，响应不含 secretRef）。
+- 测试：`go test ./internal/monitoring/ ./internal/notifications/ ./internal/quota/` → ok；staticcheck 通过。
+- 未覆盖/风险：监控先持久状态后发通知，告警投递失败不会下轮自动重发；SSRF 不做 DNS 解析，需真实 Prober 复核；真实 SMTP/QQ/网络目标 UNTESTED。
