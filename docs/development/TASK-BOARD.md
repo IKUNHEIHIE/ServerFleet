@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| AUTH01B-REVIEW | 审查中，交接后停止 | codex-review-01 | integration/auth01b-review / `.worktrees/integration--auth01b-review` | 精确审查AUTH-01B/隔离探针、合入通过项、证据/任务板/README及Codex下一步任务/目录；不干预TASK-01C/W05-R1 | 项目负责人验收；起始a652696 |
 | FOLLOWUP01-REVIEW | 审查完成：接收TASK-01B、W05退回；组合/安全检查通过，交接后停止 | codex-review-01 | integration/followup01-review / `.worktrees/integration--followup01-review` | 精确审查/隔离探针、合入通过项、证据/任务板/README及两位后续任务/目录；不干预AUTH-01B | 项目负责人验收；起始1f8f8cb |
 | M0-P1 | 已完成 | codex-p1-local | main / 主目录 | 原 P1 范围 | 交付 15814c6 |
 | G2-R01 | 审查通过，仅接收候选/评审工件；不批准运行时提案或冻结 | codex-01 | contract/g2-review-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\contract--g2-review-cx01` | 原三项授权目录 | 总控；被审查提交 8821555 |
