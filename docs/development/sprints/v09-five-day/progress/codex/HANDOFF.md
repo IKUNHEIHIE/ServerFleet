@@ -81,6 +81,20 @@ Agent保留目录Linux模式要求无group/other访问；读取保留/结果文�
 
 ## 07 / 独立认证契约修订与安全新决策候选
 
+SHA `fecc456164fa87b8fbc505e73b50f2d0b606fefc`。
+
 文件auth-session.patch.json、SECURITY-DECISIONS-PROPOSED.md及tests/integration/v09/platform/auth-candidate.test.mjs。仅对内存副本应用RFC6902；Cookie/opaqueBearer/初始化204/me-CSRF有test前置条件；不修改原始字节受保护OpenAPI；不污染通用Identity；保持既有nodes DTO/operationId/参数/响应和全部147路径185操作；拒绝旧基线与重复应用。
 
 `node --test tests/integration/v09/platform/auth-candidate.test.mjs`：2 tests PASS（最终运行771.3874ms）；旧候选SHA256仍c779a4366d5fe0d3088d1c682b231dfe9d157c3d2ae562e1440cba7ccc3f6726。安全文档明确是新PROPOSED输入，未补写/替代历史已批准原文。独立修订仍待总控接收，不能因契约静态检查通过开启HTTP。
+
+## 08 / 隔离WSS、WASM、Eino实验及双架构编译
+
+源快照/锁/脚本在tests/poc/v09/platform；独立依赖只写本worktree忽略的reports/_review/v09-platform，根依赖文件hash前后严格相同。WSS候选精确根补丁为S04-WSS-DEPENDENCY.patch，`git apply --check` PASS但未应用；WASM/Eino不申请自动采用生产runtime。
+
+- `node tests/poc/v09/platform/run.mjs` PASS：真实本机WSS+mTLS binary Protobuf往返与文本/超限/节点替换/旧连接吊销/外部Origin拒绝；WASM每内存128KiB、未注册Host拒绝、无限循环50ms关闭、健康模块返回42。最终运行5.695s。
+- `node tests/poc/v09/platform/run-eino.mjs` PASS：真实Eino ToolsNode+本包策略、合成模型调用不绕过零资源/撤权/root审批/伪造approved/未知工具；最后readonly运行3.057s。无真实模型/BYOK/任务或root执行。Sonic明确警告Go1.27超出其支持1.26上限并回退encoding/json；保留警告，兼容/性能风险未关闭。
+- 两个隔离模块分别 `govulncheck -C <对应目录> -test ./...` PASS：No vulnerabilities found。固定版本和完整sum见实验目录；根扫描不能替代这两个实验依赖扫描。
+- `node tests/integration/v09/platform/build.mjs` PASS：Controller/Agent Linux amd64/arm64四个交叉编译；名称显式scaffold，未运行/安装，不是v0.9发行物。
+- 最终 `npm run check` policy/contracts/go/web/git五套PASS；`npm run check:security` PASS。受保护go.mod/go.sum/锁/API/Proto/gen/scripts/架构规则相对基线无diff；未动DS/GM目录。
+
+实验仅局部证据，未关闭POC-01/02/03/04/06/08、AC或G2；真实Linux/1C1G、WASM全Host生命周期/资源隔离、真实模型/Agent链、Xray目标版本/双架构、更新/恢复材料与fencing均未验证。所有未完项见STATUS，构建/接线步骤见BUILD-RUN-RECOVERY，实际摘要见EVIDENCE.json。

@@ -67,6 +67,10 @@ namespace 仅组合根绑定的 auth 命名空间；Read 返回复制；无记�
 
 这些字段必须由可信统一入口构建，不能当客户端 claims 放行；SubjectID 不自行证明身份。Authorizer/审批/审计失败在持久调度前关闭，每节点派发再查当前权限、插件状态、AI范围。审批一次性绑定操作者、摘要、目标快照、世代及期限，由任务事务原子消费；普通5、root/修改1→5、未启动15分钟 TTL、UNKNOWN不重跑。新字段零值不能默认授权：旧调用仍可编译但新执行入口拒绝不完整请求。需要 DS 对持久提交/审批消费事务做精确回提；原 Submitter 不能承载完整受控执行时不以无参数任务替代。测试/回退：旧离线测试继续，新增越权/重放/撤权负向；未经接收不派发。
 
-## S04 WSS 依赖及发布（后续精确 patch）
+## S04 WSS 依赖及发布（精确 patch 已提供，仍 REQUESTED）
 
-当前 go.mod 只有 protobuf。先完成 transport 自有 mTLS 身份验证和离线门禁；WebSocket 库版本、go.sum 的完整 patch 要在选型文档查询与隔离 PoC 后提供。此项未给精确锁差异，不要求总控批准任意版本或 runtime。WASM/Eino 同理，未选生产 runtime；不添加依赖、不伪称 PoC 通过。
+当前根go.mod仍只有protobuf。独立精确diff见 `docs/contracts/revisions/v09-five-day-cx02/S04-WSS-DEPENDENCY.patch`：coder/websocket v1.8.15，两个校验和值来自固定Go模块下载/校验；该版本无模块依赖，Go最低1.23，与当前1.27.3兼容。调用方将为transport的WSS适配与Agent客户端；不影响现有Sender/Proto字段。接收时应与WSS生产import一起集成，否则go mod tidy -diff会正确报告多余依赖。回退为不接WSS，保留health/Agent离线入口；不能降级ws或跳TLS验证。
+
+已通过本目录隔离WSS+mTLS+二进制Protobuf PoC：native主动连接、frame上限、文本/节点不符/吊销/Origin拒绝。测试脚本将版本和sum只写自己忽略的reports子模块，根go.mod/sum/package-lock前后SHA256相同。Context7先resolve再query，并对固定版本本地源码核对API；依赖漏洞扫描含测试也PASS。没有将PoC源import到根工程，没有修改根配置或锁。
+
+wazero v1.12.0仅在同一隔离PoC验证128KiB内存上限、未注册Host拒绝、50ms无限循环终止、随后正常模块返回42；其x/sys v0.44.0也仅隔离锁定。Linux/1C1G/完整Host ABI及持久生命周期未验收，**不申请自动采用生产WASM运行时**。Eino隔离试验另记，不加入根依赖，不等同真实BYOK/POC-06。全部第三方版本和sum保存在tests/poc/v09/platform对应锁文本；根无新增依赖。
