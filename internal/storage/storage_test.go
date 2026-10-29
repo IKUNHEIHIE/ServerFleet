@@ -276,3 +276,34 @@ func TestMigratorRejectsBadVersions(t *testing.T) {
 		t.Fatal("accepted migration without statements")
 	}
 }
+
+func TestMigrationFailureRollsBackWholeMigration(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	db := testkit.NewDB(t)
+	migrator, err := storage.NewMigrator([]storage.Migration{{
+		Version: "ds/9999_broken",
+		Name:    "broken migration",
+		Statements: []string{
+			`CREATE TABLE should_not_exist (id TEXT)`,
+			`THIS IS NOT VALID SQL`,
+		},
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrator.Apply(ctx, db); err == nil {
+		t.Fatal("broken migration was accepted")
+	}
+	var count int
+	if err := db.QueryRow(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE name = 'should_not_exist'").Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 0 {
+		t.Fatal("partial migration DDL survived rollback")
+	}
+	versions, err := storage.AppliedVersions(ctx, db)
+	if err != nil || len(versions) != 0 {
+		t.Fatalf("versions = %v, %v", versions, err)
+	}
+}
