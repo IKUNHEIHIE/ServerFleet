@@ -14,6 +14,8 @@
  */
 export { NodeList } from "./node-list";
 export type { NodeActivateOrigin, NodeListHandle, NodeListProps } from "./node-list";
+export { NodeLoader, LOAD_FAILURE_MESSAGE } from "./node-loader";
+export type { NodeLoaderProps, NodeSource } from "./node-loader";
 export { NodeListPanel } from "./node-list-panel";
 export type { NodeListPanelHandle, NodeListPanelProps } from "./node-list-panel";
 export { NodeListWorkspace } from "./node-list-workspace";
