@@ -27,7 +27,9 @@ import { AIPage, AISessionPage } from "@/features/ai/ai-pages";
 import { PluginsPage } from "@/features/plugins/plugins-page";
 import { XrayPage } from "@/features/plugins/xray-page";
 import { WorkflowsPage } from "@/features/workflows/workflows-page";
-import { NotFoundPage, PendingPage } from "@/features/pending/pending-page";
+import { UpdatesPage } from "@/features/updates/updates-page";
+import { BackupsPage } from "@/features/backups/backups-page";
+import { NotFoundPage } from "@/features/pending/not-found-page";
 
 export interface RouteContext {
   readonly params: Readonly<Record<string, string>>;
@@ -37,10 +39,6 @@ export interface RouteContext {
 interface RouteEntry {
   readonly path: string;
   readonly render: (context: RouteContext) => ReactNode;
-}
-
-function pending(title: string, description: string) {
-  return () => <PendingPage title={title} description={description} />;
 }
 
 export const ROUTES: readonly RouteEntry[] = [
@@ -65,8 +63,8 @@ export const ROUTES: readonly RouteEntry[] = [
   { path: "/plugins/xray", render: () => <XrayPage /> },
   { path: "/dns", render: () => <DnsPage /> },
   { path: "/certificates", render: () => <CertificatesPage /> },
-  { path: "/updates", render: pending("更新中心", "主控与 Agent 更新状态、失败恢复。") },
-  { path: "/backups", render: pending("备份与恢复", "备份校验与主控灾难恢复。") },
+  { path: "/updates", render: () => <UpdatesPage /> },
+  { path: "/backups", render: () => <BackupsPage /> },
   { path: "/users", render: () => <UsersPage /> },
   { path: "/audit", render: () => <AuditPage /> },
   { path: "/settings", render: () => <SettingsPage /> },

@@ -68,3 +68,11 @@
 - **插件操作与菜单联动**：`PluginOperation.status` 为异步（queued/verifying/draining/applying/succeeded/failed/rolled_back/deferred）。前端只把服务端 `GET /api/v1/plugins` 中 `enabled && status==="enabled"` 的 `xray-manager` 显示为导航入口；请求确认“热禁用后入口消失”的判定字段就是这两个（而非需要额外 `menuVisible`）。
 - **卸载不保留数据选择**：`DELETE /api/v1/plugins/{pluginId}` 无 “保留/清除插件数据” 参数；FR §11.4 要求用户选择。UI 明确不承诺数据保留策略。请求：补 `?purgeData=` 或 body 字段。
 - **Xray 插件契约状态**：`/api/v1/plugins/xray-manager/*` 已在候选中出现（capabilities/nodes/instance/actions/templates/installations/configurations/deployments/users/client-export/traffic/jobs），但 `FR-PLUGIN-XRAY-001` 的发行制品尚未发布，因此前端把“安装”按钮的可用性交给目录条目的 `sourceCommit + artifactSha256`：缺失即显示“不可安装/尚未发布”，不伪造下载成功。
+
+## 10. GM-08 契约缺口（更新中心 / 备份与灾难恢复）
+
+- **Agent 升级没有端点**：候选只有主控 `/api/v1/system/updates/{check,plan,apply,jobs,jobs/{id}/rollback}`；FR §12 要求「Agent 通过更新中心选择节点并分批升级」，但没有 Agent 版本清单、目标选择或分批升级操作，`/api/v1/tasks` 也缺分批/金丝雀参数（§5）。更新中心因此只显示契约缺口与到批量任务/节点列表的跳转，不伪造“选择节点分批升级”。请求：补 `GET /api/v1/agents/updates/check`、`POST /api/v1/agents/updates/jobs`（含 targetNodeIds、批次策略与熔断）或明确本期不做。
+- **备份记录列表/创建缺失**（同 §4）：只有 `POST /api/v1/backups/{backupId}/verify`，没有 `GET /api/v1/backups`、`POST /api/v1/backups`、保留策略或存储位置字段。备份页因此不显示备份记录表格、不提供“立即备份”，backupId 必须由服务端（如更新作业的 `backupId`）或管理员提供。升级要求 `backupMode: "required"`，但没有可验证备份时前端只能禁止提交——请求补最小备份记录契约。
+- **灾难恢复作业没有列表**：只有 `POST /api/v1/disaster-recovery/jobs` 与 `GET …/jobs/{jobId}`，页面刷新后无法从服务端找回作业；前端不本地存储作业记录，也不伪造历史。请求：补 `GET /api/v1/disaster-recovery/jobs?cursor=&limit=`。
+- **`POST /api/v1/backups/{backupId}/verify` 返回 202 + `RecoveryPlan08`**：语义上“校验”返回的是恢复计划而不是校验结果（没有 `verified/valid` 字段或校验时间）。前端只按服务端返回的 `checks[]` 显示结论，未通过即禁止创建恢复作业；请求确认是否应返回独立 `BackupVerification`（含校验时间、校验和结果、可恢复性结论）。
+- **`RecoveryPlan08.oldControllerFenced` 是声明**：契约注释已说明它不是充分的技术隔离证据。前端要求管理员显式勾选并提示服务端仍需独立校验；请求后端确认会用真实 fencing 证据覆盖该声明。

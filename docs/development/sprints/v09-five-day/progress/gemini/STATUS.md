@@ -11,7 +11,8 @@
 | GM-04 | ffb2a14 | 节点接入/详情、分组双视图与成员抽屉、服务组、用户/角色/授权/会话、审计、安全凭据 | `/nodes/new` ← enrollment tokens/enrollments；`/nodes/{id}` ← detail/identity/capabilities/diagnostics/traffic-quota/suspend/revoke；`/groups` ← groups/classifications/node-results/members；`/service-groups[/:id]` ← CRUD/members/scheduling/preview；`/users` ← users/roles/permissions/grants/sessions；`/audit`；`/settings` ← credentials/sessions | 253 PASS；build PASS；boundaries PASS | 无安装命令/接入历史/密码重置/角色 CRUD 端点；真实 API 未部署，浏览器验收待 GM-09 |
 | GM-05 | 372ff55 | 任务中心/创建预演/审批/取消/恢复/SSE、双栏文件浏览/文件夹/重命名/删除/大小/上传元数据/跨节点传输 | `/tasks` `/tasks/:id` ← tasks/preview/approve/cancel/resume/executions/events；`/files` ← nodes/files/directories/rename/size/uploads/transfers | 259 PASS；build PASS；boundaries PASS | 无下载端点与上传字节通道；`/tasks` 路径在候选契约中重复；分批/金丝雀参数缺失；真实字节验收 BLOCKED |
 | GM-06 | 5e2de69 | 监控/通知、配额编辑、DNS、证书、网关、发布向导 | `/monitoring` ← availability-monitors/traffic-risks/notifications；`/settings` 通知渠道；`/dns` ← providers/accounts/zones/records；`/certificates` ← internal distributions；`/gateways[/:id]` ← gateways/routes/checks/dispatch/provision；`/publishing` ← preview/publications；节点配额 ← traffic-quota PUT | 266 PASS；build PASS；boundaries PASS | 检查历史只返回 ok；无资源历史/公网证书端点；发布无端口/逐网关差异；网关路由无 gatewayId；真实供应商/节点验收 UNTESTED |
-| GM-07 | 本轮后续提交（见 `git log`） | AI 运维（资源授权/三级审批/流式消息）、工作流契约缺口页、插件中心、Xray 声明式插件界面 | `/ai` ← security-policy、`POST /api/v1/ai/sessions`；`/ai/:sessionId` ← session/approval-policy/grants/approvals(+decision)/messages/approval-events/tools/execute/resource-recommendations + SSE `…/events`；`/workflows`（无端点，BLOCKED 页）；`/plugins` ← plugins/repository/catalog(+refresh)/install/activation/update/DELETE/plugin-operations；`/plugins/xray` ← `GET /api/v1/plugins/xray-manager` 门控 + nodes/templates/users/traffic(+settings)/installations/configurations/deployments/jobs | 275 PASS；typecheck PASS；build PASS；boundaries PASS | AI 会话列表/关闭端点缺失、AI SSE 无事件数据契约；workflows 完全无契约；Xray 发行制品未发布（目录缺 commit/SHA-256 即“不可安装”）；真实 AI/插件验收待 GM-09 |
+| GM-07 | a7be1b0 | AI 运维（资源授权/三级审批/流式消息）、工作流契约缺口页、插件中心、Xray 声明式插件界面 | `/ai` ← security-policy、`POST /api/v1/ai/sessions`；`/ai/:sessionId` ← session/approval-policy/grants/approvals(+decision)/messages/approval-events/tools/execute/resource-recommendations + SSE `…/events`；`/workflows`（无端点，BLOCKED 页）；`/plugins` ← plugins/repository/catalog(+refresh)/install/activation/update/DELETE/plugin-operations；`/plugins/xray` ← `GET /api/v1/plugins/xray-manager` 门控 + nodes/templates/users/traffic(+settings)/installations/configurations/deployments/jobs | 275 PASS；typecheck PASS；build PASS；boundaries PASS | AI 会话列表/关闭端点缺失、AI SSE 无事件数据契约；workflows 完全无契约；Xray 发行制品未发布（目录缺 commit/SHA-256 即“不可安装”）；真实 AI/插件验收待 GM-09 |
+| GM-08 | 本轮后续提交（见 `git log`） | 更新中心（检查/计划/一键更新/作业/回滚）、备份校验与灾难恢复、系统设置「系统更新」页签共用同一实现 | `/updates` 与 `/settings`（系统更新） ← `POST /api/v1/system/updates/check|plan|apply`、`GET …/jobs`、`GET …/jobs/{id}`、`POST …/jobs/{id}/rollback`；`/backups` ← `POST /api/v1/backups/{id}/verify`、`POST /api/v1/disaster-recovery/preview|jobs`、`GET …/jobs/{id}`；节点诊断已在 GM-04 的 `/nodes/:nodeId` 接入 | 282 PASS；typecheck PASS；build PASS；boundaries PASS | Agent 升级无端点（只显示缺口，不伪造分批升级）；备份记录列表/创建缺失；灾难恢复作业无列表；`verify` 返回 RecoveryPlan 而非校验结论 |
 
 ## GM-02/03 交付细节
 
@@ -71,6 +72,26 @@
 
 1. `GET /api/v1/auth/me` 只返回 `Identity`，不返回当前会话绑定的 CSRF 令牌；刷新后同源写操作无法安全恢复。已在 UI 以“安全写入已锁定”明确说明，不用会话 SID 伪造或新增裸路由。
 2. `g2-merged-candidate.yaml` 无工作流（workflows）管理操作；GM-07 的工作流页面在契约补齐前只能显示“契约缺口”，不能伪造规则 CRUD。精确请求见 `SHARED-CHANGES.md`。
+
+## GM-08 交付细节
+
+### 更新中心（FR-UPDATE-005 §12）
+
+- 检查更新：`POST /api/v1/system/updates/check`（stable/beta），只显示服务端返回的当前/最新版本、发布时间、签名验证、平台兼容与检查时间；检查不安装、不重启、不静默升级。签名未通过时显式标红并说明禁止安装。
+- 升级计划：`POST /api/v1/system/updates/plan`，默认 `dryRun: true`；展示 `planId`、合格性、迁移可逆性、逐项预检（名称/结果/原因）与预计影响。计划不合格或任一预检未通过时禁止创建作业。
+- 一键更新：`POST /api/v1/system/updates/apply`，提交体固定 `{planId, confirmation, backupMode:"required"}`；`confirmation` 必须逐字输入目标版本，且必须勾选风险确认，否则按钮禁用。每次提交带 `Idempotency-Key`。
+- 备份门控：计划 `backupRequired` 为真而作业历史中没有任何服务端返回的 `backupId` 时，显示“缺少可验证备份”并禁止提交（备份记录契约缺失，见 SHARED-CHANGES §4/§10），不伪造备份成功。
+- 作业与历史：`GET /api/v1/system/updates/jobs` 表格 + `GET …/jobs/{id}` 详情（阶段、错误码、备份、升级后健康检查、发起人、时间）；`rollbackEligible` 为真才允许回滚，回滚必须填原因，走 `POST …/jobs/{id}/rollback`。202 一律表述为“已受理”，完成状态以作业详情为准；`manual_recovery_required` 明确说明需要人工恢复。
+- Agent 升级：候选契约无端点，页面显示契约缺口并跳转到批量任务/节点列表，不提供假的“选择节点分批升级”。
+- 系统设置 → 系统更新：复用同一 `ControllerUpdatePanel`，因此“检查更新/一键更新”与更新中心共用同一份状态和历史，不存在第二套更新配置。
+
+### 备份与恢复（FR §12.3 / 灾难恢复演练）
+
+- 明确告知没有备份记录列表/创建端点：不显示伪造的备份表格、不提供“立即备份”，backupId 由服务端（如更新作业 `backupId`）或管理员提供。
+- 校验备份：`POST /api/v1/backups/{id}/verify`（无请求体），按返回的 `RecoveryPlan` 显示备份/目标主控/期望版本/期望节点/密钥引用与 `checks[]`；无检查项时明确“不能据此认定备份可用”。
+- 恢复预演：`POST /api/v1/disaster-recovery/preview` 提交完整计划；`oldControllerFenced` 必须由管理员显式勾选并提示这是必要声明而非充分隔离证据；`recoveryKeyReference` 只填引用，页面提示严禁明文且不保存。
+- 创建作业：只有在已预演、fenced 为真、目标主控非空且预演检查全部通过时才允许 `POST /api/v1/disaster-recovery/jobs`；返回 `AsyncOperation` 后显示状态/阶段/审计 ID，`GET …/jobs/{id}` 刷新。任一检查未通过显示“预演未通过”并禁用提交。
+- 说明恢复成功不等于业务恢复（还需控制面健康、数据库可读写、Agent 基本功能、证书有效性）；作业无列表端点，刷新页面后不本地保留历史。
 
 ## 下一步
 

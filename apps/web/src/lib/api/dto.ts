@@ -741,3 +741,64 @@ export interface PluginOperation {
   readonly error?: { readonly code: string; readonly message: string; readonly requestId?: string };
   readonly auditId?: string;
 }
+
+export interface UpdateCheckResult {
+  readonly currentVersion: string;
+  readonly latestVersion?: string;
+  readonly channel: "stable" | "beta";
+  readonly updateAvailable: boolean;
+  readonly releaseNotes?: string;
+  readonly publishedAt?: string;
+  readonly signatureVerified?: boolean;
+  readonly platformCompatible?: boolean;
+  readonly checkedAt: string;
+}
+
+export interface ControllerUpdatePlan {
+  readonly planId: string;
+  readonly targetVersion: string;
+  readonly eligible: boolean;
+  readonly migrationReversible?: boolean;
+  readonly preflightChecks?: readonly { readonly name: string; readonly passed: boolean; readonly reason?: string }[];
+  readonly estimatedImpact?: string;
+  readonly backupRequired: boolean;
+}
+
+export type ControllerUpdateState =
+  | "queued"
+  | "preflight"
+  | "verifying"
+  | "backing_up"
+  | "installing"
+  | "restarting"
+  | "health_check"
+  | "completed"
+  | "failed"
+  | "rolling_back"
+  | "rolled_back"
+  | "manual_recovery_required";
+
+export interface ControllerUpdateJob {
+  readonly jobId: string;
+  readonly fromVersion: string;
+  readonly toVersion: string;
+  readonly state: ControllerUpdateState;
+  readonly phase?: string;
+  readonly errorCode?: string;
+  readonly backupId?: string;
+  readonly rollbackEligible?: boolean;
+  readonly healthChecks?: readonly { readonly name: string; readonly passed: boolean }[];
+  readonly requestedBy?: string;
+  readonly createdAt: string;
+  readonly updatedAt?: string;
+}
+
+export interface RecoveryPlan {
+  readonly backupId: string;
+  readonly targetControllerId: string;
+  readonly oldControllerFenced: boolean;
+  readonly expectedVersion?: string;
+  readonly expectedNodeIds?: readonly string[];
+  readonly recoveryKeyReference?: string;
+  readonly checks?: readonly { readonly name: string; readonly passed: boolean; readonly reason?: string }[];
+}

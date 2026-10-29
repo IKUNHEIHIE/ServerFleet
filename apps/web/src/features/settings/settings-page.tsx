@@ -10,11 +10,12 @@ import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { authApi, credentialsApi } from "@/lib/api/endpoints";
 import { NotificationsSettings } from "./notifications-settings";
+import { ControllerUpdatePanel } from "@/features/updates/updates-page";
 import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
-type Tab = "credentials" | "security" | "notifications";
+type Tab = "credentials" | "security" | "notifications" | "updates";
 
 const KIND_LABEL: Record<CredentialMetadata["kind"], string> = {
   cloudflare_token: "Cloudflare API Token",
@@ -228,6 +229,7 @@ export function SettingsPage() {
           { id: "credentials", label: "安全凭据" },
           { id: "security", label: "账号安全与会话" },
           { id: "notifications", label: "通知渠道" },
+          { id: "updates", label: "系统更新" },
         ]}
       />
 
@@ -298,6 +300,15 @@ export function SettingsPage() {
       ) : null}
 
       {tab === "notifications" ? <NotificationsSettings /> : null}
+
+      {tab === "updates" ? (
+        <div className="space-y-4">
+          <Notice tone="info" title="与更新中心共用同一份状态">
+            检查更新与一键更新在此提供；状态与历史与 <a className="text-primary underline" href="#/updates">更新中心</a> 完全相同，不存在第二套更新配置。
+          </Notice>
+          <ControllerUpdatePanel />
+        </div>
+      ) : null}
 
       {tab === "security" ? (
         <div className="space-y-5">
