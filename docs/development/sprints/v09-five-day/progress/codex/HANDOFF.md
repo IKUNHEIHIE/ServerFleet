@@ -41,8 +41,18 @@ SHA `96b0568297bba7efc3ee2eb74f4c1a04758eec6c`。
 
 ## 04 / CX-05 AI工具策略与工作流计划组件
 
+SHA `fb0245add5e0e3021598fcc874f51cb2fb43e0fd`；03a返修SHA `51714c4e6348850084a4f9b3c340df8240fadd0a`。
+
 文件 internal/ai/tool_policy{,_test}.go、internal/workflows/plan{,_test}.go。实际 `go test ./internal/ai ./tests/architecture -count=1` PASS 2.044s/2.132s；`go test ./internal/workflows ./internal/updates ./tests/architecture -count=1` PASS 2.138s/2.176s/2.256s。最终组合平台模块测试也全部PASS（reports/platform-modules.log）。
 
 AI：零资源默认、服务组成员冻结并与当前成员取交集、当前RBAC和工具/插件权限交集、审批绑定会话/主体/目标/参数摘要/世代/期限、自动模式只允许白名单只读、限时full仍强制root Shell真人管理员审批、秘密导出无条件拒绝。工作流：固定触发类型/结构化相等条件、动作白名单、复制目标/参数、按定义修订+事件+步骤产生稳定幂等键；无脚本表达式或自造执行队列。
 
 这些是可单测的**策略/计划组件**，不是持久AI会话/模型对话/SSE、审批服务、工作流调度或POC-06 E2E。Scope、CurrentAuthority、Approval及工具分类只能由受审服务端来源构造，HumanWeb/Administrator不是HTTP布尔输入。批准的原子消费/任务提交、每阶段当前性、BYOK秘密仓储、模型/通知/触发持久来源和完整任务参数端口尚缺；未经接收不向旧Submitter丢弃参数。Eino未选生产runtime。CX-05仍未完成，独立组件不授予任何执行通道。
+
+## 05 / CX-06 插件包校验与Xray计数组件
+
+文件 internal/plugins/package_verify{,_test}.go、plugins/xray-manager/traffic{,_test}.go。新签名元数据只是独立候选，不替代现有Plugin manifest/Host ABI。实现Ed25519域分离签名、精确源pin、载荷摘要/长度、规范JSON（拒绝重复/未知字段/非规范字节）、唯一xray-manager ID、权限白名单、无脚本声明UI、当前启用/安装修订检查。没有WASM加载、安装成功或任意Host能力。
+
+Xray累计组件：稳定用户/实例/维度key，计数段、首样本基线、重复去重、重启/重置、乱序拒绝、缺口不充0、历史缺口保留，不将用户/入站/实例相加或当VPS账单。核心没有import可选包。
+
+实际 `go test ./internal/ai ./internal/plugins ./internal/transport ./tests/architecture -count=1` PASS 1.989s/2.067s/3.713s/1.439s；`go test ./internal/recovery ./plugins/xray-manager ./tests/architecture -count=1` PASS 1.389s/1.371s/1.794s。最后平台组合测试10包全部PASS。测试包载荷明确为非WASM合成数据，只证明密码学/规则层，不算POC-01/02/03/04或真实StatsService。缺Host/WASM依赖审查、插件持久生命周期/统一任务、目标Xray版本与Linux双架构、配置模板/实际预检、用户持久化/受控导出/采集器/页面，CX-06未完成。
