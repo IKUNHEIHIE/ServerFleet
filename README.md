@@ -32,6 +32,8 @@ READ-PLAN-01-R1方案文档已接收，原来源/onlineOnly问题关闭，公开
 
 W06-R1现已接收，W06-R01/R02关闭：作者同ID/关闭键盘与迟到结果证据经核对，总控独立补齐真实同key旧拒绝/两次卸载3项浏览器验证；原25项作者断言及其C24前提分别记录。见[浏览器复审](docs/development/reviews/W06-R1-REVIEW.md)。三位当前任务均完成停止，下一步见[负责人选择包](docs/contracts/decisions/node-read-01/OWNER-CHOICES.md)：首版范围与凭据设计方向待选，尚未派发新设计/实现；G2及D01–D07/P1-C10仍OPEN。
 
+负责人随后明确确认 **A1+B1：先兼容只读列表、后详情，浏览器服务端会话Cookie设计方向**。已登记[三位设计任务](docs/development/READ-DESIGN-01-WORK-PACKAGES.md)，分别为身份/会话、操作级HTTP兼容/撤权边界、legacy Web列表接缝；只新增各自设计/验收/交接Markdown，待人工派发，不接真实登录/API/App或改公共契约。方向选择已生效，完整D01–D07仍待具体设计评审，G2未冻结。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。
