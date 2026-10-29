@@ -1,13 +1,13 @@
 # 任务登记板
 
-更新：2026-10-29。负责人明确回复“按推荐 A1+B1”，已确认先兼容只读列表、后详情及浏览器会话Cookie的设计方向，状态A1_B1_CONFIRMED_DESIGN_ONLY。三位旧任务完成停止；新增READ-AUTH/HTTP/WEB-DESIGN-01三份设计任务已登记、待人工派发。详见READ-DESIGN-01-WORK-PACKAGES及node-read-01/OWNER-CHOICES。当前仅设计/评审授权，真实身份/HTTP/App来源未接入，G2/D01–D07/P1-C10仍OPEN，不自动启动/代发消息。
+更新：2026-10-29。三份具体设计已复审：认证48409bac接收为PROPOSED文档，Codex完成停止；HTTP ece5efd因HD01-R01/R02、Web 63b0feb因WD01-R01/R02各2个P2退回，原分支追加限定R1，待人工派发。详见READ-DESIGN-01-REVIEW/READ-DESIGN-01-REPAIR和node-read-01/DESIGN-INTEGRATION-STATUS。A1+B1方向有效且不重问，仍只设计/评审授权，真实身份/HTTP/App来源未接入，G2/D01–D07/P1-C10 OPEN，不自动启动/代发消息。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
-| READ-DESIGN-REVIEW | 三份精确设计交付/引用及跨模块语义复审中 | codex-review-01 | integration/read-design-review / `.worktrees/integration--read-design-review` | 只读核对三份设计/来源/现有实现，接收通过工件及必要集成澄清，审查/证据/任务板/README/P1-C10与限定返修/组合对齐清单；不批准详细D项或启动实现 | 项目负责人验收；起始4196b2e；检查/交接后停止 |
-| READ-AUTH-DESIGN-01 | 已分配，待人工派发，尚未启动；B1具体身份/会话设计 | codex-01 | docs/node-read-auth-design-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--node-read-auth-design-cx01` | 仅新增docs/contracts/decisions/node-read-auth-01/{DESIGN,ACCEPTANCE,HANDOFF}.md；不改代码/候选/共享端口或实施凭据 | 总控+安全/契约；代码/资料基线0569c1a，工作目录起始为本次派发最终main |
-| READ-HTTP-DESIGN-01 | 已分配，待人工派发，尚未启动；A1兼容/错误/来源与撤权边界设计 | deepseek-01 | docs/node-read-http-design-ds01 / `.worktrees/docs--node-read-http-design-ds01` | 仅新增docs/contracts/decisions/node-read-http-01/{DESIGN,ACCEPTANCE,HANDOFF}.md；不实现处理器/来源/数据库，不改OpenAPI/共享文件 | 总控+安全/契约/节点；代码/资料基线0569c1a，工作目录起始为本次派发最终main |
-| READ-WEB-DESIGN-01 | 已分配，待人工派发，尚未启动；A1+B1局部legacy列表/会话失效设计 | gemini-01 | docs/node-read-web-design-gm01 / `.worktrees/docs--node-read-web-design-gm01` | 仅新增docs/contracts/decisions/node-read-web-01/{DESIGN,ACCEPTANCE,HANDOFF}.md；不改TSX/测试/App/fetch/配置/依赖 | 总控+UI/契约/安全；代码/资料基线0569c1a，工作目录起始为本次派发最终main |
+| READ-DESIGN-REVIEW | 复审/组合/安全检查完成：接收认证提案，HTTP/Web各退回2P2，交接后停止 | codex-review-01 | integration/read-design-review / `.worktrees/integration--read-design-review` | 原三设计审查/工件/证据/状态与限定返修/组合清单范围；不批准详细D项或启动实现 | 项目负责人验收；起始4196b2e |
+| READ-AUTH-DESIGN-01 | 文档接收为PROPOSED，具体参数/迁移待批；任务完成停止 | codex-01 | docs/node-read-auth-design-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--node-read-auth-design-cx01` | 原3份新增Markdown；未改代码/候选/共享端口或实施凭据 | 总控+安全/契约；48409bac，起始4196b2e |
+| READ-HTTP-DESIGN-01 / R1 | CHANGES_REQUESTED，HD01-R01/R02 OPEN；原分支追加R1待人工派发 | deepseek-01 | docs/node-read-http-design-ds01 / `.worktrees/docs--node-read-http-design-ds01` | 原3文档修身份源故障映射及最小可信来源；不实现处理器/来源/数据库或改OpenAPI | 总控+安全/契约/节点；ece5efd返修起点，原基线4196b2e |
+| READ-WEB-DESIGN-01 / R1 | CHANGES_REQUESTED，WD01-R01/R02 OPEN；原分支追加R1待人工派发 | gemini-01 | docs/node-read-web-design-gm01 / `.worktrees/docs--node-read-web-design-gm01` | 原3文档修403会话区分与非在线无时间指标；不改TSX/测试/App/fetch/配置/依赖 | 总控+UI/契约/安全；63b0feb返修起点，原基线4196b2e |
 | READ-DESIGN-DISPATCH | 方向/任务配置及组合/安全检查完成，准备三目录并交人工派发后停止 | codex-review-01 | integration/read-design-dispatch / `.worktrees/integration--read-design-dispatch` | 原方向/范围记录、三任务/目录及验证交接范围；不写作者设计或运行时代码/候选 | 项目负责人验收；起始0569c1a；结果见READ-DESIGN-DISPATCH复审记录 |
 | W06R1-REVIEW | 精确审查/3项独立浏览器补验/组合及安全检查通过，交接后停止 | codex-review-01 | integration/w06r1-review / `.worktrees/integration--w06r1-review` | 原报告/证据审查、必要补验与澄清、状态/README/P1-C10和具体负责人选择包；不改运行时代码/候选或启动新开发 | 项目负责人验收；起始157549e |
 | FOLLOWUP04-REVIEW | 审查/组合/安全检查通过：接收返修方案文档，W06补验；交接后停止 | codex-review-01 | integration/followup04-review / `.worktrees/integration--followup04-review` | 原精确审查/集成/必要文档事实澄清、证据/任务状态和限定补验任务范围；不改运行时代码/候选，不批准新实现 | 项目负责人验收；起始69d6d43 |
@@ -48,6 +48,6 @@
 | READ-SEC-01 | 审查通过，接收来源/安全证据文档；完成停止，等待收口后新分配 | codex-01 | docs/read-security-evidence-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--read-security-evidence-cx01` | 原3份新增文档范围，代码/候选/批准状态未改；本任务不再扩展 | 总控安全/契约审查；f3cdf73，起始7ef7877 |
 | W06 / W06-R1 | 文档/隔离浏览器证据接收，W06-R01/R02关闭；完成停止 | gemini-01 | chore/web-node-browser-qa-gm01 / `.worktrees/chore--web-node-browser-qa-gm01` | 原报告及忽略预览/证据范围；总控只补验/澄清，未改生产组件/App/依赖或作者目录 | 总控UI/安全审查；原99cd663、返修2c1c8bc，原基线ddf8c5b |
 
-原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。Codex的READ-SEC-01、DeepSeek的READ-PLAN-01-R1、Gemini的W06-R1旧任务均完成停止，旧目录保留；新设计使用上列新目录/新分支，不同步或复用旧任务工作区。
+原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。Codex当前认证设计完成停止；DeepSeek/Gemini继续各自现有设计目录，保留原提交追加R1，不同步main。已接收认证设计可只读按48409bac或主目录已提交main核对，不读取未提交内容。
 
-前阶段收口见`reviews/W06-R1-REVIEW.md`。本会话A1+B1方向确认已生效，具体新任务见`READ-DESIGN-01-WORK-PACKAGES.md`，总控准备新目录/人工派发提示词；没有自动运行/消息派发或实现授权。原方案/安全/浏览器证据的历史与当前状态分别解释，D01–D07/P1-C10仍OPEN，身份/策略存储/HTTP未接入。GitHub远程/真实PR/线上CI未运行。
+本轮证据见`reviews/READ-DESIGN-01-REVIEW.md`，限定返修见`READ-DESIGN-01-REPAIR.md`，组合未定项见`node-read-01/DESIGN-INTEGRATION-STATUS.md`。A1+B1方向确认不变，不重复索取；未接收HTTP/Web不参与main组合，未分配实现/新目录，没有自动运行/消息派发。D01–D07/P1-C10仍OPEN，身份/策略存储/HTTP未接入，GitHub远程/真实PR/线上CI未运行。

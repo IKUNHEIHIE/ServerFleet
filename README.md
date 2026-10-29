@@ -34,6 +34,8 @@ W06-R1现已接收，W06-R01/R02关闭：作者同ID/关闭键盘与迟到结果
 
 负责人随后明确确认 **A1+B1：先兼容只读列表、后详情，浏览器服务端会话Cookie设计方向**。已登记[三位设计任务](docs/development/READ-DESIGN-01-WORK-PACKAGES.md)，分别为身份/会话、操作级HTTP兼容/撤权边界、legacy Web列表接缝；只新增各自设计/验收/交接Markdown，待人工派发，不接真实登录/API/App或改公共契约。方向选择已生效，完整D01–D07仍待具体设计评审，G2未冻结。
 
+三份具体设计首次复审接收认证提案48409bac；HTTP ece5efd、Web 63b0feb各因2个P2退回，见[复审](docs/development/reviews/READ-DESIGN-01-REVIEW.md)及[限定返修](docs/development/READ-DESIGN-01-REPAIR.md)。Codex完成停止，两位原分支只修各自3文档；[组合清单](docs/contracts/decisions/node-read-01/DESIGN-INTEGRATION-STATUS.md)保留Cookie/Token迁移、可信来源/Tgate、Web失效/指标等待对齐项。设计文档接收不批准具体安全参数、契约或真实实现，A1+B1不重问，D01–D07/P1-C10仍OPEN。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

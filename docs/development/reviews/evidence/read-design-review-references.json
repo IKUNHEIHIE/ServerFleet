@@ -1,0 +1,20 @@
+[
+  {
+    "task": "READ-HTTP-DESIGN-01",
+    "head": "ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734",
+    "baseline": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05",
+    "references": 60,
+    "referencedFiles": 22,
+    "rangeProblems": [],
+    "semanticReviewRequired": true
+  },
+  {
+    "task": "READ-WEB-DESIGN-01",
+    "head": "63b0feb8dffad7dc88252dd7dd786b80c7e54e7c",
+    "baseline": "4196b2e8ab9c389ae0830bf56f905d9bafa00d05",
+    "references": 23,
+    "referencedFiles": 11,
+    "rangeProblems": [],
+    "semanticReviewRequired": true
+  }
+]

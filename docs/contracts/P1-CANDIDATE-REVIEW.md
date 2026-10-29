@@ -50,6 +50,8 @@ P1-C10补记（W06-R1收口）：2c1c8bc报告及作者键盘/迟到结果证据
 
 P1-C10补记（A1+B1设计派发）：负责人在会话明确回复“按推荐 A1+B1”，确认先legacy兼容列表、后详情与浏览器服务端会话Cookie设计方向。只授权READ-AUTH/HTTP/WEB-DESIGN-01的具体设计、兼容差异和验收计划；原Bearer列表的Cookie迁移、D06错误映射/D07来源与撤权窗口等仍需组合评审，不能据此改schema或启动实现。D01–D07/P1-C10仍OPEN，r03/原候选/已批准ADR不改，见OWNER-CHOICES和READ-DESIGN-01-WORK-PACKAGES。
 
+P1-C10补记（三设计首次复审）：认证48409bac文档接收为PROPOSED，非__Host名/TTL/opaque Token/Tgate等具体提案批准；HTTP ece5efd缺身份源不可用分支及最小可信来源方案，Web 63b0feb误将403清会话且未限制非在线无时间百分比，各2P2退回。完整原文保留归档，未接收项不参与main，D01–D07/P1-C10仍OPEN；组合差异见node-read-01/DESIGN-INTEGRATION-STATUS.md，返修见READ-DESIGN-01-REPAIR，r03哈希不变。
+
 YAML 输入有大量正常锚点重用，默认库别名上限曾触发拒绝；工程只把上限设为有限 10000，并限制单文件 2 MiB、检测重复 key/避免重复遍历，未关闭保护或改写候选。Redocly `spec` 与补充规则对三份文件均通过；另有损坏 ref、重复 ID、路径参数和重复 YAML key 负向样例。
 
 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。本次只具备 Mock、适配层和隔离测试的基础条件。
