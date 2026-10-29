@@ -8,8 +8,15 @@ import (
 	"time"
 
 	"serverfleet.local/serverfleet/internal/audit"
+	"serverfleet.local/serverfleet/internal/certificates"
+	"serverfleet.local/serverfleet/internal/dns"
 	"serverfleet.local/serverfleet/internal/files"
+	"serverfleet.local/serverfleet/internal/gateway"
+	"serverfleet.local/serverfleet/internal/monitoring"
 	"serverfleet.local/serverfleet/internal/nodes"
+	"serverfleet.local/serverfleet/internal/notifications"
+	"serverfleet.local/serverfleet/internal/publishing"
+	"serverfleet.local/serverfleet/internal/quota"
 	"serverfleet.local/serverfleet/internal/servicegroups"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/storage/testkit"
@@ -19,7 +26,9 @@ import (
 func v09Migrations() [][]storage.Migration {
 	return [][]storage.Migration{
 		nodes.Migrations(), servicegroups.Migrations(), tasks.Migrations(),
-		files.Migrations(), audit.Migrations(),
+		files.Migrations(), monitoring.Migrations(), notifications.Migrations(),
+		quota.Migrations(), dns.Migrations(), certificates.Migrations(),
+		gateway.Migrations(), publishing.Migrations(), audit.Migrations(),
 	}
 }
 
@@ -123,7 +132,7 @@ func TestBackupRestoreAcrossDomains(t *testing.T) {
 		t.Fatalf("reapply migrations: %+v %v", report, err)
 	}
 	versions, err := storage.AppliedVersions(ctx, restored)
-	if err != nil || len(versions) != 6 {
+	if err != nil || len(versions) != 13 {
 		t.Fatalf("versions = %v, %v", versions, err)
 	}
 

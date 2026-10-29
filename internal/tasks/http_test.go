@@ -8,10 +8,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/audit"
+	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/tasks"
 )
 
@@ -308,4 +310,38 @@ type groupResolverFunc func(context.Context, string, string) ([]string, error)
 
 func (f groupResolverFunc) ResolveTargets(ctx context.Context, targetType, groupID string) ([]string, error) {
 	return f(ctx, targetType, groupID)
+}
+
+func TestSSEStopsWhenReadAuthorizationIsRevoked(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t, "n1")
+	var calls int32
+	gate := readGateFunc(func(context.Context, string, string) error {
+		if atomic.AddInt32(&calls, 1) <= 1 {
+			return nil
+		}
+		return auth.ErrDenied
+	})
+	mux := http.NewServeMux()
+	if err := tasks.Register(mux, f.service,
+		func(*http.Request) (tasks.Principal, error) {
+			return tasks.Principal{SubjectID: "user-1", RequestID: "req-http"}, nil
+		}, nil, nil, gate); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	task := f.submit(t, tasks.SubmitRequest{TargetNodeIDs: []string{"n1"}})
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	request, _ := http.NewRequestWithContext(ctx, http.MethodGet, server.URL+"/api/v1/tasks/"+task.ID+"/events", nil)
+	stream, err := http.DefaultClient.Do(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body, _ := io.ReadAll(stream.Body)
+	stream.Body.Close()
+	if !strings.Contains(string(body), "authorization_revoked") {
+		t.Fatalf("SSE body = %q", string(body))
+	}
 }
