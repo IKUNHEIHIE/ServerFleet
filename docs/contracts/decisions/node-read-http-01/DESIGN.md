@@ -38,9 +38,9 @@
 
 ### 3.1 固定顺序
 
-`路由/方法 → 凭据数量/类型/秘密验证（Tauth）→ 可信主体与身份来源当前状态 → onlineOnly 解析 → Tpolicy/N03-A 预检 → 库存读取/同次授权 → 授权可见集合 → onlineOnly 过滤 → 字段投影/序列化缓冲 → Tgate（PROPOSED）→ Tcommit`
+`路由/方法 → 凭据数量/类型/结构检查 → 权威身份/会话来源查验凭据与当前主体（合称 Tauth）→ onlineOnly 解析 → Tpolicy/N03-A 预检 → 库存读取/同次授权 → 授权可见集合 → onlineOnly 过滤 → 字段投影/序列化缓冲 → Tgate（PROPOSED）→ Tcommit`
 
-- **认证/身份先行。** 缺失、无效、过期、撤销、双凭据或不支持凭据 → 401，不解析业务 query，不调用策略/库存。**有效凭据但身份/会话来源不可用或坏记录 → 独立 503 `IDENTITY_UNAVAILABLE`，不是 401，不提示重新登录，也不读策略/库存**；这与凭据本身失效分开。`Tauth` 名字与认证提案对齐（`docs/contracts/decisions/node-read-auth-01/DESIGN.md:40,44-54,144-151`），但其具体分类仍是 PROPOSED。
+- **认证/身份先行。** 缺失、结构非法、双凭据或不支持的凭据可在查源前返回 401；结构可接受的有状态 Cookie/opaque Bearer 必须经权威来源查验，来源可用且确认未知、秘密不匹配、过期或撤销才返回 401。**来源不可用或坏记录 → 独立 503 `IDENTITY_UNAVAILABLE`，此时有效性可能尚无法判定**；不提示重新登录，不解析业务 query，不调用策略/库存，也不回退缓存主体。`Tauth` 名字与认证提案对齐（`docs/contracts/decisions/node-read-auth-01/DESIGN.md:40,44-54,144-151`），但其具体分类仍是 PROPOSED。
 - **query 次之。** 身份可用后才解析 `onlineOnly`；坏 query 返回 400，且策略读取和库存调用均为 0。有效凭据 + 坏 query + 身份来源不可用时，身份源故障优先返回 503（因为 Tauth 在 query 之前）；凭据本身无效 + 坏 query 返回 401。这样未认证请求不会获得业务 query 的差异反馈。
 - **预检先于库存。** 复用已接收的 N03-A `ReadVisibleInventory`；它在每次调用中执行 `PrepareNodeReadScope`（Tpolicy），成功后才调用库存来源，再用同一范围检查所有节点。见 `internal/nodes/read_usecase.go:27-96`、`internal/auth/node_read_scope.go:23-74`；N03-A 复审 `docs/development/reviews/N03-A-REVIEW.md:7-15,17-21,31-40`。HTTP 层不得先读库存再预检，也不得再调用一次 `PrepareNodeReadScope` 造成策略读取两次。
 - **过滤只在授权之后。** 先得到 `ReadVisibleInventory` 的授权可见集合，再按 `onlineOnly` 过滤；隐藏节点从不进入集合，也不进入计数。过滤后为空仍是成功 `items:[]`，不跳过预检/库存。
@@ -87,8 +87,8 @@ A1 输出显式白名单（不是把内部 Node 反射/序列化）：
 
 | 阶段/成因 | HTTP | 提议机器码/媒体 | 固定安全信息 | 策略/库存观察 |
 |---|---|---|---|---|
-| 凭据缺失/无效/过期/撤销/双凭据/不支持 | 401 | `UNAUTHENTICATED`；`application/json` 旧 `Error` | “Authentication required” | 0/0；身份源未读取或未授权前不产生主体 |
-| **有效凭据但身份/会话来源不可用、坏记录、随机源/时钟故障** | **503** | **`IDENTITY_UNAVAILABLE`；`Error`** | “Authentication service temporarily unavailable” | **0/0；不当作未登录、不提示重新登录、不回退旧主体** |
+| 凭据缺失/结构非法/双凭据/不支持，或权威来源确认无效/过期/撤销 | 401 | `UNAUTHENTICATED`；`application/json` 旧 `Error` | “Authentication required” | 策略/库存 0/0；后一组必须读取身份源，未认证前不产生主体 |
+| **结构可接受的凭据，但身份/会话来源不可用、坏记录、必要随机源/时钟故障** | **503** | **`IDENTITY_UNAVAILABLE`；`Error`** | “Authentication service temporarily unavailable” | **策略/库存 0/0；有效性尚不能确认，不提示重新登录、不回退旧主体** |
 | `onlineOnly` 坏值、空值或重复 | 400 | `INVALID_QUERY`；`Error` | “Invalid query” | 0/0 |
 | 已认证主体未知、整体策略拒绝 | 403 | `FORBIDDEN`；`Error` | “Access denied” | 策略1次/库存0次 |
 | 策略 reader 失败、nil/坏策略 | 503 | `POLICY_UNAVAILABLE`；`Error` | “Policy service temporarily unavailable” | 策略尝试/库存0次 |
@@ -104,7 +104,7 @@ A1 输出显式白名单（不是把内部 Node 反射/序列化）：
 
 要点：
 
-- **凭据无效与身份来源故障必须分开。** 无效/缺失/歧义凭据是 401；有效凭据之后身份/会话来源不可用是 503 `IDENTITY_UNAVAILABLE`，不能提示客户端重新登录或清会话。两者策略/库存均为 0 次，但观测阶段不同；`identity.unavailable` 是认证提案的内部类别，公共码仍待 D05/D06 批准（`docs/contracts/decisions/node-read-auth-01/DESIGN.md:52,127,144-151`）。
+- **凭据无效与身份来源故障必须分开。** 无效结论必须有依据：结构/数量可本地拒绝，有状态秘密/有效期/撤销状态需权威查询。来源不可用不能先假定秘密已验证，也不能凭未知凭据字符串直接返回“已确认无效”；返回 503 `IDENTITY_UNAVAILABLE`，不提示重登/清会话。两类失败策略/库存均为 0 次；`identity.unavailable` 是认证提案的内部类别，公共码仍待 D05/D06 批准（`docs/contracts/decisions/node-read-auth-01/DESIGN.md:52,127,144-151`）。下文“有效凭据 + 来源故障”表示测试预置凭据曾有效，并非运行时可绕过来源先证明有效。
 - **不能仅用 sentinel 统一映射。** `auth.ErrInvalidCheck` 可来自预检的 subject/context，也可来自库存坏 ID 的 `CheckNode`；前者是服务端接线/配置故障，后者是后端数据故障，均不是客户端 query 错误。HTTP 适配层必须记录“策略读取已成功、库存来源已调用”等阶段标志：库存已读后的 `InvalidCheck` → 500；query 解析错误由本地 parser 直接产生 400。不得把任何 `ErrInvalidCheck` 一律 400。对应安全缺口 A05/S16/S22/S24（`docs/contracts/decisions/node-read-security-01/SECURITY-ACCEPTANCE.md:18-30`）。
 - **`ErrDenied` 也要看阶段。** `PrepareNodeReadScope` 的主体未知/整体拒绝 → 403；`ReadVisibleInventory` 对逐节点纯拒绝会过滤，不会返回该节点错误；非纯拒绝/混合错误返回错误 → 500/503，不返回 200 空列表。
 - **错误媒体保持列表原 `Error`**（`application/json`，`code`/`message`，可选 `requestId`）；不把列表改成 Problem，不新增 `status` 字段。详情 Problem 的防枚举/统一 404 只作为未来详情边界，不在 A1 实现。参考 `api/openapi/g2-merged-candidate.yaml:6865-6883,9650-9678,10357-10362`；r03 列表错误 `api/openapi/revisions/g2-r03/nodes-read-candidate.yaml:354-483`。
@@ -114,7 +114,7 @@ A1 输出显式白名单（不是把内部 Node 反射/序列化）：
 
 ### 5.2 错误优先级
 
-1. **Tauth**：凭据数量/类型/秘密无效 → 401，身份源不读；有有效凭据但身份/会话来源不可用 → 503 `IDENTITY_UNAVAILABLE`，不读 query/策略/库存。有效凭据 + 坏 query + 身份源故障 → **503**（身份源在 query 前）；凭据本身无效 + 坏 query → **401**。
+1. **Tauth**：缺失/结构非法/双凭据/不支持 → 401，可不读身份源；结构可接受 → 查权威来源，确认未知/秘密不匹配/过期/撤销才 401，来源不可用/坏记录则 503 `IDENTITY_UNAVAILABLE`。两者均不读 query/策略/库存。结构可接受（含未知值）+ 坏 query + 身份源故障 → **503**；本地结构拒绝或来源已确认无效 + 坏 query → **401**。
 2. **query**：身份可用后解析 `onlineOnly`；坏 query → 400，策略/库存 0 次。
 3. **Tpolicy/库存**：主体未知/整体拒绝 → 403；策略不可用 → 503；库存失败/部分+错误 → 503；库存坏/重复/InvalidCheck → 500；均不返回部分 items。
 4. **投影/序列化**：投影/`Marshal` 前置失败 → 500；全量 body 就绪前不写成功响应。
@@ -154,7 +154,7 @@ A1 输出显式白名单（不是把内部 Node 反射/序列化）：
 
 | 时点 | 可保证 | 不能保证/后续依赖 |
 |---|---|---|
-| Tauth | 凭据本身无效/缺失/歧义 → 401；有效凭据后身份源不可用 → 503；主体由可信认证绑定 | Tauth 后撤销会话/Token 可能不阻止在途请求；认证设计定义其生效边界 |
+| Tauth | 本地结构拒绝或权威来源确认无效 → 401；需查询但身份源不可用 → 503；主体由可信认证绑定 | 有状态凭据的未知/过期/撤销不能在查源前断言；Tauth 后撤销会话/Token 可能不阻止在途请求 |
 | Tpolicy | 读取一次当前策略，之后捕获 scope；Tpolicy 前撤权可见 | Tpolicy 后撤权不改变已捕获 scope；读取器内部缓存旧策略时 Go 类型无法证明当前性 |
 | 库存读取 | 一次当前快照；失败/部分数据不返回成功 | 策略与库存不是同一存储事务，没有共同版本；Tpolicy–库存之间成员/策略变化不保证一致 |
 | 同次检查 | 同一 scope；纯拒绝过滤，非纯拒绝中止 | 不重新读取策略；输出前撤权/输出提交不原子 |

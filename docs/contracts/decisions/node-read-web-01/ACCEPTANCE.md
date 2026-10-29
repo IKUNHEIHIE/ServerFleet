@@ -52,6 +52,7 @@
 | WERR-03 | 有效会话收到 403（整体无 `nodes.read`） | 只清本列表视图 + 固定无权提示；**不调用会话清理、不跳登录、不递增 `sessionEpoch`**；其他已授权能力的状态保持不变（用假的 auth store 观察未被调用） | COMPONENT | NONE |
 | WSES-06 | 有效会话 + 403 后恢复授权（同一会话，权限被重新授予） | 手动「重新检查」后重新请求；成功则显示新列表；期间会话/登录状态未被清空 | COMPONENT | NONE |
 | WSES-07 | 有效会话 + 身份来源/策略来源不可用（503） | 固定「服务暂时不可用」，**不提示重新登录**、不清会话；来源恢复后手动重试成功 | COMPONENT（HTTP 层次待接） | BLOCKED D05/D06 |
+| WSES-08 | A pending → 403/503 失效，递增实际参与 key 的 viewEpoch → A 迟到 settle；保持多次渲染后手动重试 | 当帧无旧行/计数，保持固定终止错误；迟到结果不能覆盖；未手动重试前额外请求数为 0；手动重试恰好新发一次，不清会话、不改 sessionEpoch | COMPONENT（布局观察与调用次数） | NONE |
 | WCACHE-01 | 渲染、搜索、切换 key、卸载全过程 | 无 `localStorage/sessionStorage/IndexedDB` 写入；无跨 key 复用；无自动轮询/后台重试 | COMPONENT + BROWSER（storage 事件） | NONE |
 | WCOMPAT-01 | 抽取 `useLoadState<T>` 后：富化 `NodeLoader` 行为不变 | 重跑 `node-loader.test.tsx` 全部用例（本分支实测 **28** 个，不是旧稿写的 26）并全绿；再做一次富化路径浏览器冒烟（键盘/失败重试/来源切换）；新增 legacy 用例独立通过。历史 W06 证据只覆盖抽取前实现，不能替代 | COMPONENT + BROWSER | NONE |
 | WKB-01 | 键盘从头 Tab | 顺序：搜索框 →（若启用）onlineOnly 选择器 → 错误态时的「重新加载」；表格行**不可聚焦**（无动作）；焦点环可见；Enter/Space 在非按钮行上无动作（`N/A (v1)`：首版无详情，不伪造可操作行） | BROWSER（CDP 真实按键） | NONE |
