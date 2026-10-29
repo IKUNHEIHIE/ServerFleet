@@ -1,10 +1,29 @@
-import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView, NodeListState } from "./types";
 import { MetricValue, MissingValue } from "./metric-value";
 import { NodeStatusBadge } from "./node-status-badge";
 import { countLabel, formatLastSeen, resolveTitle, summariseNodes } from "./view-model";
+
+/** 激活来源：区分键盘与指针，焦点策略由包装层决定。 */
+export type NodeActivateOrigin = "pointer" | "keyboard";
+
+/** 列表对外暴露的焦点入口，只操作当前已渲染的行，不缓存 DOM。 */
+export interface NodeListHandle {
+  /** 聚焦指定节点的行；该行当前未渲染时返回 false。 */
+  focusNode(nodeId: string): boolean;
+  /** 聚焦列表区域本身（稳定兜底位置，例如来源变化导致行消失时）。 */
+  focusList(): boolean;
+}
 
 export interface NodeListProps {
   /** 互斥状态：加载 / 失败 / 就绪（就绪但为空即空列表）。 */
@@ -14,7 +33,7 @@ export interface NodeListProps {
   readonly description?: string | null;
   readonly className?: string;
   /** 行被激活（键盘 Enter/Space 或鼠标点击）时触发；未提供时行不可激活。 */
-  readonly onNodeActivate?: (node: NodeListItemView) => void;
+  readonly onNodeActivate?: (node: NodeListItemView, origin: NodeActivateOrigin) => void;
   /** 失败状态下的重试入口；未提供时不渲染按钮，避免出现无效操作。 */
   readonly onRetry?: () => void;
   /**
@@ -27,6 +46,7 @@ export interface NodeListProps {
    * 供包装层区分“源列表为空”和“筛选后没有匹配”，默认行为保持不变。
    */
   readonly emptyContent?: ReactNode;
+  readonly ref?: Ref<NodeListHandle>;
 }
 
 interface Column {
@@ -48,8 +68,10 @@ const COLUMNS: readonly Column[] = [
 interface NodeTableProps {
   readonly labelledBy: string;
   readonly nodes: readonly NodeListItemView[];
-  readonly onNodeActivate?: (node: NodeListItemView) => void;
+  readonly onNodeActivate?: (node: NodeListItemView, origin: NodeActivateOrigin) => void;
   readonly selectedId?: string | null;
+  /** 行元素引用由 `NodeList` 持有，便于包装层按 ID 聚焦仍然存在的行。 */
+  readonly rowRefs: { current: Array<HTMLTableRowElement | null> };
 }
 
 /**
@@ -58,9 +80,8 @@ interface NodeTableProps {
  * Home/End 跳到首尾，Enter/Space 激活——与“每行都是可聚焦按钮”相比不会让
  * 键盘用户连续按十几次 Tab 才能越过列表。
  */
-function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId }: NodeTableProps) {
+function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId, rowRefs }: NodeTableProps) {
   const [activeId, setActiveId] = useState<string | null>(nodes[0]?.id ?? null);
-  const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const foundIndex = nodes.findIndex(node => node.id === activeId);
   const activeIndex = foundIndex === -1 ? 0 : foundIndex;
 
@@ -95,7 +116,7 @@ function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId }: NodeTableP
         if (!onNodeActivate) return;
         event.preventDefault();
         const target = nodes[index];
-        if (target) onNodeActivate(target);
+        if (target) onNodeActivate(target, "keyboard");
         return;
       }
       default:
@@ -103,7 +124,8 @@ function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId }: NodeTableP
   }
 
   return (
-    <div className="overflow-x-auto">
+    // `contain: paint` 让表格的最小内容宽度只在容器内滚动，不再把整页撑出横向滚动条（窄屏实测）。
+    <div className="overflow-x-auto [contain:paint]">
       <table aria-labelledby={labelledBy} className="w-full border-collapse text-sm">
         <thead>
           <tr className="bg-secondary/60">
@@ -130,7 +152,8 @@ function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId }: NodeTableP
               }}
               tabIndex={index === activeIndex ? 0 : -1}
               aria-current={node.id === selectedId ? "true" : undefined}
-              onClick={onNodeActivate ? () => onNodeActivate(node) : undefined}
+              onClick={onNodeActivate ? () => onNodeActivate(node, "pointer") : undefined}
+              onFocus={() => setActiveId(node.id)}
               onKeyDown={event => handleKeyDown(event, index)}
               className={cn(
                 "border-t align-top transition-colors",
@@ -239,10 +262,36 @@ export function NodeList({
   onRetry,
   selectedId,
   emptyContent,
+  ref,
 }: NodeListProps) {
   const headingId = useId();
+  const sectionRef = useRef<HTMLElement | null>(null);
+  const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const defaultSubtitle = state.status === "ready" ? summariseNodes(state.nodes) : null;
   const subtitle = description === null ? null : description ?? defaultSubtitle;
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusNode(nodeId: string) {
+        if (state.status !== "ready") return false;
+        const index = state.nodes.findIndex(node => node.id === nodeId);
+        if (index < 0) return false;
+        const row = rowRefs.current[index];
+        // 只聚焦当前已挂载的节点，避免指向上一轮渲染留下的旧 DOM。
+        if (!row || !row.isConnected) return false;
+        row.focus();
+        return document.activeElement === row;
+      },
+      focusList() {
+        const section = sectionRef.current;
+        if (!section || !section.isConnected) return false;
+        section.focus();
+        return document.activeElement === section;
+      },
+    }),
+    [state],
+  );
 
   let body: ReactNode;
   if (state.status === "loading") body = <LoadingState />;
@@ -254,6 +303,7 @@ export function NodeList({
       nodes={state.nodes}
       onNodeActivate={onNodeActivate}
       selectedId={selectedId}
+      rowRefs={rowRefs}
     />
   );
 
@@ -261,9 +311,15 @@ export function NodeList({
 
   return (
     <section
+      ref={sectionRef}
+      tabIndex={-1}
       aria-labelledby={headingId}
       aria-busy={state.status === "loading"}
-      className={cn("overflow-hidden rounded-xl border bg-card", className)}
+      className={cn(
+        "min-w-0 overflow-hidden rounded-xl border bg-card",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4">
         <div>

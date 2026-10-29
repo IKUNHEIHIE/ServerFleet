@@ -1,4 +1,4 @@
-import { useId, type KeyboardEvent, type ReactNode } from "react";
+import { useId, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView } from "./types";
 import { MetricValue } from "./metric-value";
@@ -11,6 +11,8 @@ export interface NodeDetailPanelProps {
   /** 关闭入口；未提供时不渲染按钮。Esc 同样触发（键盘可用性）。 */
   readonly onClose?: () => void;
   readonly className?: string;
+  /** 供包装层在键盘选择后把焦点移入详情区（`tabIndex=-1`，不进入 Tab 序列）。 */
+  readonly ref?: Ref<HTMLElement>;
 }
 
 function Field({ term, children }: { readonly term: string; readonly children: ReactNode }) {
@@ -36,7 +38,7 @@ function UnknownValue() {
  *   真实的 0% 与 100% 原样显示。
  * - 非模态、无弹窗库，只有一个关闭操作；不提供编辑/删除/执行等入口。
  */
-export function NodeDetailPanel({ node, onClose, className }: NodeDetailPanelProps) {
+export function NodeDetailPanel({ node, onClose, className, ref }: NodeDetailPanelProps) {
   const headingId = useId();
 
   const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
@@ -47,9 +49,14 @@ export function NodeDetailPanel({ node, onClose, className }: NodeDetailPanelPro
 
   return (
     <section
+      ref={ref}
+      tabIndex={-1}
       aria-labelledby={headingId}
       onKeyDown={handleKeyDown}
-      className={cn("rounded-xl border bg-card", className)}
+      className={cn(
+        "rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        className,
+      )}
     >
       <header className="flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4">
         <div>

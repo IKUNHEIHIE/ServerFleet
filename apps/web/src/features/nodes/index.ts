@@ -13,9 +13,9 @@
  * 详情只读，不提供编辑/删除/执行入口。
  */
 export { NodeList } from "./node-list";
-export type { NodeListProps } from "./node-list";
+export type { NodeActivateOrigin, NodeListHandle, NodeListProps } from "./node-list";
 export { NodeListPanel } from "./node-list-panel";
-export type { NodeListPanelProps } from "./node-list-panel";
+export type { NodeListPanelHandle, NodeListPanelProps } from "./node-list-panel";
 export { NodeListWorkspace } from "./node-list-workspace";
 export type { NodeListWorkspaceProps } from "./node-list-workspace";
 export { NodeDetailPanel } from "./node-detail";

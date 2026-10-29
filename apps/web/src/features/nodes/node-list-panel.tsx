@@ -1,7 +1,7 @@
-import { useId, useState, type ReactNode } from "react";
+import { useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView, NodeListState } from "./types";
-import { NodeList } from "./node-list";
+import { NodeList, type NodeActivateOrigin, type NodeListHandle } from "./node-list";
 import {
   FILTERABLE_STATUSES,
   filterNodes,
@@ -12,16 +12,25 @@ import {
 } from "./node-filters";
 import { nodeStatusMeta } from "./view-model";
 
+/** 面板对外的焦点入口：搜索框是筛选场景下的稳定兜底位置。 */
+export interface NodeListPanelHandle {
+  /** 聚焦搜索框；控件不可用（加载/失败被禁用）时返回 false。 */
+  focusSearch(): boolean;
+}
+
 export interface NodeListPanelProps {
   /** 与 NodeList 相同的互斥状态；面板不改变加载/失败语义。 */
   readonly state: NodeListState;
   readonly title?: string;
   readonly description?: string | null;
   readonly className?: string;
-  readonly onNodeActivate?: (node: NodeListItemView) => void;
+  readonly onNodeActivate?: (node: NodeListItemView, origin: NodeActivateOrigin) => void;
   readonly onRetry?: () => void;
   /** 透传给 `NodeList` 的选中高亮；面板不解释选择语义。 */
   readonly selectedId?: string | null;
+  /** 透传给 `NodeList` 的焦点入口，供包装层按 ID 聚焦行。 */
+  readonly listRef?: Ref<NodeListHandle>;
+  readonly ref?: Ref<NodeListPanelHandle>;
 }
 
 const NO_NODES: readonly NodeListItemView[] = [];
@@ -55,10 +64,26 @@ export function NodeListPanel({
   onNodeActivate,
   onRetry,
   selectedId,
+  listRef,
+  ref,
 }: NodeListPanelProps) {
   const searchId = useId();
   const statusId = useId();
+  const searchRef = useRef<HTMLInputElement | null>(null);
   const [criteria, setCriteria] = useState<NodeFilterCriteria>({ query: "", status: "all" });
+
+  useImperativeHandle(
+    ref,
+    () => ({
+      focusSearch() {
+        const input = searchRef.current;
+        if (!input || !input.isConnected || input.disabled) return false;
+        input.focus();
+        return document.activeElement === input;
+      },
+    }),
+    [],
+  );
 
   const available = state.status === "ready";
   const sourceNodes = state.status === "ready" ? state.nodes : NO_NODES;
@@ -87,7 +112,7 @@ export function NodeListPanel({
   if (noMatch) emptyContent = <NoMatches />;
 
   return (
-    <div className={cn("flex flex-col gap-4", className)}>
+    <div className={cn("flex min-w-0 flex-col gap-4", className)}>
       <div className="rounded-xl border bg-card px-6 py-4">
         <div role="search" aria-label="节点搜索与筛选" className="flex flex-wrap items-end gap-3">
           <div className="min-w-56 flex-1">
@@ -95,6 +120,7 @@ export function NodeListPanel({
               搜索节点
             </label>
             <input
+              ref={searchRef}
               id={searchId}
               type="search"
               value={criteria.query}
@@ -143,6 +169,7 @@ export function NodeListPanel({
       </div>
 
       <NodeList
+        ref={listRef}
         state={listState}
         title={title}
         description={noMatch ? null : description}

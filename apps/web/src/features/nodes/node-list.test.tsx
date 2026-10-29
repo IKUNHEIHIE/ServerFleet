@@ -1,7 +1,8 @@
+import { createRef } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import type { CandidateNodeDetail, CandidateNodeMetrics } from "./candidate-adapter";
-import { NodeList } from "./node-list";
+import { NodeList, type NodeListHandle } from "./node-list";
 import {
   FIXED_NOW,
   buildReadyState,
@@ -289,11 +290,11 @@ describe("NodeList · 键盘交互", () => {
     fireEvent.keyDown(rows[0], { key: "ArrowDown" });
     fireEvent.keyDown(rows[1], { key: "Enter" });
     expect(onNodeActivate).toHaveBeenCalledTimes(1);
-    expect(onNodeActivate).toHaveBeenCalledWith(readyNodes[1]);
+    expect(onNodeActivate).toHaveBeenCalledWith(readyNodes[1], "keyboard");
 
     fireEvent.keyDown(rows[1], { key: " " });
     expect(onNodeActivate).toHaveBeenCalledTimes(2);
-    expect(onNodeActivate).toHaveBeenLastCalledWith(readyNodes[1]);
+    expect(onNodeActivate).toHaveBeenLastCalledWith(readyNodes[1], "keyboard");
   });
 
   it("未提供激活回调时，Enter 不产生副作用也不被吞掉默认行为", () => {
@@ -311,7 +312,7 @@ describe("NodeList · 键盘交互", () => {
     const rows = bodyRows();
 
     fireEvent.click(rows[2]);
-    expect(onNodeActivate).toHaveBeenCalledWith(readyNodes[2]);
+    expect(onNodeActivate).toHaveBeenCalledWith(readyNodes[2], "pointer");
   });
 });
 
@@ -350,6 +351,38 @@ describe("NodeList · 选中标记", () => {
     render(<NodeList state={readyState} />);
 
     for (const row of bodyRows()) expect(row).not.toHaveAttribute("aria-current");
+  });
+});
+
+describe("NodeList · 命令式焦点", () => {
+  it("focusNode 聚焦当前渲染的行，未知 ID 返回 false", () => {
+    const ref = createRef<NodeListHandle>();
+    render(<NodeList ref={ref} state={readyState} />);
+
+    expect(ref.current?.focusNode("node-online-02")).toBe(true);
+    expect(bodyRows()[1]).toHaveFocus();
+    expect(ref.current?.focusNode("node-not-rendered")).toBe(false);
+  });
+
+  it("行被筛选掉时 focusNode 返回 false，不回退到旧节点", () => {
+    const ref = createRef<NodeListHandle>();
+    const onlyGcp = {
+      status: "ready" as const,
+      nodes: readyState.status === "ready" ? readyState.nodes.filter(node => node.name.startsWith("gcp")) : [],
+    };
+    render(<NodeList ref={ref} state={onlyGcp} />);
+
+    expect(ref.current?.focusNode("node-online-01")).toBe(false);
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("加载状态没有行，focusNode 失败但 focusList 可命中列表区域", () => {
+    const ref = createRef<NodeListHandle>();
+    render(<NodeList ref={ref} state={loadingState} />);
+
+    expect(ref.current?.focusNode("node-online-01")).toBe(false);
+    expect(ref.current?.focusList()).toBe(true);
+    expect(screen.getByRole("region", { name: "节点列表" })).toHaveFocus();
   });
 });
 
