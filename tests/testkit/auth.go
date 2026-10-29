@@ -3,12 +3,14 @@ package testkit
 
 import (
 	"context"
-	"errors"
+	"fmt"
 
 	"serverfleet.local/serverfleet/internal/auth"
 )
 
-var ErrDenied = errors.New("test authorization denied")
+// ErrDenied stays source-compatible for existing references and also matches
+// auth.ErrDenied through errors.Is.
+var ErrDenied = fmt.Errorf("test authorization denied: %w", auth.ErrDenied)
 
 // Authorizer denies by default. Tests must opt into Allow explicitly.
 type Authorizer struct{ Allow bool }
