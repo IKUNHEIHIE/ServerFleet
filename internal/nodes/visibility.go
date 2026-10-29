@@ -14,18 +14,23 @@ const readAction = "nodes.read"
 var (
 	ErrMissingAuthorizer = errors.New("nodes: authorizer is required")
 	ErrMissingSubject    = errors.New("nodes: subject is required")
+	ErrInvalidSubject    = errors.New("nodes: subject must not have surrounding whitespace")
 )
 
 // Visible filters nodes through the injected Authorizer, one node at a time, using a fixed
-// read action. It fails closed: a missing authorizer or subject is an error, and any per-node
-// authorization error excludes that node. Callers must apply this before listing or counting.
+// read action. Only auth.ErrDenied filters an individual node. Policy-unavailable,
+// invalid-check, cancellation/deadline and unknown authorization errors abort with a nil
+// result, never a partial list. Subject IDs are not trimmed: blank subjects and subjects with
+// surrounding whitespace are rejected before any authorization call.
 func Visible(ctx context.Context, authorizer auth.Authorizer, subjectID string, nodes []Node) ([]Node, error) {
 	if authorizer == nil {
 		return nil, ErrMissingAuthorizer
 	}
-	subjectID = strings.TrimSpace(subjectID)
-	if subjectID == "" {
+	if strings.TrimSpace(subjectID) == "" {
 		return nil, ErrMissingSubject
+	}
+	if subjectID != strings.TrimSpace(subjectID) {
+		return nil, ErrInvalidSubject
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -40,13 +45,14 @@ func Visible(ctx context.Context, authorizer auth.Authorizer, subjectID string, 
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		if authErr != nil {
-			if errors.Is(authErr, context.Canceled) || errors.Is(authErr, context.DeadlineExceeded) {
-				return nil, authErr
-			}
+		if authErr == nil {
+			out = append(out, n)
 			continue
 		}
-		out = append(out, n)
+		if errors.Is(authErr, auth.ErrDenied) {
+			continue
+		}
+		return nil, authErr
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
