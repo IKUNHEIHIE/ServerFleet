@@ -73,6 +73,14 @@ SHA `7303301d936d9a1ff1aa509265979d4d081c5696`。
 
 ## 06a / 负向加固
 
+SHA `0ce9268d6089cc900de98ec81cf129fc46291424`。
+
 Agent保留目录Linux模式要求无group/other访问；读取保留/结果文件按1024字节/128KiB限量，损坏记录不触发执行；落盘后再次检查未启动期限。补测真实两个主体会话，跨主体撤销拒绝且另一会话保持有效。插件即使可信capability配置误列shell.root，也拒绝非xray命名空间；工作流ID拒绝Unicode空白/控制符。
 
 `go test ./apps/agent ./internal/auth -count=1` PASS 2.291s/6.371s；`go test ./internal/plugins ./internal/workflows -count=1` PASS 1.718s/1.647s。没有扩展root权限或开放未审路由。
+
+## 07 / 独立认证契约修订与安全新决策候选
+
+文件auth-session.patch.json、SECURITY-DECISIONS-PROPOSED.md及tests/integration/v09/platform/auth-candidate.test.mjs。仅对内存副本应用RFC6902；Cookie/opaqueBearer/初始化204/me-CSRF有test前置条件；不修改原始字节受保护OpenAPI；不污染通用Identity；保持既有nodes DTO/operationId/参数/响应和全部147路径185操作；拒绝旧基线与重复应用。
+
+`node --test tests/integration/v09/platform/auth-candidate.test.mjs`：2 tests PASS（最终运行771.3874ms）；旧候选SHA256仍c779a4366d5fe0d3088d1c682b231dfe9d157c3d2ae562e1440cba7ccc3f6726。安全文档明确是新PROPOSED输入，未补写/替代历史已批准原文。独立修订仍待总控接收，不能因契约静态检查通过开启HTTP。
