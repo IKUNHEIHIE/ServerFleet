@@ -38,6 +38,8 @@ W06-R1现已接收，W06-R01/R02关闭：作者同ID/关闭键盘与迟到结果
 
 HTTP返修4fbdcf5与Web返修39b2b7c现已接收为PROPOSED，原四个P2关闭；总控澄清有状态凭据的权威查询顺序及Web展示世代/终止错误门控。三位当前设计任务完成停止，详见[返修复审](docs/development/reviews/READ-DESIGN-R1-REVIEW.md)。三份设计齐备仍不代表认证/HTTP/App已实现；下一步建议的[W07旧列表展示组件](docs/development/W07-LEGACY-VIEW-PROPOSAL.md)已列清范围、等待新实施批准，未创建作者目录或派发任务。D01–D07/P1-C10仍OPEN，G2未冻结。
 
+2026-10-30负责人要求五天完成**完整v0.9**，现切换为[三位复合实施包](docs/development/sprints/v09-five-day/PLAN.md)：Codex平台安全/Agent、DeepSeek数据业务、Gemini完整管理台与浏览器验收，各包连续多子项，检查点增量集成；W07并入GM，不再单项等待。新本地实施授权不代表已有实现、G2冻结、生产/VPS/云或远程准入；24项真实验收均须证据，五日全量目标风险高，未完成项如实保留。最新授权和唯一会话/目录以任务板及本计划为准。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

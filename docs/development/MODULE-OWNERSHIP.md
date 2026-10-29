@@ -23,3 +23,18 @@
 `go.mod`、`go.sum`、根及 Web `package.json`、`package-lock.json`、`buf*.yaml`、`redocly.yaml`、依赖规则、数据库公共迁移序列、CI 与根 AGENTS 是**共享文件**。模块 Agent 提交具体需求/差异，集成负责人单独协调修改；不要由多个工作目录同时更新锁文件。
 
 GitHub 账号未提供，CODEOWNERS 尚无真实审批人，当前依靠任务单和本地审查执行。远程仓库获批后再绑定真实账号和 main 分支保护，不能把文档规则当作 GitHub 已强制执行。
+
+## 完整v0.9五日复合包的新增目录归属
+
+负责人2026-10-30授权的实施分工见`sprints/v09-five-day/PLAN.md`。原模块依赖方向有效；下表只登记新目录的单一作者，不自动修改`dependencies.json`或允许任意跨域import。首个检查点提交最小依赖边、公开端口及共享patch，总控独立接收后再接入主线。
+
+| 新目录 | 唯一实施会话 | 责任及边界 |
+|---|---|---|
+| internal/ai、internal/workflows | codex-02 | AI/工作流只通过当前授权、统一任务/审批/审计；不直连Agent/DB，不反向强迫auth依赖任务 |
+| internal/updates、internal/recovery | codex-02 | 更新/信任/恢复平台，业务数据快照经DS存储接缝；不得复制或暴露离线恢复/CA秘密 |
+| plugins/xray-manager | codex-02 | 唯一官方可选业务包，核心不得import/编入；运行时/Host需PoC后审查 |
+| internal/files、internal/monitoring、internal/notifications、internal/quota | deepseek-02 | 文件/探测/通知/估算周期业务，节点操作经统一受控任务；路径、SSRF与通知秘密等负向必测 |
+| internal/dns、internal/certificates、internal/gateway、internal/servicegroups、internal/publishing | deepseek-02 | 供应商/证书/网关/业务成员及发布编排；不自造鉴权/执行/私钥旁路或共享全部私表 |
+| apps/web/src各正式业务模块 | gemini-02 | 全管理台/REST-SSE适配/声明式插件UI与浏览器验证；只消费Controller，后端缺口不补假成功 |
+
+三个复合包的测试和进度目录也独立：CX为tests/integration/v09/platform、tests/poc/v09/platform及progress/codex；DS为对应services与progress/deepseek；GM为tests/browser/v09与progress/gemini。根配置/依赖锁/API/Proto/迁移编号/CI仍总控单写，作者给精确diff；未授权新增目录以外的跨模块改动不能因期限而覆盖他人文件。
