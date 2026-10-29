@@ -3,6 +3,7 @@ package auth
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 )
 
 // IdentitySQLStatements is an auth-owned adapter surface, not a storage KV API.
@@ -12,6 +13,11 @@ import (
 type IdentitySQLStatements struct {
 	Read func(context.Context, string, ...any) (payload []byte, everInitialized bool, err error)
 	Exec func(context.Context, string, ...any) (rowsAffected int64, err error)
+	// AppendAudit must use this SAME underlying DS Tx (e.g. SQLRecorder.AppendTx).
+	// A nil sink preserves the durable outbox for later adoption; it never drops
+	// events or pretends they reached the audit domain. Production review decides
+	// when that deferred mode is admissible. No callback opens a nested writer.
+	AppendAudit func(context.Context, []IdentityAuditEvent) error
 }
 type IdentitySQLBackend struct {
 	Read func(context.Context, string, ...any) ([]byte, bool, error)
@@ -106,6 +112,20 @@ func (s *SQLIdentityStore) Update(ctx context.Context, fn func([]byte) ([]byte, 
 		}
 		if len(next) == 0 {
 			return ErrIdentityUnavailable
+		}
+		if tx.AppendAudit != nil && len(state.Outbox) > 0 {
+			events, err := identityAuditEvents(state.Outbox)
+			if err != nil {
+				return err
+			}
+			if err = tx.AppendAudit(ctx, events); err != nil {
+				return err
+			}
+			state.Outbox = nil
+			next, err = json.Marshal(state)
+			if err != nil || len(next) > 16<<20 {
+				return ErrIdentityUnavailable
+			}
 		}
 		rows, err := tx.Exec(ctx, `UPDATE cx_auth_identity SET payload=?,ever_initialized=? WHERE singleton=1 AND ever_initialized=?`, bytes.Clone(next), state.Initialized, initialized)
 		if err != nil {

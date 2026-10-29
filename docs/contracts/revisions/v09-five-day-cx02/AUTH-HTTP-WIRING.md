@@ -8,6 +8,8 @@
 2. `NewIdentityServiceWithResources(store, ResourceResolver, []PermissionDefinition)`：资源解析来自受审node/node_group/service_group来源，每次返回当前精确节点集合；新grant冻结当前成员，使用时求交，禁止wildcard。服务只拥有auth数据，不读nodes私表。nil解析器创建/使用相关grant失败关闭。权限注册由服务器程序配置，客户端不能声明只读/管理员。
 3. `NewIdentityHTTP(service, IdentityHTTPConfig{Origin})`返回独立handler；直接HTTPS，不能仅凭X-Forwarded-Proto推断HTTPS。主控应在独立审查后挂该handler；DS authenticator可适配`AuthenticateRequest`返回的SubjectID，不能读X-User/X-Role。当前入口仍health，不消费未接收模块。
 
+4. R03新增`IdentitySQLStatements.AppendAudit(ctx, []IdentityAuditEvent)`：闭包必须绑定相同DS Tx，逐事件SQLRecorder.AppendTx后返回，不能开启嵌套writer事务。结果固定映射success/denied/failure，Source为web/system，RequestID来自服务器上下文，NodeIDs为授权冻结目标。auth出箱清除与auth状态写入、审计插入都在同一事务；任一失败全部回滚。映射实测代码在identity_audit_test.go.txt。nil不丢出箱，仅保留待消费状态；生产是否允许deferred模式须审查，不伪称审计域已收到。
+
 ## 已实现操作和兼容语义
 
 - GET bootstrap-status：initialized、bootstrapAvailable仅在setup存在且未过期时true；绝不返回setup秘密。

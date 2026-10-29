@@ -16,6 +16,8 @@
 
 ## R02 认证HTTP、用户/RBAC/显式授权与重放
 
+提交 `1a3c0452236523063996a327fa10a6fc3c3e2a95`。
+
 实现文件：identity.go、management.go、idempotency.go、session_views.go、browser_guard.go、http.go及对应测试。增加用户创建/修订/停用、内置administrator/operator/reader角色及服务器权限目录、当前资源解析+组成员快照、逐动作/逐目标授权、授权到期/撤销、用户修订CAS、角色降权epoch撤销和最后有效管理员保护。管理员仍零节点授权；角色的操作能力与资源grant取交集，组新增成员不继承旧grant、删除成员失权；NodeReadPolicy适配既有一次prepare路径，不读库存。
 
 HTTP为真实但**尚未由主入口挂载的候选handler**：现有auth/bootstrap-status/bootstrap/login/logout/me/sessions、users、roles、permissions、resource-grants路径，保留既有DTO分页/ETag形状；me-CSRF和bootstrap204按独立S01候选。TLS必需，同源/CSRF/双凭据防护、严格有界JSON/重复键/未知字段/null/重复参数拒绝、错误脱敏、no-store、读结果先缓冲后世代闸门。A→B登录原子撤旧Cookie会话；会话管理ID不能当秘密。未配置第二因素验证器时明确拒绝要求MFA的配置或secondFactorCode，不假装验证通过。
@@ -29,3 +31,11 @@ HTTP为真实但**尚未由主入口挂载的候选handler**：现有auth/bootst
 - 单元HTTP负向涵盖重复JSON键/非法null/未知角色字段/双凭据/Origin/CSRF/弱或坏If-Match/旧修订/重复查询、源故障、提交前撤权不输出缓冲的身份/CSRF。null密码首轮错误地归401，补严格JSON-null校验后重跑PASS；未删测试。
 
 仍待完成：凭据CRUD/受控服务使用、审计最终sink事务消费、受限Bearer、MFA验证器/完整政策、跨存储资源世代的输出窗口、实际Controller组合与页面、1C1G及真实Linux端到端。继续包内实现。
+
+## R03 审计同事务消费与观察到的setup过期防回拨
+
+IdentitySQLStatements增加AppendAudit候选回调，必须绑定同一个DS Tx，用SQLRecorder.AppendTx写结构化事件，再在同一事务清空auth出箱并写auth状态。失败/取消/提交错误两边回滚；nil回调只保留真实持久出箱，不假装事件已到audit域。HTTP生成的请求ID经私有上下文传入，记录web/system来源；固定字段/类别，授权增删记录冻结NodeIDs，没有密码/Cookie/CSRF/token。已认证HTTP权限拒绝也写固定denied事件，审计写失败报503。
+
+隔离实验增加DS audit提交源（同一bb8954988fe7b2f832edf291803529d7745e4f0a）；仅机械替换其storage导入到隔离模块别名，未改业务源/另一个worktree/根配置。真实SQLRecorder+SQLite注入“已写审计后错误”和“auth+audit均写完、提交前错误”，均证明用户/receipt/audit一起回滚；最终成功仅一条创建审计，重放不重复创建。`node tests/poc/v09/platform/run-identity.mjs` 4项PASS，最终5.235s。`go test ./internal/auth ./tests/architecture -count=1` PASS 8.367s/1.383s，staticcheck PASS。
+
+额外修复：观察setup状态过期和提交过期setup请求会保存时钟观察点，回拨不能恢复旧setup有效性；补负向测试。auth编码写入也限制16MiB，不能先返回成功再使下一读取超限。当前审计数据仍依赖总控接收rich audit/迁移；通用资源引用（如target userId/credentialId）需与DS审计schema另行协调，不能把缺字段说成完整审计验收。接下来继续凭据平台等包内工作。

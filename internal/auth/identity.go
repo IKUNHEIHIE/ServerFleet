@@ -78,6 +78,9 @@ type loginWindow struct {
 type identityAudit struct {
 	SubjectID, Action, Result string
 	At                        time.Time
+	RequestID                 string
+	Source                    string
+	NodeIDs                   []string
 }
 type identityState struct {
 	Version        int
@@ -92,6 +95,9 @@ type identityState struct {
 	Outbox         []identityAudit
 	Grants         map[string]identityGrant
 	Receipts       map[string]identityReceipt
+	AuditSequence  uint64
+	requestID      string
+	requestSource  string
 }
 
 // IdentityService implements auth-local lifecycle logic. The public contract and
@@ -200,13 +206,22 @@ func (s *IdentityService) update(ctx context.Context, fn func(*identityState, ti
 			return nil, ErrIdentityUnavailable
 		}
 		st.ClockFloor = now
+		st.requestID, _ = ctx.Value(identityAuditContextKey{}).(string)
+		st.requestSource = "system"
+		if st.requestID != "" {
+			st.requestSource = "web"
+		}
 		if err = fn(st, now); err != nil {
 			return nil, err
 		}
 		if err = ctx.Err(); err != nil {
 			return nil, err
 		}
-		return json.Marshal(st)
+		encoded, err := json.Marshal(st)
+		if err != nil || len(encoded) > 16<<20 {
+			return nil, ErrIdentityUnavailable
+		}
+		return encoded, nil
 	})
 	return identityStoreError(ctx, err)
 }
@@ -292,13 +307,25 @@ func validUsername(name string) bool {
 	})
 }
 
-func appendIdentityAudit(st *identityState, subject, action, result string, now time.Time) error {
+func appendIdentityAudit(st *identityState, subject, action, result string, now time.Time, nodes ...string) error {
 	// A durable outbox allows the DS audit adapter to deliver committed events.
 	// Capacity exhaustion fails closed until the reviewed adapter drains it.
 	if len(st.Outbox) >= 10000 {
 		return ErrIdentityUnavailable
 	}
-	st.Outbox = append(st.Outbox, identityAudit{subject, action, result, now})
+	st.AuditSequence++
+	if st.AuditSequence == 0 {
+		return ErrIdentityUnavailable
+	}
+	requestID := st.requestID
+	if requestID == "" {
+		requestID = requestDigest(struct {
+			Subject, Action string
+			At              time.Time
+			Sequence        uint64
+		}{subject, action, now, st.AuditSequence})
+	}
+	st.Outbox = append(st.Outbox, identityAudit{SubjectID: subject, Action: action, Result: result, At: now, RequestID: requestID, Source: st.requestSource, NodeIDs: append([]string{}, nodes...)})
 	return nil
 }
 
@@ -341,7 +368,8 @@ func (s *IdentityService) bootstrap(ctx context.Context, setup, username, passwo
 	if !validUsername(username) {
 		return ErrInvalidCheck
 	}
-	return s.update(ctx, func(st *identityState, now time.Time) error {
+	var outcome error
+	err := s.update(ctx, func(st *identityState, now time.Time) error {
 		digest := requestDigest(struct{ Username, SetupDigest string }{username, credentialDigest(setup)})
 		receipt, replay, err := loadReceipt(st, "installer", "auth.bootstrap", key, digest, now)
 		if err != nil {
@@ -357,7 +385,8 @@ func (s *IdentityService) bootstrap(ctx context.Context, setup, username, passwo
 			return ErrAlreadyInitialized
 		}
 		if !now.Before(st.SetupExpires) || !matchSecret(setup, st.SetupDigest) {
-			return ErrCredential
+			outcome = ErrCredential
+			return nil
 		}
 		pw, err := makePassword(password, s.random)
 		if err != nil {
@@ -381,6 +410,10 @@ func (s *IdentityService) bootstrap(ctx context.Context, setup, username, passwo
 		st.PolicyRevision = 1
 		return appendIdentityAudit(st, id, "auth.bootstrap", "succeeded", now)
 	})
+	if err != nil {
+		return err
+	}
+	return outcome
 }
 
 type LoginSession struct {

@@ -390,7 +390,7 @@ func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf 
 		st.Grants[id] = identityGrant{result, append([]string{}, nodes...)}
 		saveReceipt(st, actor.ID, "auth.grant.create", key, digest, id, passwordRecord{}, now)
 		st.PolicyRevision++
-		return appendIdentityAudit(st, actor.ID, "auth.grant.create", "succeeded", now)
+		return appendIdentityAudit(st, actor.ID, "auth.grant.create", "succeeded", now, nodes...)
 	})
 	if err != nil {
 		return ResourceGrant{}, err
@@ -403,12 +403,13 @@ func (s *IdentityService) RevokeResourceGrant(ctx context.Context, secret, csrf,
 		if err != nil {
 			return err
 		}
-		if _, ok := st.Grants[grantID]; !ok {
+		removed, ok := st.Grants[grantID]
+		if !ok {
 			return ErrDenied
 		}
 		delete(st.Grants, grantID)
 		st.PolicyRevision++
-		return appendIdentityAudit(st, actor.ID, "auth.grant.revoke", "succeeded", now)
+		return appendIdentityAudit(st, actor.ID, "auth.grant.revoke", "succeeded", now, removed.Nodes...)
 	})
 }
 func (s *IdentityService) ListResourceGrants(ctx context.Context, secret string) ([]ResourceGrant, error) {

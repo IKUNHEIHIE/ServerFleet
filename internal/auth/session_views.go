@@ -31,7 +31,7 @@ type BootstrapView struct {
 
 func (s *IdentityService) BootstrapState(ctx context.Context) (BootstrapView, error) {
 	var result BootstrapView
-	err := s.read(ctx, func(st *identityState, now time.Time) error {
+	err := s.update(ctx, func(st *identityState, now time.Time) error {
 		result = BootstrapView{st.Initialized, !st.Initialized && st.SetupDigest != "" && now.Before(st.SetupExpires), "local-console-token"}
 		return nil
 	})

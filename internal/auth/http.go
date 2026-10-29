@@ -2,6 +2,7 @@ package auth
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"io"
@@ -63,8 +64,9 @@ func (h *IdentityHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("X-Request-ID", id)
+	r = r.WithContext(context.WithValue(r.Context(), identityAuditContextKey{}, id))
 	if r.TLS == nil || h.guard.Check(r, r.Method != "GET" && r.Method != "HEAD") != nil {
-		h.problem(w, ErrDenied)
+		h.problem(w, r, ErrDenied)
 		return
 	}
 	h.mux.ServeHTTP(w, r)
@@ -91,7 +93,14 @@ func (h *IdentityHTTP) AuthenticateRequest(r *http.Request) (Identity, error) {
 	}
 	return h.service.Authenticate(r.Context(), secret, r.Header.Get("X-CSRF-Token"), mutation)
 }
-func (h *IdentityHTTP) problem(w http.ResponseWriter, err error) {
+func (h *IdentityHTTP) problem(w http.ResponseWriter, r *http.Request, err error) {
+	if err == ErrDenied && r != nil {
+		if actor, ok := r.Context().Value(identityActorContextKey{}).(Identity); ok {
+			if auditErr := h.service.recordHTTPDenial(r.Context(), actor.SubjectID); auditErr != nil {
+				err = ErrIdentityUnavailable
+			}
+		}
+	}
 	status := IdentityHTTPStatus(err)
 	code := "IDENTITY_UNAVAILABLE"
 	switch status {
@@ -201,14 +210,15 @@ func checkIdentityJSON(decoder *json.Decoder, depth int) error {
 func (h *IdentityHTTP) authenticated(w http.ResponseWriter, r *http.Request) (Identity, string, bool) {
 	id, err := h.AuthenticateRequest(r)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return Identity{}, "", false
 	}
 	secret, err := SessionCredential(r)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return Identity{}, "", false
 	}
+	*r = *r.WithContext(context.WithValue(r.Context(), identityActorContextKey{}, id))
 	return id, secret, true
 }
 func (h *IdentityHTTP) send(w http.ResponseWriter, r *http.Request, status int, value any, identity *Identity, secret string, cookies ...*http.Cookie) {
@@ -217,18 +227,18 @@ func (h *IdentityHTTP) send(w http.ResponseWriter, r *http.Request, status int, 
 	if value != nil {
 		body, err = json.Marshal(value)
 		if err != nil || len(body) > 1<<20 {
-			h.problem(w, ErrIdentityUnavailable)
+			h.problem(w, r, ErrIdentityUnavailable)
 			return
 		}
 	}
 	if identity != nil {
 		if err = h.service.CommitGate(r.Context(), secret, *identity); err != nil {
-			h.problem(w, err)
+			h.problem(w, r, err)
 			return
 		}
 	}
 	if r.Context().Err() != nil {
-		h.problem(w, ErrIdentityUnavailable)
+		h.problem(w, r, ErrIdentityUnavailable)
 		return
 	}
 	for _, cookie := range cookies {
@@ -245,7 +255,7 @@ func (h *IdentityHTTP) send(w http.ResponseWriter, r *http.Request, status int, 
 func (h *IdentityHTTP) bootstrapStatus(w http.ResponseWriter, r *http.Request) {
 	state, err := h.service.BootstrapState(r.Context())
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 200, state, nil, "")
@@ -253,12 +263,12 @@ func (h *IdentityHTTP) bootstrapStatus(w http.ResponseWriter, r *http.Request) {
 func (h *IdentityHTTP) bootstrap(w http.ResponseWriter, r *http.Request) {
 	prior, err := selectSessionCredential(r, true)
 	if err != nil || prior != "" {
-		h.problem(w, ErrCredential)
+		h.problem(w, r, ErrCredential)
 		return
 	}
 	key, err := identityIdempotencyKey(r)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	var input struct {
@@ -267,11 +277,11 @@ func (h *IdentityHTTP) bootstrap(w http.ResponseWriter, r *http.Request) {
 		Password   string `json:"password"`
 	}
 	if err = decodeIdentityBody(w, r, &input); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	if err = h.service.BootstrapIdempotent(r.Context(), input.SetupToken, input.Username, input.Password, key); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 204, nil, nil, "")
@@ -279,7 +289,7 @@ func (h *IdentityHTTP) bootstrap(w http.ResponseWriter, r *http.Request) {
 func (h *IdentityHTTP) login(w http.ResponseWriter, r *http.Request) {
 	prior, err := selectSessionCredential(r, true)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	var input struct {
@@ -288,36 +298,36 @@ func (h *IdentityHTTP) login(w http.ResponseWriter, r *http.Request) {
 		SecondFactorCode string `json:"secondFactorCode"`
 	}
 	if err = decodeIdentityBody(w, r, &input); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	// A configured second factor cannot silently become password-only. Until
 	// its verifier/policy is implemented this candidate explicitly fails closed.
 	if input.SecondFactorCode != "" {
-		h.problem(w, ErrIdentityUnavailable)
+		h.problem(w, r, ErrIdentityUnavailable)
 		return
 	}
 	if !validUsername(input.Username) || len(input.Password) == 0 || len(input.Password) > 1024 {
-		h.problem(w, ErrInvalidCheck)
+		h.problem(w, r, ErrInvalidCheck)
 		return
 	}
 	ip, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		h.problem(w, ErrIdentityUnavailable)
+		h.problem(w, r, ErrIdentityUnavailable)
 		return
 	}
 	login, err := h.service.LoginReplacing(r.Context(), input.Username, input.Password, ip, prior)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	if err = h.service.CommitGate(r.Context(), login.Secret, login.Identity); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	cookie, err := SessionCookie(login.Secret)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 200, map[string]any{"identity": login.Profile, "sessionExpiresAt": login.Identity.ExpiresAt, "csrfToken": login.CSRF}, &login.Identity, login.Secret, cookie)
@@ -329,7 +339,7 @@ func (h *IdentityHTTP) me(w http.ResponseWriter, r *http.Request) {
 	}
 	profile, csrf, err := h.service.CurrentIdentity(r.Context(), secret)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	view := struct {
@@ -344,7 +354,7 @@ func (h *IdentityHTTP) logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.RevokeSession(r.Context(), secret, r.Header.Get("X-CSRF-Token"), id.SessionID); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 204, nil, nil, "", ClearSessionCookie())
@@ -356,7 +366,7 @@ func (h *IdentityHTTP) revokeSession(w http.ResponseWriter, r *http.Request) {
 	}
 	target := r.PathValue("sessionId")
 	if err := h.service.RevokeSession(r.Context(), secret, r.Header.Get("X-CSRF-Token"), target); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	if target == id.SessionID {
@@ -429,12 +439,12 @@ func (h *IdentityHTTP) sessions(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := h.service.ListSessions(r.Context(), secret)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	pageItems, page, err := pageIdentityItems(r, items, func(v SessionView) string { return v.SessionID })
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 200, map[string]any{"items": pageItems, "page": page}, &id, secret)
@@ -446,12 +456,12 @@ func (h *IdentityHTTP) users(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := h.service.ListUsers(r.Context(), secret)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	pageItems, page, err := pageIdentityItems(r, items, func(v ManagedUser) string { return v.UserID })
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 200, map[string]any{"items": pageItems, "page": page}, &id, secret)
@@ -463,7 +473,7 @@ func (h *IdentityHTTP) getUser(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.service.GetUser(r.Context(), secret, r.PathValue("userId"))
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", `"`+strconv.FormatUint(user.Revision, 10)+`"`)
@@ -483,7 +493,7 @@ func (h *IdentityHTTP) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := identityIdempotencyKey(r)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	var input struct {
@@ -494,11 +504,11 @@ func (h *IdentityHTTP) createUser(w http.ResponseWriter, r *http.Request) {
 		Enabled     *bool    `json:"enabled"`
 	}
 	if err = decodeIdentityBody(w, r, &input); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	if input.RoleIDs == nil {
-		h.problem(w, ErrInvalidCheck)
+		h.problem(w, r, ErrInvalidCheck)
 		return
 	}
 	enabled := true
@@ -507,7 +517,7 @@ func (h *IdentityHTTP) createUser(w http.ResponseWriter, r *http.Request) {
 	}
 	user, err := h.service.CreateUserIdempotent(r.Context(), secret, r.Header.Get("X-CSRF-Token"), UserCreation{input.Username, input.DisplayName, input.Password, input.RoleIDs, enabled}, key)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", `"`+strconv.FormatUint(user.Revision, 10)+`"`)
@@ -524,13 +534,13 @@ func (h *IdentityHTTP) patchUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if len(values) != 1 || len(values[0]) < 3 || values[0][0] != '"' || values[0][len(values[0])-1] != '"' {
-		h.problem(w, ErrInvalidCheck)
+		h.problem(w, r, ErrInvalidCheck)
 		return
 	}
 	number := values[0][1 : len(values[0])-1]
 	revision, err := strconv.ParseUint(number, 10, 64)
 	if err != nil || revision == 0 || strconv.FormatUint(revision, 10) != number {
-		h.problem(w, ErrInvalidCheck)
+		h.problem(w, r, ErrInvalidCheck)
 		return
 	}
 	var input struct {
@@ -539,12 +549,12 @@ func (h *IdentityHTTP) patchUser(w http.ResponseWriter, r *http.Request) {
 		Enabled     *bool     `json:"enabled"`
 	}
 	if err = decodeIdentityBody(w, r, &input); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	user, err := h.service.PatchUser(r.Context(), secret, r.Header.Get("X-CSRF-Token"), r.PathValue("userId"), revision, UserChange{input.DisplayName, input.RoleIDs, input.Enabled})
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	w.Header().Set("ETag", `"`+strconv.FormatUint(user.Revision, 10)+`"`)
@@ -569,12 +579,12 @@ func (h *IdentityHTTP) grants(w http.ResponseWriter, r *http.Request) {
 	}
 	items, err := h.service.ListResourceGrants(r.Context(), secret)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	pageItems, page, err := pageIdentityItems(r, items, func(v ResourceGrant) string { return v.GrantID })
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 200, map[string]any{"items": pageItems, "page": page}, &id, secret)
@@ -586,17 +596,17 @@ func (h *IdentityHTTP) createGrant(w http.ResponseWriter, r *http.Request) {
 	}
 	key, err := identityIdempotencyKey(r)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	var input GrantRequest
 	if err = decodeIdentityBody(w, r, &input); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	grant, err := h.service.CreateResourceGrantIdempotent(r.Context(), secret, r.Header.Get("X-CSRF-Token"), input, key)
 	if err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 200, grant, nil, "")
@@ -607,7 +617,7 @@ func (h *IdentityHTTP) revokeGrant(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := h.service.RevokeResourceGrant(r.Context(), secret, r.Header.Get("X-CSRF-Token"), r.PathValue("grantId")); err != nil {
-		h.problem(w, err)
+		h.problem(w, r, err)
 		return
 	}
 	h.send(w, r, 204, nil, nil, "")

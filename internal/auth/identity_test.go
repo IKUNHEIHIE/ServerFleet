@@ -244,6 +244,27 @@ func TestIdentityObservedExpirationCannotReviveAfterClockRollback(t *testing.T) 
 	}
 }
 
+func TestIdentityObservedSetupExpiryCannotReviveAfterClockRollback(t *testing.T) {
+	m := &identityTestStore{}
+	s, _ := NewIdentityService(m)
+	now := time.Date(2026, 10, 30, 0, 0, 0, 0, time.UTC)
+	s.now = func() time.Time { return now }
+	ctx := context.Background()
+	token, err := s.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now = now.Add(11 * time.Minute)
+	status, err := s.BootstrapState(ctx)
+	if err != nil || status.Available {
+		t.Fatal(status, err)
+	}
+	now = now.Add(-2 * time.Minute)
+	if err = s.Bootstrap(ctx, token, "admin", identityTestPassword); err != ErrIdentityUnavailable {
+		t.Fatal("expired setup revived", err)
+	}
+}
+
 func TestIdentityFailClosedAndNoSecretDeliveryOnCommitFailure(t *testing.T) {
 	s, m, _ := identityFixture(t)
 	ctx := context.Background()
