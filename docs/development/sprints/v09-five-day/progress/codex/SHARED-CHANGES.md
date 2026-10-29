@@ -4,7 +4,9 @@
 
 ## S01 OpenAPI 认证迁移（API owner）
 
-文件 api/openapi/g2-merged-candidate.yaml；需总控固定工具重新生成检查工件，不手改 gen。
+2026-10-30总控澄清：8a7dd470已含98f6d94d依赖登记，但S01—S04和DS共享申请均未接收；不得假设RecordTx或扩展Request存在。四份完整安全ADR在仓库及11个历史ZIP均缺失；继续独立实现，具体依赖项保持BLOCKED。
+
+S01目标为**独立契约修订候选**，原始受字节保护的 api/openapi/g2-merged-candidate.yaml 不得直接改写。下面 diff 仅用于描述在独立副本上的精确语义差异，待总控安排修订目录和固定生成器接收；不手改 gen。早期本申请将原文件写作目标不准确，现予纠正，实际从未修改该文件。
 
 ```diff
 @@ components.securitySchemes.cookieSession

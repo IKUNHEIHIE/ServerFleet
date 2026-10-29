@@ -76,7 +76,7 @@ func (v *PeerVerifier) verify(ctx context.Context, state tls.ConnectionState, me
 // ControllerTLSConfig performs standard CA/EKU checks before the live mapping
 // callback. There is no InsecureSkipVerify, client-cert optional mode, or TOFU.
 func (v *PeerVerifier) ControllerTLSConfig(server tls.Certificate, roots *x509.CertPool) (*tls.Config, error) {
-	if v == nil || v.lookup == nil || roots == nil || len(roots.Subjects()) == 0 || len(server.Certificate) == 0 || server.PrivateKey == nil {
+	if v == nil || v.lookup == nil || roots == nil || len(server.Certificate) == 0 || server.PrivateKey == nil {
 		return nil, ErrPeerIdentity
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{server}, ClientCAs: roots.Clone(), ClientAuth: tls.RequireAndVerifyClientCert, SessionTicketsDisabled: true, VerifyConnection: func(state tls.ConnectionState) error {
@@ -91,7 +91,7 @@ func (v *PeerVerifier) ControllerTLSConfig(server tls.Certificate, roots *x509.C
 // AgentTLSConfig pins the configured CA and server DNS identity using the TLS
 // library verifier. Credentials are local; no private key travels on the wire.
 func AgentTLSConfig(client tls.Certificate, roots *x509.CertPool, serverName string) (*tls.Config, error) {
-	if roots == nil || len(roots.Subjects()) == 0 || serverName == "" || len(client.Certificate) == 0 || client.PrivateKey == nil {
+	if roots == nil || serverName == "" || len(client.Certificate) == 0 || client.PrivateKey == nil {
 		return nil, ErrPeerIdentity
 	}
 	return &tls.Config{MinVersion: tls.VersionTLS13, ServerName: serverName, RootCAs: roots.Clone(), Certificates: []tls.Certificate{client}, SessionTicketsDisabled: true}, nil

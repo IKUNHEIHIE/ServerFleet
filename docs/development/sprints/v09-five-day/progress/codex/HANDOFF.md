@@ -23,6 +23,8 @@ SHA `8ad55cc3a81c702f124a4ee8f2084709157ec7a7`。
 
 ## 03 / CX-03、CX-04 mTLS与本地执行保留记录
 
+SHA `96b0568297bba7efc3ee2eb74f4c1a04758eec6c`。
+
 文件 internal/transport/peer_identity{,_test}.go、apps/agent/executor{,_test}.go。mTLS TLS1.3标准CA/EKU/域名验证+证书指纹/serial→当前身份映射；事件/派发需重复检查吊销；消息nodeId不能替代证书。Agent白名单回调仅程序注册，限制参数/权限/期限/路径，副作用前持久保留executionId、绑定完整Offer；并发/重启重复不重跑、无完成回执UNKNOWN、输出有界。root/Shell/插件能力未获准入，均拒绝。
 
 实际命令：`go test ./apps/agent ./internal/transport ./tests/architecture -count=1` PASS：2.961s / 3.936s / 1.533s。`go vet ./internal/auth ./internal/transport` PASS。tools:install PASS（四个固定工具安装到本目录bin）。Context7查询Go os.Root，使用固定工具API。
@@ -30,3 +32,9 @@ SHA `8ad55cc3a81c702f124a4ee8f2084709157ec7a7`。
 中间失败如实记录：mTLS首轮TestPeerRealLocalTLSAndLiveRevocation FAIL，VerifyConnection在HandshakeComplete前运行；改为回调内部验证CA结果，公开事件Verify仍强制完成握手，重跑PASS。Agent测试首轮编译FAIL（测试err变量作用域），修复后PASS。
 
 真实证据仅为本机回环TCP mTLS握手和本地文件副作用；非WSS/完整注册、Linux进程、双架构或生产链路。Windows不支持本测试所需目录fsync语义，仅验证逻辑去重；Linux代码强制同步文件和目录，断电/真实Linux仍UNTESTED。当前能力Runner是测试注册函数，未编入可远程调用动作或root旁路。Agent主入口尚未联网。候选IdentityLookup/AgentIdentity/PeerVerifier必须由总控审查后接权威仓储。剩余：WSS依赖精确锁差异、注册/签发/重装准入、持久节点状态、DS统一调度/审批/事件接线及真实隔离环境，CX-03/04仍未完成。
+
+## 03a / 全量检查返修
+
+第一次 `npm run check` 的 policy/contracts/web/git PASS，go FAIL：staticcheck报CertPool.Subjects弃用。移除这项无必要的预检查；空可信池本身会在TLS证书验证时拒绝，nil池仍在构造时拒绝。没有用deprecated抑制注释或降门槛。第二次全量检查另记结果。
+
+`npm run check:security` PASS：npm audit 0 vulnerabilities / govulncheck No vulnerabilities found。总控确认S01—S04未接收，SHARED-CHANGES已纠正S01为独立修订候选；受保护原文件未改。
