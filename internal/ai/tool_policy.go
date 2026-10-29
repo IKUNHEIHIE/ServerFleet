@@ -28,21 +28,23 @@ const (
 // deserialize a model's JSON into this authoritative value. Persistent mutations
 // and approval consumption must share the reviewed task/store transaction.
 type Scope struct {
-	SessionID string
-	SubjectID string
-	Revision  uint64
-	Mode      ApprovalMode
-	FullUntil time.Time
-	FullSince time.Time
-	Nodes     []string
-	Groups    map[string][]string
+	SessionID    string
+	SubjectID    string
+	Revision     uint64
+	Mode         ApprovalMode
+	FullUntil    time.Time
+	FullSince    time.Time
+	Nodes        []string
+	Groups       map[string][]string
+	NodeActions  map[string][]string
+	GroupActions map[string][]string
 }
 
 func NewScope(sessionID, subjectID string) (Scope, error) {
 	if !exactID(sessionID) || !exactID(subjectID) {
 		return Scope{}, ErrToolDenied
 	}
-	return Scope{SessionID: sessionID, SubjectID: subjectID, Revision: 1, Mode: EveryCall, Groups: map[string][]string{}}, nil
+	return Scope{SessionID: sessionID, SubjectID: subjectID, Revision: 1, Mode: EveryCall, Groups: map[string][]string{}, NodeActions: map[string][]string{}, GroupActions: map[string][]string{}}, nil
 }
 
 // ToolDefinition must come from a fixed server registry, including classification
@@ -138,12 +140,23 @@ func EvaluateTool(scope Scope, call ToolCall, tool ToolDefinition, current Curre
 	}
 	effective := map[string]bool{}
 	for _, id := range scope.Nodes {
-		effective[id] = true
+		if !validIDs(scope.NodeActions[id]) {
+			return ErrToolDenied
+		}
+		if slices.Contains(scope.NodeActions[id], tool.ID) {
+			effective[id] = true
+		}
 	}
 	for group, snapshot := range scope.Groups {
 		members, ok := current.GroupMembers[group]
 		if !exactID(group) || !ok || !validIDs(snapshot) || !validIDs(members) {
 			return ErrToolDenied
+		}
+		if !validIDs(scope.GroupActions[group]) {
+			return ErrToolDenied
+		}
+		if !slices.Contains(scope.GroupActions[group], tool.ID) {
+			continue
 		}
 		for _, id := range snapshot {
 			if slices.Contains(members, id) {

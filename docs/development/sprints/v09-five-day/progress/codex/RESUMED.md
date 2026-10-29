@@ -88,8 +88,20 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R09 持久工作流编排
 
+提交 `b4aaa33405c213f6d46d86ae034199b481b975ed`。
+
 新增Engine/SQLWorkflowBackend：固定action规范化、CAS定义、可信触发/等值条件、冻结计划、step幂等、统一taskId顺序推进/审批等待/失败停止/UNKNOWN暂停、禁用和修订后的派发checker、同Tx域/审计/提交端口。严格校验持久计划摘要与状态，没把unknown重新当pending。精确接缝WORKFLOW-WIRING.md；发现DS pin提交没有SubmitTx，已明确列为具体S03依赖，不在写事务内调用另一个Submit造成死锁，不复制第二套任务服务。
 
 `go test ./internal/workflows -count=1 -v` PASS 2.031s；第一次staticcheck发现测试中的重复db赋值未使用，修正后staticcheck PASS；architecture PASS 2.083s。单元正向任务为明确double；真实SQLite组合只验证真实持久/重启/审计回滚与缺端口不能推进，不伪造任务成功。继续AI/插件/更新恢复包内项。
 
 固定锁SQLite组合八项PASS 8.306s，包含实际workflow定义/冻结计划重开、域+audit提交前故障一起回滚及缺统一任务端口拒绝。
+
+## R10 AI会话持久授权与逐动作限制
+
+实现ai.SessionService/SQLSessionStore，精确组合见AI-SCOPE-WIRING.md。零资源/按资源动作的grant、组成员快照、当前权限求交、CAS/撤销/关闭、真实Web与资格gate、15/30/60分钟完整访问及有效模式、过期回拨拒绝、服务器规范工具参数/摘要/审批需求评估。补严早期纯Scope资源授权未限制细分动作的问题：新增NodeActions/GroupActions，缺动作拒绝，正向fixture也明确动作；未删除任何负向测试。多个不同快照的同组grant不能合并扩大动作，重复组grant明确冲突。
+
+真实持久组合：auth只读当前观察+AI+DS audit同一SQLite文件，不嵌套writer；注入commit失败无grant/审计半提交，重启保留grant/policy，真实Cookie会话撤销后Assess拒绝。固定锁九项PASS 8.751s（后续视图字段对齐复验随后补入）。`go test ./internal/ai ./internal/auth ./tests/architecture -count=1` PASS 2.075s/9.811s/1.461s，staticcheck PASS；更新Eino实验仍PASS 4.032s，Sonic对Go1.27回退warning仍公开保留，没有生产框架选择/真实模型验收。
+
+字段对齐既有AIApprovalPolicy、撤销审计节点快照后复验：AI PASS 1.962s，固定SQLite九项PASS 8.499s。
+
+剩余scope审批/唯一tasks接线、消息/SSE/真实BYOK、资源推荐、HTTP与页面、完整PoC。当前继续包内其他功能。

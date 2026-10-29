@@ -17,6 +17,7 @@ func TestToolScopeZeroSnapshotRemovalAndCurrentRBAC(t *testing.T) {
 		t.Fatal("new scope not empty", e)
 	}
 	scope.Groups["group-a"] = []string{"node-a", "node-b"}
+	scope.GroupActions["group-a"] = []string{"nodes.read"}
 	if e := EvaluateTool(scope, call, tool, current, nil, now); e != nil {
 		t.Fatal(e)
 	}
@@ -30,6 +31,7 @@ func TestToolScopeZeroSnapshotRemovalAndCurrentRBAC(t *testing.T) {
 		t.Fatal("removed member retained permission", e)
 	}
 	scope.Nodes = []string{"node-a"}
+	scope.NodeActions["node-a"] = []string{"nodes.read"}
 	current.AllowedNodes = nil
 	if e := EvaluateTool(scope, call, tool, current, nil, now); e != ErrToolDenied {
 		t.Fatal("scope bypassed RBAC", e)
@@ -40,6 +42,7 @@ func TestToolRootRequiresRealAdminApprovalInFullAccess(t *testing.T) {
 	now := time.Now()
 	scope, _ := NewScope("session-a", "user-a")
 	scope.Nodes = []string{"node-a"}
+	scope.NodeActions["node-a"] = []string{"shell.root"}
 	scope.Mode = FullAccess
 	scope.FullUntil = now.Add(15 * time.Minute)
 	scope.FullSince = now
@@ -71,6 +74,7 @@ func TestToolFullExpiryPluginDisableAndSecretExport(t *testing.T) {
 	now := time.Now()
 	scope, _ := NewScope("s", "u")
 	scope.Nodes = []string{"n"}
+	scope.NodeActions["n"] = []string{"xray.read"}
 	scope.Mode = FullAccess
 	scope.FullUntil = now
 	call := ToolCall{"xray.read", []string{"n"}, []byte(`{}`), 1}

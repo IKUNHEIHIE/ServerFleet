@@ -67,6 +67,7 @@ func TestEinoToolNodeCannotBypassServerGate(t *testing.T) {
 		t.Fatal("zero-resource call bypassed gate", err)
 	}
 	scope.Nodes = []string{"node-a"}
+	scope.NodeActions["node-a"] = []string{"node_read", "root_shell"}
 	if err = invoke("node_read", args); err != nil || calls.Load() != 1 {
 		t.Fatal("permitted test invocation failed", err)
 	}

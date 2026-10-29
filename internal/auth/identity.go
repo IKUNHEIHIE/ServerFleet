@@ -621,6 +621,24 @@ func (s *IdentityService) CommitGate(ctx context.Context, secret string, observa
 	return outcome
 }
 
+// CheckObservationReadOnly is a candidate composition seam for a domain already
+// holding a DS writer transaction. It never opens a nested writer, refreshes
+// idle lifetime or persists a clock observation. Authenticate (Origin/CSRF) must
+// have run before entering that transaction; use a transaction-bound auth reader
+// for a shared snapshot. Final HTTP output still uses CommitGate outside it.
+func (s *IdentityService) CheckObservationReadOnly(ctx context.Context, secret string, observation Identity) error {
+	return s.read(ctx, func(st *identityState, now time.Time) error {
+		u, se, err := findIdentity(st, secret, now)
+		if err != nil {
+			return err
+		}
+		if observation.SubjectID != u.ID || observation.SessionID != se.ID || observation.Epoch != u.Epoch || observation.PolicyRevision != st.PolicyRevision {
+			return ErrDenied
+		}
+		return nil
+	})
+}
+
 func (s *IdentityService) RevokeSession(ctx context.Context, secret, csrf, sessionID string) error {
 	return s.update(ctx, func(st *identityState, now time.Time) error {
 		u, current, err := findIdentity(st, secret, now)

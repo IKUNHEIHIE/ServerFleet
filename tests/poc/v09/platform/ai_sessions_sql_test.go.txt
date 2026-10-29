@@ -1,0 +1,160 @@
+package persistencepoc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/ai"
+	"serverfleet.local/serverfleet/internal/auth"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "ai.db")
+	db := newDB(t, path, true)
+	defer db.Close()
+	for _, sql := range ai.SessionSchemaStatements() {
+		if _, err := db.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, migration := range audit.Migrations() {
+		for _, sql := range migration.Statements {
+			if _, err := db.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	identity, _ := auth.NewIdentityServiceWithResources(identityStore(t, db), func(_ context.Context, kind, id string) ([]string, error) { return []string{id}, nil }, nil)
+	setup, err := identity.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = identity.Bootstrap(ctx, setup, "admin", "synthetic-long-password"); err != nil {
+		t.Fatal(err)
+	}
+	login, err := identity.Login(ctx, "admin", "synthetic-long-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = identity.CreateResourceGrant(ctx, login.Secret, login.CSRF, auth.GrantRequest{PrincipalID: login.Identity.SubjectID, ResourceType: "node", ResourceID: "node-a", Permissions: []string{"nodes.read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	observed, err := identity.Authenticate(ctx, login.Secret, login.CSRF, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validator, err := audit.NewValidator([]string{"ai.sessions.create", "ai.sessions.grant", "ai.sessions.revoke", "ai.sessions.policy", "ai.sessions.close"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fail := false
+	service := func(db *ds.DB) *ai.SessionService {
+		recorder, err := audit.NewSQLRecorder(db, validator, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		read := func(q ds.Queryer) func(context.Context, string, ...any) ([]byte, error) {
+			return func(ctx context.Context, sql string, args ...any) ([]byte, error) {
+				var b []byte
+				err := q.QueryRow(ctx, sql, args...).Scan(&b)
+				return b, err
+			}
+		}
+		store, err := ai.NewSQLSessionStore(ai.SessionSQLBackend{Read: read(db), InTx: func(ctx context.Context, fn func(ai.SessionSQLStatements) error) error {
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+				ops := ai.SessionSQLStatements{Read: read(tx), Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
+					r, err := tx.Exec(ctx, sql, args...)
+					if err != nil {
+						return 0, err
+					}
+					return r.RowsAffected()
+				}, AppendAudit: func(ctx context.Context, events []ai.SessionAuditEvent) error {
+					for _, e := range events {
+						if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.SubjectID, Action: e.Action, Result: "success", RequestID: e.SessionID, Source: audit.SourceWeb, At: e.At, NodeIDs: e.NodeIDs}); err != nil {
+							return err
+						}
+					}
+					return nil
+				}}
+				if err := fn(ops); err != nil {
+					return err
+				}
+				if fail {
+					return errors.New("injected before commit")
+				}
+				return nil
+			})
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		access := func(ctx context.Context, _, _ string) (ai.SessionActor, error) {
+			if identity.CheckObservationReadOnly(ctx, login.Secret, observed) != nil {
+				return ai.SessionActor{}, ai.ErrToolDenied
+			}
+			return ai.SessionActor{SubjectID: observed.SubjectID, HumanWeb: true, CanFullAccess: true}, nil
+		}
+		authority := func(ctx context.Context, subject, action string) (ai.CurrentAuthority, error) {
+			if identity.Authorize(ctx, auth.Check{SubjectID: subject, Action: action, NodeIDs: []string{"node-a"}}) != nil {
+				return ai.CurrentAuthority{SubjectID: subject}, nil
+			}
+			return ai.CurrentAuthority{SubjectID: subject, AllowedTools: []string{"nodes.read"}, AllowedNodes: []string{"node-a"}}, nil
+		}
+		result, err := ai.NewSessionService(store, access, authority, []ai.RegisteredTool{{Definition: ai.ToolDefinition{ID: "nodes.read", ReadOnly: true, AutoAllowed: true}, Canonicalize: func(raw json.RawMessage) (json.RawMessage, error) {
+			if string(raw) != "{}" {
+				return nil, ai.ErrToolDenied
+			}
+			return raw, nil
+		}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return result
+	}
+	aiService := service(db)
+	session, err := aiService.Create(ctx)
+	if err != nil || len(session.AllowedNodeIDs) != 0 {
+		t.Fatal(session, err)
+	}
+	fail = true
+	if _, err = aiService.AddGrant(ctx, session.ID, 1, ai.ResourceGrantInput{ResourceType: "node", ResourceID: "node-a", AllowedActions: []string{"nodes.read"}}); err != ai.ErrSessionUnavailable {
+		t.Fatal(err)
+	}
+	fail = false
+	session, err = aiService.Get(ctx, session.ID)
+	if err != nil || session.ScopeRevision != 1 || len(session.ResourceGrants) != 0 {
+		t.Fatal("failed grant changed scope", session, err)
+	}
+	session, err = aiService.AddGrant(ctx, session.ID, 1, ai.ResourceGrantInput{ResourceType: "node", ResourceID: "node-a", AllowedActions: []string{"nodes.read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	session, err = aiService.SetPolicy(ctx, session.ID, session.ScopeRevision, ai.LowRisk, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	identity, _ = auth.NewIdentityServiceWithResources(identityStore(t, db), func(_ context.Context, kind, id string) ([]string, error) { return []string{id}, nil }, nil)
+	aiService = service(db)
+	call := ai.ToolCall{ToolID: "nodes.read", NodeIDs: []string{"node-a"}, Parameters: []byte(`{}`), ScopeRevision: session.ScopeRevision}
+	if assessed, err := aiService.AssessTool(ctx, session.ID, call); err != nil || assessed.RequiresApproval {
+		t.Fatal("persisted scope not enforced", assessed, err)
+	}
+	if err = identity.RevokeSession(ctx, login.Secret, login.CSRF, observed.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = aiService.AssessTool(ctx, session.ID, call); err != ai.ErrToolDenied {
+		t.Fatal("revoked owner session retained tool access", err)
+	}
+}
