@@ -8,6 +8,8 @@ import { Modal } from "@/components/ui/modal";
 import { Notice } from "@/components/ui/feedback";
 import { describeApiError } from "@/lib/api/errors";
 import { formatDateTime } from "@/lib/format";
+import { pluginsApi } from "@/lib/api/endpoints-ai";
+import { useResource } from "@/lib/data/use-resource";
 
 function isActive(path: string, target: string): boolean {
   if (path === target) return true;
@@ -49,7 +51,7 @@ function NavLink({
   );
 }
 
-export function NavList({ onNavigate }: { readonly onNavigate?: () => void }) {
+export function NavList({ onNavigate, pluginLinks = [] }: { readonly onNavigate?: () => void; readonly pluginLinks?: readonly { readonly path: string; readonly label: string }[] }) {
   const location = useLocation();
   const [nodesOpen, setNodesOpen] = useState(true);
   return (
@@ -89,6 +91,14 @@ export function NavList({ onNavigate }: { readonly onNavigate?: () => void }) {
           </div>
         );
       })}
+      {pluginLinks.length > 0 ? (
+        <div className="pt-3">
+          <p className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">已启用插件</p>
+          <ul className="mt-0.5 space-y-0.5">
+            {pluginLinks.map(link => <NavLink key={link.path} path={link.path} label={link.label} current={location.path} onNavigate={onNavigate} />)}
+          </ul>
+        </div>
+      ) : null}
       <div className="pt-4 text-xs leading-5 text-muted-foreground">
         <p>可选插件入口仅在服务端确认已安装并启用后显示。</p>
       </div>
@@ -96,7 +106,7 @@ export function NavList({ onNavigate }: { readonly onNavigate?: () => void }) {
   );
 }
 
-function Sidebar() {
+function Sidebar({ pluginLinks }: { readonly pluginLinks: readonly { readonly path: string; readonly label: string }[] }) {
   return (
     <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col border-r bg-card lg:flex">
       <div className="border-b px-5 py-4">
@@ -111,7 +121,7 @@ function Sidebar() {
         </a>
       </div>
       <div className="min-h-0 flex-1 overflow-y-auto px-3 py-4">
-        <NavList />
+        <NavList pluginLinks={pluginLinks} />
       </div>
       <p className="border-t px-5 py-3 text-xs text-muted-foreground">Web 仅调用 Controller REST/SSE</p>
     </aside>
@@ -126,6 +136,15 @@ export function Shell({ children }: { readonly children: ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const routeMeta = ROUTE_META[location.path];
   const navItem = findNavItem(location.path);
+  const plugins = useResource(`shell:plugins:${session.viewEpoch}`, signal =>
+    pluginsApi.installed(signal).then(result => result.data),
+  );
+  const pluginLinks =
+    plugins.state.status === "ready"
+      ? plugins.state.data.items
+          .filter(plugin => plugin.id === "xray-manager" && plugin.enabled && plugin.status === "enabled")
+          .map(() => ({ path: "/plugins/xray", label: "Xray 节点管理器" }))
+      : [];
   const notice =
     session.state.kind === "authenticated" || session.state.kind === "anonymous" ? session.state.notice : null;
   const warning = session.state.kind === "authenticated" ? session.state.warning : null;
@@ -145,7 +164,7 @@ export function Shell({ children }: { readonly children: ReactNode }) {
       >
         跳到主要内容
       </a>
-      <Sidebar />
+      <Sidebar pluginLinks={pluginLinks} />
       <div className="lg:pl-64">
         <header className="sticky top-0 z-20 border-b bg-card/95 backdrop-blur">
           <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 lg:px-8">
@@ -227,7 +246,7 @@ export function Shell({ children }: { readonly children: ReactNode }) {
         </div>
       </div>
       <Modal open={mobileOpen} title="导航" onClose={() => setMobileOpen(false)} side>
-        <NavList onNavigate={() => setMobileOpen(false)} />
+        <NavList pluginLinks={pluginLinks} onNavigate={() => setMobileOpen(false)} />
       </Modal>
     </div>
   );

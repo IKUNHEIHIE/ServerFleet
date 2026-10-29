@@ -23,6 +23,10 @@ import { DnsPage } from "@/features/dns/dns-page";
 import { GatewayDetailPage, GatewaysPage } from "@/features/gateways/gateways-page";
 import { CertificatesPage } from "@/features/certificates/certificates-page";
 import { PublishingPage } from "@/features/publishing/publishing-page";
+import { AIPage, AISessionPage } from "@/features/ai/ai-pages";
+import { PluginsPage } from "@/features/plugins/plugins-page";
+import { XrayPage } from "@/features/plugins/xray-page";
+import { WorkflowsPage } from "@/features/workflows/workflows-page";
 import { NotFoundPage, PendingPage } from "@/features/pending/pending-page";
 
 export interface RouteContext {
@@ -49,16 +53,16 @@ export const ROUTES: readonly RouteEntry[] = [
   { path: "/tasks", render: () => <TasksPage /> },
   { path: "/tasks/:taskId", render: ({ params }) => <TaskDetailPage taskId={params.taskId} /> },
   { path: "/monitoring", render: () => <MonitoringPage /> },
-  { path: "/ai", render: pending("AI 运维", "会话资源授权、工具审批与流式消息。") },
-  { path: "/ai/:sessionId", render: pending("AI 会话", "资源授权、审批模式、消息与工具事件。") },
+  { path: "/ai", render: () => <AIPage /> },
+  { path: "/ai/:sessionId", render: ({ params }) => <AISessionPage sessionId={params.sessionId} /> },
   { path: "/gateways", render: () => <GatewaysPage /> },
   { path: "/gateways/:gatewayId", render: ({ params }) => <GatewayDetailPage gatewayId={params.gatewayId} /> },
   { path: "/publishing", render: () => <PublishingPage /> },
   { path: "/service-groups", render: () => <ServiceGroupsPage /> },
   { path: "/service-groups/:serviceGroupId", render: ({ params }) => <ServiceGroupDetailPage serviceGroupId={params.serviceGroupId} /> },
-  { path: "/workflows", render: pending("自动化工作流", "触发器、条件、操作、人工审批与通知。") },
-  { path: "/plugins", render: pending("插件中心", "来源仓库、目录、安装启停升级与卸载。") },
-  { path: "/plugins/xray", render: pending("Xray 节点管理器", "声明式插件界面；仅安装并启用后可操作。") },
+  { path: "/workflows", render: () => <WorkflowsPage /> },
+  { path: "/plugins", render: () => <PluginsPage /> },
+  { path: "/plugins/xray", render: () => <XrayPage /> },
   { path: "/dns", render: () => <DnsPage /> },
   { path: "/certificates", render: () => <CertificatesPage /> },
   { path: "/updates", render: pending("更新中心", "主控与 Agent 更新状态、失败恢复。") },

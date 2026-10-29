@@ -597,3 +597,147 @@ export interface AsyncOperation {
   readonly stages?: readonly { readonly name: string; readonly status: string; readonly message?: string }[];
   readonly auditId?: string;
 }
+
+export type AIApprovalMode = "per_action" | "automatic" | "full_access";
+
+export interface AIResourceGrant {
+  readonly grantId: string;
+  readonly resourceType: "node" | "service_group";
+  readonly resourceId: string;
+  readonly memberNodeIdsSnapshot?: readonly string[];
+  readonly allowedActions: readonly string[];
+  readonly grantedAt?: string;
+  readonly grantedBy?: string;
+}
+
+export interface AISession {
+  readonly id: string;
+  readonly scopeRevision: number;
+  readonly resourceGrants: readonly AIResourceGrant[];
+  readonly allowedNodeIds?: readonly string[];
+  readonly status: "active" | "closed";
+  readonly createdBy?: string;
+  readonly createdAt?: string;
+  readonly approvalPolicy?: AIApprovalPolicy;
+}
+
+export interface AIApprovalPolicy {
+  readonly sessionId: string;
+  readonly mode: AIApprovalMode;
+  readonly effectiveMode: AIApprovalMode;
+  readonly expiresAt?: string | null;
+  readonly scopeRevision: number;
+  readonly maxFullAccessSeconds?: number;
+  readonly enforcedRestrictions?: readonly string[];
+}
+
+export interface AIResourceRecommendation {
+  readonly id: string;
+  readonly reason: string;
+  readonly resourceType: "node" | "service_group" | "gateway" | "unknown";
+  readonly recommendedCapability: string;
+  readonly metadataOnly?: boolean;
+  readonly status: "pending" | "approved" | "rejected";
+}
+
+export interface AIApprovalRequest {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly state: "pending" | "approved" | "denied" | "expired" | "revoked" | "consumed";
+  readonly toolName: string;
+  readonly canonicalArgumentsHash: string;
+  readonly targetNodeIdsSnapshot: readonly string[];
+  readonly scopeRevision: number;
+  readonly riskLevel?: "read" | "low" | "medium" | "high" | "critical";
+  readonly expiresAt: string;
+  readonly createdBy?: string;
+}
+
+export interface AIApprovalEvent {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly actor: string;
+  readonly action: string;
+  readonly mode?: AIApprovalMode;
+  readonly toolName?: string;
+  readonly targetNodeIds?: readonly string[];
+  readonly result: "approved" | "denied" | "auto_approved" | "blocked" | "expired" | "changed";
+  readonly timestamp: string;
+  readonly reason?: string;
+}
+
+export interface AISecurityPolicy {
+  readonly defaultDeny: boolean;
+  readonly serverSideEnforced: boolean;
+  readonly groupGrantMemberPolicy?: string;
+  readonly allowUnscopedDiscovery?: boolean;
+  readonly scopeRevisionRequired?: boolean;
+  readonly lateralMovementRestricted?: boolean;
+  readonly approvalPolicyServerEnforced?: boolean;
+  readonly noScopeExpansionFromApprovalMode?: boolean;
+}
+
+export interface AIExecuteResult {
+  readonly taskId?: string;
+  readonly accepted: boolean;
+  readonly validatedNodeIds: readonly string[];
+  readonly operation?: string;
+  readonly state: "queued" | "running" | "completed" | "denied" | "canceled";
+  readonly deniedReason?: string;
+  readonly scopeRevision: number;
+}
+
+export interface AIMessage {
+  readonly messageId: string;
+  readonly sessionId: string;
+  readonly role: "user" | "assistant" | "tool";
+  readonly redactedContent?: string;
+  readonly createdAt: string;
+  readonly taskIds?: readonly string[];
+}
+
+export interface PluginRepository {
+  readonly mode: "official" | "custom";
+  readonly url?: string;
+  readonly ref: string;
+  readonly path: "Plugin";
+  readonly resolvedCommit?: string;
+  readonly officialVerified?: boolean;
+}
+
+export interface PluginCatalogEntry {
+  readonly id: string;
+  readonly name: string;
+  readonly version: string;
+  readonly description?: string;
+  readonly minControllerVersion?: string;
+  readonly entryType?: "declarative" | "wasm";
+  readonly manifestHash: string;
+  readonly artifactSha256?: string;
+  readonly signature?: string;
+  readonly permissions: readonly string[];
+  readonly sourceCommit?: string;
+}
+
+export interface InstalledPlugin {
+  readonly id: string;
+  readonly version: string;
+  readonly status: "installed_disabled" | "starting" | "enabled" | "draining" | "updating" | "uninstalling" | "failed";
+  readonly enabled: boolean;
+  readonly sourceURL?: string;
+  readonly sourceCommit: string;
+  readonly permissions?: readonly string[];
+  readonly lastError?: string;
+  readonly installedAt?: string;
+}
+
+export interface PluginOperation {
+  readonly id: string;
+  readonly pluginId: string;
+  readonly action: "install" | "activate" | "deactivate" | "update" | "uninstall";
+  readonly status: "queued" | "verifying" | "draining" | "applying" | "succeeded" | "failed" | "rolled_back" | "deferred";
+  readonly previousVersion?: string;
+  readonly targetVersion?: string;
+  readonly error?: { readonly code: string; readonly message: string; readonly requestId?: string };
+  readonly auditId?: string;
+}

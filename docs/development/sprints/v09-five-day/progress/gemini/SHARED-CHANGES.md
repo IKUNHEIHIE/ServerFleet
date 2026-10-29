@@ -58,3 +58,13 @@
 - 发布 DTO：`PublicationDraft08` 没有独立业务端口/网关端口映射字段，也没有逐网关配置差异；服务组端口只读展示。若产品要求“向导选择端口”，需扩展契约。
 - 网关路由：`GatewayRoute` 没有 `gatewayId` 字段，无法从响应判断路由归属哪台网关；UI 仅展示服务端返回列表，不自行关联。建议补归属/检查字段。
 - 通知测试：返回 delivery 状态；UI 只显示平台语义，不声称已读。SMTP/QQ 秘密只写。
+
+## 9. GM-07 契约缺口（AI 会话 / 插件 / Xray）
+
+- **AI 会话列表缺失**：`/api/v1/ai/sessions` 只有 `POST`，没有 `GET` 列表；`/ai` 入口无法显示当前用户的历史会话，只能新建后进入 `sessionId` 页面。请求：补 `GET /api/v1/ai/sessions?cursor=&limit=`（返回 `AISession[]` + `PageMeta`，仅当前用户可见会话），或明确本期不提供列表。
+- **AI 会话无法关闭**：`/api/v1/ai/sessions/{sessionId}` 只有 `GET`，`AISession.status` 含 `closed` 但没有关闭/撤销整会话授权的操作。请求：补 `POST /api/v1/ai/sessions/{sessionId}/close`（或 DELETE），语义为立即失效全部授权与待批计划。
+- **AI SSE 事件无数据契约**：`GET /api/v1/ai/sessions/{sessionId}/events` 只声明 `204`，没有 `text/event-stream` 响应体、事件名清单或 data schema（对比：任务 SSE 同样缺，见 §5）。前端按固定投影字段渲染（`event/id/toolName/state/message/progressPercent`），**从不渲染原始 data**；请补事件名与字段契约以便对齐。
+- **审批执行响应字段**：`POST /api/v1/ai/tools/execute` 返回体未声明 `validatedNodeIds`/`state` 的最小集；前端只展示服务端返回值，不自造“已执行成功”。
+- **插件操作与菜单联动**：`PluginOperation.status` 为异步（queued/verifying/draining/applying/succeeded/failed/rolled_back/deferred）。前端只把服务端 `GET /api/v1/plugins` 中 `enabled && status==="enabled"` 的 `xray-manager` 显示为导航入口；请求确认“热禁用后入口消失”的判定字段就是这两个（而非需要额外 `menuVisible`）。
+- **卸载不保留数据选择**：`DELETE /api/v1/plugins/{pluginId}` 无 “保留/清除插件数据” 参数；FR §11.4 要求用户选择。UI 明确不承诺数据保留策略。请求：补 `?purgeData=` 或 body 字段。
+- **Xray 插件契约状态**：`/api/v1/plugins/xray-manager/*` 已在候选中出现（capabilities/nodes/instance/actions/templates/installations/configurations/deployments/users/client-export/traffic/jobs），但 `FR-PLUGIN-XRAY-001` 的发行制品尚未发布，因此前端把“安装”按钮的可用性交给目录条目的 `sourceCommit + artifactSha256`：缺失即显示“不可安装/尚未发布”，不伪造下载成功。

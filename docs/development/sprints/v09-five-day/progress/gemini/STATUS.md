@@ -10,7 +10,8 @@
 | GM-02/03 | f49e637 | 会话失效/恢复语义、W07 legacy 列表、真实节点列表 | `/nodes` ← `GET /api/v1/nodes?onlineOnly=`；富化视图 ← `GET /api/v1/nodes/{nodeId}`（候选详情，需显式切换） | 235 PASS；build PASS；boundaries PASS | 详情契约 D02–D04 未冻结；真实管理 API 未提供，浏览器验证待 GM-09 |
 | GM-04 | ffb2a14 | 节点接入/详情、分组双视图与成员抽屉、服务组、用户/角色/授权/会话、审计、安全凭据 | `/nodes/new` ← enrollment tokens/enrollments；`/nodes/{id}` ← detail/identity/capabilities/diagnostics/traffic-quota/suspend/revoke；`/groups` ← groups/classifications/node-results/members；`/service-groups[/:id]` ← CRUD/members/scheduling/preview；`/users` ← users/roles/permissions/grants/sessions；`/audit`；`/settings` ← credentials/sessions | 253 PASS；build PASS；boundaries PASS | 无安装命令/接入历史/密码重置/角色 CRUD 端点；真实 API 未部署，浏览器验收待 GM-09 |
 | GM-05 | 372ff55 | 任务中心/创建预演/审批/取消/恢复/SSE、双栏文件浏览/文件夹/重命名/删除/大小/上传元数据/跨节点传输 | `/tasks` `/tasks/:id` ← tasks/preview/approve/cancel/resume/executions/events；`/files` ← nodes/files/directories/rename/size/uploads/transfers | 259 PASS；build PASS；boundaries PASS | 无下载端点与上传字节通道；`/tasks` 路径在候选契约中重复；分批/金丝雀参数缺失；真实字节验收 BLOCKED |
-| GM-06 | 本轮后续提交（见 `git log`） | 监控/通知、配额编辑、DNS、证书、网关、发布向导 | `/monitoring` ← availability-monitors/traffic-risks/notifications；`/settings` 通知渠道；`/dns` ← providers/accounts/zones/records；`/certificates` ← internal distributions；`/gateways[/:id]` ← gateways/routes/checks/dispatch/provision；`/publishing` ← preview/publications；节点配额 ← traffic-quota PUT | 266 PASS；build PASS；boundaries PASS | 检查历史只返回 ok；无资源历史/公网证书端点；发布无端口/逐网关差异；网关路由无 gatewayId；真实供应商/节点验收 UNTESTED |
+| GM-06 | 5e2de69 | 监控/通知、配额编辑、DNS、证书、网关、发布向导 | `/monitoring` ← availability-monitors/traffic-risks/notifications；`/settings` 通知渠道；`/dns` ← providers/accounts/zones/records；`/certificates` ← internal distributions；`/gateways[/:id]` ← gateways/routes/checks/dispatch/provision；`/publishing` ← preview/publications；节点配额 ← traffic-quota PUT | 266 PASS；build PASS；boundaries PASS | 检查历史只返回 ok；无资源历史/公网证书端点；发布无端口/逐网关差异；网关路由无 gatewayId；真实供应商/节点验收 UNTESTED |
+| GM-07 | 本轮后续提交（见 `git log`） | AI 运维（资源授权/三级审批/流式消息）、工作流契约缺口页、插件中心、Xray 声明式插件界面 | `/ai` ← security-policy、`POST /api/v1/ai/sessions`；`/ai/:sessionId` ← session/approval-policy/grants/approvals(+decision)/messages/approval-events/tools/execute/resource-recommendations + SSE `…/events`；`/workflows`（无端点，BLOCKED 页）；`/plugins` ← plugins/repository/catalog(+refresh)/install/activation/update/DELETE/plugin-operations；`/plugins/xray` ← `GET /api/v1/plugins/xray-manager` 门控 + nodes/templates/users/traffic(+settings)/installations/configurations/deployments/jobs | 275 PASS；typecheck PASS；build PASS；boundaries PASS | AI 会话列表/关闭端点缺失、AI SSE 无事件数据契约；workflows 完全无契约；Xray 发行制品未发布（目录缺 commit/SHA-256 即“不可安装”）；真实 AI/插件验收待 GM-09 |
 
 ## GM-02/03 交付细节
 
@@ -33,6 +34,31 @@
 - 富化视图需用户显式切换，才逐节点请求候选详情；若任一详情缺失/重复/ID 不匹配则整次失败。列表 DTO 无采样时间，CPU/内存不会被显示为当前读数。
 - 保留原有 179 个测试与富化组件；新增 legacy/rich 适配测试与页面集成测试。
 
+## GM-07 交付细节
+
+### AI 运维（FR-AI-SCOPE-005 / FR-AI-APPROVAL-006）
+
+- `/ai` 入口显示服务端安全策略（默认拒绝、服务端强制），只能新建会话；候选契约没有会话列表端点，因此不伪造历史会话（缺口见 `SHARED-CHANGES.md` §9）。
+- 会话页所有数据来自 `GET /api/v1/ai/sessions/{id}`：`scopeRevision`、`resourceGrants`、服务端计算的 `allowedNodeIds`；授权/撤权后静默刷新，页面不空白、不本地推算权限。
+- 添加授权必须由管理员从**服务端返回的节点/服务组列表**选择具体 ID；AI 建议只展示原因与所需能力，批准时仍要管理员显式选 ID，未选则拒绝提交。
+- 三级审批：模式卡片切换走 `PATCH …/approval-policy`；`full_access` 必须勾选风险确认并选择 15/30/60 分钟，提交 `userConfirmedFullAccess: true`；页面固定提示“完全访问不扩大资源范围”。
+- 工具审批：`POST …/approvals` 返回 `canonicalArgumentsHash` 与目标快照后，才允许一次性 `decision`；执行走 `POST /api/v1/ai/tools/execute` 并携带当前 `scopeRevision`，前端不自造执行成功。
+- SSE：只渲染投影字段（event/id/toolName/state/message/progressPercent）；测试断言原始 `output` 中的 `SECRET-AI-OUTPUT` 从不出现在 DOM。终止（401/403/404）显示错误且不循环重连。
+- 消息发送携带 `clientMessageId` 与当前 `scopeRevision`；只展示服务端 `redactedContent`。
+
+### 插件中心与 Xray（FR-PLUGIN-004 / FR-PLUGIN-XRAY-001）
+
+- 来源：`GET/PUT /api/v1/plugins/repository`，第三方 Fork 必须填 GitHub URL 并显示为非官方；保存后提示“不会自动替换已安装插件”。
+- 目录：只读元数据；缺 `sourceCommit` 或 `artifactSha256` 的条目显示“缺少 SHA-256 / 不可安装”，确认按钮禁用，不伪造下载成功。
+- 安装：权限逐项勾选后才真正提交（未勾全时点击确认不发请求），提交体固定为 `version/sourceCommit/expectedSha256/acceptedPermissions/enableAfterInstall`。
+- 启停/更新/卸载全部走服务端异步操作，返回 `PluginOperation` 后弹出操作详情，明确“只有 succeeded 才算完成，失败时旧版保持可用”。
+- 导航入口只在 `GET /api/v1/plugins` 返回 `id==="xray-manager" && enabled && status==="enabled"` 时出现；测试覆盖“已安装但停用 → 入口消失”。
+- `/plugins/xray` 为声明式渲染：标签/标题/说明来自核心内 manifest 常量，渲染器不执行任何插件脚本；未启用时只显示“插件未启用 + 前往插件中心”，不渲染任何控制台。
+
+### 工作流
+
+- `g2-merged-candidate.yaml` 无 `/api/v1/workflows*`；页面为诚实 BLOCKED 页，列出已批准但待接线的能力，不提供本地规则 CRUD、假通知或模拟执行成功。
+
 ## 结构说明
 
 - `apps/web/src/app/router.ts`：hash 路由、路径参数匹配、查询串构建；`app/navigation.ts` 保留完整 v0.9 功能地图入口。
@@ -48,4 +74,4 @@
 
 ## 下一步
 
-GM-07：AI 会话/资源授权/三级审批/流式消息、工作流（契约缺口）、插件中心与 Xray 声明式 UI。随后 GM-08 更新/备份恢复、GM-09 浏览器证据。
+GM-08：更新中心（`/api/v1/system/updates/*`）、备份与灾难恢复（`/api/v1/backups/{id}/verify`、`/disaster-recovery/*`），替换 `/updates`、`/backups` 两个占位路由，并登记备份列表/创建缺口。随后 GM-09 浏览器端到端证据与未完成清单。
