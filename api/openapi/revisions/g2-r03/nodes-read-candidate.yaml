@@ -1,0 +1,706 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet 节点只读 g2-r03 兼容候选（未批准/未冻结）
+  version: 0.9.0-g2-r03-candidate
+  description: G2-R02A/codex-01：仅两个既有 GET 的隔离评审候选；不是运行时 profile、完整 API 或真实 HTTP 实现。保留列表/详情原认证和错误格式差异，必须经总控/产品/安全批准后才可接线。
+servers:
+  - url: https://server-fleet.example.invalid
+    description: 示意服务地址，非真实 API
+security:
+  - bearerAuth: []
+tags:
+  - name: Nodes
+    description: 既有授权节点列表
+  - name: NodeLifecycle
+    description: 既有节点详情
+x-review-status: PROPOSED-NOT-FROZEN
+paths:
+  /api/v1/nodes:
+    get:
+      tags:
+        - Nodes
+      summary: 获取用户有权限访问的节点列表
+      operationId: listNodesForTransfer
+      parameters:
+        - in: query
+          name: onlineOnly
+          schema:
+            type: boolean
+            default: false
+      responses:
+        "200":
+          description: 节点列表
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeList"
+              examples:
+                legacyUntimed:
+                  summary: 合法旧响应；没有状态/revision/采样时间，不能直接当作新 Web DTO
+                  value:
+                    items:
+                      - id: node-example-01
+                        name: 示例节点
+                        online: true
+                        cpuPercent: 23
+                        memoryPercent: null
+                empty:
+                  summary: 仅身份和策略已成功检查后允许的空可见集合
+                  value:
+                    items: []
+                enriched:
+                  summary: 仅可信数据源确有字段时添加；五状态及指标边界
+                  value:
+                    items:
+                      - id: node-example-1
+                        name: 示例节点 1
+                        online: true
+                        status: online
+                        revision: 1
+                        cpuPercent: 0
+                        memoryPercent: 100
+                        sampledAt: 2026-10-29T00:00:00Z
+                        platform: linux/amd64
+                        agentVersion: example-version
+                        lastSeenAt: 2026-10-29T00:00:10Z
+                      - id: node-example-2
+                        name: 示例节点 2
+                        online: false
+                        status: offline
+                        revision: 2
+                        cpuPercent: null
+                        memoryPercent: null
+                        sampledAt: null
+                      - id: node-example-3
+                        name: 示例节点 3
+                        online: false
+                        status: suspended
+                        revision: 3
+                        cpuPercent: null
+                        memoryPercent: null
+                        sampledAt: null
+                      - id: node-example-4
+                        name: 示例节点 4
+                        online: false
+                        status: revoked
+                        revision: 4
+                        cpuPercent: null
+                        memoryPercent: null
+                        sampledAt: null
+                      - id: node-example-5
+                        name: 示例节点 5
+                        online: false
+                        status: unknown
+                        revision: 5
+                        cpuPercent: null
+                        memoryPercent: null
+                        sampledAt: null
+          headers:
+            Cache-Control:
+              description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+              schema:
+                type: string
+                const: no-store
+              example: no-store
+        "400":
+          $ref: "#/components/responses/ListBadRequest"
+        "401":
+          $ref: "#/components/responses/Unauthorized"
+        "403":
+          $ref: "#/components/responses/ListForbidden"
+        "503":
+          $ref: "#/components/responses/ListUnavailable"
+      description: 既有列表操作的范围内修订提案。先绑定可信身份并确认当前策略可用，再过滤授权可见集合，最后应用
+        onlineOnly；不返回全量计数、无权字段或部分成功。空库存也必须先检查身份/策略。无分页/total 新增。
+  /api/v1/nodes/{nodeId}:
+    get:
+      tags:
+        - NodeLifecycle
+      operationId: getNodeDetailG2
+      summary: 读取节点详情
+      responses:
+        "200":
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/NodeDetail"
+              examples:
+                online:
+                  value:
+                    nodeId: node-example-1
+                    displayName: 示例节点 1
+                    status: online
+                    revision: 1
+                    cpuPercent: 100
+                    memoryPercent: 0
+                    sampledAt: 2026-10-29T00:00:00Z
+                offline:
+                  value:
+                    nodeId: node-example-2
+                    displayName: 示例节点 2
+                    status: offline
+                    revision: 2
+                suspended:
+                  value:
+                    nodeId: node-example-3
+                    displayName: 示例节点 3
+                    status: suspended
+                    revision: 3
+                revoked:
+                  value:
+                    nodeId: node-example-4
+                    displayName: 示例节点 4
+                    status: revoked
+                    revision: 4
+                unknown:
+                  value:
+                    nodeId: node-example-5
+                    displayName: 示例节点 5
+                    status: unknown
+                    revision: 5
+          headers:
+            Cache-Control:
+              description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+              schema:
+                type: string
+                const: no-store
+              example: no-store
+        "400":
+          $ref: "#/components/responses/Error400"
+        "401":
+          $ref: "#/components/responses/Error401"
+        "403":
+          $ref: "#/components/responses/Error403"
+        "404":
+          $ref: "#/components/responses/Error404"
+        "409":
+          $ref: "#/components/responses/Error409"
+        "412":
+          $ref: "#/components/responses/Error412"
+        "428":
+          $ref: "#/components/responses/Error428"
+        "429":
+          $ref: "#/components/responses/Error429"
+        "503":
+          $ref: "#/components/responses/Error503"
+      parameters:
+        - name: nodeId
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - cookieSession: []
+        - bearerAuth: []
+      description: 沿用已有详情操作。身份验证与当前 nodes.read 授权先于资源/版本观察；缺失或不可见统一 404 是待批准的防枚举提案。原声明的通用错误码保留，不据此增加写入或 If-Match 要求。
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: sf_session
+  schemas:
+    NodeList:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/NodeSummary"
+    NodeSummary:
+      type: object
+      required:
+        - id
+        - name
+        - online
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        online:
+          type: boolean
+        region:
+          type: string
+        provider:
+          type: string
+        countryCode:
+          type: string
+          pattern: ^[A-Z]{2}$
+          description: ISO 3166-1 alpha-2 国家/地区代码，用于显示国旗；缺失时显示通用地球图标
+        ip:
+          type: string
+          description: 管理页面显示用途，按 RBAC 授权过滤
+        tags:
+          type: array
+          items:
+            type: string
+        cpuPercent:
+          type:
+            - number
+            - "null"
+          minimum: 0
+          maximum: 100
+        memoryPercent:
+          type:
+            - number
+            - "null"
+          minimum: 0
+          maximum: 100
+        status:
+          type: string
+          enum:
+            - online
+            - offline
+            - suspended
+            - revoked
+            - unknown
+        revision:
+          type: integer
+          minimum: 1
+        platform:
+          type: string
+        agentVersion:
+          type: string
+        lastSeenAt:
+          type: string
+          format: date-time
+        sampledAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: 提案：CPU/内存同一真实样本的时间；无共同采样证据时省略或 null。不得用 lastSeenAt、响应时间或 now 补齐。新鲜度由可信调用方显式时间/阈值判断。
+      description: 提案：兼容旧 NodeSummary 的可选扩展。id/name/online 与所有旧字段保留；只有可信来源提供时输出 status/revision 等新字段。无采样时间的旧指标仍可读取但不能宣称新鲜。
+      oneOf:
+        - not:
+            required:
+              - status
+        - required:
+            - status
+          properties:
+            status:
+              const: online
+            online:
+              const: true
+        - required:
+            - status
+          properties:
+            status:
+              enum:
+                - offline
+                - suspended
+                - revoked
+                - unknown
+            online:
+              const: false
+    NodeDetail:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        displayName:
+          type: string
+        status:
+          type: string
+          enum:
+            - online
+            - offline
+            - suspended
+            - revoked
+            - unknown
+        lastSeenAt:
+          type: string
+          format: date-time
+        agentVersion:
+          type: string
+        platform:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        cpuPercent:
+          type:
+            - number
+            - "null"
+          minimum: 0
+          maximum: 100
+        memoryPercent:
+          type:
+            - number
+            - "null"
+          minimum: 0
+          maximum: 100
+        sampledAt:
+          type:
+            - string
+            - "null"
+          format: date-time
+          description: 提案：CPU/内存同一真实样本的时间；无共同采样证据时省略或 null。不得用 lastSeenAt、响应时间或 now 补齐。新鲜度由可信调用方显式时间/阈值判断。
+      required:
+        - nodeId
+        - displayName
+        - status
+        - revision
+      additionalProperties: false
+      description: 沿用原 NodeDetail 的必填和字段类型，仅提案增加可选 CPU/内存及共同 sampledAt。revision 是节点元数据并发版本，不是指标样本序号，不是授权证明。
+    Error:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          examples:
+            - NODE_OFFLINE
+            - PERMISSION_DENIED
+            - FILE_CONFLICT
+            - NOT_ENOUGH_SPACE
+            - INVALID_PATH
+            - SYMLINK_NOT_ALLOWED
+        message:
+          type: string
+        requestId:
+          type: string
+    Problem:
+      type: object
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+        requestId:
+          type: string
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            properties:
+              pointer:
+                type: string
+              message:
+                type: string
+            additionalProperties: false
+      required:
+        - type
+        - title
+        - status
+        - code
+        - requestId
+      additionalProperties: false
+  responses:
+    Unauthorized:
+      description: 未登录或无效凭证
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            valid:
+              value:
+                code: UNAUTHENTICATED
+                message: 需要有效身份凭证
+    ListBadRequest:
+      description: 提案：查询参数无效；不输出原始内部异常。
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            valid:
+              value:
+                code: INVALID_REQUEST
+                message: 请求参数无效
+    ListForbidden:
+      description: 提案：已验证主体被拒绝访问列表操作；逐节点的纯拒绝只过滤对应节点。
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            valid:
+              value:
+                code: PERMISSION_DENIED
+                message: 请求未获授权
+    ListUnavailable:
+      description: 提案：策略读取失败、不可用或未知授权故障；绝不能转为 200 空/部分列表。
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Error"
+          examples:
+            valid:
+              value:
+                code: POLICY_UNAVAILABLE
+                message: 服务暂不可用
+    Error400:
+      description: Bad request
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 400
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 400
+                code: HTTP_400
+                requestId: request-example-01
+    Error401:
+      description: Unauthenticated
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 401
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 401
+                code: HTTP_401
+                requestId: request-example-01
+    Error403:
+      description: Forbidden
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 403
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 403
+                code: HTTP_403
+                requestId: request-example-01
+    Error404:
+      description: Not found
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 404
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 404
+                code: HTTP_404
+                requestId: request-example-01
+    Error409:
+      description: State conflict
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 409
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 409
+                code: HTTP_409
+                requestId: request-example-01
+    Error412:
+      description: Revision mismatch
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 412
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 412
+                code: HTTP_412
+                requestId: request-example-01
+    Error428:
+      description: Precondition required
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 428
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 428
+                code: HTTP_428
+                requestId: request-example-01
+    Error429:
+      description: Rate limited
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 429
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 429
+                code: HTTP_429
+                requestId: request-example-01
+    Error503:
+      description: Unavailable
+      headers:
+        Cache-Control:
+          description: 提案：所有成功及错误响应禁止共享/跨主体复用。
+          schema:
+            type: string
+            const: no-store
+          example: no-store
+      content:
+        application/problem+json:
+          schema:
+            allOf:
+              - $ref: "#/components/schemas/Problem"
+              - properties:
+                  status:
+                    const: 503
+          examples:
+            valid:
+              value:
+                type: about:blank
+                title: 请求未完成
+                status: 503
+                code: POLICY_UNAVAILABLE
+                requestId: request-example-01
