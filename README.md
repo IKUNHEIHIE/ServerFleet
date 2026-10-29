@@ -18,9 +18,11 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 随后TASK-01B默认分批/当前批纯判定通过审查；W05加载容器因恢复来源首帧旧数据、标识trim合并两个P2退回，尚未进入main。结论与证据见 [本轮审查](docs/development/reviews/FOLLOWUP-01-REVIEW.md)；DeepSeek补顺序进度纯值、Gemini原分支返修，见 [两位后续任务](docs/development/PARALLEL-FOLLOWUP-02.md)。
 
-AUTH-01B离线读取预检/不可变范围已通过独立审查，见 [授权预检复审](docs/development/reviews/AUTH-01B-REVIEW.md)。Codex后续为 [N03-A任务单](docs/development/CODEX-N03A-WORK-PACKAGE.md)：预检先行的离线节点读取组合；DeepSeek/Gemini维持原任务。G2未冻结，尚未接真实节点/API/执行，App仍是开发空壳；候选接收不批准认证/字段迁移或运行时profile，D07不能因离线预检通过而关闭。
+AUTH-01B离线读取预检/不可变范围已通过独立审查，见 [授权预检复审](docs/development/reviews/AUTH-01B-REVIEW.md)，随后进入 [N03-A任务](docs/development/CODEX-N03A-WORK-PACKAGE.md)。G2未冻结，尚未接真实节点/API/执行，App仍是开发空壳；候选接收不批准认证/字段迁移或运行时profile，D07不能因离线预检通过而关闭。
 
 TASK-01C顺序批次进度已接收，实际交付为e169afa；W05-R1关闭标识trim问题，但同key无效load恢复仍会首提交显示旧数据，继续返修且未合入。见 [本轮复审](docs/development/reviews/FOLLOWUP-02-REVIEW.md)。[后续任务](docs/development/PARALLEL-FOLLOWUP-03.md)安排DeepSeek整理首条只读闭环的可批准方案/验收包，Gemini补剩余隔离问题；Codex继续原N03-A。方案仅为待批建议，G2及D01–D07/P1-C10仍OPEN。
+
+N03-A预检先行的离线库存读取已接收，见 [读取用例复审](docs/development/reviews/N03-A-REVIEW.md)。它保证新入口先预检、只用同次范围过滤、错误无部分列表及输出复制隔离，仍未接真实身份/HTTP或存储原子性。Codex下一项为 [READ-SEC-01安全来源/证据任务](docs/development/CODEX-READ-SEC01-WORK-PACKAGE.md)，配合DeepSeek方案；Gemini仍修W05-R2，G2/D07未关闭。
 
 ## 快速验证
 

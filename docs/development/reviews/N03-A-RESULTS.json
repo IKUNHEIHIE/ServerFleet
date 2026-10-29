@@ -1,0 +1,28 @@
+{
+  "task":"N03A-REVIEW",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"98a1f6b2971d87adbb88c74bbc8ec1484c0e9de2",
+  "author":{"session":"codex-01","base":"8b2d8aa5b7d249b032d2c64abbbc2f758c739a4a","head":"f57fe0dd3c77691518d4e5b5a30bda714c13bc81","decision":"ACCEPT_OFFLINE_USECASE","newFiles":3,"existingSourceFilesChanged":0},
+  "testedCodeHead":"0ec62214d206af71c4dffb81bdc033fde4eec062",
+  "blockingFindings":[],
+  "checks":{
+    "module":{"status":"PASS","nodesCoveragePercent":96.3,"testkitCoveragePercent":100,"authCoveragePercent":98.6,"readUsecaseCoveragePercent":100},
+    "independentProbe":{"status":"PASS","assertions":33,"source":"evidence/n03a-review-probe.go.txt"},
+    "npmCi":"PASS",
+    "toolsInstall":"PASS",
+    "combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":212,"goSubtestsPassed":805,"goFailures":0,"webPassed":151},
+    "combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},
+    "g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "originalFilesVerified":69,
+    "byteExactOriginalCandidatesVerified":3
+  },
+  "otherTasks":{"deepseek":"READ-PLAN-01 unchanged","gemini":"W05-R2 unchanged","uncommittedFilesInspected":false,"w05Merged":false},
+  "nextTask":{"id":"READ-SEC-01","session":"codex-01","branch":"docs/read-security-evidence-cx01","worktree":"D:/admin/desktop/codex/myproject/ks.worktrees/docs--read-security-evidence-cx01","status":"ASSIGNED_FOR_MANUAL_DISPATCH"},
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "notVerified":["runtime authentication and policy/inventory store","enforced scope request lifetime","policy-inventory-output atomicity","HTTP/cache/browser","WSS/mTLS","task approval/dispatch/execution","Linux race","GitHub CI","1C1G performance"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

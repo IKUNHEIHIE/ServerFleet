@@ -1,0 +1,80 @@
+package main
+
+import (
+ "context"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "os"
+ "slices"
+ "strings"
+
+ "serverfleet.local/serverfleet/internal/auth"
+ "serverfleet.local/serverfleet/internal/nodes"
+)
+
+func main() {
+ checks:=0
+ assert:=func(ok bool,label string){if !ok{panic(label)};checks++}
+ bg:=context.Background()
+ makePolicy:=func()*auth.NodePolicy{return &auth.NodePolicy{KnownNodes:map[string]struct{}{"a":{},"b":{},"c":{}},ReadGrants:map[string]map[string]struct{}{"reader":{"a":{},"c":{}},"zero":nil}}}
+ p:=makePolicy()
+ var order []string
+ policyReads,inventoryReads:=0,0
+ reader:=func(context.Context)(*auth.NodePolicy,error){policyReads++;order=append(order,"policy");return p,nil}
+ tags:=[]string{"visible-tag"}
+ metrics:=&nodes.Metrics{CPUPercent:10}
+ source:=[]nodes.Node{{ID:"c",Name:"visible-c",Region:"visible",Tags:tags,Metrics:metrics},{ID:"b",Name:"hidden-marker",Region:"hidden-marker"},{ID:"a",Name:"visible-a",Region:"visible",Tags:tags,Metrics:metrics}}
+ inventory:=func(context.Context)([]nodes.Node,error){inventoryReads++;order=append(order,"inventory");return source,nil}
+ out,err:=nodes.ReadVisibleInventory(bg,"reader",reader,inventory)
+ assert(err==nil && len(out)==2 && out[0].ID=="c" && out[1].ID=="a","authorized input order")
+ assert(policyReads==1 && inventoryReads==1 && slices.Equal(order,[]string{"policy","inventory"}),"one policy before one inventory")
+ assert(out[0].Metrics!=metrics && out[1].Metrics!=metrics && out[0].Metrics!=out[1].Metrics,"per-node independent metrics")
+ out[0].Tags[0]="changed-output"
+ out[0].Metrics.CPUPercent=77
+ assert(tags[0]=="visible-tag" && metrics.CPUPercent==10 && out[1].Tags[0]=="visible-tag" && out[1].Metrics.CPUPercent==10,"output does not alias source or another output node")
+ tags[0]="changed-source";metrics.CPUPercent=55;source[0].Name="changed-source"
+ assert(out[1].Tags[0]=="visible-tag" && out[1].Metrics.CPUPercent==10 && out[0].Name=="visible-c","source mutations do not change output")
+ filtered,err:=nodes.Filter(out,nodes.NodeQuery{Text:"hidden-marker"})
+ assert(err==nil && len(filtered)==0,"hidden name not searchable")
+ buckets,err:=nodes.Classify(out,nodes.DimensionRegion)
+ assert(err==nil && len(buckets)==1 && buckets[0].Value=="visible" && buckets[0].Count==2,"hidden region not counted")
+ for _,subject:=range []string{"unknown",""," reader"} {
+  before:=inventoryReads
+  denied,err:=nodes.ReadVisibleInventory(bg,subject,reader,inventory)
+  assert(denied==nil && err!=nil && inventoryReads==before,"preflight failure never reads inventory")
+ }
+ for _,subject:=range []string{"reader","zero"} {
+  empty,err:=nodes.ReadVisibleInventory(bg,subject,reader,func(context.Context)([]nodes.Node,error){return nil,nil})
+  assert(err==nil && empty!=nil && len(empty)==0 && cap(empty)==0,"empty inventory still permits known preflight only")
+ }
+ zero,err:=nodes.ReadVisibleInventory(bg,"zero",reader,inventory)
+ assert(err==nil && len(zero)==0 && cap(zero)==0,"zero resource scope never all")
+ for _,sourceErr:=range []error{errors.New("secret-path-token"),auth.ErrDenied,errors.Join(auth.ErrDenied,auth.ErrPolicyUnavailable),fmt.Errorf("secret-wrap: %w",context.Canceled),fmt.Errorf("secret-wrap: %w",context.DeadlineExceeded)} {
+  denied,err:=nodes.ReadVisibleInventory(bg,"reader",reader,func(context.Context)([]nodes.Node,error){return source,sourceErr})
+  expected:=nodes.ErrInventoryUnavailable
+  if errors.Is(sourceErr,context.Canceled){expected=context.Canceled}else if errors.Is(sourceErr,context.DeadlineExceeded){expected=context.DeadlineExceeded}
+  assert(denied==nil && err==expected,"source fault drops partial data")
+  assert(!strings.Contains(err.Error(),"secret") && errors.Unwrap(err)==nil,"source fault does not retain secret chain")
+ }
+ for _,bad:=range [][]nodes.Node{{{ID:"a"},{ID:""}},{{ID:"a"},{ID:"*"}},{{ID:"a"},{ID:"a"}},{{ID:"a"},{ID:"b"},{ID:"b"}},{{ID:"a"},{ID:"unknown"},{ID:"unknown"}}} {
+  denied,err:=nodes.ReadVisibleInventory(bg,"reader",reader,func(context.Context)([]nodes.Node,error){return bad,nil})
+  assert(denied==nil && err!=nil,"bad or duplicate inventory cannot return prefix")
+ }
+ current:=makePolicy();current.ReadGrants["reader"]=map[string]struct{}{"a":{}}
+ liveReader:=func(context.Context)(*auth.NodePolicy,error){return current,nil}
+ mutateAfterPrepare:=func(context.Context)([]nodes.Node,error){current.ReadGrants["reader"]=map[string]struct{}{"b":{}};return source,nil}
+ first,err:=nodes.ReadVisibleInventory(bg,"reader",liveReader,mutateAfterPrepare)
+ assert(err==nil && len(first)==1 && first[0].ID=="a","one request keeps captured policy")
+ second,err:=nodes.ReadVisibleInventory(bg,"reader",liveReader,inventory)
+ assert(err==nil && len(second)==1 && second[0].ID=="b","fresh request sees revocation")
+ before:=inventoryReads
+ failed,err:=nodes.ReadVisibleInventory(bg,"reader",func(context.Context)(*auth.NodePolicy,error){return current,errors.New("sensitive-policy")},inventory)
+ assert(failed==nil && errors.Is(err,auth.ErrPolicyUnavailable) && inventoryReads==before,"new policy failure never uses old result")
+ ctx,cancel:=context.WithCancel(bg)
+ canceled,err:=nodes.ReadVisibleInventory(ctx,"reader",reader,func(context.Context)([]nodes.Node,error){cancel();return source,nil})
+ assert(canceled==nil && err==context.Canceled,"cancel inside final inventory source wins")
+ missing,err:=nodes.ReadVisibleInventory(bg,"reader",reader,nil)
+ assert(missing==nil && err==nodes.ErrInventoryUnavailable,"nil inventory does not become empty success")
+ if err:=json.NewEncoder(os.Stdout).Encode(map[string]any{"status":"PASS","assertions":checks,"scope":"real offline read usecase only; no identity or storage/output atomicity guarantee"});err!=nil{panic(err)}
+}
