@@ -98,6 +98,8 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R10 AI会话持久授权与逐动作限制
 
+提交 `f738f491140f6cb341d8f3334765753da7b9ef8a`。
+
 实现ai.SessionService/SQLSessionStore，精确组合见AI-SCOPE-WIRING.md。零资源/按资源动作的grant、组成员快照、当前权限求交、CAS/撤销/关闭、真实Web与资格gate、15/30/60分钟完整访问及有效模式、过期回拨拒绝、服务器规范工具参数/摘要/审批需求评估。补严早期纯Scope资源授权未限制细分动作的问题：新增NodeActions/GroupActions，缺动作拒绝，正向fixture也明确动作；未删除任何负向测试。多个不同快照的同组grant不能合并扩大动作，重复组grant明确冲突。
 
 真实持久组合：auth只读当前观察+AI+DS audit同一SQLite文件，不嵌套writer；注入commit失败无grant/审计半提交，重启保留grant/policy，真实Cookie会话撤销后Assess拒绝。固定锁九项PASS 8.751s（后续视图字段对齐复验随后补入）。`go test ./internal/ai ./internal/auth ./tests/architecture -count=1` PASS 2.075s/9.811s/1.461s，staticcheck PASS；更新Eino实验仍PASS 4.032s，Sonic对Go1.27回退warning仍公开保留，没有生产框架选择/真实模型验收。
@@ -105,3 +107,9 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 字段对齐既有AIApprovalPolicy、撤销审计节点快照后复验：AI PASS 1.962s，固定SQLite九项PASS 8.499s。
 
 剩余scope审批/唯一tasks接线、消息/SSE/真实BYOK、资源推荐、HTTP与页面、完整PoC。当前继续包内其他功能。
+
+## R11 更新工件私有暂存与复验
+
+新增ArtifactStager/StagedArtifact，更新签名/平台/序列/哈希验证后写私有文件，再同FD复验；向唯一任务安装器仅借限长只读流，没有任意文件路径或写者，前后当前策略gate、一次使用、失败UNKNOWN不重跑，清理仅自己随机目录文件。原始UPDATE缺失不阻塞这些安全IO逻辑，但不批准实际安装profile/健康协议/自动迁移回退。
+
+`go test ./internal/updates -count=1 -v` PASS 2.028s，staticcheck PASS；实际文件负向见UPDATE-STAGING.md。Windows未作Linux断电持久/真实安装证明。继续审批/插件/恢复与其他包内未完成项。
