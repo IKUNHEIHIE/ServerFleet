@@ -26,6 +26,8 @@ N03-A预检先行的离线库存读取已接收，见 [读取用例复审](docs/
 
 W05-R2复审接收原加载容器及两次返修，两个隔离问题均关闭；READ-PLAN-01因来源事实混淆和遗漏onlineOnly旧参数退回，尚未形成批准包。见 [最新复审](docs/development/reviews/FOLLOWUP-03-REVIEW.md)与[后续任务](docs/development/PARALLEL-FOLLOWUP-04.md)：DeepSeek修正方案，Gemini做隔离真实浏览器验收，Codex继续安全证据核验。当前仍无真实API/App来源接线，G2/D01–D07/P1-C10未批准。
 
+READ-SEC-01安全来源/证据包已接收，见 [安全证据复审](docs/development/reviews/READ-SEC-01-REVIEW.md)和[验收缺口](docs/contracts/decisions/node-read-security-01/SECURITY-ACCEPTANCE.md)。Codex本任务完成停止；待DeepSeek方案返修、Gemini浏览器结果复审后，统一形成可供负责人决定的具体方案包。证据文档接收不批准真实认证/HTTP或G2冻结。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。
