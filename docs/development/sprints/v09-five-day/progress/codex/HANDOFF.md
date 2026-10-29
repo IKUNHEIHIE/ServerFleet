@@ -38,3 +38,11 @@ SHA `96b0568297bba7efc3ee2eb74f4c1a04758eec6c`。
 第一次 `npm run check` 的 policy/contracts/web/git PASS，go FAIL：staticcheck报CertPool.Subjects弃用。移除这项无必要的预检查；空可信池本身会在TLS证书验证时拒绝，nil池仍在构造时拒绝。没有用deprecated抑制注释或降门槛。第二次全量检查另记结果。
 
 `npm run check:security` PASS：npm audit 0 vulnerabilities / govulncheck No vulnerabilities found。总控确认S01—S04未接收，SHARED-CHANGES已纠正S01为独立修订候选；受保护原文件未改。
+
+## 04 / CX-05 AI工具策略与工作流计划组件
+
+文件 internal/ai/tool_policy{,_test}.go、internal/workflows/plan{,_test}.go。实际 `go test ./internal/ai ./tests/architecture -count=1` PASS 2.044s/2.132s；`go test ./internal/workflows ./internal/updates ./tests/architecture -count=1` PASS 2.138s/2.176s/2.256s。最终组合平台模块测试也全部PASS（reports/platform-modules.log）。
+
+AI：零资源默认、服务组成员冻结并与当前成员取交集、当前RBAC和工具/插件权限交集、审批绑定会话/主体/目标/参数摘要/世代/期限、自动模式只允许白名单只读、限时full仍强制root Shell真人管理员审批、秘密导出无条件拒绝。工作流：固定触发类型/结构化相等条件、动作白名单、复制目标/参数、按定义修订+事件+步骤产生稳定幂等键；无脚本表达式或自造执行队列。
+
+这些是可单测的**策略/计划组件**，不是持久AI会话/模型对话/SSE、审批服务、工作流调度或POC-06 E2E。Scope、CurrentAuthority、Approval及工具分类只能由受审服务端来源构造，HumanWeb/Administrator不是HTTP布尔输入。批准的原子消费/任务提交、每阶段当前性、BYOK秘密仓储、模型/通知/触发持久来源和完整任务参数端口尚缺；未经接收不向旧Submitter丢弃参数。Eino未选生产runtime。CX-05仍未完成，独立组件不授予任何执行通道。
