@@ -89,6 +89,8 @@ SHA `fecc456164fa87b8fbc505e73b50f2d0b606fefc`。
 
 ## 08 / 隔离WSS、WASM、Eino实验及双架构编译
 
+SHA `7c0fccda0d3e3000a871a2bcbe570f29ca39e1f5`。
+
 源快照/锁/脚本在tests/poc/v09/platform；独立依赖只写本worktree忽略的reports/_review/v09-platform，根依赖文件hash前后严格相同。WSS候选精确根补丁为S04-WSS-DEPENDENCY.patch，`git apply --check` PASS但未应用；WASM/Eino不申请自动采用生产runtime。
 
 - `node tests/poc/v09/platform/run.mjs` PASS：真实本机WSS+mTLS binary Protobuf往返与文本/超限/节点替换/旧连接吊销/外部Origin拒绝；WASM每内存128KiB、未注册Host拒绝、无限循环50ms关闭、健康模块返回42。最终运行5.695s。
@@ -98,3 +100,7 @@ SHA `fecc456164fa87b8fbc505e73b50f2d0b606fefc`。
 - 最终 `npm run check` policy/contracts/go/web/git五套PASS；`npm run check:security` PASS。受保护go.mod/go.sum/锁/API/Proto/gen/scripts/架构规则相对基线无diff；未动DS/GM目录。
 
 实验仅局部证据，未关闭POC-01/02/03/04/06/08、AC或G2；真实Linux/1C1G、WASM全Host生命周期/资源隔离、真实模型/Agent链、Xray目标版本/双架构、更新/恢复材料与fencing均未验证。所有未完项见STATUS，构建/接线步骤见BUILD-RUN-RECOVERY，实际摘要见EVIDENCE.json。
+
+## 最终证据交接
+
+本次最终文件仅更新STATUS、COMMITS、EVIDENCE和此交接，不再改运行时代码。最终HEAD由交接消息给出，避免在同一提交内写自引用SHA。COMMITS记录所有前序独立检查点。没有推送/合并main，没有把局部实现/PoC或编译命名为完整v0.9。当前具体依赖阻塞及未交付列表以STATUS为准；待总控接收精确共享/安全候选与隔离环境后再接对应功能。

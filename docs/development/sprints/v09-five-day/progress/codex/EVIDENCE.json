@@ -1,0 +1,105 @@
+{
+  "task": "V09-5D-CX",
+  "session": "codex-02",
+  "reviewer": "codex-review-01 plus security/contract/module owners",
+  "capturedAt": "2026-10-30T02:19:10.2324433+08:00",
+  "timezone": "Asia/Shanghai",
+  "baseline": "8a7dd4707d2d7e142e137d098296788d2c80eddd",
+  "sourceHead": "7c0fccda0d3e3000a871a2bcbe570f29ca39e1f5",
+  "branch": "feature/v09-platform-cx02",
+  "environment": {
+    "architecture": "X64",
+    "node": "v24.22.1",
+    "resourcePerformanceVerified": false,
+    "os": "Microsoft Windows 10.0.26300",
+    "logicalProcessors": 32,
+    "go": "go version go1.27.3 windows/amd64"
+  },
+  "rootCheck": {
+    "executedAt": "2026-10-29T18:16:43.803Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      },
+      {
+        "name": "contracts",
+        "status": "PASS"
+      },
+      {
+        "name": "go",
+        "status": "PASS"
+      },
+      {
+        "name": "web",
+        "status": "PASS"
+      },
+      {
+        "name": "git",
+        "status": "PASS"
+      }
+    ]
+  },
+  "rootSecurity": {
+    "executedAt": "2026-10-29T18:15:53.35Z",
+    "results": [
+      {
+        "name": "security",
+        "status": "PASS"
+      }
+    ]
+  },
+  "platformModules": "ok  \tserverfleet.local/serverfleet/internal/auth\t6.752s\r\nok  \tserverfleet.local/serverfleet/internal/ai\t1.481s\r\nok  \tserverfleet.local/serverfleet/internal/plugins\t1.594s\r\nok  \tserverfleet.local/serverfleet/internal/workflows\t1.541s\r\nok  \tserverfleet.local/serverfleet/internal/updates\t1.529s\r\nok  \tserverfleet.local/serverfleet/internal/recovery\t1.390s\r\nok  \tserverfleet.local/serverfleet/plugins/xray-manager\t1.345s\r\nok  \tserverfleet.local/serverfleet/apps/agent\t2.422s\r\nok  \tserverfleet.local/serverfleet/internal/transport\t3.341s\r\nok  \tserverfleet.local/serverfleet/tests/architecture\t1.642s\r\n",
+  "extraNegative": "ok  \tserverfleet.local/serverfleet/apps/agent\t2.291s\r\nok  \tserverfleet.local/serverfleet/internal/auth\t6.371s\r\n",
+  "independentContract": "✔ CX02 independent auth candidate preserves protected bytes, operation IDs and legacy node DTO (198.4258ms)\r\n✔ CX02 refuses applying migration to a stale or already migrated input (37.3608ms)\r\nℹ tests 2\r\nℹ suites 0\r\nℹ pass 2\r\nℹ fail 0\r\nℹ cancelled 0\r\nℹ skipped 0\r\nℹ todo 0\r\nℹ duration_ms 771.3874\r\n",
+  "isolatedWssWasm": "> v09-isolated-platform-poc: test -mod=readonly -count=1 -v -timeout=45s .\r\n=== RUN   TestWASMMemoryAndUnregisteredHostDenied\r\n--- PASS: TestWASMMemoryAndUnregisteredHostDenied (0.00s)\r\n=== RUN   TestWASMInfiniteLoopTerminatesAndRuntimeSurvives\r\n--- PASS: TestWASMInfiniteLoopTerminatesAndRuntimeSurvives (0.05s)\r\n=== RUN   TestWSSActualMutualTLSBinaryProtobufAndRefusals\r\n=== RUN   TestWSSActualMutualTLSBinaryProtobufAndRefusals/roundtrip\r\n=== RUN   TestWSSActualMutualTLSBinaryProtobufAndRefusals/text\r\n=== RUN   TestWSSActualMutualTLSBinaryProtobufAndRefusals/oversize\r\n=== RUN   TestWSSActualMutualTLSBinaryProtobufAndRefusals/node-mismatch\r\n=== RUN   TestWSSActualMutualTLSBinaryProtobufAndRefusals/revoked-live\r\n--- PASS: TestWSSActualMutualTLSBinaryProtobufAndRefusals (0.02s)\r\n    --- PASS: TestWSSActualMutualTLSBinaryProtobufAndRefusals/roundtrip (0.00s)\r\n    --- PASS: TestWSSActualMutualTLSBinaryProtobufAndRefusals/text (0.00s)\r\n    --- PASS: TestWSSActualMutualTLSBinaryProtobufAndRefusals/oversize (0.00s)\r\n    --- PASS: TestWSSActualMutualTLSBinaryProtobufAndRefusals/node-mismatch (0.00s)\r\n    --- PASS: TestWSSActualMutualTLSBinaryProtobufAndRefusals/revoked-live (0.00s)\r\nPASS\r\nok  \tserverfleet.local/serverfleet/poc\t5.695s\r\nPASS: root dependency hashes unchanged. Windows local PoC only; Linux/1C1G/full Host admission remain unverified.\r\n",
+  "isolatedWssWasmSecurity": "No vulnerabilities found.\r\n",
+  "isolatedEino": "> v09-isolated-eino-poc: test -mod=readonly -count=1 -v -timeout=45s .\r\nWARNING: sonic/ast only supports (go1.17~1.26 and amd64 CPU) or (go1.20~1.26 and arm64 CPU), but your environment is not suitable and will fallback to encoding/json\r\n=== RUN   TestEinoToolNodeCannotBypassServerGate\r\n--- PASS: TestEinoToolNodeCannotBypassServerGate (0.00s)\r\nPASS\r\nok  \tserverfleet.local/serverfleet/eino-poc\t3.057s\r\nPASS: isolated Eino tool gate experiment only; no live model or production framework selection.\r\n",
+  "isolatedEinoSecurity": "No vulnerabilities found.\r\n",
+  "crossBuild": "> v09-compile-controller-amd64: build -trimpath -o D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--v09-platform-cx02\\reports\\_review\\v09-platform\\build\\controller-scaffold-linux-amd64 ./apps/controller\r\n> v09-compile-agent-amd64: build -trimpath -o D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--v09-platform-cx02\\reports\\_review\\v09-platform\\build\\agent-scaffold-linux-amd64 ./apps/agent\r\n> v09-compile-controller-arm64: build -trimpath -o D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--v09-platform-cx02\\reports\\_review\\v09-platform\\build\\controller-scaffold-linux-arm64 ./apps/controller\r\n> v09-compile-agent-arm64: build -trimpath -o D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--v09-platform-cx02\\reports\\_review\\v09-platform\\build\\agent-scaffold-linux-arm64 ./apps/agent\r\nPASS: four Linux cross-compiles; no runtime/install/health/recovery claim.\r\n",
+  "commands": [
+    "npm ci",
+    "npm run tools:install",
+    "npm run check",
+    "npm run check:security",
+    "node --test tests/integration/v09/platform/auth-candidate.test.mjs",
+    "node tests/poc/v09/platform/run.mjs",
+    "node tests/poc/v09/platform/run-eino.mjs",
+    "govulncheck -C reports/_review/v09-platform/poc -test ./...",
+    "govulncheck -C reports/_review/v09-platform/eino-poc -test ./...",
+    "node tests/integration/v09/platform/build.mjs"
+  ],
+  "artifacts": [
+    {
+      "name": "agent-scaffold-linux-amd64",
+      "classification": "compile-only scaffold, not installed v0.9",
+      "bytes": 6068592,
+      "sha256": "866189eeb5e3f3bee572bcfea8f3bbe8129eb335da9faddd2b7beb2657ea6e9a"
+    },
+    {
+      "name": "agent-scaffold-linux-arm64",
+      "classification": "compile-only scaffold, not installed v0.9",
+      "bytes": 5749733,
+      "sha256": "8377e9411f649fd7b2b9d12fe35bc10e60264da743717d01f90d65c62db2f8de"
+    },
+    {
+      "name": "controller-scaffold-linux-amd64",
+      "classification": "compile-only scaffold, not installed v0.9",
+      "bytes": 8683654,
+      "sha256": "d9f8c541b2771773bd19aacc07aaf193f0cf06330645acd81eee5ce9ce0da3a7"
+    },
+    {
+      "name": "controller-scaffold-linux-arm64",
+      "classification": "compile-only scaffold, not installed v0.9",
+      "bytes": 8096132,
+      "sha256": "b7de8ae5b9e166c50f116a5e5f6a657d296f39141fdbdf230ccda3cdf7d8538a"
+    }
+  ],
+  "protectedSourceHash": "c779a4366d5fe0d3088d1c682b231dfe9d157c3d2ae562e1440cba7ccc3f6726",
+  "allAcceptanceItems": "NOT_ACCEPTED",
+  "g2Frozen": false,
+  "productionCloudVpsAccess": false,
+  "mainMerged": false,
+  "remaining": "See STATUS.md: incomplete real features, shared ports/security review, Linux/1C1G and external environment BLOCKED/UNTESTED",
+  "historicFailures": "Initial mTLS callback timing test, Agent test variable compile error, first staticcheck deprecation failure; corrected and rerun. See HANDOFF.md."
+}
