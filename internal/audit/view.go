@@ -31,6 +31,8 @@ type Query struct {
 	Action    string
 	Result    string
 	RequestID string
+	TaskID    string
+	Source    Source
 	Since     time.Time
 	Until     time.Time
 	Offset    int
@@ -100,7 +102,7 @@ func (v *View) Query(q Query) (Page, error) {
 	}
 	items := make([]EventView, 0, end-start)
 	for _, event := range matched[start:end] {
-		items = append(items, EventView(event))
+		items = append(items, project(event))
 	}
 	return Page{
 		Items:   items,
@@ -124,6 +126,12 @@ func matchesQuery(event Event, q Query) bool {
 	if q.RequestID != "" && event.RequestID != q.RequestID {
 		return false
 	}
+	if q.TaskID != "" && event.TaskID != q.TaskID {
+		return false
+	}
+	if q.Source != "" && event.Source != q.Source {
+		return false
+	}
 	if !q.Since.IsZero() && event.At.Before(q.Since) {
 		return false
 	}
@@ -131,6 +139,16 @@ func matchesQuery(event Event, q Query) bool {
 		return false
 	}
 	return true
+}
+
+func project(event Event) EventView {
+	return EventView{
+		SubjectID: event.SubjectID,
+		Action:    event.Action,
+		Result:    event.Result,
+		RequestID: event.RequestID,
+		At:        event.At,
+	}
 }
 
 func invalidQuery(reason string) error {
