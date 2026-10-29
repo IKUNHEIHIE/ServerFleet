@@ -20,6 +20,8 @@ export interface NodeListPanelProps {
   readonly className?: string;
   readonly onNodeActivate?: (node: NodeListItemView) => void;
   readonly onRetry?: () => void;
+  /** 透传给 `NodeList` 的选中高亮；面板不解释选择语义。 */
+  readonly selectedId?: string | null;
 }
 
 const NO_NODES: readonly NodeListItemView[] = [];
@@ -52,6 +54,7 @@ export function NodeListPanel({
   className,
   onNodeActivate,
   onRetry,
+  selectedId,
 }: NodeListPanelProps) {
   const searchId = useId();
   const statusId = useId();
@@ -146,6 +149,7 @@ export function NodeListPanel({
         emptyContent={emptyContent}
         onNodeActivate={onNodeActivate}
         onRetry={onRetry}
+        selectedId={selectedId}
       />
     </div>
   );

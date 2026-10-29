@@ -1,15 +1,10 @@
 import { useId, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import type { MetricReading, NodeListItemView, NodeListState } from "./types";
-import {
-  countLabel,
-  describeMetric,
-  formatLastSeen,
-  nodeStatusMeta,
-  resolveTitle,
-  summariseNodes,
-} from "./view-model";
+import type { NodeListItemView, NodeListState } from "./types";
+import { MetricValue, MissingValue } from "./metric-value";
+import { NodeStatusBadge } from "./node-status-badge";
+import { countLabel, formatLastSeen, resolveTitle, summariseNodes } from "./view-model";
 
 export interface NodeListProps {
   /** 互斥状态：加载 / 失败 / 就绪（就绪但为空即空列表）。 */
@@ -22,6 +17,11 @@ export interface NodeListProps {
   readonly onNodeActivate?: (node: NodeListItemView) => void;
   /** 失败状态下的重试入口；未提供时不渲染按钮，避免出现无效操作。 */
   readonly onRetry?: () => void;
+  /**
+   * 当前选中的节点 ID，仅用于行高亮与 `aria-current`。
+   * 选择状态由包装层拥有，列表本身不保存选中对象。
+   */
+  readonly selectedId?: string | null;
   /**
    * 就绪但为空时替换默认“暂无节点”内容。
    * 供包装层区分“源列表为空”和“筛选后没有匹配”，默认行为保持不变。
@@ -45,53 +45,11 @@ const COLUMNS: readonly Column[] = [
   { key: "lastSeen", label: "最近在线", align: "left" },
 ];
 
-/**
- * 缺失值标记。
- * 视觉上沿用原型的破折号，但给读屏器一个明确原因，
- * 避免“—”、“无有效数据”、“0”在同一列里语义不清。
- */
-function MissingValue({ label }: { readonly label: string }) {
-  return (
-    <span className="text-muted-foreground">
-      <span aria-hidden="true">—</span>
-      <span className="sr-only">{label}</span>
-    </span>
-  );
-}
-
-/**
- * 指标单元格。
- *
- * 只有新鲜或陈旧样本才有数字；陈旧样本必须同时渲染可见的“陈旧 + 采样时间”，
- * 不使用 title/悬停承载时效信息，键盘与触摸用户同样能看到。
- */
-function MetricCell({ reading }: { readonly reading: MetricReading }) {
-  const metric = describeMetric(reading);
-  if (metric.kind === "empty") return <MissingValue label={metric.reason ?? "无有效数据"} />;
-  return (
-    <span className="inline-flex flex-col items-end gap-0.5">
-      <span className="tabular-nums">{metric.value}</span>
-      {metric.note ? (
-        <span className="text-xs font-medium text-amber-700">{metric.note}</span>
-      ) : null}
-    </span>
-  );
-}
-
-function NodeStatusBadge({ node }: { readonly node: NodeListItemView }) {
-  const meta = nodeStatusMeta[node.status];
-  return (
-    <Badge variant="outline" className={cn("gap-1.5 whitespace-nowrap", meta.badgeClassName)}>
-      <span aria-hidden="true" className={cn("size-1.5 rounded-full", meta.dotClassName)} />
-      {meta.label}
-    </Badge>
-  );
-}
-
 interface NodeTableProps {
   readonly labelledBy: string;
   readonly nodes: readonly NodeListItemView[];
   readonly onNodeActivate?: (node: NodeListItemView) => void;
+  readonly selectedId?: string | null;
 }
 
 /**
@@ -100,7 +58,7 @@ interface NodeTableProps {
  * Home/End 跳到首尾，Enter/Space 激活——与“每行都是可聚焦按钮”相比不会让
  * 键盘用户连续按十几次 Tab 才能越过列表。
  */
-function NodeTable({ labelledBy, nodes, onNodeActivate }: NodeTableProps) {
+function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId }: NodeTableProps) {
   const [activeId, setActiveId] = useState<string | null>(nodes[0]?.id ?? null);
   const rowRefs = useRef<Array<HTMLTableRowElement | null>>([]);
   const foundIndex = nodes.findIndex(node => node.id === activeId);
@@ -171,12 +129,14 @@ function NodeTable({ labelledBy, nodes, onNodeActivate }: NodeTableProps) {
                 rowRefs.current[index] = element;
               }}
               tabIndex={index === activeIndex ? 0 : -1}
+              aria-current={node.id === selectedId ? "true" : undefined}
               onClick={onNodeActivate ? () => onNodeActivate(node) : undefined}
               onKeyDown={event => handleKeyDown(event, index)}
               className={cn(
                 "border-t align-top transition-colors",
                 onNodeActivate && "cursor-pointer hover:bg-secondary/40",
                 index === activeIndex && "bg-secondary/30",
+                node.id === selectedId && "bg-primary/10 ring-1 ring-inset ring-primary/30",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
               )}
             >
@@ -198,10 +158,10 @@ function NodeTable({ labelledBy, nodes, onNodeActivate }: NodeTableProps) {
                 {node.agentVersion ?? <MissingValue label="未知" />}
               </td>
               <td className="px-4 py-3 text-right">
-                <MetricCell reading={node.cpu} />
+                <MetricValue reading={node.cpu} className="items-end" />
               </td>
               <td className="px-4 py-3 text-right">
-                <MetricCell reading={node.memory} />
+                <MetricValue reading={node.memory} className="items-end" />
               </td>
               <td className="px-4 py-3 whitespace-nowrap">
                 {formatLastSeen(node.lastSeenAt) ?? <MissingValue label="未知" />}
@@ -277,6 +237,7 @@ export function NodeList({
   className,
   onNodeActivate,
   onRetry,
+  selectedId,
   emptyContent,
 }: NodeListProps) {
   const headingId = useId();
@@ -287,7 +248,14 @@ export function NodeList({
   if (state.status === "loading") body = <LoadingState />;
   else if (state.status === "error") body = <ErrorState message={state.message} onRetry={onRetry} />;
   else if (state.nodes.length === 0) body = emptyContent ?? <EmptyState />;
-  else body = <NodeTable labelledBy={headingId} nodes={state.nodes} onNodeActivate={onNodeActivate} />;
+  else body = (
+    <NodeTable
+      labelledBy={headingId}
+      nodes={state.nodes}
+      onNodeActivate={onNodeActivate}
+      selectedId={selectedId}
+    />
+  );
 
   const showFootnote = state.status === "ready" && state.nodes.length > 0;
 
