@@ -19,13 +19,15 @@ import (
 // It can be tested against the real persistent service before public integration
 // review. Direct HTTPS is required; no forwarding header is trusted as TLS.
 type IdentityHTTP struct {
-	service *IdentityService
-	guard   *BrowserGuard
-	mux     *http.ServeMux
+	service     *IdentityService
+	guard       *BrowserGuard
+	mux         *http.ServeMux
+	credentials *CredentialService
 }
 type IdentityHTTPConfig struct {
 	Origin              string
 	RequireSecondFactor bool
+	Credentials         *CredentialService
 }
 
 func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*IdentityHTTP, error) {
@@ -36,7 +38,10 @@ func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*Identit
 	if err != nil {
 		return nil, err
 	}
-	h := &IdentityHTTP{service, guard, http.NewServeMux()}
+	if cfg.Credentials != nil && cfg.Credentials.identity != service {
+		return nil, ErrIdentityUnavailable
+	}
+	h := &IdentityHTTP{service: service, guard: guard, mux: http.NewServeMux(), credentials: cfg.Credentials}
 	h.mux.HandleFunc("GET /api/v1/auth/bootstrap-status", h.bootstrapStatus)
 	h.mux.HandleFunc("POST /api/v1/auth/bootstrap", h.bootstrap)
 	h.mux.HandleFunc("POST /api/v1/auth/login", h.login)
@@ -53,6 +58,11 @@ func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*Identit
 	h.mux.HandleFunc("GET /api/v1/resource-grants", h.grants)
 	h.mux.HandleFunc("POST /api/v1/resource-grants", h.createGrant)
 	h.mux.HandleFunc("DELETE /api/v1/resource-grants/{grantId}", h.revokeGrant)
+	if h.credentials != nil {
+		h.mux.HandleFunc("GET /api/v1/credentials", h.credentialMetadata)
+		h.mux.HandleFunc("POST /api/v1/credentials", h.createCredential)
+		h.mux.HandleFunc("GET /api/v1/credentials/{credentialId}/references", h.credentialReferences)
+	}
 	return h, nil
 }
 func (h *IdentityHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {

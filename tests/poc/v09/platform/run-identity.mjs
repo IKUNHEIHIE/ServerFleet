@@ -34,6 +34,7 @@ if(!bootstrap)writeFileSync(path.join(work,"go.sum"),readFileSync(new URL("ident
 writeFileSync(path.join(work,"identity_sql_test.go"),readFileSync(new URL("identity_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_http_test.go"),readFileSync(new URL("identity_http_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_audit_test.go"),readFileSync(new URL("identity_audit_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"identity_credentials_test.go"),readFileSync(new URL("identity_credentials_test.go.txt",import.meta.url)));
 try{
  run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s","."],{cwd:work,name:"v09-real-sqlite-identity"});
 }finally{if(protectedFiles.some((file,i)=>hash(file)!==before[i]))throw new Error("Root dependencies changed");}

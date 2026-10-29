@@ -83,21 +83,25 @@ type identityAudit struct {
 	NodeIDs                   []string
 }
 type identityState struct {
-	Version        int
-	Initialized    bool
-	SetupDigest    string
-	SetupExpires   time.Time
-	ClockFloor     time.Time
-	PolicyRevision uint64
-	Users          map[string]identityUser
-	Sessions       map[string]identitySession
-	Failures       map[string]loginWindow
-	Outbox         []identityAudit
-	Grants         map[string]identityGrant
-	Receipts       map[string]identityReceipt
-	AuditSequence  uint64
-	requestID      string
-	requestSource  string
+	Version           int
+	Initialized       bool
+	SetupDigest       string
+	SetupExpires      time.Time
+	ClockFloor        time.Time
+	PolicyRevision    uint64
+	Users             map[string]identityUser
+	Sessions          map[string]identitySession
+	Failures          map[string]loginWindow
+	Outbox            []identityAudit
+	Grants            map[string]identityGrant
+	Receipts          map[string]identityReceipt
+	AuditSequence     uint64
+	Credentials       map[string]storedCredential
+	CredentialChanges map[string]credentialChange
+	CredentialKeyUses map[string]uint64
+	CredentialUses    map[string]credentialUse
+	requestID         string
+	requestSource     string
 }
 
 // IdentityService implements auth-local lifecycle logic. The public contract and
@@ -143,6 +147,21 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	}
 	if s.Receipts == nil {
 		s.Receipts = map[string]identityReceipt{}
+	}
+	if s.Credentials == nil {
+		s.Credentials = map[string]storedCredential{}
+	}
+	if s.CredentialChanges == nil {
+		s.CredentialChanges = map[string]credentialChange{}
+	}
+	if s.CredentialKeyUses == nil {
+		s.CredentialKeyUses = map[string]uint64{}
+	}
+	if s.CredentialUses == nil {
+		s.CredentialUses = map[string]credentialUse{}
+	}
+	if len(s.Credentials) > 5000 || len(s.CredentialChanges) > 1000 || len(s.CredentialKeyUses) > 64 || len(s.CredentialUses) > 10000 {
+		return nil, ErrIdentityUnavailable
 	}
 	if len(s.Receipts) > 5000 {
 		return nil, ErrIdentityUnavailable
@@ -230,7 +249,7 @@ func identityStoreError(ctx context.Context, err error) error {
 	if ctx.Err() != nil {
 		return ctx.Err()
 	}
-	for _, category := range []error{ErrCredential, ErrIdentityUnavailable, ErrRateLimited, ErrAlreadyInitialized, ErrDenied, ErrInvalidCheck, ErrRevisionConflict, ErrPolicyUnavailable, ErrIdempotencyConflict} {
+	for _, category := range []error{ErrCredential, ErrIdentityUnavailable, ErrRateLimited, ErrAlreadyInitialized, ErrDenied, ErrInvalidCheck, ErrRevisionConflict, ErrPolicyUnavailable, ErrIdempotencyConflict, ErrCredentialUseUnknown, ErrCredentialReplay} {
 		if errors.Is(err, category) {
 			return category
 		}

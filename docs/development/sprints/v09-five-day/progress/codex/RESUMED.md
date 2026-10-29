@@ -34,8 +34,18 @@ HTTP为真实但**尚未由主入口挂载的候选handler**：现有auth/bootst
 
 ## R03 审计同事务消费与观察到的setup过期防回拨
 
+提交 `519b689dc3be4cdfaa71dccfd98de4ddde57a7dd`。
+
 IdentitySQLStatements增加AppendAudit候选回调，必须绑定同一个DS Tx，用SQLRecorder.AppendTx写结构化事件，再在同一事务清空auth出箱并写auth状态。失败/取消/提交错误两边回滚；nil回调只保留真实持久出箱，不假装事件已到audit域。HTTP生成的请求ID经私有上下文传入，记录web/system来源；固定字段/类别，授权增删记录冻结NodeIDs，没有密码/Cookie/CSRF/token。已认证HTTP权限拒绝也写固定denied事件，审计写失败报503。
 
 隔离实验增加DS audit提交源（同一bb8954988fe7b2f832edf291803529d7745e4f0a）；仅机械替换其storage导入到隔离模块别名，未改业务源/另一个worktree/根配置。真实SQLRecorder+SQLite注入“已写审计后错误”和“auth+audit均写完、提交前错误”，均证明用户/receipt/audit一起回滚；最终成功仅一条创建审计，重放不重复创建。`node tests/poc/v09/platform/run-identity.mjs` 4项PASS，最终5.235s。`go test ./internal/auth ./tests/architecture -count=1` PASS 8.367s/1.383s，staticcheck PASS。
 
 额外修复：观察setup状态过期和提交过期setup请求会保存时钟观察点，回拨不能恢复旧setup有效性；补负向测试。auth编码写入也限制16MiB，不能先返回成功再使下一读取超限。当前审计数据仍依赖总控接收rich audit/迁移；通用资源引用（如target userId/credentialId）需与DS审计schema另行协调，不能把缺字段说成完整审计验收。接下来继续凭据平台等包内工作。
+
+## R04 加密凭据生命周期
+
+auth/credentials及HTTP可选接线、单元与真实SQLite测试；详细候选为CREDENTIAL-WIRING.md。支持限定用途的只写创建、元数据读取、密文暂存轮换、CAS替换/撤销、程序注册业务回调短时使用、调用前后gate、持久operation防重放与intent/终态审计。AES256GCM完整AAD绑定、注入密钥组、逐key持久预算先提交；没有默认密钥、通用解密口或假供应商验证。HTTP只提供实际已实现的create/list/references；rotate/revoke的202接线等待唯一tasks正式Controller本地目标，未造假任务。
+
+实际验证：新增单元覆盖密文/元数据不回显、幂等改秘密冲突、轮换暂存不改旧值、跨key替换/旧key退役、旧revision/过期stage/撤销拒绝、缺gate/引用源失败关闭、调用错误/恐慌/中途撤销/终态审计失败都不重试，借用缓冲清零，key预算耗尽拒绝。固定锁`node tests/poc/v09/platform/run-identity.mjs` 五项PASS 7.515s，真实SQLite/WAL关闭重开后凭据持久、预算保留、UNKNOWN operation不重跑、撤销后不使用。该测试的task gate为明确测试fixture，不是统一任务/审批的完整验收。
+
+剩余：真实密钥安装与恢复防回退key轮换、精确引用源和供应商有效性验证、Controller本地异步任务接线/页面；继续受限Bearer与Agent平台，不以此检查点结束。
