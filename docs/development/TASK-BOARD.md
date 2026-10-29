@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| READ-DESIGN-REVIEW | 三份精确设计交付/引用及跨模块语义复审中 | codex-review-01 | integration/read-design-review / `.worktrees/integration--read-design-review` | 只读核对三份设计/来源/现有实现，接收通过工件及必要集成澄清，审查/证据/任务板/README/P1-C10与限定返修/组合对齐清单；不批准详细D项或启动实现 | 项目负责人验收；起始4196b2e；检查/交接后停止 |
 | READ-AUTH-DESIGN-01 | 已分配，待人工派发，尚未启动；B1具体身份/会话设计 | codex-01 | docs/node-read-auth-design-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--node-read-auth-design-cx01` | 仅新增docs/contracts/decisions/node-read-auth-01/{DESIGN,ACCEPTANCE,HANDOFF}.md；不改代码/候选/共享端口或实施凭据 | 总控+安全/契约；代码/资料基线0569c1a，工作目录起始为本次派发最终main |
 | READ-HTTP-DESIGN-01 | 已分配，待人工派发，尚未启动；A1兼容/错误/来源与撤权边界设计 | deepseek-01 | docs/node-read-http-design-ds01 / `.worktrees/docs--node-read-http-design-ds01` | 仅新增docs/contracts/decisions/node-read-http-01/{DESIGN,ACCEPTANCE,HANDOFF}.md；不实现处理器/来源/数据库，不改OpenAPI/共享文件 | 总控+安全/契约/节点；代码/资料基线0569c1a，工作目录起始为本次派发最终main |
 | READ-WEB-DESIGN-01 | 已分配，待人工派发，尚未启动；A1+B1局部legacy列表/会话失效设计 | gemini-01 | docs/node-read-web-design-gm01 / `.worktrees/docs--node-read-web-design-gm01` | 仅新增docs/contracts/decisions/node-read-web-01/{DESIGN,ACCEPTANCE,HANDOFF}.md；不改TSX/测试/App/fetch/配置/依赖 | 总控+UI/契约/安全；代码/资料基线0569c1a，工作目录起始为本次派发最终main |
