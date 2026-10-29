@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| READ-DESIGN-R1-REVIEW | HTTP/Web精确返修与组合复审中 | codex-review-01 | integration/read-design-r1-review / `.worktrees/integration--read-design-r1-review` | 两返修的范围/引用/语义核验、通过文档接收及必要接线语义澄清、审查证据/状态/README/P1-C10与下一步具体准入/待批任务；不启动实现或批准详细D项 | 项目负责人验收；起始3c817f8；复审/检查/交接后停止 |
 | READ-DESIGN-REVIEW | 复审/组合/安全检查完成：接收认证提案，HTTP/Web各退回2P2，交接后停止 | codex-review-01 | integration/read-design-review / `.worktrees/integration--read-design-review` | 原三设计审查/工件/证据/状态与限定返修/组合清单范围；不批准详细D项或启动实现 | 项目负责人验收；起始4196b2e |
 | READ-AUTH-DESIGN-01 | 文档接收为PROPOSED，具体参数/迁移待批；任务完成停止 | codex-01 | docs/node-read-auth-design-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--node-read-auth-design-cx01` | 原3份新增Markdown；未改代码/候选/共享端口或实施凭据 | 总控+安全/契约；48409bac，起始4196b2e |
 | READ-HTTP-DESIGN-01 / R1 | CHANGES_REQUESTED，HD01-R01/R02 OPEN；原分支追加R1待人工派发 | deepseek-01 | docs/node-read-http-design-ds01 / `.worktrees/docs--node-read-http-design-ds01` | 原3文档修身份源故障映射及最小可信来源；不实现处理器/来源/数据库或改OpenAPI | 总控+安全/契约/节点；ece5efd返修起点，原基线4196b2e |
