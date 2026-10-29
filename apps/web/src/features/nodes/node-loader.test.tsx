@@ -400,6 +400,56 @@ describe("NodeLoader · 来源失效与恢复（W05-R1）", () => {
   });
 });
 
+describe("NodeLoader · 同 key 可用性变化（W05-R2）", () => {
+  it("ready → 同 key 但 load 非函数 → 恢复有效来源：首个提交不含旧节点/计数/详情", async () => {
+    const a = makeSource("scope-a");
+    const broken = { key: "scope-a", load: undefined } as unknown as NodeSource;
+    const commits: string[] = [];
+    const view = (next: NodeSource) => (
+      <CommitProbe commits={commits}>
+        <NodeLoader source={next} />
+      </CommitProbe>
+    );
+    const { rerender } = render(view(a.source));
+    await settle(() => a.calls[0].deferred.resolve(readyNodes));
+
+    // 先打开详情，证明恢复时连详情也不能复活
+    fireEvent.click(bodyRows()[0]);
+    expect(screen.getByRole("region", { name: "节点详情" })).toBeVisible();
+
+    rerender(view(broken));
+    expect(screen.getByRole("alert")).toHaveTextContent(LOAD_FAILURE_MESSAGE);
+    expect(screen.queryByRole("table")).toBeNull();
+
+    commits.length = 0;
+    rerender(view(a.source));
+
+    expect(a.load).toHaveBeenCalledTimes(2);
+    expect(commits[0]).toContain("正在加载节点");
+    expect(commits[0]).not.toContain("aws-tokyo-01");
+    expect(commits[0]).not.toContain("共 8 个节点");
+    expect(commits[0]).not.toContain("节点详情");
+  });
+
+  it("同 key 失效时 abort 旧请求，恢复后迟到成功/失败均被丢弃", async () => {
+    const a = makeSource("scope-a");
+    const broken = { key: "scope-a", load: null } as unknown as NodeSource;
+    const { rerender } = render(<NodeLoader source={a.source} />);
+
+    rerender(<NodeLoader source={broken} />);
+    expect(a.calls[0].signal.aborted).toBe(true);
+
+    rerender(<NodeLoader source={a.source} />);
+    await settle(() => a.calls[0].deferred.resolve(readyNodes));
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载节点");
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+
+    await settle(() => a.calls[1].deferred.resolve(nodesB));
+    expect(bodyRows()).toHaveLength(nodesB.length);
+  });
+});
+
 describe("NodeLoader · 卸载与无效来源", () => {
   it("卸载时 abort 本容器的请求，迟到响应不再更新状态", async () => {
     const a = makeSource("scope-a");

@@ -57,14 +57,16 @@ export function NodeLoader({ source, title, description, className }: NodeLoader
   const keyValid = sourceKey !== "" && sourceKey.trim() === sourceKey;
   const usable = keyValid && typeof source?.load === "function";
 
-  // 世代编号：来源身份每次变化（含 A → 无效来源 → A）就递增。上一世代的 ready 快照
+  // 世代编号由「精确 key + 可用性」共同决定：key 变化（含 A → 无效来源 → A）、
+  // 或同 key 的 load 从函数变成非函数再恢复，都会开启新世代。上一世代的 ready 快照
   // 因此立即失效，恢复来源后的首个提交不会重新显示旧节点/计数/详情。
-  const [identity, setIdentity] = useState({ key: sourceKey, epoch: 0 });
-  if (identity.key !== sourceKey) {
+  const identityKey = `${sourceKey}::${usable ? "valid" : "invalid"}`;
+  const [identity, setIdentity] = useState({ key: identityKey, epoch: 0 });
+  if (identity.key !== identityKey) {
     // 渲染期同步调整自身 state：React 会在提交前立即重渲染，本次提交已用新世代。
-    setIdentity({ key: sourceKey, epoch: identity.epoch + 1 });
+    setIdentity({ key: identityKey, epoch: identity.epoch + 1 });
   }
-  const epoch = identity.key === sourceKey ? identity.epoch : identity.epoch + 1;
+  const epoch = identity.key === identityKey ? identity.epoch : identity.epoch + 1;
 
   const [snapshot, setSnapshot] = useState<Snapshot>({ epoch, key: sourceKey, status: "loading" });
   const [attempt, setAttempt] = useState(0);
