@@ -1,0 +1,376 @@
+{
+  "task": "W06R1-REVIEW",
+  "method": "Computer Use tab-scoped CDP on fresh independently built local preview",
+  "scope": "3 independent boundary cases; author 25 not independently rerun",
+  "url": "http://127.0.0.1:8463/index.html",
+  "codeHead": "ed6b80c",
+  "status": "PASS",
+  "cases": [
+    "same scope-a key pending -> invalid load -> scope-a restored -> old rejection ignored -> new success",
+    "pending unmount -> signal aborted -> late success ignored",
+    "independent pending unmount -> signal aborted -> late rejection ignored; no errors"
+  ],
+  "trace": [
+    {
+      "step": "initial-A-pending",
+      "value": {
+        "errors": [],
+        "requests": [
+          {
+            "aborted": false,
+            "key": "scope-a",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": true,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "same-key-invalid",
+      "value": {
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表无法加载节点列表加载失败节点数据暂时无法加载，请稍后重试。\n  \n\n",
+          "detailName": null,
+          "hasAlert": true,
+          "hasDetail": false,
+          "hasLoading": false,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "same-key-restored-before-old-failure",
+      "value": {
+        "errors": [],
+        "focus": {
+          "heading": null,
+          "tag": "BODY",
+          "text": "(body)"
+        },
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": null
+          },
+          {
+            "aborted": false,
+            "key": "scope-a",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": true,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "same-key-old-failure-ignored",
+      "value": {
+        "errors": [],
+        "focus": {
+          "heading": null,
+          "tag": "BODY",
+          "text": "(body)"
+        },
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": false,
+            "key": "scope-a",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": true,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "fresh-success-after-old-rejection",
+      "value": {
+        "errors": [],
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": false,
+            "key": "scope-a",
+            "settled": "success"
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-2",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": false,
+          "hasTable": true,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "pending-before-success-unmount",
+      "value": {
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "success"
+          },
+          {
+            "aborted": false,
+            "key": "scope-b",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": true,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "success-unmount-aborted",
+      "value": {
+        "errors": [],
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": false,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "unmounted-late-success-ignored",
+      "value": {
+        "errors": [],
+        "focus": {
+          "heading": null,
+          "tag": "BODY",
+          "text": "(body)"
+        },
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": "success"
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": false,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "pending-before-failure-unmount",
+      "value": {
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": "success"
+          },
+          {
+            "aborted": false,
+            "key": "scope-b",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": true,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "failure-unmount-aborted",
+      "value": {
+        "errors": [],
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": null
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": false,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        }
+      }
+    },
+    {
+      "step": "unmounted-late-failure-ignored",
+      "value": {
+        "errors": [],
+        "focus": {
+          "heading": null,
+          "tag": "BODY",
+          "text": "(body)"
+        },
+        "requests": [
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "failure"
+          },
+          {
+            "aborted": true,
+            "key": "scope-a",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": "success"
+          },
+          {
+            "aborted": true,
+            "key": "scope-b",
+            "settled": "failure"
+          }
+        ],
+        "state": {
+          "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n",
+          "detailName": null,
+          "hasAlert": false,
+          "hasDetail": false,
+          "hasLoading": false,
+          "hasTable": false,
+          "selectedRowId": null,
+          "sourceKind": "a"
+        },
+        "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/156.0.0.0 Safari/537.36"
+      }
+    }
+  ]
+}

@@ -118,12 +118,12 @@ C12 / C15 / C16 的首个提交文本均为：
 ### 证据（绝对路径，均在 git 忽略的 reports 下）
 
 - 驱动：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\browser-qa-r1.mjs`
-- 预览：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\preview.tsx`、`preview.html`、`vite.preview.config.ts`
-- 记录：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\w06r1-results.json`、`w06r1.log`
-- 新增截图：`r01-repeat-enter-1280.png`（重复激活后详情聚焦）、`r01-close-return-1280.png`（关闭后行聚焦）、
-  `r02-late-failure-1280.png`、`r02-unmounted.png`
-- 复跑截图：`loading-state.png`、`error-state.png`、`focus-detail-1280.png`、`focus-row-1280.png`、
-  `wide-1280.png`、`narrow-420.png`
+- 预览：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\preview.tsx`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\preview.html`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\vite.preview.config.ts`
+- 记录：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\w06r1-results.json`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\w06r1.log`
+- 新增截图：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\r01-repeat-enter-1280.png`（重复激活后详情聚焦）、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\r01-close-return-1280.png`（关闭后行聚焦）、
+  `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\r02-late-failure-1280.png`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\r02-unmounted.png`
+- 复跑截图：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\loading-state.png`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\error-state.png`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\focus-detail-1280.png`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\focus-row-1280.png`、
+  `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\wide-1280.png`、`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\narrow-420.png`
 - 服务端口：预览 `127.0.0.1:8462`、CDP `9462`；脚本结束即关闭（未见监听残留）
 
 ### 机制说明修正

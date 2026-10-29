@@ -1,0 +1,50 @@
+
+> serverfleet@0.0.0 check:web
+> node scripts/check.mjs web
+
+> web-typecheck: C:\Users\姜维\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\npm\bin\npm-cli.js run typecheck --workspace @serverfleet/web
+
+> @serverfleet/web@0.0.0 typecheck
+> tsc --noEmit
+> web-tests: C:\Users\姜维\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\npm\bin\npm-cli.js test --workspace @serverfleet/web
+
+> @serverfleet/web@0.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/apps/web
+
+ ✓ src/features/nodes/view-model.test.ts (12 tests) 14ms
+ ✓ src/features/nodes/candidate-adapter.test.ts (19 tests) 14ms
+ ✓ src/features/nodes/node-filters.test.ts (15 tests) 19ms
+ ✓ src/App.test.tsx (3 tests) 241ms
+ ✓ src/features/nodes/node-detail.test.tsx (11 tests) 395ms
+ ✓ src/features/nodes/node-list-panel.test.tsx (23 tests) 1255ms
+ ✓ src/features/nodes/node-loader.test.tsx (28 tests) 1306ms
+ ✓ src/features/nodes/node-list-workspace.test.tsx (16 tests) 1392ms
+ ✓ src/features/nodes/node-focus.test.tsx (18 tests) 1548ms
+   ✓ 焦点 · 键盘选择后到达详情 (4)
+     ✓ Enter 选择后焦点进入详情区域 322ms
+ ✓ src/features/nodes/node-list.test.tsx (34 tests) 1636ms
+
+ Test Files  10 passed (10)
+      Tests  179 passed (179)
+   Start at  21:23:32
+   Duration  6.00s (environment 67%, tests 16%, setup 15%, transform 1%, import 1%)
+
+JUNIT report written to D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/web-junit.xml
+> web-build: C:\Users\姜维\.workbuddy\binaries\node\versions\22.22.2-6\node_modules\npm\bin\npm-cli.js run build --workspace @serverfleet/web
+
+> @serverfleet/web@0.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 21 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:  0.31 kB
+dist/assets/index-ZGybvyGf.css   17.48 kB │ gzip:  4.27 kB
+dist/assets/index-DhifIrbU.js   249.13 kB │ gzip: 77.99 kB
+
+✓ built in 497ms

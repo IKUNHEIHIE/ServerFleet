@@ -30,6 +30,8 @@ READ-SEC-01安全来源/证据包已接收，见 [安全证据复审](docs/devel
 
 READ-PLAN-01-R1方案文档已接收，原来源/onlineOnly问题关闭，公开字段省略与局部null已澄清；方案仍PROPOSED。W06的19项作者浏览器记录及6张截图已核验，但同ID保持选中再激活、关闭按钮、迟到失败/卸载等指定覆盖未齐，报告未接收。见[最新复审](docs/development/reviews/FOLLOWUP-04-REVIEW.md)及[W06-R1补验](docs/development/PARALLEL-FOLLOWUP-05.md)。DeepSeek/Codex完成停止，Gemini原目录补验；尚无新实现/负责人批准或G2冻结。
 
+W06-R1现已接收，W06-R01/R02关闭：作者同ID/关闭键盘与迟到结果证据经核对，总控独立补齐真实同key旧拒绝/两次卸载3项浏览器验证；原25项作者断言及其C24前提分别记录。见[浏览器复审](docs/development/reviews/W06-R1-REVIEW.md)。三位当前任务均完成停止，下一步见[负责人选择包](docs/contracts/decisions/node-read-01/OWNER-CHOICES.md)：首版范围与凭据设计方向待选，尚未派发新设计/实现；G2及D01–D07/P1-C10仍OPEN。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

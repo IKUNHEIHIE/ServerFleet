@@ -1,10 +1,10 @@
 # 任务登记板
 
-更新：2026-10-29。READ-PLAN-01-R1方案文档接收，原RP01-R01/R02关闭；总控仅补公开可省略string与局部null的事实澄清，仍PROPOSED。W06的99cd663证据已核验，原19项浏览器PASS保留，但W06-R01/R02两个P2覆盖缺口待补，报告未合入。DeepSeek/Codex完成停止，Gemini原目录追加W06-R1；详见FOLLOWUP-04-REVIEW和PARALLEL-FOLLOWUP-05。真实身份/HTTP/App来源未接入，G2/D01–D07/P1-C10仍OPEN，不自动启动/代发消息。
+更新：2026-10-29。W06-R1精确2c1c8bc接收，W06-R01/R02关闭：作者R1证据与总控3项独立浏览器补验共同完成，C24实际跨key前提已澄清。READ-PLAN-01-R1/READ-SEC-01已接收，三位作者当前任务均完成停止。具体下一步见node-read-01/OWNER-CHOICES.md，状态PENDING_OWNER_CHOICE；未派发新设计/实现。真实身份/HTTP/App来源未接入，G2/D01–D07/P1-C10仍OPEN，不自动启动/代发消息。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
-| W06R1-REVIEW | 精确复审及必要独立浏览器补验中 | codex-review-01 | integration/w06r1-review / `.worktrees/integration--w06r1-review` | 只读核对2c1c8bc/证据、忽略reports独立补验、接收通过文档及事实澄清、审查/任务状态/README/P1-C10、具体负责人选择包；不改运行时代码/候选或启动新开发 | 项目负责人验收；起始157549e；复审/验证/交接后停止 |
+| W06R1-REVIEW | 精确审查/3项独立浏览器补验/组合及安全检查通过，交接后停止 | codex-review-01 | integration/w06r1-review / `.worktrees/integration--w06r1-review` | 原报告/证据审查、必要补验与澄清、状态/README/P1-C10和具体负责人选择包；不改运行时代码/候选或启动新开发 | 项目负责人验收；起始157549e |
 | FOLLOWUP04-REVIEW | 审查/组合/安全检查通过：接收返修方案文档，W06补验；交接后停止 | codex-review-01 | integration/followup04-review / `.worktrees/integration--followup04-review` | 原精确审查/集成/必要文档事实澄清、证据/任务状态和限定补验任务范围；不改运行时代码/候选，不批准新实现 | 项目负责人验收；起始69d6d43 |
 | READSEC01-REVIEW | 独立审查/组合/安全检查通过，交接后停止 | codex-review-01 | integration/readsec01-review / `.worktrees/integration--readsec01-review` | 精确审查安全证据/引用原文、合入通过文档、证据/任务板/README及收口状态；不干预READ-PLAN-01-R1/W06，不启动新实现 | 项目负责人验收；起始ddf8c5b |
 | FOLLOWUP03-REVIEW | 审查/组合/安全检查通过：接收W05/R2，READ-PLAN-01退回，交接后停止 | codex-review-01 | integration/followup03-review / `.worktrees/integration--followup03-review` | 精确审查/引用与UI复验、合入通过项、证据/任务板/README/P1-C10补记及两位后续安排；不干预READ-SEC-01 | 项目负责人验收；起始7ef7877 |
@@ -41,8 +41,8 @@
 | N03-A | 审查通过，接收离线预检先行读取用例；完成停止 | codex-01 | feature/nodes-read-usecase-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--nodes-read-usecase-cx01` | 原internal/nodes新增文件范围；现有文件/端口/真实接线未改 | 总控授权/节点安全审查；f57fe0d，起始8b2d8aa |
 | READ-PLAN-01 / READ-PLAN-01-R1 | 文档接收，RP01-R01/R02关闭；仍PROPOSED，完成停止 | deepseek-01 | docs/node-read-plan-ds01 / `.worktrees/docs--node-read-plan-ds01` | 原3份文档；总控接收时澄清DTO省略与VM可null；不改代码/候选或批准状态 | 总控产品/契约/安全审查；原d0709fc、返修4da769c，起始98a1f6b |
 | READ-SEC-01 | 审查通过，接收来源/安全证据文档；完成停止，等待收口后新分配 | codex-01 | docs/read-security-evidence-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--read-security-evidence-cx01` | 原3份新增文档范围，代码/候选/批准状态未改；本任务不再扩展 | 总控安全/契约审查；f3cdf73，起始7ef7877 |
-| W06 / W06-R1 | 99cd663报告退回补验；W06-R01/R02两个P2 OPEN，原分支追加R1待人工派发 | gemini-01 | chore/web-node-browser-qa-gm01 / `.worktrees/chore--web-node-browser-qa-gm01` | 只改BROWSER-ACCEPTANCE.md，忽略reports新子目录补原生键盘/迟到失败/卸载证据；不改生产组件/App/依赖 | 总控UI/安全审查；原基线ddf8c5b，返修起点99cd663 |
+| W06 / W06-R1 | 文档/隔离浏览器证据接收，W06-R01/R02关闭；完成停止 | gemini-01 | chore/web-node-browser-qa-gm01 / `.worktrees/chore--web-node-browser-qa-gm01` | 原报告及忽略预览/证据范围；总控只补验/澄清，未改生产组件/App/依赖或作者目录 | 总控UI/安全审查；原99cd663、返修2c1c8bc，原基线ddf8c5b |
 
-原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。Codex的READ-SEC-01、DeepSeek的READ-PLAN-01-R1完成停止；Gemini保持W06原目录，从99cd663追加补验，不要求同步main。总控只在独立集成目录澄清接收方案的公开字段形状，作者目录/提交/既有证据未改。
+原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。Codex的READ-SEC-01、DeepSeek的READ-PLAN-01-R1、Gemini的W06-R1均完成停止。总控仅在自己集成目录独立补验/归档并澄清报告；作者目录/提交/原工件未改，无须同步main。
 
-Gemini继续`PARALLEL-FOLLOWUP-05.md`的W06-R1；方案见`docs/contracts/decisions/node-read-01/`，安全证据见`docs/contracts/decisions/node-read-security-01/`。旧安全/方案文档的历史基线陈述与当前接收状态分别解释，W05已接收、W06仍未整项验收。W06-R1复审后再汇总具体选择包；D01–D07/P1-C10仍OPEN，身份/策略存储/HTTP未接入。GitHub远程/真实PR/线上CI未运行，没有自动启动开发会话。
+本阶段收口见`reviews/W06-R1-REVIEW.md`，具体方向及待选后的三位设计任务草案见`docs/contracts/decisions/node-read-01/OWNER-CHOICES.md`。未回复不构成批准，当前没有新作者任务/新工作目录或实现授权。旧方案/安全证据的历史基线与当前状态分别解释；D01–D07/P1-C10仍OPEN，身份/策略存储/HTTP未接入。GitHub远程/真实PR/线上CI未运行，没有自动启动开发会话。

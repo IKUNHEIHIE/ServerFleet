@@ -1,0 +1,25 @@
+PASS  C1 首次加载显示 loading，无表格 — {"hasLoading":true,"hasTable":false}
+PASS  C2 成功后展示节点与计数 — {"hasTable":true}
+PASS  C3 固定时钟下指标质量（真实 0% 与陈旧可见时间） — {"has0":true,"hasStale":true}
+PASS  C4 真实 Tab：搜索框 → 状态筛选 → 表格行（禁用的清空按钮被跳过） — 1:<INPUT> 2:<SELECT> 3:<TR>
+PASS  C5 Enter 激活行后焦点进入详情区 — <SECTION>
+PASS  C6 Tab/Shift+Tab/Escape：详情内只有关闭按钮，可离开可返回，Escape 回到来源行 — {"tab":{"tag":"BUTTON","heading":"节点详情","text":"关闭详情"},"out":{"tag":"BODY","heading":null,"text":"(body)"},"back":{"tag":"BUTTON","heading":"节点详情","text":"关闭详情"},"esc":{"tag":"TR","heading":"节点列表","text":"aws-tokyo-01node-online-01在线Ubun"}}
+PASS  C7 关闭后 Space 重开（未选中→新选中，非重复激活） — <SECTION>
+PASS  C8 真实鼠标点击行打开详情且不搬动焦点 — {"focus":{"tag":"TR","heading":"节点列表","text":"aws-tokyo-01node-online-01在线Ubun"}}
+PASS  C9 失败显示固定安全提示（无异常原文） — {"hasAlert":true}
+PASS  C10 鼠标点击重新加载立即回到 loading，无节点/计数/详情 — {"hasLoading":true}
+PASS  C11 键盘 Tab+Enter 触发重试同样进入 loading — {"button":{"tag":"BUTTON","heading":"节点列表","text":"重新加载"},"hasLoading":true}
+PASS  C12 A→B 首个提交即为 loading，不含旧节点/计数 — {"firstCommitChars":67,"hasTable":false}
+PASS  C13 B 成功后展示 B 的节点 — {}
+PASS  C14 旧请求迟到成功不覆盖 B，且不抢走搜索框焦点 — {"focusBefore":{"tag":"INPUT","heading":null,"text":""},"focusAfter":{"tag":"INPUT","heading":null,"text":""},"oldAborted":true}
+PASS  C15 A→null→A：无效期隐藏，恢复首个提交即 loading（旧详情不复活） — {"nullAlert":true,"firstCommitChars":67}
+PASS  C16 同 key 无效 load → 恢复有效来源：首个提交即 loading，无旧节点/计数/详情 — {"brokenAlert":true,"firstCommitChars":67}
+PASS  C17 pending 请求在失效时被 abort，迟到成功不覆盖恢复后的 loading — {"aborted":true}
+PASS  C18 详情打开时切换来源：旧详情隐藏，焦点不残留旧详情、不被后台更新抢走 — {"before":{"tag":"SECTION","heading":"节点详情","text":"节点详情gcp-singapore-01node-online-"},"after":{"tag":"BODY","heading":null,"text":"(body)"},"later":{"tag":"BODY","heading":null,"text":"(body)"}}
+PASS  C19 窄屏 420px：页面不横向滚动，表格在卡片内滚动 — {"innerWidth":420,"htmlScroll":420,"bodyScroll":420,"boxClient":386,"boxScroll":801}
+PASS  C20 R01 详情保持打开、同 ID 保持选中时，Shift+Tab 回行后 Enter 重复激活立即聚焦详情 — {"opened":{"tag":"SECTION","heading":"节点详情","text":"节点详情aws-tokyo-01node-online-01关闭"},"rowFocus":{"tag":"TR","heading":"节点列表","text":"aws-tokyo-01node-online-01在线Ubun"},"selectedRowId":"aws-tokyo-01","repeatEnter":{"tag":"SECTION","heading":"节点详情","text":"节点详情aws-tokyo-01node-online-01关闭"},"detailAfter":true}
+PASS  C21 R01 同一保持选中状态下，Shift+Tab 回行后 Space 重复激活同样立即聚焦详情 — {"rowFocus":{"tag":"TR","heading":"节点列表","text":"aws-tokyo-01node-online-01在线Ubun"},"repeatSpace":{"tag":"SECTION","heading":"节点详情","text":"节点详情aws-tokyo-01node-online-01关闭"}}
+PASS  C22 R01 键盘 Enter/Space 激活“关闭详情”：详情消失并把焦点送回来源行（两次独立重开验证） — {"closeButton":{"tag":"BUTTON","heading":"节点详情","text":"关闭详情"},"afterCloseEnter":{"tag":"TR","heading":"节点列表","text":"aws-tokyo-01node-online-01在线Ubun"},"reopened":{"tag":"SECTION","heading":"节点详情","text":"节点详情aws-tokyo-01node-online-01关闭"},"afterCloseSpace":{"tag":"TR","heading":"节点列表","text":"aws-tokyo-01node-online-01在线Ubun"}}
+PASS  C23 R02 来源切换后旧请求迟到失败：不产生错误态、不覆盖新结果、不抢焦点 — {"hasAlert":false,"focus":{"tag":"INPUT","heading":null,"text":""},"oldAborted":true}
+PASS  C24 R02 同 key 失效恢复后旧请求迟到失败：仍保持 loading，不变成错误态 — {"hasLoading":true,"hasAlert":false}
+PASS  C25 R02 pending 卸载：请求被 abort，迟到成功/失败均无渲染变化、无未处理拒绝、无抢焦点 — {"aborted":true,"errorsBeforeUnmount":0,"errorsAfterLateSuccess":0,"errorsFinal":0}

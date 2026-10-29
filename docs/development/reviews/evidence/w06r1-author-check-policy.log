@@ -1,0 +1,72 @@
+
+> serverfleet@0.0.0 check:policy
+> node scripts/check.mjs policy
+
+> source-integrity: scripts/verify-source.mjs
+PASS: 69 original files and 3 byte-exact candidates
+> tooling-tests: --test scripts/contracts.test.mjs scripts/git-policy.test.mjs scripts/worktree.test.mjs scripts/web-boundaries.test.mjs
+TAP version 13
+# Subtest: valid fixture is counted
+ok 1 - valid fixture is counted
+  ---
+  duration_ms: 7.8445
+  type: 'test'
+  ...
+# Subtest: broken refs are rejected
+ok 2 - broken refs are rejected
+  ---
+  duration_ms: 1.1547
+  type: 'test'
+  ...
+# Subtest: path parameters must be required
+ok 3 - path parameters must be required
+  ---
+  duration_ms: 0.8049
+  type: 'test'
+  ...
+# Subtest: duplicate operation IDs are rejected
+ok 4 - duplicate operation IDs are rejected
+  ---
+  duration_ms: 1.2942
+  type: 'test'
+  ...
+# Subtest: duplicate YAML keys are rejected
+ok 5 - duplicate YAML keys are rejected
+  ---
+  duration_ms: 0.9552
+  type: 'test'
+  ...
+# Subtest: task branches and conventional titles
+ok 6 - task branches and conventional titles
+  ---
+  duration_ms: 0.7657
+  type: 'test'
+  ...
+# Subtest: production may use UI but not test data or Go implementation
+ok 7 - production may use UI but not test data or Go implementation
+  ---
+  duration_ms: 1.1165
+  type: 'test'
+  ...
+# Subtest: worktree helper contains task paths
+ok 8 - worktree helper contains task paths
+  ---
+  duration_ms: 0.9005
+  type: 'test'
+  ...
+1..8
+# tests 8
+# suites 0
+# pass 8
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 180.9473
+> web-boundaries: scripts/web-boundaries.mjs
+PASS: Web production import and Agent WebSocket boundaries
+> git-policy: scripts/git-policy.mjs
+PASS: branch chore/web-node-browser-qa-gm01, 1 commit title(s); remote PR not available locally
+> module-boundaries: test ./tests/architecture
+ok  	serverfleet.local/serverfleet/tests/architecture	(cached)
+> actionlint: -shellcheck=

@@ -1,0 +1,22 @@
+import { fileURLToPath } from "node:url";
+import react from "@vitejs/plugin-react";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+
+// 临时预览配置（reports/_review/w06r1，未提交）：不改 apps/web/vite.config.ts 与共享配置。
+// 本文件位于 reports/_review/w06r1/，故仓库根与 apps/web 各需多上溯一级。
+const repo = fileURLToPath(new URL("../../../", import.meta.url));
+
+export default defineConfig({
+  root: repo,
+  base: "./",
+  plugins: [react(), tailwindcss()],
+  resolve: { alias: { "@": fileURLToPath(new URL("../../../apps/web/src", import.meta.url)) } },
+  build: {
+    outDir: fileURLToPath(new URL("./dist", import.meta.url)),
+    emptyOutDir: true,
+    rollupOptions: {
+      input: fileURLToPath(new URL("./preview.html", import.meta.url)),
+    },
+  },
+});
