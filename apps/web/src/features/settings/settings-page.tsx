@@ -9,11 +9,12 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { authApi, credentialsApi } from "@/lib/api/endpoints";
+import { NotificationsSettings } from "./notifications-settings";
 import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
-type Tab = "credentials" | "security";
+type Tab = "credentials" | "security" | "notifications";
 
 const KIND_LABEL: Record<CredentialMetadata["kind"], string> = {
   cloudflare_token: "Cloudflare API Token",
@@ -226,6 +227,7 @@ export function SettingsPage() {
         tabs={[
           { id: "credentials", label: "安全凭据" },
           { id: "security", label: "账号安全与会话" },
+          { id: "notifications", label: "通知渠道" },
         ]}
       />
 
@@ -294,6 +296,8 @@ export function SettingsPage() {
           </Panel>
         </div>
       ) : null}
+
+      {tab === "notifications" ? <NotificationsSettings /> : null}
 
       {tab === "security" ? (
         <div className="space-y-5">

@@ -391,3 +391,209 @@ export interface CreateTransferRequest {
   readonly followSymlinks?: false;
   readonly dryRun?: boolean;
 }
+
+export type MonitorState = "healthy" | "degraded" | "unhealthy" | "pending" | "unknown" | "paused";
+
+export interface AvailabilityMonitor {
+  readonly id?: string;
+  readonly name: string;
+  readonly type: "http" | "tcp" | "tls";
+  readonly target: string;
+  readonly sourceNodeId?: string;
+  readonly linkedResource?: { readonly kind: string; readonly id: string };
+  readonly intervalSeconds: number;
+  readonly timeoutSeconds: number;
+  readonly failureCount?: number;
+  readonly recoveryCount?: number;
+  readonly state?: MonitorState;
+  readonly lastCheckedAt?: string;
+  readonly notifyChannels?: readonly ("qqbot" | "smtp")[];
+}
+
+export interface SMTPConfig {
+  readonly host?: string;
+  readonly port?: number;
+  readonly security?: "tls" | "starttls" | "none";
+  readonly sender?: string;
+  readonly recipient?: string;
+  readonly password?: never;
+}
+
+export interface QQBotConfig {
+  readonly appId?: string;
+  readonly targetType?: "private" | "group";
+  readonly targetId?: string;
+  readonly appSecret?: never;
+}
+
+export interface NotificationChannel {
+  readonly channel: "smtp" | "qqbot";
+  readonly enabled: boolean;
+  readonly credentialStatus: "not_configured" | "configured" | "invalid";
+  readonly smtp?: SMTPConfig;
+  readonly qqbot?: QQBotConfig;
+}
+
+export interface NotificationDelivery {
+  readonly id: string;
+  readonly channel: "smtp" | "qqbot";
+  readonly status: "queued" | "submitted" | "provider_accepted" | "rejected" | "rate_limited" | "failed" | "delivery_unknown";
+  readonly providerCode?: string;
+  readonly message?: string;
+  readonly createdAt?: string;
+}
+
+export interface NotificationSettings {
+  readonly smtpFallbackOnQQFailure: boolean;
+  readonly maxRetryAttempts: number;
+  readonly deduplicationWindowSeconds?: number;
+}
+
+export interface DNSProvider {
+  readonly code: "cloudflare";
+  readonly displayName: string;
+  readonly supported: boolean;
+  readonly capabilities: {
+    readonly supportsProxy?: boolean;
+    readonly supportsZoneSync?: boolean;
+    readonly supportedRecordTypes?: readonly string[];
+  };
+}
+
+export interface DNSAccount {
+  readonly id: string;
+  readonly providerCode: "cloudflare";
+  readonly displayName: string;
+  readonly note?: string;
+  readonly enabled: boolean;
+  readonly isDefault: boolean;
+  readonly credentialStatus: "not_configured" | "pending_verification" | "valid" | "invalid" | "missing_permissions";
+  readonly zoneCount?: number;
+}
+
+export interface DNSZone {
+  readonly id: string;
+  readonly accountId: string;
+  readonly name: string;
+  readonly status?: string;
+}
+
+export interface DNSRecordInput {
+  readonly type: "A" | "AAAA" | "CNAME" | "TXT" | "MX";
+  readonly name: string;
+  readonly content: string;
+  readonly ttl?: number;
+  readonly proxied?: boolean;
+  readonly priority?: number;
+}
+
+export interface DNSRecord extends DNSRecordInput {
+  readonly id: string;
+  readonly zoneId: string;
+  readonly modifiedAt?: string;
+}
+
+export interface DNSConnectionTest {
+  readonly status: "success" | "failed" | "partial";
+  readonly zoneRead: boolean;
+  readonly recordWrite: boolean;
+  readonly message?: string;
+  readonly checkedAt?: string;
+}
+
+export interface GatewayNode {
+  readonly id: string;
+  readonly nodeId: string;
+  readonly name: string;
+  readonly region?: string;
+  readonly countryCode?: string;
+  readonly online: boolean;
+  readonly status: "pending" | "installing" | "verifying" | "ready" | "failed" | "maintenance";
+  readonly nginxInstalled: boolean;
+  readonly checksPassed: boolean;
+  readonly enabled: boolean;
+  readonly schedulingEligible: boolean;
+  readonly lastError?: string;
+  readonly nginxVersion?: string;
+}
+
+export interface GatewayProvisionJob {
+  readonly id: string;
+  readonly nodeId: string;
+  readonly gatewayId?: string;
+  readonly status: "queued" | "installing" | "verifying" | "succeeded" | "failed" | "cancelled";
+  readonly phase?: string;
+  readonly createdAt: string;
+  readonly error?: { readonly code: string; readonly message: string; readonly requestId?: string };
+  readonly checks?: GatewayHealthChecks;
+}
+
+export interface GatewayHealthChecks {
+  readonly nginxInstalled: boolean;
+  readonly serviceRunning: boolean;
+  readonly configValid: boolean;
+  readonly healthProbePassed: boolean;
+  readonly checkedAt?: string;
+  readonly message?: string;
+}
+
+export interface GatewayRouteInput {
+  readonly domain: string;
+  readonly upstream?: string;
+  readonly serviceGroupId?: string;
+  readonly https: boolean;
+  readonly enabled: boolean;
+}
+
+export interface GatewayRoute extends GatewayRouteInput {
+  readonly id: string;
+}
+
+export interface CertificateNodeResult {
+  readonly nodeId: string;
+  readonly state: "queued" | "keygen" | "csr_pending" | "signed" | "distributing" | "verified" | "failed" | "waiting_offline" | "revoked";
+  readonly certificateSerial?: string;
+  readonly identity?: string;
+  readonly expiresAt?: string;
+  readonly errorCode?: string;
+  readonly retryable?: boolean;
+}
+
+export interface InternalCertificateJob {
+  readonly jobId: string;
+  readonly serviceGroupId: string;
+  readonly memberNodeIdsSnapshot: readonly string[];
+  readonly credentialType: "trust_bundle" | "per_node_identity";
+  readonly state: "queued" | "running" | "completed" | "partial" | "failed" | "revoking" | "revoked";
+  readonly results: readonly CertificateNodeResult[];
+  readonly createdAt?: string;
+  readonly requestedBy?: string;
+}
+
+export interface PublicationDraft {
+  readonly name?: string;
+  readonly serviceGroupId: string;
+  readonly gatewayIds: readonly string[];
+  readonly dnsAccountId?: string;
+  readonly zoneId?: string;
+  readonly domain: string;
+  readonly https: boolean;
+  readonly certificateId?: string;
+  readonly createMonitor?: boolean;
+}
+
+export interface PublicationPreview {
+  readonly eligible?: boolean;
+  readonly targetNodeIdsSnapshot?: readonly string[];
+  readonly configDiff?: readonly string[];
+  readonly checks?: readonly { readonly name: string; readonly passed: boolean; readonly reason?: string }[];
+  readonly warnings?: readonly string[];
+}
+
+export interface AsyncOperation {
+  readonly id: string;
+  readonly status: "queued" | "prechecking" | "running" | "partially_completed" | "succeeded" | "failed" | "paused" | "manual_intervention";
+  readonly createdAt: string;
+  readonly stages?: readonly { readonly name: string; readonly status: string; readonly message?: string }[];
+  readonly auditId?: string;
+}

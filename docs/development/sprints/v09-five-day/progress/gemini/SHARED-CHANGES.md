@@ -49,3 +49,12 @@
 - CX 检查点 2fc8dab 提议 `bootstrap` 从 `LoginResult` 改为 204、Cookie 名改 `__Host-sf_session`、`me` 增加 CSRF 重载；前端当前仍按已接收候选的 `LoginResult` 实现，刷新后写入锁定。等总控接收后再改，避免把未接收提案当冻结接口。
 - 前端已按 401/403/503 语义实现：401 终止会话、403 只清当前资源、503 保留会话；节点列表使用 Cookie credentials，等待列表 security 接收后即可真实生效。
 - DS 的 SQLite/storage 接缝不出现在 Web 层；Web 不直连 DB/Agent。
+
+## 8. GM-06 契约缺口（监控/证书/发布/网关）
+
+- 服务监控检查历史：`GET /api/v1/availability-monitors/{id}/checks` 当前只返回 `{ok}`，没有检查时间、探测源状态或事件字段；UI 不展示伪造历史，建议补最小 `checks[]`（时间、结果、错误分类、探测源失联标记）。
+- 资源监控：没有节点历史指标/告警规则端点；UI 只显示当前读数与 `/traffic-risks`，建议 DS-06 确认是否本期提供。
+- 公网证书：只有 `certificates/internal/distributions`；没有 ACME/公网证书列表、申请、续期、吊销端点。UI 明确 BLOCKED，不伪造签发。
+- 发布 DTO：`PublicationDraft08` 没有独立业务端口/网关端口映射字段，也没有逐网关配置差异；服务组端口只读展示。若产品要求“向导选择端口”，需扩展契约。
+- 网关路由：`GatewayRoute` 没有 `gatewayId` 字段，无法从响应判断路由归属哪台网关；UI 仅展示服务端返回列表，不自行关联。建议补归属/检查字段。
+- 通知测试：返回 delivery 状态；UI 只显示平台语义，不声称已读。SMTP/QQ 秘密只写。

@@ -9,7 +9,8 @@
 | GM-01 | 4155b9c | 应用壳、路由/导航、API 客户端、SSE、会话/权限上下文、登录/初始化/概览 | `/overview` ← `/healthz`、`/api/v1/nodes`、`/api/v1/tasks`、`/api/v1/audit/events`；登录 ← `POST /api/v1/auth/login`；刷新恢复 ← `GET /api/v1/auth/me` | `npm test --workspace @serverfleet/web` 207 PASS；`npm run build --workspace @serverfleet/web` PASS；`node scripts/web-boundaries.mjs` PASS | 后端管理 API 仍未实现：真实 Controller 仅 `/healthz`，登录/概览在真实环境会显示不可用 |
 | GM-02/03 | f49e637 | 会话失效/恢复语义、W07 legacy 列表、真实节点列表 | `/nodes` ← `GET /api/v1/nodes?onlineOnly=`；富化视图 ← `GET /api/v1/nodes/{nodeId}`（候选详情，需显式切换） | 235 PASS；build PASS；boundaries PASS | 详情契约 D02–D04 未冻结；真实管理 API 未提供，浏览器验证待 GM-09 |
 | GM-04 | ffb2a14 | 节点接入/详情、分组双视图与成员抽屉、服务组、用户/角色/授权/会话、审计、安全凭据 | `/nodes/new` ← enrollment tokens/enrollments；`/nodes/{id}` ← detail/identity/capabilities/diagnostics/traffic-quota/suspend/revoke；`/groups` ← groups/classifications/node-results/members；`/service-groups[/:id]` ← CRUD/members/scheduling/preview；`/users` ← users/roles/permissions/grants/sessions；`/audit`；`/settings` ← credentials/sessions | 253 PASS；build PASS；boundaries PASS | 无安装命令/接入历史/密码重置/角色 CRUD 端点；真实 API 未部署，浏览器验收待 GM-09 |
-| GM-05 | 本轮后续提交（见 `git log`） | 任务中心/创建预演/审批/取消/恢复/SSE、双栏文件浏览/文件夹/重命名/删除/大小/上传元数据/跨节点传输 | `/tasks` `/tasks/:id` ← tasks/preview/approve/cancel/resume/executions/events；`/files` ← nodes/files/directories/rename/size/uploads/transfers | 259 PASS；build PASS；boundaries PASS | 无下载端点与上传字节通道；`/tasks` 路径在候选契约中重复；分批/金丝雀参数缺失；真实字节验收 BLOCKED |
+| GM-05 | 372ff55 | 任务中心/创建预演/审批/取消/恢复/SSE、双栏文件浏览/文件夹/重命名/删除/大小/上传元数据/跨节点传输 | `/tasks` `/tasks/:id` ← tasks/preview/approve/cancel/resume/executions/events；`/files` ← nodes/files/directories/rename/size/uploads/transfers | 259 PASS；build PASS；boundaries PASS | 无下载端点与上传字节通道；`/tasks` 路径在候选契约中重复；分批/金丝雀参数缺失；真实字节验收 BLOCKED |
+| GM-06 | 本轮后续提交（见 `git log`） | 监控/通知、配额编辑、DNS、证书、网关、发布向导 | `/monitoring` ← availability-monitors/traffic-risks/notifications；`/settings` 通知渠道；`/dns` ← providers/accounts/zones/records；`/certificates` ← internal distributions；`/gateways[/:id]` ← gateways/routes/checks/dispatch/provision；`/publishing` ← preview/publications；节点配额 ← traffic-quota PUT | 266 PASS；build PASS；boundaries PASS | 检查历史只返回 ok；无资源历史/公网证书端点；发布无端口/逐网关差异；网关路由无 gatewayId；真实供应商/节点验收 UNTESTED |
 
 ## GM-02/03 交付细节
 
@@ -47,4 +48,4 @@
 
 ## 下一步
 
-GM-05：统一任务中心/审批/SSE 进度、文件互传双栏/上传/下载/传输任务。随后 GM-06—08 页面与 GM-09 浏览器证据。
+GM-07：AI 会话/资源授权/三级审批/流式消息、工作流（契约缺口）、插件中心与 Xray 声明式 UI。随后 GM-08 更新/备份恢复、GM-09 浏览器证据。

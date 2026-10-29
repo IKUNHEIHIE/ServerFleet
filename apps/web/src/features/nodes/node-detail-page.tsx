@@ -5,12 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, TextArea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { DefinitionList, CodeBlock } from "@/components/ui/table";
+import { CodeBlock, DefinitionList } from "@/components/ui/table";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi } from "@/lib/api/endpoints";
 import type { NodeCapabilities, NodeDetail, NodeDiagnostic, NodeIdentity, TrafficQuota } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
+import { NodeQuotaEditor } from "./node-quota-editor";
 
 type ActionKind = "suspend" | "revoke";
 
@@ -152,8 +153,10 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
   const [reason, setReason] = useState("");
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
+  const [quotaOpen, setQuotaOpen] = useState(false);
 
   const canManage = session.can("node.manage") || session.can("node.suspend") || session.can("node.revoke");
+  const canManageQuota = session.can("quota.manage") || session.can("node.manage");
   const locked = !canManage || session.writesLocked;
   const detail = useResource(`node:detail:${session.viewEpoch}:${nodeId}`, signal =>
     nodesApi.detail(nodeId, signal).then(result => result.data),
@@ -279,12 +282,39 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
             {data => <DiagnosticBody diagnostic={data} />}
           </AsyncPanel>
         </Panel>
-        <Panel title="流量与配额" description="GET /api/v1/nodes/{nodeId}/traffic-quota；估算值与账单分开。">
+        <Panel
+          title="流量与配额"
+          description="GET /api/v1/nodes/{nodeId}/traffic-quota；估算值与账单分开。"
+          actions={
+            <Button
+              type="button"
+              size="sm"
+              disabled={!canManageQuota || session.writesLocked || quota.state.status !== "ready"}
+              onClick={() => setQuotaOpen(true)}
+            >
+              编辑配额
+            </Button>
+          }
+        >
           <AsyncPanel state={quota.state} onRetry={quota.reload} errorTitle="流量配额加载失败">
             {data => <QuotaBody quota={data} />}
           </AsyncPanel>
         </Panel>
       </div>
+
+      <NodeQuotaEditor
+        nodeId={nodeId}
+        quota={quota.state.status === "ready" ? quota.state.data : null}
+        open={quotaOpen}
+        canManage={canManageQuota}
+        writesLocked={session.writesLocked}
+        onClose={() => setQuotaOpen(false)}
+        onSaved={() => {
+          setQuotaOpen(false);
+          setOutcome("流量配额已保存（服务端结果）。");
+          quota.reload();
+        }}
+      />
 
       <Modal
         open={actionKind !== null}
