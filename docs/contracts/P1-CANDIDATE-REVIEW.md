@@ -42,6 +42,8 @@
 | P1-C09 | WASM Host ABI、签名、配额、Xray/Nginx/灾备 PoC 未完成 | 不锁定运行时，不实现插件业务；按 G2 E01～E08/G1 PoC 门槛推进 |
 | P1-C10 | 节点只读适配的资料范围不一致：Core候选只有单节点详情，但Merged候选已有GET /api/v1/nodes（listNodesForTransfer、NodeSummary，含online布尔及可空CPU/内存），不同于NodeDetail的status/revision模型；旧指标没有采样时间 | OPEN：G2-R02A/r03已完成来源/字段/错误矩阵并接收为评审工件；总控完成D08检查接线及两处Web范围注释修正。D01–D07的字段/认证/错误/采样/空库存预检与列表原子视图仍待批准和真实验证。不替换原GET、不凭空补状态/版本/时间；旧候选/r02/原始资料不变，运行时profile和G2冻结均未批准。详见G2-R02A-REVIEW |
 
+P1-C10补记（FOLLOWUP03复审）：AUTH-01B/N03-A离线预检/共同范围读取和W05隔离加载容器已接收，不代表真实身份/HTTP/库存事务或浏览器接线完成。READ-PLAN-01草案d0709fc把已有Status/ObservedAt与缺失字段混淆，并遗漏原列表onlineOnly请求兼容，已登记RP01-R01/R02并退回，未进入main批准包；来源事实、可选元数据与r03提案的批准级别须分别核对。先列表后详情、Cookie等仍只是待批建议，D01–D07/P1-C10保持OPEN，详见docs/development/reviews/FOLLOWUP-03-REVIEW.md。
+
 YAML 输入有大量正常锚点重用，默认库别名上限曾触发拒绝；工程只把上限设为有限 10000，并限制单文件 2 MiB、检测重复 key/避免重复遍历，未关闭保护或改写候选。Redocly `spec` 与补充规则对三份文件均通过；另有损坏 ref、重复 ID、路径参数和重复 YAML key 负向样例。
 
 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。本次只具备 Mock、适配层和隔离测试的基础条件。

@@ -1,0 +1,50 @@
+import { execFileSync } from "node:child_process";
+import { writeFileSync } from "node:fs";
+
+const baseline = "98a1f6b2971d87adbb88c74bbc8ec1484c0e9de2";
+const head = "d0709fc1fe0a5518000bdb7b81f8c1f8f82334e1";
+const read = (ref, path) => execFileSync("git", ["show", `${ref}:${path}`], { encoding: "utf8" });
+const files = ["PROPOSAL.md", "ACCEPTANCE.md", "HANDOFF.md"];
+const documents = Object.fromEntries(files.map(name => [name, read(head, `docs/contracts/decisions/node-read-01/${name}`)]));
+const citationProblems = [];
+let references = 0;
+const referencedFiles = new Set();
+for (const [document, body] of Object.entries(documents)) {
+  for (const match of body.matchAll(/`([^`\r\n]+?\.(?:md|go|ts|tsx|yaml)):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)`/g)) {
+    references++;
+    const [, path, ranges] = match;
+    referencedFiles.add(path);
+    try {
+      const length = read(baseline, path).split("\n").length;
+      for (const range of ranges.split(",")) {
+        const [start, end = start] = range.split("-").map(Number);
+        if (start < 1 || start > end || end > length) citationProblems.push({ document, path, range, length });
+      }
+    } catch {
+      citationProblems.push({ document, path, error: "missing in cited baseline" });
+    }
+  }
+}
+const node = read(baseline, "internal/nodes/node.go");
+const candidate = read(baseline, "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml");
+const original = read(baseline, "api/openapi/g2-merged-candidate.yaml");
+const allPlanText = Object.values(documents).join("\n");
+const summary = {
+  task: "READ-PLAN-01 independent document review",
+  head,
+  citedBaseline: baseline,
+  references,
+  referencedFiles: referencedFiles.size,
+  citationProblems,
+  facts: {
+    nodeAlreadyHasStatus: /Status\s+Status/.test(node),
+    nodeMetricsAlreadyHasObservedAt: /ObservedAt\s+time\.Time/.test(node),
+    planSaysListedFieldsAbsent: documents["PROPOSAL.md"].includes("这些是当前内部 `Node` 没有的字段"),
+    originalListHasOnlineOnly: original.includes("name: onlineOnly"),
+    r03ListPreservesOnlineOnly: candidate.includes("name: onlineOnly"),
+    anyPlanDocumentMentionsOnlineOnly: allPlanText.includes("onlineOnly"),
+  },
+  status: "CHANGES_REQUESTED: content findings; path/range validity alone is not factual correctness",
+};
+writeFileSync("reports/followup03-plan-review.json", `${JSON.stringify(summary, null, 2)}\n`);
+process.stdout.write(`${JSON.stringify(summary, null, 2)}\n`);

@@ -24,6 +24,8 @@ TASK-01C顺序批次进度已接收，实际交付为e169afa；W05-R1关闭标�
 
 N03-A预检先行的离线库存读取已接收，见 [读取用例复审](docs/development/reviews/N03-A-REVIEW.md)。它保证新入口先预检、只用同次范围过滤、错误无部分列表及输出复制隔离，仍未接真实身份/HTTP或存储原子性。Codex下一项为 [READ-SEC-01安全来源/证据任务](docs/development/CODEX-READ-SEC01-WORK-PACKAGE.md)，配合DeepSeek方案；Gemini仍修W05-R2，G2/D07未关闭。
 
+W05-R2复审接收原加载容器及两次返修，两个隔离问题均关闭；READ-PLAN-01因来源事实混淆和遗漏onlineOnly旧参数退回，尚未形成批准包。见 [最新复审](docs/development/reviews/FOLLOWUP-03-REVIEW.md)与[后续任务](docs/development/PARALLEL-FOLLOWUP-04.md)：DeepSeek修正方案，Gemini做隔离真实浏览器验收，Codex继续安全证据核验。当前仍无真实API/App来源接线，G2/D01–D07/P1-C10未批准。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

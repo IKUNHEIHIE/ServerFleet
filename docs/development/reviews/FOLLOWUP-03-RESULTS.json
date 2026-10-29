@@ -1,0 +1,35 @@
+{
+  "task":"FOLLOWUP03-REVIEW",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"7ef78771da410a06d62a8605058e67a2f066ceb5",
+  "testedCodeHead":"b44352fba27a462442a97d7f7748f526bd22e2e6",
+  "decisions":[
+    {"task":"READ-PLAN-01","session":"deepseek-01","head":"d0709fc1fe0a5518000bdb7b81f8c1f8f82334e1","decision":"CHANGES_REQUESTED","merged":false,"findings":["RP01-R01","RP01-R02"],"nextTask":"READ-PLAN-01-R1"},
+    {"task":"W05-R2","session":"gemini-01","head":"fcb9382315b71e80d1340c4d15419bfcb194cd43","includedHistory":["0ebe81224e63065d40a608e9eccb15123d9c8d60","54df33ec4f0bc34e0bce5734d0a769bb0b543baa"],"decision":"ACCEPT","closed":["W05-R01","W05-R02"],"nextTask":"W06"}
+  ],
+  "findings":[
+    {"id":"RP01-R01","priority":"P2","status":"OPEN","file":"docs/contracts/decisions/node-read-01/PROPOSAL.md","line":12,"behavior":"conflates missing fields with existing Status/Metrics.ObservedAt and unapproved authority/shape; optional public metadata must not become mandatory non-null prerequisites"},
+    {"id":"RP01-R02","priority":"P2","status":"OPEN","file":"docs/contracts/decisions/node-read-01/PROPOSAL.md","startLine":45,"endLine":51,"behavior":"legacy compatibility plan and acceptance omit existing onlineOnly boolean query and authorization-before-filter semantics"}
+  ],
+  "checks":{
+    "independentLoaderProbe":{"status":"PASS","passed":5,"failed":0,"originalTestSourcesUnchanged":true},
+    "authorWeb":{"status":"PASS","passed":179},
+    "documentCitations":{"references":61,"files":24,"pathAndRangeProblems":0,"semanticDecision":"CHANGES_REQUESTED"},
+    "npmCi":"PASS",
+    "toolsInstall":"PASS",
+    "combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":212,"goSubtestsPassed":805,"goFailures":0,"webPassed":179},
+    "combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},
+    "g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "originalFilesVerified":69,
+    "byteExactOriginalCandidatesVerified":3
+  },
+  "codexTask":{"id":"READ-SEC-01","base":"7ef78771da410a06d62a8605058e67a2f066ceb5","scopeChanged":false,"uncommittedFilesInspected":false},
+  "g2Frozen":false,
+  "productOrRuntimeProposalsApproved":[],
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "notVerified":["real browser keyboard in this review","runtime identity/HTTP/storage/cache","policy-inventory-output atomicity","WSS/mTLS","task approval/execution","Linux race","GitHub CI","1C1G performance"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

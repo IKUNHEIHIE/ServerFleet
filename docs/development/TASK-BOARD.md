@@ -1,10 +1,10 @@
 # 任务登记板
 
-更新：2026-10-29。N03-A独立复审接收，仅为预检先行的离线库存读取用例，未接真实入口或改变旧Visible；Codex后续READ-SEC-01核验安全来源/证据。DeepSeek继续READ-PLAN-01，Gemini继续原分支W05-R2，本轮不检查两位未提交内容。W05仍未合入，W05-R01 OPEN、W05-R02 CLOSED。G2-R02A仅接收候选工件，D01–D07及P1-C10仍OPEN，G2未冻结。总控不自动启动或代发其他会话消息，真实节点/生产操作未授权。
+更新：2026-10-29。W05-R2复审通过，接收原W05及两次返修，W05-R01/R02均CLOSED；只接收隔离加载容器，无真实来源/App接线。READ-PLAN-01因字段/权威来源混淆和遗漏onlineOnly兼容两处P2退回，未合入或提交负责人批准。DeepSeek原分支R1返修，Gemini转W06浏览器验收；Codex继续READ-SEC-01，本轮未检查其未提交内容。G2/D01–D07/P1-C10仍OPEN，不自动启动/代发其他会话消息，真实节点/生产操作未授权。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
-| FOLLOWUP03-REVIEW | 审查中，交接后停止 | codex-review-01 | integration/followup03-review / `.worktrees/integration--followup03-review` | 精确审查READ-PLAN-01/W05-R2、引用/独立UI复验、合入通过项、证据/任务板/README及两位后续安排；不干预READ-SEC-01 | 项目负责人验收；起始7ef7877 |
+| FOLLOWUP03-REVIEW | 审查/组合/安全检查通过：接收W05/R2，READ-PLAN-01退回，交接后停止 | codex-review-01 | integration/followup03-review / `.worktrees/integration--followup03-review` | 精确审查/引用与UI复验、合入通过项、证据/任务板/README/P1-C10补记及两位后续安排；不干预READ-SEC-01 | 项目负责人验收；起始7ef7877 |
 | N03A-REVIEW | 独立审查/组合/安全检查通过，交接后停止 | codex-review-01 | integration/n03a-review / `.worktrees/integration--n03a-review` | 精确审查N03-A/隔离探针、合入通过项、证据/任务板/README及Codex后续任务/目录；不干预READ-PLAN-01/W05-R2 | 项目负责人验收；起始98a1f6b |
 | FOLLOWUP02-REVIEW | 审查/组合/安全检查完成：接收TASK-01C、W05-R1继续返修，交接后停止 | codex-review-01 | integration/followup02-review / `.worktrees/integration--followup02-review` | 核对TASK-01C实际交付、精确审查W05-R1、隔离探针/合入通过项、证据/任务板/README及两位后续安排；不干预N03-A | 项目负责人验收；起始8b2d8aa |
 | AUTH01B-REVIEW | 独立审查/组合/安全检查通过，交接后停止 | codex-review-01 | integration/auth01b-review / `.worktrees/integration--auth01b-review` | 精确审查AUTH-01B/隔离探针、合入通过项、证据/任务板/README及Codex下一步任务/目录；不干预TASK-01C/W05-R1 | 项目负责人验收；起始a652696 |
@@ -31,14 +31,15 @@
 | TASK-01A | 审查通过，接收纯快照/等待规则；完成停止 | deepseek-01 | feature/task-waiting-rules-ds01 / `.worktrees/feature--task-waiting-rules-ds01` | 原internal/tasks范围；ports.go不变 | 总控；0204d29，起始0fef8ba |
 | BATCH06-PARTIAL-REVIEW | 两项部分验收通过，交接后停止；不代表整个第六批完成 | codex-review-01 | integration/batch06-partial-review / `.worktrees/integration--batch06-partial-review` | 审查TASK-01A/W04-R1、隔离验证/合入通过项、审查证据/任务板/README及两位后续目录；不干预Codex在编任务 | 项目负责人验收；起始0fef8ba |
 | TASK-01B | 审查通过，接收默认分批与当前批纯判定；完成停止 | deepseek-01 | feature/task-batch-rules-ds01 / `.worktrees/feature--task-batch-rules-ds01` | 原internal/tasks范围，ports/快照/等待规则未改 | 总控任务/安全审查；e23a4c5，起始adce532 |
-| W05 / W05-R1 / W05-R2 | 原交付/首轮返修未接收；W05-R02关闭，W05-R01剩余同key无效load恢复待修，R2已分配 | gemini-01 | feature/web-node-loader-gm01 / `.worktrees/feature--web-node-loader-gm01` | 原features/nodes加载容器最小修复/测试/说明；不接App/真实API | 总控UI/数据隔离审查；原0ebe812、R1 54df33e，追加R2 |
+| W05 / W05-R1 / W05-R2 | 复审通过，接收原实现与两次返修；W05-R01/R02关闭，完成停止 | gemini-01 | feature/web-node-loader-gm01 / `.worktrees/feature--web-node-loader-gm01` | 原features/nodes范围，未接App/真实API | 总控UI/数据隔离审查；原0ebe812、R1 54df33e、最终fcb9382 |
 | G2-R02A-REVIEW | 独立复审/组合检查通过；D08技术协调完成，交接后停止 | codex-review-01 | integration/batch06-contract-review / `.worktrees/integration--batch06-contract-review` | 审查/合入候选、check.mjs接线、两处Web来源注释/固定生成器重算provenance、审查/任务板/README/P1-C10及Codex后续目录 | 项目负责人验收；起始adce532 |
 | AUTH-01B | 审查通过，接收离线预检/不可变范围；完成停止 | codex-01 | feature/auth-read-preflight-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--auth-read-preflight-cx01` | 原internal/auth新增文件范围，现有auth/端口/其他模块未改 | 总控授权/安全审查；14b9eac，起始1f8f8cb |
 | TASK-01C | 审查通过，接收不可变顺序批次进度；完成停止 | deepseek-01 | feature/task-batch-progress-ds01 / `.worktrees/feature--task-batch-progress-ds01` | 原internal/tasks新增文件范围，现有规则/端口未改 | 总控任务/安全审查；实际交付e169afa，起始a652696 |
 | N03-A | 审查通过，接收离线预检先行读取用例；完成停止 | codex-01 | feature/nodes-read-usecase-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--nodes-read-usecase-cx01` | 原internal/nodes新增文件范围；现有文件/端口/真实接线未改 | 总控授权/节点安全审查；f57fe0d，起始8b2d8aa |
-| READ-PLAN-01 | 已分配，待人工派发，尚未启动 | deepseek-01 | docs/node-read-plan-ds01 / `.worktrees/docs--node-read-plan-ds01` | 仅docs/contracts/decisions/node-read-01/新增方案/验收/交接3份文档；不改既有代码/候选或批准状态 | 总控产品/契约/安全审查；本次FOLLOWUP02交接后的main |
-| READ-SEC-01 | 已分配，待人工派发，尚未启动 | codex-01 | docs/read-security-evidence-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--read-security-evidence-cx01` | 仅docs/contracts/decisions/node-read-security-01/新增来源/安全验收/交接3份文档；不改既有文件/代码或批准状态 | 总控安全/契约审查；本次N03A复审交接后的main |
+| READ-PLAN-01 / READ-PLAN-01-R1 | 退回，RP01-R01/R02两个P2待修；原分支追加R1，待人工派发 | deepseek-01 | docs/node-read-plan-ds01 / `.worktrees/docs--node-read-plan-ds01` | 原三份方案文档事实/旧参数/验收/决策表述修正；不改代码/候选或批准状态 | 总控产品/契约/安全审查；原d0709fc，起始98a1f6b |
+| READ-SEC-01 | 已分配，本轮未收到交付，保持原任务 | codex-01 | docs/read-security-evidence-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\docs--read-security-evidence-cx01` | 仅docs/contracts/decisions/node-read-security-01/新增来源/安全验收/交接3份文档；不改既有文件/代码或批准状态 | 总控安全/契约审查；7ef7877 |
+| W06 | 已分配，待人工派发，尚未启动 | gemini-01 | chore/web-node-browser-qa-gm01 / `.worktrees/chore--web-node-browser-qa-gm01` | 仅新增features/nodes/BROWSER-ACCEPTANCE.md，忽略reports临时预览/脚本/截图/trace；不改生产组件/App/依赖 | 总控UI/安全审查；本次FOLLOWUP03交接后的main |
 
-原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。N03-A旧目录停止，Codex转新READ-SEC-01目录；DeepSeek保持READ-PLAN-01原98a1f6b基线/目录，Gemini原W05目录追加R2，不要求同步main。本轮未改作者生产源码；总控探针只写独立忽略目录。
+原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。W05旧目录停止，Gemini转新W06目录；DeepSeek原READ-PLAN-01目录追加R1，Codex保持READ-SEC-01原7ef7877基线/目录，不要求同步main。本轮未改作者生产源码；总控复验只写忽略reports。
 
-Codex读`CODEX-READ-SEC01-WORK-PACKAGE.md`及`reviews/N03-A-REVIEW.md`；DeepSeek/Gemini保持原`PARALLEL-FOLLOWUP-03.md`范围。N03-A已接收的事实可从主目录复审记录核对，不要求两位同步分支。方案/安全证据任务不能自行批准D01–D07或启用真实入口；W05-R01仍OPEN，身份/策略存储/HTTP仍未接入。GitHub远程/真实PR/线上CI未配置或运行，没有自动启动开发会话。
+DeepSeek/Gemini读`PARALLEL-FOLLOWUP-04.md`及`reviews/FOLLOWUP-03-REVIEW.md`；Codex保持原READ-SEC-01范围。N03-A/W05接收事实可从主目录复审记录核对，不代表真实接线/浏览器已验收。方案/安全证据未形成批准包，D01–D07及P1-C10仍OPEN，身份/策略存储/HTTP仍未接入。GitHub远程/真实PR/线上CI未运行，没有自动启动开发会话。

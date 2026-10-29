@@ -1,0 +1,17 @@
+{
+  "task": "READ-PLAN-01 independent document review",
+  "head": "d0709fc1fe0a5518000bdb7b81f8c1f8f82334e1",
+  "citedBaseline": "98a1f6b2971d87adbb88c74bbc8ec1484c0e9de2",
+  "references": 61,
+  "referencedFiles": 24,
+  "citationProblems": [],
+  "facts": {
+    "nodeAlreadyHasStatus": true,
+    "nodeMetricsAlreadyHasObservedAt": true,
+    "planSaysListedFieldsAbsent": true,
+    "originalListHasOnlineOnly": true,
+    "r03ListPreservesOnlineOnly": true,
+    "anyPlanDocumentMentionsOnlineOnly": false
+  },
+  "status": "CHANGES_REQUESTED: content findings; path/range validity alone is not factual correctness"
+}
