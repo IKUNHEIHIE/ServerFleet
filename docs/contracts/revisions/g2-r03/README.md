@@ -2,6 +2,8 @@
 
 日期：2026-10-29；会话 `codex-01`；审查人 `codex-review-01`。**PROPOSED / G2 未冻结**。
 
+> 集成复审更新：总控已接收8165057评审工件，将r03接入根check:contracts，并按作者提交的具体差异修正两处Web来源注释。原固定生成器只更新provenance的webAdapter哈希，候选YAML/MATRIX字节未变；作者原provenance单独归档。D08技术协调完成，D01–D07和P1-C10仍OPEN，不批准运行时profile或冻结。下文保留作者交付时的工作目录/独立运行记录；最新结果见[总控复审](../../../development/reviews/G2-R02A-REVIEW.md)。
+
 实际工作目录：`D:\admin\desktop\codex\myproject\ks.worktrees\contract--nodes-read-cx01`。
 实际分支：`contract/nodes-read-cx01`；开始时 HEAD：`0fef8ba9d42bc50d442721b4ab382af961604e72`，工作区干净。
 依据本目录根 AGENTS、README、架构索引、模块归属/依赖规则、TASK-BOARD、第五批审查以及主工作目录第六批任务单。仅在三个授权 r03 目录新增文件。

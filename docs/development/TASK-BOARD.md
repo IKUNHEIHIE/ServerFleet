@@ -1,6 +1,6 @@
 # 任务登记板
 
-更新：2026-10-29。第六批TASK-01A/W04-R1部分验收通过，W04-R01关闭，组合与安全检查通过。负责人确认Codex的G2-R02A仍在工作，本轮未审查、不改原任务或目录。DeepSeek/Gemini后续TASK-01B/W05已分配，待人工派发。G2未冻结，真实节点/生产操作未授权；总控不自动启动或代发其他会话消息。
+更新：2026-10-29。G2-R02A独立复审通过，仅接收候选/矩阵/检查工件；总控完成r03检查接线和来源注释修正，D01–D07及P1-C10仍OPEN，G2未冻结。第六批原三项交付均完成审查。Codex后续AUTH-01B已分配，待人工派发；DeepSeek TASK-01B和Gemini W05保持原任务/目录/基线，本轮不检查其未提交内容。总控不自动启动或代发其他会话消息，真实节点/生产操作未授权。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
@@ -22,12 +22,14 @@
 | T01-C | 审查通过，接收离线单连接对账/序列候选；完成停止 | codex-01 | feature/connection-guard-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--connection-guard-cx01` | 原任务范围 | 总控；b118aa6，起始189112e |
 | W04 / W04-R1 | 复审通过，W04-R01关闭，接收原W04与返修；完成停止 | gemini-01 | feature/web-node-accessibility-gm01 / `.worktrees/feature--web-node-accessibility-gm01` | 原features/nodes及忽略reports临时验收范围 | 总控；原8e95c3c、返修b315046，保留历史 |
 | BATCH05-REVIEW | 审查完成：接收T01-C及N02-R1，W04退回；交接后停止 | codex-review-01 | integration/batch05-review / `.worktrees/integration--batch05-review` | 精确提交审查/隔离验证、合入通过项；证据/任务板/README、P1-C10登记及下一批目录 | 项目负责人验收；起始189112e |
-| G2-R02A | 进行中（负责人本轮明确确认），尚未交付审查，原范围不变 | codex-01 | contract/nodes-read-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\contract--nodes-read-cx01` | 仅新增docs/contracts/revisions/g2-r03、api/openapi/revisions/g2-r03、tests/contracts/g2r03 | 总控/节点/Web契约审查；保持原基线0fef8ba，不要求同步main |
+| G2-R02A | 审查通过，仅接收评审候选/工件；D01–D07未批准，完成停止 | codex-01 | contract/nodes-read-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\contract--nodes-read-cx01` | 原三个r03新增目录；作者未改共享文件 | 总控；8165057，起始0fef8ba |
 | TASK-01A | 审查通过，接收纯快照/等待规则；完成停止 | deepseek-01 | feature/task-waiting-rules-ds01 / `.worktrees/feature--task-waiting-rules-ds01` | 原internal/tasks范围；ports.go不变 | 总控；0204d29，起始0fef8ba |
 | BATCH06-PARTIAL-REVIEW | 两项部分验收通过，交接后停止；不代表整个第六批完成 | codex-review-01 | integration/batch06-partial-review / `.worktrees/integration--batch06-partial-review` | 审查TASK-01A/W04-R1、隔离验证/合入通过项、审查证据/任务板/README及两位后续目录；不干预Codex在编任务 | 项目负责人验收；起始0fef8ba |
 | TASK-01B | 已分配，待人工派发，尚未启动 | deepseek-01 | feature/task-batch-rules-ds01 / `.worktrees/feature--task-batch-rules-ds01` | internal/tasks新增默认分批/后批推进纯规则及测试；不改ports.go或调度实现 | 总控任务/安全审查；本次部分验收后的main |
 | W05 | 已分配，待人工派发，尚未启动 | gemini-01 | feature/web-node-loader-gm01 / `.worktrees/feature--web-node-loader-gm01` | features/nodes注入只读来源的局部加载容器/测试/说明；不接App/真实API | 总控UI/数据隔离审查；本次部分验收后的main |
+| G2-R02A-REVIEW | 独立复审/组合检查通过；D08技术协调完成，交接后停止 | codex-review-01 | integration/batch06-contract-review / `.worktrees/integration--batch06-contract-review` | 审查/合入候选、check.mjs接线、两处Web来源注释/固定生成器重算provenance、审查/任务板/README/P1-C10及Codex后续目录 | 项目负责人验收；起始adce532 |
+| AUTH-01B | 已分配，待人工派发，尚未启动 | codex-01 | feature/auth-read-preflight-cx01 / `D:\admin\desktop\codex\myproject\ks.worktrees\feature--auth-read-preflight-cx01` | internal/auth新增离线读取预检/不可变范围/测试/说明；不改现有auth文件、端口或其他模块 | 总控授权/安全审查；本次G2-R02A复审后的main |
 
-原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。TASK-01B/W05用新目录，不在已完成目录叠加无关任务；Codex继续原G2-R02A目录、分支和基线，不读取未提交契约供新任务使用。
+原分支/Worktree保留以便追溯，不重置、不清理其他会话依赖、报告或未保存内容。Codex转入新AUTH-01B目录；TASK-01B/W05保持原adce532基线和已分配目录，不要求同步main。本轮集成只在总控目录修改已提交材料，未改两位作者目录。
 
-DeepSeek/Gemini开始前核对路径、分支和HEAD，读`PARALLEL-FOLLOWUP-01.md`及`reviews/BATCH-06-PARTIAL-REVIEW.md`。Codex仍以SIXTH-BATCH-WORK-PACKAGES的G2-R02A为准。N02及W04问题已关闭，真实身份/策略存储/HTTP仍未接入；GitHub远程/真实PR/线上CI未配置或运行，没有自动启动开发会话。
+Codex读`CODEX-AUTH-01B-WORK-PACKAGE.md`及`reviews/G2-R02A-REVIEW.md`；DeepSeek/Gemini仍读`PARALLEL-FOLLOWUP-01.md`。新预检不能自行关闭D07或启用真实入口；N02/W04问题已关闭，但身份/策略存储/HTTP仍未接入。GitHub远程/真实PR/线上CI未配置或运行，没有自动启动开发会话。

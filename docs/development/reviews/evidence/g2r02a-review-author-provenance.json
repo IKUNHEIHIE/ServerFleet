@@ -1,0 +1,229 @@
+{
+  "task": "G2-R02A",
+  "session": "codex-01",
+  "base": "0fef8ba9d42bc50d442721b4ab382af961604e72",
+  "status": "PROPOSED-NOT-FROZEN",
+  "sources": {
+    "merged": {
+      "file": "api/openapi/g2-merged-candidate.yaml",
+      "sha256": "c779a4366d5fe0d3088d1c682b231dfe9d157c3d2ae562e1440cba7ccc3f6726"
+    },
+    "core": {
+      "file": "api/openapi/g2-core-candidate.yaml",
+      "sha256": "d94f0c46289afcce435850ba4ae15b59b154a34572408286befdf529016e227d"
+    },
+    "r02": {
+      "file": "api/openapi/revisions/g2-r02/merged-candidate.yaml",
+      "sha256": "d84235693d9e0a85549ca19b54a4b64d7881b9838baea84979736ef0f0b98d74"
+    },
+    "originalMerged": {
+      "file": "docs/reference/ServerFleet-ALL-v0.9-G2/01-当前开发基线/g2/ServerFleet-API-Contract-v0.9-G2-merged-candidate.yaml",
+      "sha256": "c779a4366d5fe0d3088d1c682b231dfe9d157c3d2ae562e1440cba7ccc3f6726"
+    },
+    "originalLegacy": {
+      "file": "docs/reference/ServerFleet-ALL-v0.9-G2/01-当前开发基线/ServerFleet-API-Contract-v0.9.yaml",
+      "sha256": "05fb9b826d305c28b73c7226692f1600346231045b25cc8868f50068c21e6db9"
+    },
+    "webAdapter": {
+      "file": "apps/web/src/features/nodes/candidate-adapter.ts",
+      "sha256": "5eebba4c1df163e6b84f370f0bb48041b24c8c5201218ca433a081732b020b5c"
+    },
+    "webTypes": {
+      "file": "apps/web/src/features/nodes/types.ts",
+      "sha256": "e8a0d35934874f6e356d4f52210a027be224bf5036d54da49a44937d79641d79"
+    },
+    "node": {
+      "file": "internal/nodes/node.go",
+      "sha256": "b9f42e1c201493241de2f3daf055e2addaa80a999e0eb71f36376be448adfa62"
+    },
+    "visibility": {
+      "file": "internal/nodes/visibility.go",
+      "sha256": "602051c3fca3d3569ead89c1eaf9af1bebd638100d58257f818ae1fbd47ae187"
+    },
+    "auth": {
+      "file": "internal/auth/node_policy.go",
+      "sha256": "f678bd148db82ba4e7af900d87227313ec32b8708736495b64c74bf0501575ec"
+    }
+  },
+  "operations": [
+    {
+      "method": "get",
+      "path": "/api/v1/nodes",
+      "operationId": "listNodesForTransfer",
+      "schema": "NodeSummary",
+      "originalErrors": [
+        "401"
+      ],
+      "candidateErrors": [
+        "400",
+        "401",
+        "403",
+        "503"
+      ],
+      "errorMedia": "application/json",
+      "required": [
+        "id",
+        "name",
+        "online"
+      ],
+      "security": [
+        {
+          "bearerAuth": []
+        }
+      ]
+    },
+    {
+      "method": "get",
+      "path": "/api/v1/nodes/{nodeId}",
+      "operationId": "getNodeDetailG2",
+      "schema": "NodeDetail",
+      "originalErrors": [
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "412",
+        "428",
+        "429",
+        "503"
+      ],
+      "candidateErrors": [
+        "400",
+        "401",
+        "403",
+        "404",
+        "409",
+        "412",
+        "428",
+        "429",
+        "503"
+      ],
+      "errorMedia": "application/problem+json",
+      "required": [
+        "nodeId",
+        "displayName",
+        "status",
+        "revision"
+      ],
+      "security": [
+        {
+          "cookieSession": []
+        },
+        {
+          "bearerAuth": []
+        }
+      ]
+    }
+  ],
+  "fields": [
+    {
+      "id": "id",
+      "legacy": "id (必需)",
+      "detail": "nodeId (必需)",
+      "web": "nodeId → id",
+      "listProperty": "id",
+      "detailProperty": "nodeId",
+      "proposal": "仅别名映射；不 trim、补造或从名称构造 ID"
+    },
+    {
+      "id": "name",
+      "legacy": "name (必需)",
+      "detail": "displayName (必需)",
+      "web": "displayName → name",
+      "listProperty": "name",
+      "detailProperty": "displayName",
+      "proposal": "保留原显示值；Web 空名回退只属显示，不回写 DTO"
+    },
+    {
+      "id": "online",
+      "legacy": "online:boolean (必需)",
+      "detail": "无",
+      "web": "仅 status=online 显示指标",
+      "listProperty": "online",
+      "detailProperty": null,
+      "proposal": "布尔字段保留；false 不能反推出 offline/suspended/revoked"
+    },
+    {
+      "id": "status",
+      "legacy": "缺失",
+      "detail": "五状态 (必需)",
+      "web": "五状态 (必需)",
+      "listProperty": "status",
+      "detailProperty": "status",
+      "proposal": "列表可选新增；有权威状态时 online 必须等于 status=online；无状态不猜"
+    },
+    {
+      "id": "revision",
+      "legacy": "缺失",
+      "detail": "integer >=1 (必需)",
+      "web": "number (必需)",
+      "listProperty": "revision",
+      "detailProperty": "revision",
+      "proposal": "列表可选新增；不得填 1/0；缺失不能直接构造现有 Web DTO"
+    },
+    {
+      "id": "platform",
+      "legacy": "缺失",
+      "detail": "可选 string",
+      "web": "可选 string/null",
+      "listProperty": "platform",
+      "detailProperty": "platform",
+      "proposal": "列表可选新增；无证据省略；Web 归一到 null"
+    },
+    {
+      "id": "agentVersion",
+      "legacy": "缺失",
+      "detail": "可选 string",
+      "web": "可选 string/null",
+      "listProperty": "agentVersion",
+      "detailProperty": "agentVersion",
+      "proposal": "列表可选新增；不得拿 Controller 版本充当 Agent 版本"
+    },
+    {
+      "id": "lastSeenAt",
+      "legacy": "缺失",
+      "detail": "可选 date-time string",
+      "web": "可选 string/null",
+      "listProperty": "lastSeenAt",
+      "detailProperty": "lastSeenAt",
+      "proposal": "列表可选新增；沿用详情不接受 null；不是指标采样时间"
+    },
+    {
+      "id": "cpuPercent",
+      "legacy": "可选 number/null, 0..100",
+      "detail": "缺失",
+      "web": "局部 CandidateNodeMetrics → cpu",
+      "listProperty": "cpuPercent",
+      "detailProperty": "cpuPercent",
+      "proposal": "保留列表原字段；详情可选新增；0 是真实值，null/缺失不是 0"
+    },
+    {
+      "id": "memoryPercent",
+      "legacy": "可选 number/null, 0..100",
+      "detail": "缺失",
+      "web": "局部 CandidateNodeMetrics → memory",
+      "listProperty": "memoryPercent",
+      "detailProperty": "memoryPercent",
+      "proposal": "保留列表原字段；详情可选新增；越界不夹取"
+    },
+    {
+      "id": "sampledAt",
+      "legacy": "缺失",
+      "detail": "缺失",
+      "web": "局部指标可选 string/null",
+      "listProperty": "sampledAt",
+      "detailProperty": "sampledAt",
+      "proposal": "两者可选新增 date-time/null；仅同一真实样本共用；缺失不能称实时"
+    },
+    {
+      "id": "region/provider/countryCode/ip/tags",
+      "legacy": "可选；countryCode 两位大写",
+      "detail": "缺失",
+      "web": "当前列表 VM 未声明",
+      "listProperty": "region",
+      "detailProperty": null,
+      "proposal": "全部保留原字段；无权字段不得输出；不扩进详情"
+    }
+  ]
+}
