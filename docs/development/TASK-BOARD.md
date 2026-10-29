@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| READ-DESIGN-DISPATCH | 记录负责人A1+B1方向选择，准备三位设计任务/独立目录中 | codex-review-01 | integration/read-design-dispatch / `.worktrees/integration--read-design-dispatch` | OWNER-CHOICES及批准范围记录、新设计任务单/任务板/README/P1-C10、派发检查证据及创建三目录；不写作者设计或运行时代码/候选 | 项目负责人验收；起始0569c1a；准备/验证/交接后停止 |
 | W06R1-REVIEW | 精确审查/3项独立浏览器补验/组合及安全检查通过，交接后停止 | codex-review-01 | integration/w06r1-review / `.worktrees/integration--w06r1-review` | 原报告/证据审查、必要补验与澄清、状态/README/P1-C10和具体负责人选择包；不改运行时代码/候选或启动新开发 | 项目负责人验收；起始157549e |
 | FOLLOWUP04-REVIEW | 审查/组合/安全检查通过：接收返修方案文档，W06补验；交接后停止 | codex-review-01 | integration/followup04-review / `.worktrees/integration--followup04-review` | 原精确审查/集成/必要文档事实澄清、证据/任务状态和限定补验任务范围；不改运行时代码/候选，不批准新实现 | 项目负责人验收；起始69d6d43 |
 | READSEC01-REVIEW | 独立审查/组合/安全检查通过，交接后停止 | codex-review-01 | integration/readsec01-review / `.worktrees/integration--readsec01-review` | 精确审查安全证据/引用原文、合入通过文档、证据/任务板/README及收口状态；不干预READ-PLAN-01-R1/W06，不启动新实现 | 项目负责人验收；起始ddf8c5b |
