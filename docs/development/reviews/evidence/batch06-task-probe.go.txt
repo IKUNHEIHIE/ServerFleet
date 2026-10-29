@@ -1,0 +1,45 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"slices"
+	"time"
+	"serverfleet.local/serverfleet/internal/tasks"
+)
+
+func main() {
+	pass := func(name string, ok bool) { if !ok { panic("FAIL " + name) }; fmt.Println("PASS " + name) }
+	_, err := tasks.NewTargetSnapshot(nil)
+	pass("empty snapshot rejected", errors.Is(err,tasks.ErrEmptyTargets))
+	_, err = tasks.NewTargetSnapshot([]string{"n","n"})
+	pass("duplicate target rejected", errors.Is(err,tasks.ErrDuplicateTarget))
+	_, err = tasks.NewTargetSnapshot([]string{" n"})
+	pass("target is not silently normalized", errors.Is(err,tasks.ErrInvalidTarget))
+	input := []string{"b","a"}
+	snapshot,err := tasks.NewTargetSnapshot(input); if err!=nil { panic(err) }
+	input[0]="changed"; input=append(input,"later")
+	pass("input changes and later members cannot alter snapshot", slices.Equal(snapshot.IDs(),[]string{"b","a"}))
+	output:=snapshot.IDs(); output[0]="changed"
+	pass("returned target slice is detached", slices.Equal(snapshot.IDs(),[]string{"b","a"}))
+	var empty tasks.TargetSnapshot
+	pass("zero snapshot is empty rather than all nodes",empty.Len()==0&&len(empty.IDs())==0)
+	created:=time.Date(2026,10,29,10,0,0,0,time.UTC)
+	w,err:=tasks.NewDefaultWaitWindow(created);if err!=nil {panic(err)}
+	deadline:=time.Date(2026,10,29,10,15,0,0,time.UTC)
+	pass("default wait is exactly fifteen minutes",w.CreatedAt().Equal(created)&&w.Deadline().Equal(deadline))
+	outcome,err:=w.Evaluate(deadline.Add(-time.Nanosecond),tasks.StartStateUnstarted)
+	pass("unstarted just before deadline remains pending",err==nil&&outcome==tasks.WaitPending)
+	outcome,err=w.Evaluate(deadline,tasks.StartStateUnstarted)
+	pass("exact deadline is expired",err==nil&&outcome==tasks.WaitExpired)
+	outcome,err=w.Evaluate(deadline.Add(time.Nanosecond),tasks.StartStateUnstarted)
+	pass("after deadline stays expired",err==nil&&outcome==tasks.WaitExpired)
+	outcome,err=w.Evaluate(deadline.Add(time.Hour),tasks.StartStateStarted)
+	pass("started task is not reclassified by waiting TTL",err==nil&&outcome==tasks.WaitNotApplicable)
+	outcome,err=w.Evaluate(created,tasks.StartState("unknown"))
+	pass("unknown start state is rejected",errors.Is(err,tasks.ErrUnknownStartState)&&outcome=="")
+	outcome,err=(tasks.WaitWindow{}).Evaluate(created,tasks.StartStateUnstarted)
+	pass("zero window fails closed",errors.Is(err,tasks.ErrInvalidWindow)&&outcome=="")
+	_,err=tasks.NewWaitWindow(created,0)
+	pass("zero duration cannot create an unlimited window",errors.Is(err,tasks.ErrInvalidWaitDuration))
+}

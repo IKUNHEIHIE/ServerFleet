@@ -1,0 +1,14 @@
+PASS empty snapshot rejected
+PASS duplicate target rejected
+PASS target is not silently normalized
+PASS input changes and later members cannot alter snapshot
+PASS returned target slice is detached
+PASS zero snapshot is empty rather than all nodes
+PASS default wait is exactly fifteen minutes
+PASS unstarted just before deadline remains pending
+PASS exact deadline is expired
+PASS after deadline stays expired
+PASS started task is not reclassified by waiting TTL
+PASS unknown start state is rejected
+PASS zero window fails closed
+PASS zero duration cannot create an unlimited window

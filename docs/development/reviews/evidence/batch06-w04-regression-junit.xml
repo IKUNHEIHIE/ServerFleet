@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="0" errors="0" time="0.1465487">
+    <testsuite name="../../reports/_review/batch06/repeated-focus.test.tsx" timestamp="2026-10-29T08:16:23.020Z" hostname="DESKTOP-6A2IJTG" tests="2" failures="0" errors="0" skipped="0" time="0.1465487">
+        <testcase classname="../../reports/_review/batch06/repeated-focus.test.tsx" name="independent W04 repeated selection regression &gt; keyboard activation of an already pointer-selected row focuses detail immediately" time="0.1102113">
+        </testcase>
+        <testcase classname="../../reports/_review/batch06/repeated-focus.test.tsx" name="independent W04 repeated selection regression &gt; a background refresh does not perform a delayed focus request after the user moves to search" time="0.0353163">
+        </testcase>
+    </testsuite>
+</testsuites>

@@ -1,0 +1,38 @@
+{
+  "reviewDate": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "task": "BATCH06-PARTIAL-REVIEW",
+  "reviewer": "codex-review-01",
+  "baseline": "0fef8ba9d42bc50d442721b4ab382af961604e72",
+  "testedAcceptedCodeHead": "169591d0f44013f05fb8ec490ef3685fa19bada5",
+  "decisions": [
+    {"task": "TASK-01A", "head": "0204d299ca2aadfc48c2649ebeaadedded609431", "decision": "ACCEPT_OFFLINE_RULES", "coveragePercent": 100},
+    {"task": "W04-R1", "head": "b3150464b78967dd36c33a00bade6faa4119001f", "decision": "ACCEPT_WITH_W04_HISTORY", "webTests": 151, "independentRegressionAssertions": 2, "regressionStatus": "PASS"},
+    {"task": "G2-R02A", "decision": "NOT_REVIEWED_STILL_IN_PROGRESS_PER_USER", "baselineUnchanged": "0fef8ba9d42bc50d442721b4ab382af961604e72", "worktreeModified": false}
+  ],
+  "findings": [{"id": "W04-R01", "priority": 2, "status": "CLOSED", "evidence": "Both original independent focus regression tests pass against b315046."}],
+  "blockingNewFindings": [],
+  "integration": {
+    "npmCi": "PASS",
+    "toolsInstall": "PASS_WITH_LOCAL_FILE_MODULE_CACHE",
+    "check": "PASS",
+    "security": "PASS",
+    "goTopLevelTests": 158,
+    "goSubtests": 595,
+    "goFailures": 0,
+    "webTests": 151,
+    "webFailures": 0,
+    "npmVulnerabilities": 0,
+    "govulncheck": "No vulnerabilities found.",
+    "independentTaskAssertions": 14
+  },
+  "nextAssignments": ["TASK-01B / deepseek-01", "W05 / gemini-01"],
+  "authorBrowserArtifactsInspected": true,
+  "reviewerBrowserRerun": false,
+  "wholeSixthBatchComplete": false,
+  "g2Frozen": false,
+  "agentsStarted": false,
+  "messagesSentToAgents": false,
+  "remotePushed": false,
+  "notVerified": ["in-progress G2-R02A candidate", "GitHub CI", "Linux race", "real identity or policy storage", "real API/database/WSS/mTLS/task execution", "1C1G performance"]
+}

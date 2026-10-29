@@ -1,0 +1,11 @@
+
+ RUN  v5.0.5 D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-accessibility-gm01/apps/web
+
+ ✓ ../../reports/_review/batch06/repeated-focus.test.tsx (2 tests) 147ms
+
+ Test Files  1 passed (1)
+      Tests  2 passed (2)
+   Start at  16:16:21
+   Duration  1.30s (environment 39%, import 30%, tests 12%, setup 9%, transform 8%)
+
+JUNIT report written to D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-accessibility-gm01/reports/batch06-focus-probe-junit.xml
