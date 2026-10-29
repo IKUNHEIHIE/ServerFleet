@@ -1,0 +1,1015 @@
+{
+  "cases": [
+    "negative_missing_id",
+    "negative_online_type",
+    "negative_unknown_status",
+    "negative_status_disagrees",
+    "negative_offline_disagrees",
+    "negative_revision_zero",
+    "negative_cpu_over",
+    "negative_memory_under",
+    "negative_cpu_string",
+    "negative_sampled_time",
+    "negative_detail_revision_missing",
+    "negative_detail_status",
+    "negative_detail_last_seen_null",
+    "negative_detail_extra_field",
+    "negative_error_status",
+    "negative_legacy_error"
+  ],
+  "totals": {
+    "errors": 32,
+    "warnings": 0,
+    "ignored": 0
+  },
+  "version": "2.72.0",
+  "problems": [
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must have required property 'id'.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_missing_id/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 42,
+            "col": 25
+          },
+          "end": {
+            "line": 43,
+            "col": 38
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 47,
+            "col": 25
+          },
+          "end": {
+            "line": 57,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/online",
+          "reportOnKey": false,
+          "start": {
+            "line": 49,
+            "col": 33
+          },
+          "end": {
+            "line": 49,
+            "col": 39
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 50,
+            "col": 33
+          },
+          "end": {
+            "line": 50,
+            "col": 39
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [
+        "offline",
+        "suspended",
+        "revoked",
+        "unknown"
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/online",
+          "reportOnKey": false,
+          "start": {
+            "line": 49,
+            "col": 33
+          },
+          "end": {
+            "line": 49,
+            "col": 39
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 47,
+            "col": 25
+          },
+          "end": {
+            "line": 57,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property type must be boolean.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_online_type/value/items/0/online",
+          "reportOnKey": false,
+          "start": {
+            "line": 49,
+            "col": 33
+          },
+          "end": {
+            "line": 49,
+            "col": 39
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 61,
+            "col": 25
+          },
+          "end": {
+            "line": 71,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 64,
+            "col": 33
+          },
+          "end": {
+            "line": 64,
+            "col": 42
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 64,
+            "col": 33
+          },
+          "end": {
+            "line": 64,
+            "col": 42
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [
+        "offline",
+        "suspended",
+        "revoked",
+        "unknown"
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/online",
+          "reportOnKey": false,
+          "start": {
+            "line": 63,
+            "col": 33
+          },
+          "end": {
+            "line": 63,
+            "col": 37
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 61,
+            "col": 25
+          },
+          "end": {
+            "line": 71,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"online\", \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_unknown_status/value/items/0/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 64,
+            "col": 33
+          },
+          "end": {
+            "line": 64,
+            "col": 42
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [
+        "online",
+        "offline",
+        "suspended",
+        "revoked",
+        "unknown"
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 75,
+            "col": 25
+          },
+          "end": {
+            "line": 85,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0/online",
+          "reportOnKey": false,
+          "start": {
+            "line": 77,
+            "col": 33
+          },
+          "end": {
+            "line": 77,
+            "col": 38
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 78,
+            "col": 33
+          },
+          "end": {
+            "line": 78,
+            "col": 39
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [
+        "offline",
+        "suspended",
+        "revoked",
+        "unknown"
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_status_disagrees/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 75,
+            "col": 25
+          },
+          "end": {
+            "line": 85,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must NOT be valid.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 89,
+            "col": 25
+          },
+          "end": {
+            "line": 99,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 92,
+            "col": 33
+          },
+          "end": {
+            "line": 92,
+            "col": 40
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `online` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0/online",
+          "reportOnKey": false,
+          "start": {
+            "line": 91,
+            "col": 33
+          },
+          "end": {
+            "line": 91,
+            "col": 37
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `0` property must match exactly one schema in oneOf.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_offline_disagrees/value/items/0",
+          "reportOnKey": false,
+          "start": {
+            "line": 89,
+            "col": 25
+          },
+          "end": {
+            "line": 99,
+            "col": 57
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `revision` property must be >= 1.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_revision_zero/value/items/0/revision",
+          "reportOnKey": false,
+          "start": {
+            "line": 107,
+            "col": 35
+          },
+          "end": {
+            "line": 107,
+            "col": 36
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `cpuPercent` property must be <= 100.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_cpu_over/value/items/0/cpuPercent",
+          "reportOnKey": false,
+          "start": {
+            "line": 122,
+            "col": 37
+          },
+          "end": {
+            "line": 122,
+            "col": 42
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `memoryPercent` property must be >= 0.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_memory_under/value/items/0/memoryPercent",
+          "reportOnKey": false,
+          "start": {
+            "line": 137,
+            "col": 40
+          },
+          "end": {
+            "line": 137,
+            "col": 42
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `cpuPercent` property type must be number,null.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_cpu_string/value/items/0/cpuPercent",
+          "reportOnKey": false,
+          "start": {
+            "line": 150,
+            "col": 37
+          },
+          "end": {
+            "line": 150,
+            "col": 40
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `sampledAt` property must match format \"date-time\".",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json/examples/negative_sampled_time/value/items/0/sampledAt",
+          "reportOnKey": false,
+          "start": {
+            "line": 166,
+            "col": 36
+          },
+          "end": {
+            "line": 166,
+            "col": 46
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: must have required property 'code'.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/components/responses/Unauthorized/content/application~1json/examples/negative_legacy_error/value",
+          "reportOnKey": false,
+          "start": {
+            "line": 507,
+            "col": 17
+          },
+          "end": {
+            "line": 507,
+            "col": 34
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/components/responses/Unauthorized/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: must have required property 'revision'.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_revision_missing/value",
+          "reportOnKey": false,
+          "start": {
+            "line": 203,
+            "col": 21
+          },
+          "end": {
+            "line": 208,
+            "col": 52
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to one of the allowed values \"online\", \"offline\", \"suspended\", \"revoked\", \"unknown\".",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_status/value/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 213,
+            "col": 29
+          },
+          "end": {
+            "line": 213,
+            "col": 36
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json"
+      },
+      "suggest": [
+        "online",
+        "offline",
+        "suspended",
+        "revoked",
+        "unknown"
+      ],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `lastSeenAt` property type must be string.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_last_seen_null/value/lastSeenAt",
+          "reportOnKey": false,
+          "start": {
+            "line": 227,
+            "col": 33
+          },
+          "end": {
+            "line": 227,
+            "col": 37
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: must NOT have additional properties `arbitrary`.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json/examples/negative_detail_extra_field/value/arbitrary",
+          "reportOnKey": true,
+          "start": {
+            "line": 237,
+            "col": 21
+          },
+          "end": {
+            "line": 237,
+            "col": 30
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/paths/~1api~1v1~1nodes~1{nodeId}/get/responses/200/content/application~1json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    },
+    {
+      "ruleId": "no-invalid-media-type-examples",
+      "severity": "error",
+      "message": "Example value must conform to the schema: `status` property must be equal to constant.",
+      "location": [
+        {
+          "source": {
+            "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+          },
+          "pointer": "#/components/responses/Error401/content/application~1problem+json/examples/negative_error_status/value/status",
+          "reportOnKey": false,
+          "start": {
+            "line": 609,
+            "col": 25
+          },
+          "end": {
+            "line": 609,
+            "col": 28
+          }
+        }
+      ],
+      "from": {
+        "source": {
+          "ref": "reports\\g2r03-negative\\invalid-examples.yaml"
+        },
+        "pointer": "#/components/responses/Error401/content/application~1problem+json"
+      },
+      "suggest": [],
+      "reference": "https://redocly.com/docs/cli/rules/oas/no-invalid-media-type-examples"
+    }
+  ]
+}

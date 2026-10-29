@@ -71,4 +71,6 @@
 
 ## 停止
 
+总控接收注（FOLLOWUP04-REVIEW）：原作者返修为4da769c；接收时仅澄清公开DTO可选string缺失应省略、局部VM可null，并重申详情缺必填status/revision不得成功。该澄清没有修改候选或批准范围，具体差异/证据见docs/development/reviews/FOLLOWUP-04-REVIEW.md。本文所述W06尚未执行属于ddf8c5b核对阶段；当前W06已有19项作者浏览器记录，但因两项指定覆盖缺口仍待W06-R1，不能称整项已接收。
+
 仅创建本地 docs 提交，交总控 codex-review-01 审核后停止；不合并 main、不推送、不启动实现或其他 Agent，不读取 Codex/Gemini 未提交内容。

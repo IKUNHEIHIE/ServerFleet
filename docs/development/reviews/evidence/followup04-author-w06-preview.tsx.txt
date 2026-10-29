@@ -1,0 +1,161 @@
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createRoot } from "react-dom/client";
+import "@/index.css";
+import { NodeLoader, type NodeSource } from "@/features/nodes/node-loader";
+import type { NodeListItemView, NodeListState } from "@/features/nodes/types";
+import {
+  allNodeDetails,
+  buildReadyState,
+  idleOnlineNodeDetail,
+  nodeMetrics,
+} from "@/features/nodes/test/fixtures";
+
+/**
+ * W06 隔离预览（只存在于 reports/_preview，不进生产 bundle）：
+ * 真实 `NodeLoader` + 现有组件 + 合成 fixture（固定时钟 FIXED_NOW、可控 Promise）。
+ * `window.__qa` 仅用于验收脚本驱动来源切换与请求 settle；不含任何真实网络。
+ */
+
+type Kind = "a" | "b" | "broken" | "none";
+
+interface Deferred {
+  readonly promise: Promise<readonly NodeListItemView[]>;
+  resolve: (nodes: readonly NodeListItemView[]) => void;
+  reject: (reason?: unknown) => void;
+}
+
+interface RequestRecord {
+  readonly key: string;
+  readonly nodes: readonly NodeListItemView[];
+  readonly deferred: Deferred;
+  aborted: boolean;
+  settled: string | null;
+}
+
+declare global {
+  interface Window {
+    __qa?: {
+      readonly commits: readonly string[];
+      clearCommits(): void;
+      setSource(kind: Kind): void;
+      requests(): Array<{ key: string; aborted: boolean; settled: string | null }>;
+      settle(index: number, outcome: "success" | "failure"): void;
+      focus(): { tag: string; heading: string | null; text: string };
+      snapshot(): {
+        hasTable: boolean;
+        hasAlert: boolean;
+        hasDetail: boolean;
+        hasLoading: boolean;
+        body: string;
+      };
+    };
+  }
+}
+
+const nodesOf = (state: NodeListState) => (state.status === "ready" ? state.nodes : []);
+/** 8 个合成节点：含真实 0%、100%、陈旧样本与离线/未知。 */
+const NODES_A = nodesOf(buildReadyState(allNodeDetails, nodeMetrics));
+/** 1 个合成节点：gcp-singapore-01（真实 0%）。 */
+const NODES_B = nodesOf(buildReadyState([idleOnlineNodeDetail], nodeMetrics));
+
+const newDeferred = (): Deferred => {
+  let resolve!: (nodes: readonly NodeListItemView[]) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<readonly NodeListItemView[]>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+};
+
+/** 布局阶段记录每次提交后的文本：用于“首个提交无旧数据”的浏览器证据。 */
+function CommitProbe({ commitsRef, children }: { readonly commitsRef: { current: string[] }; readonly children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    commitsRef.current.push(ref.current?.textContent ?? "");
+  });
+  return <div ref={ref}>{children}</div>;
+}
+
+function Preview() {
+  const [kind, setKind] = useState<Kind>("a");
+  const commitsRef = useRef<string[]>([]);
+  const requestsRef = useRef<RequestRecord[]>([]);
+
+  useEffect(() => {
+    window.__qa = {
+      commits: commitsRef.current,
+      clearCommits: () => {
+        commitsRef.current.length = 0;
+      },
+      setSource: next => setKind(next),
+      requests: () =>
+        requestsRef.current.map(record => ({ key: record.key, aborted: record.aborted, settled: record.settled })),
+      settle: (index, outcome) => {
+        const record = requestsRef.current[index];
+        if (!record || record.settled) return;
+        record.settled = outcome;
+        if (outcome === "success") record.deferred.resolve(record.nodes);
+        else record.deferred.reject(new Error("synthetic failure"));
+      },
+      focus: () => {
+        const el = document.activeElement;
+        if (!el || el === document.body) return { tag: "BODY", heading: null, text: "(body)" };
+        const section = el.closest("section");
+        return {
+          tag: el.tagName,
+          heading: section?.querySelector("h2")?.textContent ?? null,
+          text: (el.textContent || "").trim().slice(0, 32),
+        };
+      },
+      snapshot: () => ({
+        hasTable: Boolean(document.querySelector("table")),
+        hasAlert: Boolean(document.querySelector('[role="alert"]')),
+        hasDetail: Boolean([...document.querySelectorAll("section h2")].find(h => h.textContent === "节点详情")),
+        hasLoading: Boolean(document.querySelector('[role="status"]')),
+        body: (document.body.textContent || "").slice(0, 500),
+      }),
+    };
+    return () => {
+      delete window.__qa;
+    };
+  }, []);
+
+  const makeLoad = (key: string, nodes: readonly NodeListItemView[]): NodeSource["load"] => {
+    return ({ signal }) => {
+      const deferred = newDeferred();
+      const record: RequestRecord = { key, nodes, deferred, aborted: false, settled: null };
+      requestsRef.current.push(record);
+      signal.addEventListener("abort", () => {
+        record.aborted = true;
+      });
+      return deferred.promise;
+    };
+  };
+
+  const source: NodeSource | null =
+    kind === "a"
+      ? { key: "scope-a", load: makeLoad("scope-a", NODES_A) }
+      : kind === "b"
+        ? { key: "scope-b", load: makeLoad("scope-b", NODES_B) }
+        : kind === "broken"
+          ? { key: "scope-a", load: undefined as unknown as NodeSource["load"] }
+          : null;
+
+  return (
+    <main className="mx-auto flex max-w-5xl flex-col gap-6 px-4 py-10 sm:px-6">
+      <header>
+        <h1 className="text-xl font-semibold">W06 · 加载容器浏览器验收</h1>
+        <p className="mt-1 text-sm text-muted-foreground">
+          合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。
+        </p>
+      </header>
+      <CommitProbe commitsRef={commitsRef}>
+        <NodeLoader source={source} title="节点列表" />
+      </CommitProbe>
+    </main>
+  );
+}
+
+const container = document.getElementById("root");
+if (container) createRoot(container).render(<Preview />);

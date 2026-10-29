@@ -1,0 +1,144 @@
+{
+  "page": "http://127.0.0.1:8461/index.html",
+  "codeHead": "ddf8c5beaee24694e687ad3166db32597ef60df1",
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/156.0.8078.49",
+    "revision": "@29eb03535d5f2f4f899b95f22a92413ffde5284e",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+    "jsVersion": "15.6.75.19"
+  },
+  "keyMechanism": "Chrome DevTools Protocol: Input.dispatchKeyEvent (rawKeyDown + keyUp) for Tab/Shift+Tab/Enter/Space/Escape; Input.dispatchMouseEvent for real clicks",
+  "tabStops": [
+    {
+      "step": 1,
+      "tag": "INPUT",
+      "heading": null,
+      "text": ""
+    },
+    {
+      "step": 2,
+      "tag": "SELECT",
+      "heading": null,
+      "text": "全部状态在线离线已暂停已吊销未知"
+    },
+    {
+      "step": 3,
+      "tag": "TR",
+      "heading": "节点列表",
+      "text": "aws-tokyo-01node-online-01在线Ubun"
+    }
+  ],
+  "results": [
+    {
+      "name": "C1 首次加载显示 loading，无表格",
+      "pass": true,
+      "details": "hasLoading=true hasTable=false"
+    },
+    {
+      "name": "C2 成功后展示节点与计数",
+      "pass": true,
+      "details": "hasTable=true"
+    },
+    {
+      "name": "C3 固定时钟下指标质量（真实 0% 与陈旧可见时间）",
+      "pass": true,
+      "details": "has0=true hasStale=true"
+    },
+    {
+      "name": "C4 真实 Tab：搜索框 → 状态筛选 → 表格行（禁用的清空按钮被跳过）",
+      "pass": true,
+      "details": "1:<INPUT> 2:<SELECT> 3:<TR>"
+    },
+    {
+      "name": "C5 Enter 激活行后焦点进入详情区",
+      "pass": true,
+      "details": "<SECTION> heading=节点详情"
+    },
+    {
+      "name": "C6 Tab/Shift+Tab/Escape：详情内只有关闭按钮，可离开可返回，Escape 回到来源行",
+      "pass": true,
+      "details": "tab=<BUTTON:关闭详情> out=<BODY> back=<BUTTON> esc=<TR>"
+    },
+    {
+      "name": "C7 Space 激活同一行同样立即聚焦详情",
+      "pass": true,
+      "details": "<SECTION>"
+    },
+    {
+      "name": "C8 真实鼠标点击行打开详情且不搬动焦点",
+      "pass": true,
+      "details": "focus=<TR>"
+    },
+    {
+      "name": "C9 失败显示固定安全提示（无异常原文）",
+      "pass": true,
+      "details": "hasAlert=true"
+    },
+    {
+      "name": "C10 鼠标点击重新加载立即回到 loading，无节点/计数/详情",
+      "pass": true,
+      "details": "hasLoading=true hasTable=false"
+    },
+    {
+      "name": "C11 键盘 Tab+Enter 触发重试同样进入 loading",
+      "pass": true,
+      "details": "button=<BUTTON:重新加载> hasLoading=true"
+    },
+    {
+      "name": "C12 A→B 首个提交即为 loading，不含旧节点/计数",
+      "pass": true,
+      "details": "firstCommitLen=67"
+    },
+    {
+      "name": "C13 B 成功后展示 B 的节点",
+      "pass": true,
+      "details": ""
+    },
+    {
+      "name": "C14 旧请求迟到成功不覆盖 B，且不抢走搜索框焦点",
+      "pass": true,
+      "details": "focusBefore=<INPUT> focusAfter=<INPUT> oldAborted=true"
+    },
+    {
+      "name": "C15 A→null→A：无效期隐藏，恢复首个提交即 loading（旧详情不复活）",
+      "pass": true,
+      "details": "nullAlert=true firstCommitLen=67"
+    },
+    {
+      "name": "C16 同 key 无效 load → 恢复有效来源：首个提交即 loading，无旧节点/计数/详情",
+      "pass": true,
+      "details": "brokenAlert=true firstCommitLen=67"
+    },
+    {
+      "name": "C17 pending 请求在失效时被 abort，迟到成功不覆盖恢复后的 loading",
+      "pass": true,
+      "details": "aborted=true"
+    },
+    {
+      "name": "C18 详情打开时切换来源：旧详情隐藏，焦点不残留旧详情、不被后台更新抢走",
+      "pass": true,
+      "details": "before=<SECTION> after=<BODY> later=<BODY>"
+    },
+    {
+      "name": "C19 窄屏 420px：页面不横向滚动，表格在卡片内滚动",
+      "pass": true,
+      "details": "htmlScroll=420 innerWidth=420 box=386/801"
+    }
+  ],
+  "screenshots": [
+    "reports/_review/w06/loading-state.png",
+    "reports/_review/w06/error-state.png",
+    "reports/_review/w06/focus-detail-1280.png",
+    "reports/_review/w06/focus-row-1280.png",
+    "reports/_review/w06/wide-1280.png",
+    "reports/_review/w06/narrow-420.png"
+  ],
+  "narrowMetrics": {
+    "innerWidth": 420,
+    "htmlScroll": 420,
+    "bodyScroll": 420,
+    "boxClient": 386,
+    "boxScroll": 801
+  }
+}

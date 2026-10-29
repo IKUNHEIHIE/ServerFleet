@@ -44,6 +44,8 @@
 
 P1-C10补记（FOLLOWUP03复审）：AUTH-01B/N03-A离线预检/共同范围读取和W05隔离加载容器已接收，不代表真实身份/HTTP/库存事务或浏览器接线完成。READ-PLAN-01草案d0709fc把已有Status/ObservedAt与缺失字段混淆，并遗漏原列表onlineOnly请求兼容，已登记RP01-R01/R02并退回，未进入main批准包；来源事实、可选元数据与r03提案的批准级别须分别核对。先列表后详情、Cookie等仍只是待批建议，D01–D07/P1-C10保持OPEN，详见docs/development/reviews/FOLLOWUP-03-REVIEW.md。
 
+P1-C10补记（FOLLOWUP04复审）：READ-PLAN-01-R1的4da769c修正上述两项，RP01-R01/R02关闭；总控澄清公开可选metadata string缺失省略、局部VM可null，不改schema。方案接收为PROPOSED，安全来源包READ-SEC-01亦已接收；W06虽有19项浏览器PASS记录，但同ID重复激活/关闭与迟到失败/卸载覆盖尚缺，待W06-R1，未批准真实HTTP/身份/字段迁移。原r03哈希不变，D01–D07/P1-C10仍OPEN；详见FOLLOWUP-04-REVIEW.md。
+
 YAML 输入有大量正常锚点重用，默认库别名上限曾触发拒绝；工程只把上限设为有限 10000，并限制单文件 2 MiB、检测重复 key/避免重复遍历，未关闭保护或改写候选。Redocly `spec` 与补充规则对三份文件均通过；另有损坏 ref、重复 ID、路径参数和重复 YAML key 负向样例。
 
 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。本次只具备 Mock、适配层和隔离测试的基础条件。

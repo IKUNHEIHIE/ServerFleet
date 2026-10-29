@@ -1,0 +1,30 @@
+
+> serverfleet@0.0.0 check:policy
+> node scripts/check.mjs policy
+
+> source-integrity: scripts/verify-source.mjs
+PASS: 69 original files and 3 byte-exact candidates
+> tooling-tests: --test scripts/contracts.test.mjs scripts/git-policy.test.mjs scripts/worktree.test.mjs scripts/web-boundaries.test.mjs
+✔ valid fixture is counted (5.8497ms)
+✔ broken refs are rejected (0.9164ms)
+✔ path parameters must be required (0.6661ms)
+✔ duplicate operation IDs are rejected (0.8648ms)
+✔ duplicate YAML keys are rejected (0.9992ms)
+✔ task branches and conventional titles (0.6771ms)
+✔ production may use UI but not test data or Go implementation (1.0637ms)
+✔ worktree helper contains task paths (0.6686ms)
+ℹ tests 8
+ℹ suites 0
+ℹ pass 8
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 142.7388
+> web-boundaries: scripts/web-boundaries.mjs
+PASS: Web production import and Agent WebSocket boundaries
+> git-policy: scripts/git-policy.mjs
+PASS: branch integration/followup04-review, 1 commit title(s); remote PR not available locally
+> module-boundaries: test ./tests/architecture
+ok  	serverfleet.local/serverfleet/tests/architecture	(cached)
+> actionlint: -shellcheck=

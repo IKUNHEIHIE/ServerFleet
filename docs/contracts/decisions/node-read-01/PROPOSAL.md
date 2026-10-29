@@ -95,7 +95,7 @@ D08 的工具/注释协调已完成，不在此重复；它不批准 D01–D07 �
 ### Q1 首版范围：R1-A legacy 列表，还是 R1-full 列表+详情？
 
 - **推荐：R1-A。** 先闭环可信身份、可见过滤、`onlineOnly` 兼容和 legacy 列表；范围小、可先验收授权与不泄露，但首版 UI 没有详情、状态/版本和新鲜指标。
-- 替代：R1-full。一次完成列表+详情+富化；体验完整，但详情真正需要 `status`（D02）与 `revision`（D03）来源，且 `platform/agentVersion` 缺失时只能是可省略/null 的可选字段；这仍需节点元数据来源和存储原子性，首条闭环明显推迟。选择 R1-full 不等于要求 `platform/agentVersion` 必须有非空值。
+- 替代：R1-full。一次完成列表+详情+富化；体验完整，但详情真正需要 `status`（D02）与 `revision`（D03）来源，且 `platform/agentVersion` 缺失时在公开 DTO 中省略、局部 VM 可用 null；这仍需节点元数据来源和存储原子性，首条闭环明显推迟。选择 R1-full 不等于要求 `platform/agentVersion` 必须有非空值。
 
 ### Q2 Web 首版凭证：服务端会话 Cookie，还是 Bearer-only API 先行？
 
