@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-5D-DISPATCH | 完整v0.9五日冲刺重排与派发包准备中 | codex-review-01 | integration/v09-five-day-dispatch / `.worktrees/integration--v09-five-day-dispatch` | 全量需求责任/接口依赖/每日里程碑、三项复合任务及目录、任务状态/接收范围/检查证据；不在本任务实现业务或替代安全冻结 | 项目负责人；起始6052f59；派发包和检查交接后停止 |
 | READ-DESIGN-R1-REVIEW | 返修/组合/安全检查通过，接收两设计并关闭原四P2；交接后停止 | codex-review-01 | integration/read-design-r1-review / `.worktrees/integration--read-design-r1-review` | 原精确复审/接收及文义澄清、审查证据/状态/README/P1-C10与下一步具体待批范围；不启动实现或批准详细D项 | 项目负责人验收；起始3c817f8 |
 | W07-LEGACY-VIEW | PROPOSED / NOT_AUTHORIZED；未派发、未建目录 | gemini-02（拟） | feature/web-legacy-view-gm02 / `.worktrees/feature--web-legacy-view-gm02`（均未创建） | 拟仅8个新增legacy类型/适配/列表/搜索及测试/文档文件，具体见W07-LEGACY-VIEW-PROPOSAL；不改App/加载器/fetch/认证/公共契约 | 总控+UI/契约/安全；批准后登记精确起点，目前不得开工 |
 | READ-DESIGN-REVIEW | 复审/组合/安全检查完成：接收认证提案，HTTP/Web各退回2P2，交接后停止 | codex-review-01 | integration/read-design-review / `.worktrees/integration--read-design-review` | 原三设计审查/工件/证据/状态与限定返修/组合清单范围；不批准详细D项或启动实现 | 项目负责人验收；起始4196b2e |
