@@ -1,0 +1,49 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/nodes"
+)
+
+type checkFn func(context.Context, auth.Check) error
+func (f checkFn) Authorize(ctx context.Context, c auth.Check) error { return f(ctx, c) }
+
+func main() {
+	input := []nodes.Node{{ID: "n1"}, {ID: "n2"}}
+	failures := 0
+	for _, fatal := range []error{auth.ErrPolicyUnavailable, auth.ErrInvalidCheck, context.Canceled, context.DeadlineExceeded, errors.New("synthetic unknown failure")} {
+		for _, name := range []string{"Visible", "VisibleFilter", "VisibleClassify"} {
+			a := checkFn(func(_ context.Context, c auth.Check) error {
+				if c.NodeIDs[0] == "n1" { return nil }
+				return errors.Join(auth.ErrDenied, fatal)
+			})
+			var err error
+			var count int
+			var isNil bool
+			switch name {
+			case "Visible":
+				var got []nodes.Node
+				got, err = nodes.Visible(context.Background(), a, "reader", input)
+				count, isNil = len(got), got == nil
+			case "VisibleFilter":
+				var got []nodes.Node
+				got, err = nodes.VisibleFilter(context.Background(), a, "reader", input, nodes.NodeQuery{})
+				count, isNil = len(got), got == nil
+			case "VisibleClassify":
+				var got []nodes.Classification
+				got, err = nodes.VisibleClassify(context.Background(), a, "reader", input, nodes.DimensionRegion)
+				count, isNil = len(got), got == nil
+			}
+			if !errors.Is(err, fatal) || !isNil {
+				failures++
+				fmt.Printf("FAIL %s joined denial + %q: error=%v result_nil=%v count=%d; want fatal preserved and nil result\n", name, fatal, err, isNil, count)
+			} else { fmt.Printf("PASS %s joined denial + %q\n", name, fatal) }
+		}
+	}
+	if failures > 0 { fmt.Printf("%d failed assertions\n", failures); os.Exit(1) }
+}

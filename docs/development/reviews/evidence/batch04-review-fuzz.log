@@ -1,0 +1,7 @@
+fuzz: elapsed: 0s, gathering baseline coverage: 0/78 completed
+fuzz: elapsed: 1s, gathering baseline coverage: 78/78 completed, now fuzzing with 2 workers
+fuzz: elapsed: 3s, execs: 36980 (12326/sec), new interesting: 14 (total: 92)
+fuzz: elapsed: 6s, execs: 36980 (0/sec), new interesting: 14 (total: 92)
+fuzz: elapsed: 6s, execs: 36980 (0/sec), new interesting: 14 (total: 92)
+PASS
+ok  	serverfleet.local/serverfleet/internal/transport	9.693s

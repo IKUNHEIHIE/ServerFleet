@@ -1,0 +1,10 @@
+PASS valid heartbeat actual decoder
+PASS exact raw-byte limit accepted
+PASS raw-byte limit precedes malformed parsing
+PASS duplicate metadata rejected
+PASS same oneof occurrence rejected
+PASS complete concatenation rejected
+PASS valid prefix cannot escape trailing truncation
+PASS unknown groups bounded before decode
+PASS unknown opaque bytes preserved
+PASS semantic rejection returns nil message

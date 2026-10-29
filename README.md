@@ -10,6 +10,8 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 第三批已接收默认拒绝的节点读取策略、审计事件校验/受限视图及列表搜索筛选，均为未接线的离线基础。最新结论见 [第三批审查](docs/development/reviews/BATCH-03-REVIEW.md)，下一步见 [第四批任务单](docs/development/FOURTH-BATCH-WORK-PACKAGES.md)：有界帧解码、节点授权错误接线、只读节点详情。G2仍未冻结，不自动启动Agent。
 
+第四批接收有界离线帧解码、只读节点详情；节点授权错误接线因1个P2退回，main中该缺口仍未关闭。最新记录见 [第四批审查](docs/development/reviews/BATCH-04-REVIEW.md)，后续见 [第五批任务单](docs/development/FIFTH-BATCH-WORK-PACKAGES.md)：离线连接对账/序列、节点授权返修、键盘焦点验收。全部尚未接真实节点/API/执行，App仍是开发空壳。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。
