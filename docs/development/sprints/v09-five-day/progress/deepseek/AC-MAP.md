@@ -32,3 +32,4 @@ SSE 读取 3 事件 <1ms。报告：`reports/_review/v09-services/poc07-report.j
 - monitoring/quota HTTP 未注册：g2-merged 候选无相应路径。
 - 真实 Cloudflare/ACME/QQ/SMTP/Nginx、Debian/Ubuntu 双架构、1C1G、mTLS Agent 全部 UNTESTED/BLOCKED；publishing 只有注入端口，无真实供应商端到端。
 - `go.mod/go.sum`、迁移编号、HTTP 契约仍待总控接收。
+- `npm run check` 的 g2r03 契约检查 FAIL：候选 provenance 固定了 `internal/nodes/node.go` 的旧哈希，DS-02 的合法字段扩展使其变化；需总控重基线，不通过删除测试/改候选规避。

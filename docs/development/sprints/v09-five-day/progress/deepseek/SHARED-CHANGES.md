@@ -84,3 +84,11 @@
 - 未注册：monitoring/quota（g2-merged 无路径）、certificates（候选节点本地 CSR/信任包与 KeyRef 模型冲突）、publishing（候选无路径）、gateway `/checks`（缺独立 serviceRunning 观测）。
 - 契约差异：DNS 以 `credentialRef` 取代 `apiToken`（DS 永不接收原始令牌）；文件上传 HTTP 仅会话创建/完成，字节通道待 CX；gateway 路由创建需 `gatewayId` 扩展字段；任务审批需先取 `planDigest`；审计 eventId 为数字字符串。
 - 上述若需并入主线，请总控按 OpenAPI/契约流程裁决；本包未改 API/Proto/gen。
+
+## 7. g2r03 候选 provenance 重基线请求（非代码缺陷）
+
+- 文件：`tests/contracts/g2r03/build-candidate.mjs` 的 `sources.node` 哈希（候选工件，未由本包修改）。
+- 期望：`internal/nodes/node.go` sha256 `c61c768a2d2f6f5729219c8a459258b3f34ff83f14c578253c3abba2fd63eb78`。
+- 实际：`b9f42e1c201493241de2f3daf055e2addaa80a999e0eb71f36376be448adfa62`。
+- 原因：DS-02 需要持久化 CountryCode、CreatedAt/UpdatedAt 与受控事件序列 eventSeq；`Node` 是同包公开 DTO/领域模型，字段必须定义在 node.go。未改 `visibility.go`、`auth/node_policy.go`、API/Proto/gen。
+- 请求：总控在接收本包时重算 g2r03 provenance（或明确该检查仅针对提案快照）。不要通过删除测试或手改生成物规避。

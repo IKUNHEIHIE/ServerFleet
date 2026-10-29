@@ -83,8 +83,9 @@
 
 ## 最终验证（2026-10-30）
 
-- `npm run check`：PASS（policy/contracts/go/web/git；Go 全包测试、vet、staticcheck；Web 179 项、build）。
+- `npm run check`：**非全绿**。policy/go/web/git 通过（policy 在最终 docs HEAD 复跑 PASS；Go 全包测试+vet+staticcheck；Web 测试+build）。contracts 仅 `g2r03-explicit-contracts` FAIL：其 provenance 固化哈希期望 `internal/nodes/node.go`=c61c768a…，而 DS-02 合法新增 CountryCode/CreatedAt/UpdatedAt/eventSeq 后为 b9f42e1c…；`visibility.go`、`auth/node_policy.go` 未变。未改候选/测试，需总控重基线该候选来源哈希。其余结构/lint/roundtrip/negative/g2r02 通过。
 - `npm run check:security`：PASS（npm audit 0，govulncheck 无漏洞）。
+- `node scripts/check.mjs policy`：PASS（最终 HEAD 提交标题合法；架构边界通过）。
 - `go test ./...`：PASS（含 architecture、contracts、integration、POC）。
 - `go mod tidy -diff` / `go mod verify`：PASS。
 - 跨 13 个迁移的备份/恢复/损坏拒绝：`go test ./tests/integration/v09/services/` PASS。
