@@ -5,6 +5,7 @@ import type {
   BatchTaskPreview,
   BootstrapRequest,
   BootstrapState,
+  CredentialMetadata,
   Grant,
   HealthPayload,
   Identity,
@@ -13,6 +14,7 @@ import type {
   LoginResult,
   NodeCapabilities,
   NodeDetail,
+  NodeDiagnostic,
   NodeEnrollment,
   NodeEnrollmentToken,
   NodeGroup,
@@ -24,9 +26,11 @@ import type {
   Permission,
   Role,
   ServiceGroup,
+  ServiceGroupDispatchPreview,
   Session,
   TaskExecution,
   TaskSummary,
+  TrafficQuota,
   User,
 } from "./dto";
 
@@ -40,7 +44,8 @@ export const authApi = {
   login: (body: LoginRequest) => authPost<LoginResult>("/api/v1/auth/login", body),
   logout: () => apiClient.request<void>("/api/v1/auth/logout", { method: "POST" }),
   me: () => apiClient.request<Identity>("/api/v1/auth/me"),
-  sessions: () => apiClient.request<ItemList<Session>>("/api/v1/auth/sessions"),
+  sessions: (query: { cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
+    apiClient.request<ItemList<Session>>("/api/v1/auth/sessions", { query, signal }),
   revokeSession: (sessionId: string) =>
     apiClient.request<void>(`/api/v1/auth/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
 };
@@ -65,6 +70,15 @@ export const nodesApi = {
     apiClient.request<NodeDetail>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/suspend`, { method: "POST", body }),
   revoke: (nodeId: string, body: { reason: string; expectedRevision?: number }) =>
     apiClient.request<NodeIdentity>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/revoke`, { method: "POST", body }),
+  diagnostics: (nodeId: string, signal?: AbortSignal) =>
+    apiClient.request<NodeDiagnostic>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/diagnostics`, { signal }),
+  trafficQuota: (nodeId: string, signal?: AbortSignal) =>
+    apiClient.request<TrafficQuota>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/traffic-quota`, { signal }),
+  setTrafficQuota: (nodeId: string, body: TrafficQuota) =>
+    apiClient.request<TrafficQuota>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/traffic-quota`, {
+      method: "PUT",
+      body,
+    }),
 };
 
 export const enrollmentApi = {
@@ -109,7 +123,8 @@ export const groupsApi = {
 };
 
 export const usersApi = {
-  list: (signal?: AbortSignal) => apiClient.request<Page<User>>("/api/v1/users", { signal }),
+  list: (query: { cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
+    apiClient.request<Page<User>>("/api/v1/users", { query, signal }),
   get: (userId: string, signal?: AbortSignal) =>
     apiClient.request<User>(`/api/v1/users/${encodeURIComponent(userId)}`, { signal }),
   create: (body: { username: string; displayName?: string; password?: string; roleIds: readonly string[]; enabled?: boolean }) =>
@@ -118,7 +133,8 @@ export const usersApi = {
     apiClient.request<User>(`/api/v1/users/${encodeURIComponent(userId)}`, { method: "PATCH", body }),
   roles: (signal?: AbortSignal) => apiClient.request<ItemList<Role>>("/api/v1/roles", { signal }),
   permissions: (signal?: AbortSignal) => apiClient.request<ItemList<Permission>>("/api/v1/permissions", { signal }),
-  grants: (signal?: AbortSignal) => apiClient.request<Page<Grant>>("/api/v1/resource-grants", { signal }),
+  grants: (query: { cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
+    apiClient.request<Page<Grant>>("/api/v1/resource-grants", { query, signal }),
   createGrant: (body: {
     principalId: string;
     resourceType: "node" | "node_group" | "service_group";
@@ -194,13 +210,13 @@ export const serviceGroupsApi = {
       method: "PUT",
       body,
     }),
-  setScheduling: (serviceGroupId: string, nodeId: string, body: { eligible: boolean; reason?: string }) =>
+  setScheduling: (serviceGroupId: string, nodeId: string, body: { paused: boolean; reason?: string }) =>
     apiClient.request<unknown>(
       `/api/v1/service-groups/${encodeURIComponent(serviceGroupId)}/members/${encodeURIComponent(nodeId)}/scheduling`,
       { method: "PATCH", body },
     ),
   dispatchPreview: (serviceGroupId: string, signal?: AbortSignal) =>
-    apiClient.request<unknown>(
+    apiClient.request<ServiceGroupDispatchPreview>(
       `/api/v1/service-groups/${encodeURIComponent(serviceGroupId)}/dispatch-preview`,
       { signal },
     ),
@@ -215,5 +231,30 @@ export interface ServiceGroupInput {
   readonly gatewayIds?: readonly string[];
   readonly expectedRevision?: number;
 }
+
+export const credentialsApi = {
+  list: (signal?: AbortSignal) => apiClient.request<readonly CredentialMetadata[]>("/api/v1/credentials", { signal }),
+  create: (body: {
+    name: string;
+    kind: string;
+    secret: string;
+    usageScope: readonly string[];
+    expiresAt?: string;
+  }) => apiClient.request<CredentialMetadata>("/api/v1/credentials", { method: "POST", body }),
+  references: (credentialId: string, signal?: AbortSignal) =>
+    apiClient.request<{ ok: boolean }>(`/api/v1/credentials/${encodeURIComponent(credentialId)}/references`, { signal }),
+  rotate: (credentialId: string, body: { name: string; kind: string; secret: string; usageScope: readonly string[]; expiresAt?: string }) =>
+    apiClient.request<unknown>(`/api/v1/credentials/${encodeURIComponent(credentialId)}/rotate`, { method: "POST", body }),
+  revoke: (credentialId: string) =>
+    apiClient.request<unknown>(`/api/v1/credentials/${encodeURIComponent(credentialId)}/revoke`, { method: "POST" }),
+};
+
+export const trafficApi = {
+  risks: (signal?: AbortSignal) =>
+    apiClient.request<readonly { nodeId: string; kind: string; severity: string; estimated: boolean }[]>(
+      "/api/v1/traffic-risks",
+      { signal },
+    ),
+};
 
 export type { RequestOptions };

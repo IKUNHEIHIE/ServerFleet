@@ -254,3 +254,66 @@ export interface HealthPayload {
   readonly status: string;
   readonly stage?: string;
 }
+
+export interface NodeDiagnostic {
+  readonly nodeId: string;
+  readonly connectionState: "online" | "unreachable" | "identity_rejected" | "unknown";
+  readonly lastHeartbeatAt?: string;
+  readonly agentVersion?: string;
+  readonly identityVerified?: boolean;
+  readonly pendingTasks?: readonly { readonly id: string; readonly expired?: boolean; readonly requiresReapproval?: boolean }[];
+  readonly diagnosticNotes?: readonly string[];
+}
+
+export interface TrafficQuota {
+  readonly nodeId: string;
+  readonly quotaGb: number;
+  readonly usedGb?: number;
+  readonly cycleResetDay: number;
+  readonly timezone: string;
+  readonly direction: "ingress" | "egress" | "combined";
+  readonly source: "agent_estimate" | "provider_billing";
+  readonly dataComplete?: boolean;
+  readonly thresholdsPct?: readonly number[];
+  readonly expiryType?: "instance" | "trial" | "credit" | "other";
+  readonly expiresAt?: string;
+  readonly remindDays?: readonly number[];
+  readonly predictionGb?: number;
+  readonly predictionConfidence?: "insufficient" | "low" | "medium" | "high";
+}
+
+export interface TrafficRisk {
+  readonly nodeId: string;
+  readonly kind: string;
+  readonly severity: string;
+  readonly estimated: boolean;
+}
+
+export interface CredentialMetadata {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: "cloudflare_token" | "smtp_password" | "qqbot_secret" | "ai_api_key" | "other";
+  readonly status: "unverified" | "valid" | "invalid" | "expired" | "revoked";
+  readonly usageScope: readonly string[];
+  readonly references?: readonly string[];
+  readonly lastValidatedAt?: string;
+  readonly expiresAt?: string;
+  readonly createdAt?: string;
+}
+
+export interface ServiceGroupDispatchPreview {
+  readonly serviceGroupId: string;
+  readonly gatewayEligible: boolean;
+  readonly eligibleNodeIds: readonly string[];
+  readonly excludedNodes?: readonly { readonly nodeId: string; readonly reason?: string }[];
+  readonly policy?: string;
+}
+
+export interface ServiceGroupMemberStatus {
+  readonly nodeId: string;
+  readonly paused: boolean;
+  readonly reason?: string;
+  readonly online?: boolean;
+  readonly healthy?: boolean;
+  readonly dispatchEligible: boolean;
+}

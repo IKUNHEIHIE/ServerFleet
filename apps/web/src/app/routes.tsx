@@ -8,6 +8,13 @@ import { SessionChecking, SessionUnavailable } from "@/app/session-screens";
 import { BootstrapPage, LoginPage } from "@/features/auth/auth-pages";
 import { OverviewPage } from "@/features/overview/overview-page";
 import { NodesPage } from "@/features/nodes/nodes-page";
+import { NodeAddPage } from "@/features/nodes/node-add-page";
+import { NodeDetailPage } from "@/features/nodes/node-detail-page";
+import { GroupsPage } from "@/features/groups/groups-page";
+import { ServiceGroupDetailPage, ServiceGroupsPage } from "@/features/service-groups/service-groups-page";
+import { UsersPage } from "@/features/users/users-page";
+import { AuditPage } from "@/features/audit/audit-page";
+import { SettingsPage } from "@/features/settings/settings-page";
 import { NotFoundPage, PendingPage } from "@/features/pending/pending-page";
 
 export interface RouteContext {
@@ -27,9 +34,9 @@ function pending(title: string, description: string) {
 export const ROUTES: readonly RouteEntry[] = [
   { path: "/overview", render: () => <OverviewPage /> },
   { path: "/nodes", render: () => <NodesPage /> },
-  { path: "/nodes/new", render: pending("添加节点", "短期接入凭证、安装引导、接入审批与历史。") },
-  { path: "/nodes/:nodeId", render: pending("节点详情", "身份、能力、状态、诊断与流量配额。") },
-  { path: "/groups", render: pending("分组管理", "自定义分组与只读自动分类；与服务组严格区分。") },
+  { path: "/nodes/new", render: () => <NodeAddPage /> },
+  { path: "/nodes/:nodeId", render: ({ params }) => <NodeDetailPage nodeId={params.nodeId} /> },
+  { path: "/groups", render: () => <GroupsPage /> },
   { path: "/files", render: pending("文件互传", "双栏目录浏览、上传下载与跨节点复制任务。") },
   { path: "/tasks", render: pending("批量任务", "冻结目标快照、分批/金丝雀、审批与进度。") },
   { path: "/tasks/:taskId", render: pending("任务详情", "任务状态、逐节点执行、SSE 进度与审批。") },
@@ -39,8 +46,8 @@ export const ROUTES: readonly RouteEntry[] = [
   { path: "/gateways", render: pending("网关管理", "Nginx 应用网关安装、检查、维护与路由。") },
   { path: "/gateways/:gatewayId", render: pending("网关详情", "安装状态、健康检查与调度资格。") },
   { path: "/publishing", render: pending("服务发布", "服务组到网关、DNS、证书的一体化发布。") },
-  { path: "/service-groups", render: pending("服务组管理", "业务成员集合、健康与调度状态。") },
-  { path: "/service-groups/:serviceGroupId", render: pending("服务组详情", "成员、健康、调度与发布关联。") },
+  { path: "/service-groups", render: () => <ServiceGroupsPage /> },
+  { path: "/service-groups/:serviceGroupId", render: ({ params }) => <ServiceGroupDetailPage serviceGroupId={params.serviceGroupId} /> },
   { path: "/workflows", render: pending("自动化工作流", "触发器、条件、操作、人工审批与通知。") },
   { path: "/plugins", render: pending("插件中心", "来源仓库、目录、安装启停升级与卸载。") },
   { path: "/plugins/xray", render: pending("Xray 节点管理器", "声明式插件界面；仅安装并启用后可操作。") },
@@ -48,9 +55,9 @@ export const ROUTES: readonly RouteEntry[] = [
   { path: "/certificates", render: pending("证书管理", "公网证书与内部 TLS 下发。") },
   { path: "/updates", render: pending("更新中心", "主控与 Agent 更新状态、失败恢复。") },
   { path: "/backups", render: pending("备份与恢复", "备份校验与主控灾难恢复。") },
-  { path: "/users", render: pending("用户与权限", "用户、角色、资源授权与会话。") },
-  { path: "/audit", render: pending("审计日志", "关键操作人、时间、资源与结果。") },
-  { path: "/settings", render: pending("系统设置", "账号安全、通知渠道、DNS 供应商与安全凭据。") },
+  { path: "/users", render: () => <UsersPage /> },
+  { path: "/audit", render: () => <AuditPage /> },
+  { path: "/settings", render: () => <SettingsPage /> },
 ];
 
 function routeTitle(path: string): string {

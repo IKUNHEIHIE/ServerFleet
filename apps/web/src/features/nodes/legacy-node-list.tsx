@@ -1,6 +1,7 @@
 import { useId, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
-import type { LegacyMetric, LegacyNodeRow } from "./legacy-types";
+import { LegacyMetricCell } from "./metric-display";
+import type { LegacyNodeRow } from "./legacy-types";
 
 export function normaliseLegacyQuery(raw: string): string {
   return raw.trim().toLowerCase();
@@ -12,30 +13,6 @@ export function filterLegacyRows(rows: readonly LegacyNodeRow[], query: string):
   return rows.filter(
     row => row.name.toLowerCase().includes(normalised) || row.id.toLowerCase().includes(normalised),
   );
-}
-
-function formatPercent(percent: number): string {
-  return `${percent.toFixed(1).replace(/\.0$/, "")}%`;
-}
-
-function MetricCell({ metric }: { readonly metric: LegacyMetric }) {
-  if (metric.kind === "value") {
-    return (
-      <span className="inline-flex flex-col items-end gap-0.5">
-        <span className="tabular-nums">{formatPercent(metric.percent)}</span>
-        <span className="text-xs font-medium text-amber-700">无采样时间</span>
-      </span>
-    );
-  }
-  const text =
-    metric.kind === "unavailable"
-      ? "离线，无当前读数"
-      : metric.kind === "absent"
-        ? "无读数"
-        : metric.reason === "out-of-range"
-          ? "读数超出 0–100"
-          : "读数非法";
-  return <span className="text-xs text-muted-foreground">{text}</span>;
 }
 
 function NameCell({ row }: { readonly row: LegacyNodeRow }) {
@@ -125,10 +102,10 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
                 <td className="px-4 py-3">{row.region ?? <span className="text-muted-foreground">缺失</span>}</td>
                 <td className="px-4 py-3">{row.provider ?? <span className="text-muted-foreground">缺失</span>}</td>
                 <td className="px-4 py-3 text-right">
-                  <MetricCell metric={row.cpu} />
+                  <LegacyMetricCell metric={row.cpu} />
                 </td>
                 <td className="px-4 py-3 text-right">
-                  <MetricCell metric={row.memory} />
+                  <LegacyMetricCell metric={row.memory} />
                 </td>
               </tr>
             ))}
