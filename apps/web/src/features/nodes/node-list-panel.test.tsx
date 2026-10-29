@@ -1,6 +1,7 @@
+import { createRef } from "react";
 import { fireEvent, render, screen, within } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { NodeListPanel } from "./node-list-panel";
+import { NodeListPanel, type NodeListPanelHandle } from "./node-list-panel";
 import {
   buildReadyState,
   emptyState,
@@ -257,7 +258,10 @@ describe("NodeListPanel · 键盘交互", () => {
     expect(rows[1]).toHaveFocus();
 
     fireEvent.keyDown(rows[1], { key: "Enter" });
-    expect(onNodeActivate).toHaveBeenCalledWith(readyNodes.find(node => node.id === "node-online-03"));
+    expect(onNodeActivate).toHaveBeenCalledWith(
+      readyNodes.find(node => node.id === "node-online-03"),
+      "keyboard",
+    );
   });
 
   it("从搜索框输入后可直接用 Tab 顺序进入列表行", () => {
@@ -268,6 +272,20 @@ describe("NodeListPanel · 键盘交互", () => {
     rows[0].focus();
     expect(rows[0]).toHaveFocus();
     expect(rows[0]).toHaveAttribute("tabindex", "0");
+  });
+});
+
+describe("NodeListPanel · 命令式焦点", () => {
+  it("focusSearch 聚焦可用的搜索框；加载时控件禁用则返回 false", () => {
+    const ref = createRef<NodeListPanelHandle>();
+    const { rerender } = render(<NodeListPanel ref={ref} state={readyState} />);
+
+    expect(ref.current?.focusSearch()).toBe(true);
+    expect(searchBox()).toHaveFocus();
+
+    rerender(<NodeListPanel ref={ref} state={loadingState} />);
+    expect(ref.current?.focusSearch()).toBe(false);
+    expect(searchBox()).toBeDisabled();
   });
 });
 
