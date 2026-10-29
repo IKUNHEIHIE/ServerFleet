@@ -1,7 +1,6 @@
 package dns
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 	"unicode/utf8"
@@ -40,10 +39,3 @@ func (r CredentialRef) Validate() error {
 }
 
 func (r CredentialRef) String() string { return string(r) }
-
-func validateCredentialStatus(status CredentialStatus) error {
-	if !status.valid() {
-		return fmt.Errorf("%w: credential status", ErrInvalidInput)
-	}
-	return nil
-}
