@@ -62,6 +62,16 @@ auth/credentials及HTTP可选接线、单元与真实SQLite测试；详细候选
 
 ## R06 生产连接状态机与真实WSS组合实验
 
+提交 `7c43ce49f62f3e759ff2c7f6bf799945f3ef2e09`；额外staticcheck PASS，architecture PASS 2.128s。
+
 internal/transport/controller_link.go实现既有Sender和ControllerLinks连接状态机；握手阶段、能力求交、每帧当前证书重查、事件与发送回调、连接替换、读写超时/有界帧、写失败UNKNOWN和禁止盲目重发。精确接线候选CONTROLLER-LINK-WIRING.md；FrameSocket不绑定待审第三方运行时，实际适配在独立固定依赖PoC，根锁未变。
 
 `go test ./internal/transport -count=1` PASS 3.675s；固定`node tests/poc/v09/platform/run.mjs` PASS 5.311s。真实本机WSS执行生产hub的Hello→offer→ack事件，未准入发送被拒、重连关闭旧连接、旧离线不污染新连接、吊销后收发均拒绝。业务回调/Admit是fixture，未替代DS任务/节点实现，未把局部实验记为完整Agent执行验收。继续接入身份/其他平台功能。
+
+## R07 接入凭据、CSR、签发与重装撤销
+
+transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测试；精确候选ENROLLMENT-WIRING.md。短期一次性token仅摘要持久、首次绑定CSR/request、默认pending、当前管理员gate/revision决定、证书与映射同Tx、重装原子吊销旧证书、指纹查当前撤销，临时测试CA私钥不进入Git/响应/持久状态。保留真实审计出箱，需接入统一audit Tx；不批准任何生产PKI profile。
+
+单元测试含改CSR/请求重放、无审批不返回cert、提交失败仍pending、审批重放、CSR恶意CA/SAN不继承、重装旧证书拒绝、token期限/观察后时钟回拨、假管理员gate拒绝。第一次独立SQLite测试因引入transport缺protobuf sum失败；只在隔离module/sum补入根已固定protobuf v1.36.12，根锁未动。随后实际SQLite→关闭重开保留pending→失败回滚→批准→签发证书真实本机TLS握手→撤销→关闭重开仍拒绝，七项组合PASS 8.367s（bootstrap锁步骤）。固定锁复验记录随后补入。gate是fixture，未把本机TLS验成实际节点/统一任务/正式接入页面。
+
+固定锁重验PASS 6.082s；继续加入真实DS SQLRecorder同Tx消费enrollment出箱，故意在auth状态+audit均写完后提交前失败，证明批准审计与证书映射一起回滚，最终七项PASS 8.366s。`go test ./internal/transport ./tests/architecture -count=1` PASS 3.470s/1.320s，staticcheck PASS。继续插件/Xray、AI/工作流、更新恢复等包内项。

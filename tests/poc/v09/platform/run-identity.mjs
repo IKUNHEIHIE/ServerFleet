@@ -36,7 +36,12 @@ writeFileSync(path.join(work,"identity_http_test.go"),readFileSync(new URL("iden
 writeFileSync(path.join(work,"identity_audit_test.go"),readFileSync(new URL("identity_audit_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_credentials_test.go"),readFileSync(new URL("identity_credentials_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_bearer_test.go"),readFileSync(new URL("identity_bearer_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"enrollment_sql_test.go"),readFileSync(new URL("enrollment_sql_test.go.txt",import.meta.url)));
 try{
  run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s","."],{cwd:work,name:"v09-real-sqlite-identity"});
+ if(bootstrap){
+  writeFileSync(new URL("identity-module.txt",import.meta.url),readFileSync(path.join(work,"go.mod"),"utf8").replace(workspace,"__WORKSPACE__"));
+  writeFileSync(new URL("identity-dependency-sums.txt",import.meta.url),readFileSync(path.join(work,"go.sum")));
+ }
 }finally{if(protectedFiles.some((file,i)=>hash(file)!==before[i]))throw new Error("Root dependencies changed");}
 console.log(`PASS: actual SQLite auth integration with DS source ${dsRef}; isolated only, public integration still pending.`);
