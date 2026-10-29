@@ -39,6 +39,7 @@ const suites = {
     run(process.execPath, ["scripts/proto-negative.mjs"], { name: "protobuf-negative-checks" });
     // Revision candidates are checked explicitly, alongside the original inputs.
     run(process.execPath, ["tests/contracts/g2r02/run.mjs"], { name: "g2r02-explicit-contracts" });
+    run(process.execPath, ["tests/contracts/g2r03/run.mjs"], { name: "g2r03-explicit-contracts" });
   },
   go() {
     const fmt = path.join(path.dirname(go), process.platform === "win32" ? "gofmt.exe" : "gofmt");

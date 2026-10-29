@@ -26,7 +26,7 @@
     },
     "webAdapter": {
       "file": "apps/web/src/features/nodes/candidate-adapter.ts",
-      "sha256": "5eebba4c1df163e6b84f370f0bb48041b24c8c5201218ca433a081732b020b5c"
+      "sha256": "026f71ec896a8433f5f71dcc509f297df562f8c785197258dfa6357a9d4c2cf4"
     },
     "webTypes": {
       "file": "apps/web/src/features/nodes/types.ts",

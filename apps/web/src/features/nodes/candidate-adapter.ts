@@ -3,8 +3,9 @@
  *
  * 边界（重要）：
  * - G2 尚未冻结：这里只做纯映射 `DTO → ViewModel`，不实现任何网络访问，也不缓存。
- * - 候选契约当前只有 `GET /api/v1/nodes/{nodeId}`（单节点详情），尚无节点集合读取操作，
- *   因此 `CandidateNodesSource` 只是留给集成负责人的接缝，本文件不提供实现。
+ * - 本适配仅参考 Core 详情；Merged 已有 `GET /api/v1/nodes` / `listNodesForTransfer`，
+ *   其 `NodeSummary` 与此 DTO 不同，不能直接强转；差异与待批准方案见 g2-r03 决策包。
+ * - `CandidateNodesSource` 是留给集成负责人的接缝，本文件不提供实现。
  * - 集成本页面时：用真实 Controller REST 实现 `CandidateNodesSource`，并在此处替换映射；
  *   调用方不得绕过本文件直接消费候选 DTO。
  *
@@ -38,8 +39,9 @@ export interface CandidateNodeDetail {
 
 /**
  * 指标的临时本地形状。
- * 候选契约目前没有 CPU/内存读数对象，此形状只用于隔离 Mock 与 ViewModel 之间，
- * 不是契约，不得在任何文档或接口描述中当作 G2 字段。契约补齐后原地替换。
+ * Core 详情无 CPU/内存；Merged 的 NodeSummary 已有可空读数，但没有采样时间。
+ * 此形状只用于隔离 Mock 与 ViewModel，不是公共契约；不能用响应时间补造采样时间。
+ * g2-r03 的可选扩展仍待批准，未来真实适配须显式处理旧列表与详情的差异。
  */
 export interface CandidateNodeMetrics {
   readonly cpuPercent?: number | null;
