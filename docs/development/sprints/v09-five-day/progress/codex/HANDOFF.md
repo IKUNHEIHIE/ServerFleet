@@ -51,8 +51,20 @@ AI：零资源默认、服务组成员冻结并与当前成员取交集、当前
 
 ## 05 / CX-06 插件包校验与Xray计数组件
 
+SHA `52ea2b9a6b1ba21ee5b85cd25b84ac8d6937bbc2`。
+
 文件 internal/plugins/package_verify{,_test}.go、plugins/xray-manager/traffic{,_test}.go。新签名元数据只是独立候选，不替代现有Plugin manifest/Host ABI。实现Ed25519域分离签名、精确源pin、载荷摘要/长度、规范JSON（拒绝重复/未知字段/非规范字节）、唯一xray-manager ID、权限白名单、无脚本声明UI、当前启用/安装修订检查。没有WASM加载、安装成功或任意Host能力。
 
 Xray累计组件：稳定用户/实例/维度key，计数段、首样本基线、重复去重、重启/重置、乱序拒绝、缺口不充0、历史缺口保留，不将用户/入站/实例相加或当VPS账单。核心没有import可选包。
 
 实际 `go test ./internal/ai ./internal/plugins ./internal/transport ./tests/architecture -count=1` PASS 1.989s/2.067s/3.713s/1.439s；`go test ./internal/recovery ./plugins/xray-manager ./tests/architecture -count=1` PASS 1.389s/1.371s/1.794s。最后平台组合测试10包全部PASS。测试包载荷明确为非WASM合成数据，只证明密码学/规则层，不算POC-01/02/03/04或真实StatsService。缺Host/WASM依赖审查、插件持久生命周期/统一任务、目标Xray版本与Linux双架构、配置模板/实际预检、用户持久化/受控导出/采集器/页面，CX-06未完成。
+
+## 06 / CX-02/07 凭据加密、更新验签与恢复隔离组件
+
+文件 internal/auth/credential_cipher{,_test}.go、internal/updates/verify{,_test}.go、internal/recovery/reconcile{,_test}.go。AES-256-GCM随机nonce+对象/用途/owner/修订/keyID的AAD绑定、过期/撤销拒绝、新key重加密/旧key退出；仅auth私有函数，无普通API明文GET，不接受CA/恢复密钥用途。全局key使用量/存储/当前权限仍需适配，不把该组件称为凭据管理完成。
+
+更新校验：固定版本/组件/平台/架构/单调发布序列、Ed25519域分离签名+摘要、限量流式读取、取消/短包/尾随/篡改拒绝。没有替换二进制、启动服务、健康/迁移回退或伪造installed。签名格式是新候选，缺UPDATE原文，不默认采用生产。
+
+恢复组件：信任根/世代与撤销序列不能回退，撤销并集保留；running/offered/acknowledged归UNKNOWN，未启动过期归expired，全部旧session/approval待作废；输出恒为quarantine计划，不能开调度。不接触恢复私钥，不因可解码就声称可恢复；实际离线解密/备份完整性/旧主控fencing与DS原子写入仍缺。
+
+组合命令 `go test ./internal/auth ./internal/ai ./internal/plugins ./internal/workflows ./internal/updates ./internal/recovery ./plugins/xray-manager ./apps/agent ./internal/transport ./tests/architecture -count=1`：10包PASS，详见reports/platform-modules.log（auth 6.752s；其余1.345–3.341s）。单元测试用合成key/字节，不是真实更新或POC-08。第二次 `npm run check` 五套全部PASS；`npm run check:security` PASS。这些检查不能关闭AC或缺失E2E。
