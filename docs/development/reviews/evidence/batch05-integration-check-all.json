@@ -1,0 +1,25 @@
+{
+  "executedAt": "2026-10-29T05:03:03.919Z",
+  "results": [
+    {
+      "name": "policy",
+      "status": "PASS"
+    },
+    {
+      "name": "contracts",
+      "status": "PASS"
+    },
+    {
+      "name": "go",
+      "status": "PASS"
+    },
+    {
+      "name": "web",
+      "status": "PASS"
+    },
+    {
+      "name": "git",
+      "status": "PASS"
+    }
+  ]
+}

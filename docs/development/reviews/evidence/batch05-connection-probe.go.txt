@@ -1,0 +1,52 @@
+package main
+
+import (
+	"errors"
+	"fmt"
+	"math"
+	"sync"
+	"sync/atomic"
+	"time"
+	"google.golang.org/protobuf/proto"
+	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
+	"serverfleet.local/serverfleet/internal/transport"
+)
+
+func main() {
+	now := time.Date(2026,10,29,1,0,0,0,time.UTC)
+	c := transport.ValidationContext{Direction:transport.AgentToController,Phase:transport.Established,ProtocolMajor:1,Now:now}
+	s := transport.ValidationLimits{MaxMessageBytes:8192,MaxTextBytes:256,MaxParametersBytes:256,MaxOutputBytes:256,MaxMetrics:4,MaxSyncExecutions:4,MaxCapabilities:4,MaxTimeoutSeconds:60,MaxOfferLifetime:time.Minute}
+	l := transport.FrameDecodeLimits{MaxFrameBytes:8192,MaxFields:64,MaxDepth:4}
+	pass:=func(name string,ok bool){if !ok{panic("FAIL "+name)};fmt.Println("PASS "+name)}
+	frame:=func(node,conn string,seq uint64)[]byte{b,e:=proto.Marshal(&agentv1.Envelope{ProtocolMajor:1,MessageId:"m",ConnectionId:conn,NodeId:node,Sequence:seq,SentAtUnixMs:now.UnixMilli(),Message:&agentv1.Envelope_Heartbeat{Heartbeat:&agentv1.Heartbeat{ConnectivityStatus:"online"}}});if e!=nil{panic(e)};return b}
+	code:=func(err error,want transport.ConnectionErrorCode)bool{var e *transport.ConnectionError;return errors.As(err,&e)&&e.Code==want}
+	g,err:=transport.NewConnectionGuard(transport.ConnectionBinding{})
+	pass("empty binding rejected",g==nil&&code(err,transport.ConnectionInvalidBinding))
+	var unbound transport.ConnectionGuard
+	m,err:=unbound.Receive(frame("n","c",1),c,s,l)
+	pass("zero guard rejects message",m==nil&&code(err,transport.ConnectionUnbound))
+	g,err=transport.NewConnectionGuard(transport.ConnectionBinding{NodeID:"n",ConnectionID:"c",Direction:transport.AgentToController});if err!=nil{panic(err)}
+	m,err=g.Receive(frame("n","c",1),c,s,l)
+	pass("first sequence commits",m!=nil&&err==nil&&g.HighWatermark()==1)
+	m,err=g.Receive(frame("n","c",1),c,s,l)
+	pass("replay rejected without watermark change",m==nil&&code(err,transport.ConnectionSequenceRejected)&&g.HighWatermark()==1)
+	m,err=g.Receive(frame("other","c",2),c,s,l)
+	pass("wrong node rejected without consuming sequence",m==nil&&code(err,transport.ConnectionNodeMismatch)&&g.HighWatermark()==1)
+	m,err=g.Receive(frame("n","other",2),c,s,l)
+	pass("wrong connection rejected without consuming sequence",m==nil&&code(err,transport.ConnectionIDMismatch)&&g.HighWatermark()==1)
+	m,err=g.Receive(frame("n","c",2),c,s,l)
+	pass("corrected same sequence accepted",m!=nil&&err==nil&&g.HighWatermark()==2)
+	var wg sync.WaitGroup;var accepted,rejected atomic.Int32
+	raw:=frame("n","c",3)
+	for i:=0;i<32;i++{wg.Add(1);go func(){defer wg.Done();m,e:=g.Receive(raw,c,s,l);if e==nil&&m!=nil{accepted.Add(1)}else if m==nil&&code(e,transport.ConnectionSequenceRejected){rejected.Add(1)}}()};wg.Wait()
+	pass("32 concurrent copies of a sequence commit once",accepted.Load()==1&&rejected.Load()==31&&g.HighWatermark()==3)
+	m,err=g.Receive(frame("n","c",math.MaxUint64),c,s,l)
+	pass("maximum uint64 accepted without arithmetic overflow",m!=nil&&err==nil&&g.HighWatermark()==math.MaxUint64)
+	m,err=g.Receive(frame("n","c",1),c,s,l)
+	pass("maximum sequence cannot wrap to one",m==nil&&code(err,transport.ConnectionSequenceRejected))
+	alias:=*g;g.Close();m,err=alias.Receive(raw,c,s,l)
+	pass("close applies to copied handle",m==nil&&code(err,transport.ConnectionClosed))
+	g,err=transport.NewConnectionGuard(transport.ConnectionBinding{NodeID:"n",ConnectionID:"new",Direction:transport.AgentToController});if err!=nil{panic(err)}
+	m,err=g.Receive(raw,c,s,l)
+	pass("old connection cannot enter explicit new guard",m==nil&&code(err,transport.ConnectionIDMismatch)&&g.HighWatermark()==0)
+}

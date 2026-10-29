@@ -40,6 +40,7 @@
 | P1-C07 | 部分 PRIV/WC/PKI-OPS/UPDATE 原始 ADR 未单独收录 | 本阶段不实现相关业务；后续安全实现前从正式归档补齐核验，不能猜测 |
 | P1-C08 | Protobuf 帧/心跳/缓存/版本协商、mTLS、持有证明、去重和恢复无真实 PoC | 参数仍候选；不得从编译成功推断通信安全或 1C1G 性能 |
 | P1-C09 | WASM Host ABI、签名、配额、Xray/Nginx/灾备 PoC 未完成 | 不锁定运行时，不实现插件业务；按 G2 E01～E08/G1 PoC 门槛推进 |
+| P1-C10 | 节点只读适配的资料范围不一致：Core候选只有单节点详情，但Merged候选已有GET /api/v1/nodes（listNodesForTransfer、NodeSummary，含online布尔及可空CPU/内存），不同于NodeDetail的status/revision模型；旧指标没有采样时间。当前Web局部适配仅围绕Core说明，不能据此断言整个候选集没有节点列表/指标 | 第五批审查登记；G2-R02A逐字段核对旧列表/新详情/局部ViewModel，写兼容候选与冻结前决策。不静默替换已有GET、复用operationId、把online=false推成暂停/吊销，或把缺采样时间当作实时读数；旧候选/r02及原始资料只读，运行时profile仍未批准 |
 
 YAML 输入有大量正常锚点重用，默认库别名上限曾触发拒绝；工程只把上限设为有限 10000，并限制单文件 2 MiB、检测重复 key/避免重复遍历，未关闭保护或改写候选。Redocly `spec` 与补充规则对三份文件均通过；另有损坏 ref、重复 ID、路径参数和重复 YAML key 负向样例。
 

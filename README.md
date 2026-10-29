@@ -1,6 +1,6 @@
 # Server Fleet · M0-P1 工程基础
 
-Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Monorepo。当前交付只有可构建骨架、模块端口、测试/契约工具链和协作规范；没有真实节点管理或生产发布能力。
+Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Monorepo。已包含可构建骨架、模块端口、测试/契约工具链，以及离线授权/节点/审计/通信规则和隔离Web组件；尚未形成真实管理API、节点执行或生产发布能力。
 
 **状态：G0 产品已确认；G1 方向已批准；G2 仍为候选，未冻结。P1 完成后暂停，后续开发需负责人明确分配新任务。**
 
@@ -10,7 +10,9 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 第三批已接收默认拒绝的节点读取策略、审计事件校验/受限视图及列表搜索筛选，均为未接线的离线基础。最新结论见 [第三批审查](docs/development/reviews/BATCH-03-REVIEW.md)，下一步见 [第四批任务单](docs/development/FOURTH-BATCH-WORK-PACKAGES.md)：有界帧解码、节点授权错误接线、只读节点详情。G2仍未冻结，不自动启动Agent。
 
-第四批接收有界离线帧解码、只读节点详情；节点授权错误接线因1个P2退回，main中该缺口仍未关闭。最新记录见 [第四批审查](docs/development/reviews/BATCH-04-REVIEW.md)，后续见 [第五批任务单](docs/development/FIFTH-BATCH-WORK-PACKAGES.md)：离线连接对账/序列、节点授权返修、键盘焦点验收。全部尚未接真实节点/API/执行，App仍是开发空壳。
+第四批接收有界离线帧解码、只读节点详情，当时节点授权错误接线因1个P2退回。历史记录见 [第四批审查](docs/development/reviews/BATCH-04-REVIEW.md)和[第五批任务单](docs/development/FIFTH-BATCH-WORK-PACKAGES.md)。
+
+第五批接收离线连接对账/序列及节点授权返修，N02-R01关闭；W04焦点改动因1个P2退回，未合并。最新见 [第五批审查](docs/development/reviews/BATCH-05-REVIEW.md)，后续见 [第六批任务单](docs/development/SIXTH-BATCH-WORK-PACKAGES.md)：节点只读契约收口、任务目标快照/未启动等待规则、焦点返修。G2未冻结，全部尚未接真实节点/API/执行，App仍是开发空壳。
 
 ## 快速验证
 

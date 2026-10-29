@@ -1,0 +1,42 @@
+{
+  "reviewDate": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "task": "BATCH05-REVIEW",
+  "reviewer": "codex-review-01",
+  "baseline": "189112ef23444f3d0d28474fa46c2cb866aded0d",
+  "testedAcceptedCodeHead": "043b3fde140ee5b5f41ac2e18aad2dc3abc5396d",
+  "overallDecision": "PARTIAL_ACCEPT",
+  "decisions": [
+    {"task": "T01-C", "head": "b118aa6a73ac6eddcb32c126bb9b64b89496bcab", "decision": "ACCEPT_OFFLINE_CANDIDATE", "coveragePercent": 98.2},
+    {"task": "N02-R1", "head": "fdeb3e6f18ea1930a257eacbf986a4119d2602b1", "decision": "ACCEPT_WITH_N02_HISTORY", "moduleCoveragePercent": 95.7, "independentRegressionAssertions": 15, "regressionStatus": "PASS"},
+    {"task": "W04", "head": "8e95c3cbb8bfffc497449cc2728c4dd04fe45eee", "decision": "CHANGES_REQUESTED", "merged": false, "originalWebTests": 147, "originalTestsStatus": "PASS", "independentFocusProbe": "FAIL", "failedAssertions": 2}
+  ],
+  "findings": [
+    {"id": "N02-R01", "priority": 2, "status": "CLOSED", "evidence": "All 15 original independent failure assertions pass against fdeb3e6."},
+    {"id": "W04-R01", "priority": 2, "status": "OPEN", "file": "apps/web/src/features/nodes/node-list-workspace.tsx", "line": 80, "summary": "Same-ID state bailout prevents the ref-based focus request from running immediately; a later background refresh consumes it and steals focus from search.", "repairTask": "W04-R1"}
+  ],
+  "acceptedIntegration": {
+    "includes": ["T01-C", "N02", "N02-R1"],
+    "excludes": ["W04"],
+    "npmCi": "PASS",
+    "toolsInstall": "PASS_WITH_LOCAL_FILE_MODULE_CACHE",
+    "check": "PASS",
+    "security": "PASS",
+    "goTopLevelTests": 144,
+    "goSubtests": 581,
+    "goFailures": 0,
+    "webTests": 129,
+    "webFailures": 0,
+    "npmVulnerabilities": 0,
+    "govulncheck": "No vulnerabilities found.",
+    "independentConnectionAssertions": 12,
+    "connectionConcurrencyRepetitions": 20
+  },
+  "candidateConflictRegistered": "P1-C10",
+  "authorBrowserArtifactsInspected": true,
+  "reviewerBrowserRerun": false,
+  "notVerified": ["GitHub CI", "Linux race", "real identity and policy storage", "real API/storage/WSS/mTLS/task execution", "production replay protection", "1C1G performance"],
+  "g2Frozen": false,
+  "agentsStarted": false,
+  "remotePushed": false
+}
