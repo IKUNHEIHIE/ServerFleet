@@ -336,6 +336,23 @@ describe("NodeList · 空内容与副标题覆写", () => {
   });
 });
 
+describe("NodeList · 选中标记", () => {
+  it("只有 selectedId 对应的行带 aria-current", () => {
+    render(<NodeList state={readyState} selectedId="node-online-02" onNodeActivate={vi.fn()} />);
+
+    const rows = bodyRows();
+    expect(rows[1]).toHaveAttribute("aria-current", "true");
+    expect(rows[0]).not.toHaveAttribute("aria-current");
+    expect(rows.filter(row => row.getAttribute("aria-current") === "true")).toHaveLength(1);
+  });
+
+  it("未提供 selectedId 时没有行被标记为当前", () => {
+    render(<NodeList state={readyState} />);
+
+    for (const row of bodyRows()) expect(row).not.toHaveAttribute("aria-current");
+  });
+});
+
 describe("NodeList · 隔离性", () => {
   it("渲染期间不发起网络请求", () => {
     const fetchSpy = vi.fn(() => Promise.reject(new Error("blocked in tests")));
