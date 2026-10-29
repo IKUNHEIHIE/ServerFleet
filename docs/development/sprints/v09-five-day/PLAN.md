@@ -43,7 +43,7 @@
 
 公共文件（go.mod/go.sum、npm manifests/锁、根配置、依赖图、迁移台账、API/Proto/gen、CI/打包）保持总控单写。作者在各自`progress/<作者>/SHARED-CHANGES.md`给**文件、精确patch、理由、调用方、兼容性、测试/回退**；总控用独立contract/integration提交接收，批准后作者才能同步相应提交。库/API/CLI具体用法按Context7查询，生成代码只用固定工具。
 
-新业务包采用任务单列出的单一owner；当前依赖图尚未登记它们。首个检查点给新增包的最小import边，**总控审查登记后才接入跨模块主线**，不放宽依赖检查、泛化为任意internal依赖或把所有业务塞进storage。作者可先写独立实现/测试与受控接口草案，未登记导致的组合BLOCKED如实记录，继续其他子项。后续主控只组合已接收模块，由CX独占入口文件。
+新业务包采用任务单列出的单一owner；总控已在本次交接的`dependencies.json`提前登记13个新域及最小方向，并用实际策略的14项边界检查保护允许/拒绝方向，作者不必再等这些已有边批准。额外边/新包须给具体patch再审查，不能泛化任意internal依赖或把业务塞进storage。允许方向见[依赖规则](../../DEPENDENCY-RULES.md)；transport不反向import业务、AI/文件不直连transport、Agent不importController领域、核心不import可选Xray、只有storage使用database/sql继续受检。后续主控只组合已接收模块，由CX独占入口文件。
 
 ## 安全、环境与完成标准
 

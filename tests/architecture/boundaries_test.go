@@ -112,3 +112,39 @@ func TestBoundaryCheckerRejectsForbiddenEdges(t *testing.T) {
 		}
 	}
 }
+
+func TestV09DomainBoundaries(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "development", "dependencies.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var p policy
+	if err := json.Unmarshal(data, &p); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		name, from, to string
+		want           bool
+	}{
+		{"controller_composes_monitoring", "apps/controller", "internal/monitoring", true},
+		{"file_changes_use_tasks", "internal/files", "internal/tasks", true},
+		{"ai_reads_servicegroup_snapshot", "internal/ai", "internal/servicegroups", true},
+		{"workflow_uses_notification_service", "internal/workflows", "internal/notifications", true},
+		{"recovery_coordinates_task_state", "internal/recovery", "internal/tasks", true},
+		{"storage_no_reverse_auth", "internal/storage", "internal/auth", false},
+		{"ai_no_direct_agent", "internal/ai", "internal/transport", false},
+		{"files_no_direct_agent", "internal/files", "internal/transport", false},
+		{"transport_no_business_import", "internal/transport", "internal/nodes", false},
+		{"agent_no_gateway_domain", "apps/agent", "internal/gateway", false},
+		{"core_no_optional_xray", "internal/plugins", "plugins/xray-manager", false},
+		{"nodes_no_dns_domain", "internal/nodes", "internal/dns", false},
+		{"audit_no_task_side_effects", "internal/audit", "internal/tasks", false},
+		{"unregistered_domain_rejected", "internal/ai-extra", "internal/tasks", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := p.permits(tc.from, tc.to); got != tc.want {
+				t.Errorf("%s -> %s = %t, want %t", tc.from, tc.to, got, tc.want)
+			}
+		})
+	}
+}

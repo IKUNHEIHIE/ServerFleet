@@ -21,3 +21,23 @@ Web 仅消费 Controller REST/SSE；API DTO 将来由契约适配层转换成 Vi
 检查能力有限：静态 import 检查不能证明运行时 RBAC、网络安全、SQL 正确性或插件沙箱隔离。真实安全验收仍需负向测试与审查；禁止把通过 import 检查当成已实现授权。
 
 公共端口、外部契约或依赖图调整必须走 `contract/...` / `integration/...`，列出调用方、兼容性、迁移、测试与回退。实现者不能以修复循环依赖为由把所有类型搬进公共“大杂烩”包或取消规则。
+
+## 完整v0.9五日包的增量登记
+
+总控在integration/v09-five-day-dispatch为三个复合实施包提前登记以下新域。仅新增允许的静态import边，不实现授权/任务/供应商，也不批准G2或运行时；不改Agent直连或storage反向边。
+
+| 新调用域 | 允许跨域（其余拒绝） |
+|---|---|
+| ai | auth、tasks、nodes、servicegroups、audit、storage |
+| workflows | auth、tasks、nodes、notifications、audit、storage |
+| updates、recovery | auth、tasks、nodes、audit、storage |
+| files | auth、tasks、nodes、audit、storage |
+| monitoring、quota | auth、nodes、notifications、audit、storage |
+| notifications | auth、audit、storage |
+| dns | auth、tasks、audit、storage |
+| certificates | auth、tasks、nodes、dns、audit、storage |
+| gateway | auth、tasks、nodes、servicegroups、certificates、audit、storage |
+| servicegroups | auth、nodes、audit、storage |
+| publishing | auth、tasks、nodes、servicegroups、gateway、dns、certificates、audit、storage |
+
+Controller组合入口和tests增加对上述域的显式允许；tasks增加servicegroups用于目标快照；没有`internal/*`通配放行。实际策略测试覆盖正常任务/组合方向及AI/文件直连transport、Agent导入业务、storage反向、核心导入可选Xray、未登记相似前缀等拒绝。撤回本次新方向需与相应业务调用一起协调，不删除旧限制或生成基线。

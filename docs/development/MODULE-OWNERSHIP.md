@@ -26,7 +26,7 @@ GitHub 账号未提供，CODEOWNERS 尚无真实审批人，当前依靠任务�
 
 ## 完整v0.9五日复合包的新增目录归属
 
-负责人2026-10-30授权的实施分工见`sprints/v09-five-day/PLAN.md`。原模块依赖方向有效；下表只登记新目录的单一作者，不自动修改`dependencies.json`或允许任意跨域import。首个检查点提交最小依赖边、公开端口及共享patch，总控独立接收后再接入主线。
+负责人2026-10-30授权的实施分工见`sprints/v09-five-day/PLAN.md`。总控本次已登记下表13个新域的最小方向，见`dependencies.json`和DEPENDENCY-RULES，作者可以直接使用；不允许任意跨域import。额外依赖边、公开端口与共享patch仍由总控独立协调。
 
 | 新目录 | 唯一实施会话 | 责任及边界 |
 |---|---|---|

@@ -7,7 +7,7 @@
 ## 允许写入
 
 - `internal/storage/**`、`internal/nodes/**`、`internal/tasks/**`、`internal/audit/**`。
-- 新领域目录 `internal/files/**`、`internal/monitoring/**`、`internal/notifications/**`、`internal/quota/**`、`internal/dns/**`、`internal/certificates/**`、`internal/gateway/**`、`internal/servicegroups/**`、`internal/publishing/**`；单一owner为本包，跨模块import边先给总控登记。
+- 新领域目录 `internal/files/**`、`internal/monitoring/**`、`internal/notifications/**`、`internal/quota/**`、`internal/dns/**`、`internal/certificates/**`、`internal/gateway/**`、`internal/servicegroups/**`、`internal/publishing/**`；单一owner为本包。本次交接已登记最小依赖方向，可直接使用；额外跨模块import边交总控协调。
 - `tests/integration/v09/services/**`、`tests/poc/v09/services/**`、`docs/development/sprints/v09-five-day/progress/deepseek/**`、自己的忽略`reports/_review/v09-services/`。
 - 不改auth/transport/Controller与Agent入口、Web、可选插件、公共配置/锁/API/Proto/gen或原始资料。数据库迁移公共编号/台账、go依赖和公开ports按PLAN提交精确共享差异，不自行抢写。
 
@@ -27,7 +27,7 @@
 
 ## 依赖与交付
 
-所有修改经Controller权限/任务/审批/审计，复用CX鉴权与受控命令，不用测试subject或默认allow兜底。首检查点先交DS-01及节点只读垂直增量；被CX接口/共享依赖阻塞时登记具体文件/patch/错误，继续同包其他独立实现和测试。新包import需总控批准，不关闭边界测试。
+所有修改经Controller权限/任务/审批/审计，复用CX鉴权与受控命令，不用测试subject或默认allow兜底。首检查点先交DS-01及节点只读垂直增量；被CX接口/共享依赖阻塞时登记具体文件/patch/错误，继续同包其他独立实现和测试。本次已登记的依赖方向可直接用，额外边走总控，不关闭边界测试。
 
 检查点逐项记录到自己progress的`STATUS.md`/`HANDOFF.md`/`SHARED-CHANGES.md`，包含SHA、实际命令/输出、端点/事件、数据持久与权限负向结果、候选依赖、环境。测试至少覆盖跨节点/账号/Zone/路径越权、空库/坏源/部分结果、并发revision/幂等/取消/TTL、崩溃恢复、任务审批失效、敏感日志、通知去重和SSRF；真实文件字节/第三方/Nginx证据与double分开。
 

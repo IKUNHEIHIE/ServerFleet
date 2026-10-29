@@ -7,7 +7,7 @@
 ## 允许写入
 
 - `internal/auth/**`、`internal/transport/**`、`internal/plugins/**`、`apps/controller/**`、`apps/agent/**`。
-- 新领域目录 `internal/ai/**`、`internal/workflows/**`、`internal/updates/**`、`internal/recovery/**`；可选包 `plugins/xray-manager/**`（不得由核心import）。新增包import边须先交总控登记，不默认突破现有依赖图。
+- 新领域目录 `internal/ai/**`、`internal/workflows/**`、`internal/updates/**`、`internal/recovery/**`；可选包 `plugins/xray-manager/**`（不得由核心import）。本次交接已登记最小依赖方向，可直接使用；额外import边交总控协调，不突破依赖图。
 - `tests/integration/v09/platform/**`、`tests/poc/v09/platform/**`、`docs/contracts/revisions/v09-five-day-cx02/**`、`docs/development/sprints/v09-five-day/progress/codex/**`、自己忽略的`reports/_review/v09-platform/`。
 - 禁止修改DS/GM业务目录、公共配置/锁/生成/API/Proto/迁移台账及原始资料。共享变更按PLAN的具体patch机制；模块公开ports跨owner变化也先协调。真实凭据/生产/VPS/云不在本次授权中。
 
