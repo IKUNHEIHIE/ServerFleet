@@ -4,8 +4,8 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
-| V09-5D-DISPATCH | 完整v0.9五日冲刺重排与派发包准备中 | codex-review-01 | integration/v09-five-day-dispatch / `.worktrees/integration--v09-five-day-dispatch` | 全量需求责任/接口依赖/每日里程碑、三项复合任务及目录、任务状态/接收范围/检查证据；不在本任务实现业务或替代安全冻结 | 项目负责人；起始6052f59；派发包和检查交接后停止 |
-| V09-5D-CX | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | codex-02 | feature/v09-platform-cx02 / `.worktrees/feature--v09-platform-cx02` | CX-01—08：auth/transport/plugins/Controller+Agent及AI/工作流/更新恢复新域、可选Xray、专用测试/进度；具体CODEX.md；共享文件交精确patch总控协调 | codex-review-01+安全/契约/owner；基线为本包最终派发main SHA，交接明示；不是旧6052f59目录 |
+| V09-5D-DISPATCH | 全量派发包/24AC覆盖/13新域依赖及14方向检查/组合安全检查通过，三目录准备完成；交接后停止 | codex-review-01 | integration/v09-five-day-dispatch / `.worktrees/integration--v09-five-day-dispatch` | 全量责任/每日里程碑、三复合任务及目录、依赖协调/架构负向、状态与证据；不实现业务或替代安全冻结 | 项目负责人；起始6052f59；结果见reviews/V09-FIVE-DAY-DISPATCH.md |
+| V09-5D-CX | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | codex-02 | feature/v09-platform-cx02 / `.worktrees/feature--v09-platform-cx02` | CX-01—08：auth/transport/plugins/Controller+Agent及AI/工作流/更新恢复新域、可选Xray、专用测试/进度；具体CODEX.md；共享文件交精确patch总控协调 | codex-review-01+安全/契约/owner；基线为本包最终派发main SHA，交接明示；不复用旧设计目录 |
 | V09-5D-DS | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | deepseek-02 | feature/v09-services-ds02 / `.worktrees/feature--v09-services-ds02` | DS-01—09：storage/nodes/tasks/audit及文件/监控通知/配额/DNS/证书/网关/服务组/发布新域、专用测试/进度；具体DEEPSEEK.md；迁移/依赖单写 | codex-review-01+安全/契约/owner；基线为本包最终派发main SHA，交接明示 |
 | V09-5D-GM | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | gemini-02 | feature/v09-console-gm02 / `.worktrees/feature--v09-console-gm02` | GM-01—09：正式Web全部功能/真实API适配/浏览器验收；W07并入GM-03；具体GEMINI.md；不抢改npm锁/配置/后端 | codex-review-01+UI/安全/契约；基线为本包最终派发main SHA，交接明示 |
 | READ-DESIGN-R1-REVIEW | 返修/组合/安全检查通过，接收两设计并关闭原四P2；交接后停止 | codex-review-01 | integration/read-design-r1-review / `.worktrees/integration--read-design-r1-review` | 原精确复审/接收及文义澄清、审查证据/状态/README/P1-C10与下一步具体待批范围；不启动实现或批准详细D项 | 项目负责人验收；起始3c817f8 |

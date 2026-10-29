@@ -1,0 +1,188 @@
+{
+  "task": "V09-5D-DISPATCH",
+  "session": "codex-review-01",
+  "date": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "baseMain": "6052f5966735b62283876acbd43b78320d0fe60d",
+  "userRequestedScope": "FULL_V0.9",
+  "userRequestedDeadline": "five days",
+  "plannedDeadline": "2026-11-03T23:59:00+08:00",
+  "feasibility": "HIGH_RISK_NOT_GUARANTEED",
+  "decision": "AUTHORIZE_AND_PREPARE_THREE_COMPOSITE_LOCAL_IMPLEMENTATION_PACKAGES",
+  "packages": [
+    {
+      "id": "V09-5D-CX",
+      "session": "codex-02",
+      "branch": "feature/v09-platform-cx02",
+      "directory": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-platform-cx02",
+      "subtasks": 8,
+      "preparedFrom": "c75bf330e3614cd260111499a6d1eeffc2609646",
+      "nodeModulesIndependent": true,
+      "toolBinIndependent": true,
+      "dependencyInstall": "PASS",
+      "initialTrackedState": "CLEAN"
+    },
+    {
+      "id": "V09-5D-DS",
+      "session": "deepseek-02",
+      "branch": "feature/v09-services-ds02",
+      "directory": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-services-ds02",
+      "subtasks": 9,
+      "preparedFrom": "c75bf330e3614cd260111499a6d1eeffc2609646",
+      "nodeModulesIndependent": true,
+      "toolBinIndependent": true,
+      "dependencyInstall": "PASS",
+      "initialTrackedState": "CLEAN"
+    },
+    {
+      "id": "V09-5D-GM",
+      "session": "gemini-02",
+      "branch": "feature/v09-console-gm02",
+      "directory": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-console-gm02",
+      "subtasks": 9,
+      "preparedFrom": "c75bf330e3614cd260111499a6d1eeffc2609646",
+      "nodeModulesIndependent": true,
+      "toolBinIndependent": true,
+      "dependencyInstall": "PASS",
+      "initialTrackedState": "CLEAN"
+    }
+  ],
+  "authorFinalBaselineRule": "Fast-forward all clean prepared author branches to final reviewed main before handoff; exact SHA recorded in primary reports/v09-five-day-handoff.json and user handoff",
+  "coverage": {
+    "date": "2026-10-30",
+    "timezone": "Asia/Shanghai",
+    "status": "PASS",
+    "baseMain": "6052f5966735b62283876acbd43b78320d0fe60d",
+    "fullApprovedProductACs": 24,
+    "assignedACs": 24,
+    "unassigned": [],
+    "acceptancePassesClaimed": 0,
+    "subtasks": {
+      "CX": [
+        "CX-01",
+        "CX-02",
+        "CX-03",
+        "CX-04",
+        "CX-05",
+        "CX-06",
+        "CX-07",
+        "CX-08"
+      ],
+      "DS": [
+        "DS-01",
+        "DS-02",
+        "DS-03",
+        "DS-04",
+        "DS-05",
+        "DS-06",
+        "DS-07",
+        "DS-08",
+        "DS-09"
+      ],
+      "GM": [
+        "GM-01",
+        "GM-02",
+        "GM-03",
+        "GM-04",
+        "GM-05",
+        "GM-06",
+        "GM-07",
+        "GM-08",
+        "GM-09"
+      ]
+    },
+    "totalSubtasks": 26,
+    "pocOwners": 8,
+    "registeredNewDomains": [
+      "internal/ai",
+      "internal/workflows",
+      "internal/updates",
+      "internal/recovery",
+      "internal/files",
+      "internal/monitoring",
+      "internal/notifications",
+      "internal/quota",
+      "internal/dns",
+      "internal/certificates",
+      "internal/gateway",
+      "internal/servicegroups",
+      "internal/publishing"
+    ],
+    "dependencyGraphAcyclic": true,
+    "noWildcardAllow": true,
+    "agentAndStorageDirectionsPreserved": true,
+    "localMarkdownLinks": 64,
+    "brokenLinks": [],
+    "businessSourceContractsOriginalsUnchanged": true,
+    "scope": "Dispatch, ownership, dependency registration and architecture tests; not implementation or acceptance of v0.9 features"
+  },
+  "dependencyCoordination": {
+    "newDomains": 13,
+    "newArchitectureTopLevelTests": 1,
+    "allowedDirectionCases": 5,
+    "deniedDirectionCases": 9,
+    "wildcardAllow": false,
+    "oldAgentStorageBoundariesPreserved": true
+  },
+  "initialTestedHead": "c75bf330e3614cd260111499a6d1eeffc2609646",
+  "initialCombinedChecks": "PASS",
+  "initialSecurity": "PASS",
+  "testedTechnicalHead": "98f6d94d94468d390dd76d2744b8f62198dd033c",
+  "checks": {
+    "npmCi": "PASS",
+    "toolsInstall": "PASS",
+    "combined": {
+      "executedAt": "2026-10-29T17:20:27.233Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        },
+        {
+          "name": "contracts",
+          "status": "PASS"
+        },
+        {
+          "name": "go",
+          "status": "PASS"
+        },
+        {
+          "name": "web",
+          "status": "PASS"
+        },
+        {
+          "name": "git",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-10-29T17:20:40.874Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "counts": {
+      "goTopLevel": 213,
+      "goSubtests": 819,
+      "goFailures": 0,
+      "webTests": "179",
+      "webFailures": "0"
+    },
+    "originalFilesVerified": 69,
+    "byteExactOriginalCandidatesVerified": 3,
+    "g2r03CandidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd"
+  },
+  "changed": "Task ownership/scope, docs/development/dependencies.json, architecture test; no business implementation or immutable source/contract changes",
+  "evidenceManifest": "evidence/v09-five-day-manifest.json",
+  "completeProductAcceptancePasses": 0,
+  "g2Frozen": false,
+  "productionOrCloudAccessAuthorized": false,
+  "agentsAutomaticallyStarted": 0,
+  "messagesSent": 0,
+  "pushed": false,
+  "conditions": "Authorized Linux/dual architecture/1C1G and third-party tests, applicable missing security originals, G2/PoC evidence remain unresolved; no scope reduction or mock-as-success"
+}

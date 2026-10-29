@@ -1,0 +1,68 @@
+{
+  "date": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "status": "PASS",
+  "baseMain": "6052f5966735b62283876acbd43b78320d0fe60d",
+  "fullApprovedProductACs": 24,
+  "assignedACs": 24,
+  "unassigned": [],
+  "acceptancePassesClaimed": 0,
+  "subtasks": {
+    "CX": [
+      "CX-01",
+      "CX-02",
+      "CX-03",
+      "CX-04",
+      "CX-05",
+      "CX-06",
+      "CX-07",
+      "CX-08"
+    ],
+    "DS": [
+      "DS-01",
+      "DS-02",
+      "DS-03",
+      "DS-04",
+      "DS-05",
+      "DS-06",
+      "DS-07",
+      "DS-08",
+      "DS-09"
+    ],
+    "GM": [
+      "GM-01",
+      "GM-02",
+      "GM-03",
+      "GM-04",
+      "GM-05",
+      "GM-06",
+      "GM-07",
+      "GM-08",
+      "GM-09"
+    ]
+  },
+  "totalSubtasks": 26,
+  "pocOwners": 8,
+  "registeredNewDomains": [
+    "internal/ai",
+    "internal/workflows",
+    "internal/updates",
+    "internal/recovery",
+    "internal/files",
+    "internal/monitoring",
+    "internal/notifications",
+    "internal/quota",
+    "internal/dns",
+    "internal/certificates",
+    "internal/gateway",
+    "internal/servicegroups",
+    "internal/publishing"
+  ],
+  "dependencyGraphAcyclic": true,
+  "noWildcardAllow": true,
+  "agentAndStorageDirectionsPreserved": true,
+  "localMarkdownLinks": 64,
+  "brokenLinks": [],
+  "businessSourceContractsOriginalsUnchanged": true,
+  "scope": "Dispatch, ownership, dependency registration and architecture tests; not implementation or acceptance of v0.9 features"
+}

@@ -20,6 +20,8 @@
 
 精确派发基线为**纳入本包并通过组合检查的最终main SHA**，由总控交接文本给出；作者必须核对实际HEAD，不能从旧设计分支开始。具体允许目录、子项和验收见[Codex任务](CODEX.md)、[DeepSeek任务](DEEPSEEK.md)、[Gemini任务](GEMINI.md)。需求责任完整覆盖见[AC-01—24登记表](ACCEPTANCE.json)。
 
+总控已准备每目录独立node_modules和工具bin；Go/Node发行文件链接到固定现有工具，只读使用，不写入/升级链接目标，任务缓存/数据库/报告留各自目录。初始创建点c75bf33，最终交接前仅在三目录仍干净时快进到已验证main；最终精确SHA和目录状态另存主目录忽略的`reports/v09-five-day-handoff.json`并在交接给出。没有自动启动作者。
+
 ## 五天里程碑
 
 | 时间 | Codex | DeepSeek | Gemini | 总控与交付证据 |

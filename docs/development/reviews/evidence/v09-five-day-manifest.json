@@ -1,0 +1,133 @@
+{
+  "date": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "technicalHead": "98f6d94d94468d390dd76d2744b8f62198dd033c",
+  "artifacts": [
+    {
+      "label": "npm-ci",
+      "source": "reports/v09-five-day-npm-ci.log",
+      "artifact": "v09-five-day-npm-ci.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 341,
+      "sha256": "cb4885a6a6aae31c1dfda40af21418f4d278f3f69603003d33b9f5303083e706",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "tools-install",
+      "source": "reports/v09-five-day-tools-install.log",
+      "artifact": "v09-five-day-tools-install.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 393,
+      "sha256": "e889f4db965670aef2d2ded045e8bfe7105b4a3f51e26909061794c1d330cec0",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "initial-check",
+      "source": "reports/v09-five-day-check.log",
+      "artifact": "v09-five-day-initial-check.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 1051375,
+      "sha256": "873e4be6a9337e7ac8c7ddfd030590006b362c5b4504005b8a4e9527069ea521",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "initial-security",
+      "source": "reports/v09-five-day-security.log",
+      "artifact": "v09-five-day-initial-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "final-check",
+      "source": "reports/v09-five-day-final-check.log",
+      "artifact": "v09-five-day-final-check.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 1065200,
+      "sha256": "61a521d75468eec762e8fdf1ff84eebbb9250b432b690ba510da4eca46dc4eef",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "final-security",
+      "source": "reports/v09-five-day-final-security.log",
+      "artifact": "v09-five-day-final-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "boundaries",
+      "source": "reports/v09-five-day-boundaries.log",
+      "artifact": "v09-five-day-boundaries.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 2030,
+      "sha256": "96601eef99d21cd3954bbd6adc87c89600af1785c39d175be53a744fd6d1c6f8",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "source-integrity",
+      "source": "reports/source-integrity.log",
+      "artifact": "v09-five-day-source-integrity.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 52,
+      "sha256": "ce1d0e3452868ac1db94258f2f5e9016dc21a8df0180b0689c0285867ff9c96d",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "check-all",
+      "source": "reports/check-all.json",
+      "artifact": "v09-five-day-check-all.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 359,
+      "sha256": "7b7fe2782355877da726c89054d7efb39d351e63b87c246b1bb0d7c71563f00e",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "check-security",
+      "source": "reports/check-security.json",
+      "artifact": "v09-five-day-check-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 128,
+      "sha256": "139b85fc12a8de6f67a4a86cd0dc77585aa24bc5f77f24ff1270d6513c7cf701",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "counts",
+      "source": "reports/v09-five-day-test-counts.json",
+      "artifact": "v09-five-day-counts.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 114,
+      "sha256": "a056e66ebfce3c96a64bdaf9cb30a42213550458ccd050e6db029e781b5dd504",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "codex-02-setup",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-platform-cx02/reports/v09-sprint-setup.log",
+      "artifact": "v09-five-day-codex-02-setup.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 341,
+      "sha256": "99fbe602c54b372a72b6377f7453f9b08073532063df26b04fa3ab479a05eae9",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "deepseek-02-setup",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-services-ds02/reports/v09-sprint-setup.log",
+      "artifact": "v09-five-day-deepseek-02-setup.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 341,
+      "sha256": "99fbe602c54b372a72b6377f7453f9b08073532063df26b04fa3ab479a05eae9",
+      "roundTrip": "PASS"
+    },
+    {
+      "label": "gemini-02-setup",
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-console-gm02/reports/v09-sprint-setup.log",
+      "artifact": "v09-five-day-gemini-02-setup.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "originalBytes": 341,
+      "sha256": "cb36a3ea9e30aee0f7866720c4ae4fbfbae93b721a9ca445cc52ffae6a637272",
+      "roundTrip": "PASS"
+    }
+  ]
+}
