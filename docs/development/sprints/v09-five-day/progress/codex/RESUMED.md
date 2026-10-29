@@ -70,8 +70,16 @@ internal/transport/controller_link.go实现既有Sender和ControllerLinks连接�
 
 ## R07 接入凭据、CSR、签发与重装撤销
 
+提交 `c537c2b98dddc655f035bc8e6deb351801cc788f`。
+
 transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测试；精确候选ENROLLMENT-WIRING.md。短期一次性token仅摘要持久、首次绑定CSR/request、默认pending、当前管理员gate/revision决定、证书与映射同Tx、重装原子吊销旧证书、指纹查当前撤销，临时测试CA私钥不进入Git/响应/持久状态。保留真实审计出箱，需接入统一audit Tx；不批准任何生产PKI profile。
 
 单元测试含改CSR/请求重放、无审批不返回cert、提交失败仍pending、审批重放、CSR恶意CA/SAN不继承、重装旧证书拒绝、token期限/观察后时钟回拨、假管理员gate拒绝。第一次独立SQLite测试因引入transport缺protobuf sum失败；只在隔离module/sum补入根已固定protobuf v1.36.12，根锁未动。随后实际SQLite→关闭重开保留pending→失败回滚→批准→签发证书真实本机TLS握手→撤销→关闭重开仍拒绝，七项组合PASS 8.367s（bootstrap锁步骤）。固定锁复验记录随后补入。gate是fixture，未把本机TLS验成实际节点/统一任务/正式接入页面。
 
 固定锁重验PASS 6.082s；继续加入真实DS SQLRecorder同Tx消费enrollment出箱，故意在auth状态+audit均写完后提交前失败，证明批准审计与证书映射一起回滚，最终七项PASS 8.366s。`go test ./internal/transport ./tests/architecture -count=1` PASS 3.470s/1.320s，staticcheck PASS。继续插件/Xray、AI/工作流、更新恢复等包内项。
+
+## R08 两套Xray模板与真实目标版本测试
+
+可选包新增固定26.6.1两套RAW/Vision模板、当前预检/插件/版本/接管/revision/端口/证书/REALITY校验、指定业务凭据借用与短时配置回调。默认仅声明UI，不引入WASM生产runtime、不import核心、不调用Shell/SSH。详细输入/接线/边界见XRAY-TEMPLATES.md。
+
+下载公开官方Windows64发布物，核对release asset SHA256和解包exe SHA256，未下载/接入Linux节点。真实Xray -test与两套回环inbound/API进程启动通过。初轮TLS临时证书测试把旧解析parent与新key混用，x509正确拒绝；改为新临时template/匹配key并同步预检DER后全通过，没放宽生产校验。显式SF_XRAY_LOCAL_TEST_BINARY的`go test ./plugins/xray-manager -count=1 -v` PASS 3.082s；staticcheck PASS。通用未供binary的运行SKIP该项。Linux双架构/完整客户端流量仍未验证，继续平台生命周期和其他子项。
