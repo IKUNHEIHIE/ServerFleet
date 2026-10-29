@@ -89,7 +89,7 @@
 - `go mod tidy -diff` / `go mod verify`：PASS。
 - 跨 13 个迁移的备份/恢复/损坏拒绝：`go test ./tests/integration/v09/services/` PASS。
 - POC-07 本机：10/30/100 代理 9370.9/5680.9/5298.8 writes/s，DB ≤980KB，checkpoint 后 WAL 0，SSE 3 事件 <1ms；环境 Windows，不代表 1C1G/Linux 验收。
-- 工作区在最终提交前 clean；最终 HEAD 见下一条提交。
+- 代码最终 HEAD：`9f33728`（网关/发布读拒绝审计补充）；本进度文档随后形成最终 docs HEAD。最终检查时工作区 clean。
 
 ## 未完成清单（不得当作完整 v0.9 已验收）
 
