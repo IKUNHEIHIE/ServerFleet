@@ -317,3 +317,77 @@ export interface ServiceGroupMemberStatus {
   readonly healthy?: boolean;
   readonly dispatchEligible: boolean;
 }
+
+export type ConflictPolicy = "skip" | "overwrite" | "rename";
+
+export interface FileEntry {
+  readonly name: string;
+  readonly path: string;
+  readonly type: "file" | "directory" | "symlink";
+  readonly sizeBytes?: number | null;
+  readonly modifiedAt?: string | null;
+  readonly version?: string | null;
+  readonly permissions?: string | null;
+}
+
+export interface DirectoryList {
+  readonly nodeId: string;
+  readonly path: string;
+  readonly entries: readonly FileEntry[];
+  readonly nextCursor?: string | null;
+}
+
+export interface FileSizeResult {
+  readonly path: string;
+  readonly sizeBytes: number;
+  readonly itemsScanned?: number;
+}
+
+export interface UploadSession {
+  readonly uploadId: string;
+  readonly status: "awaiting_data";
+  readonly expiresAt?: string;
+}
+
+export interface UploadCompletion {
+  readonly uploadId: string;
+  readonly status: "completed" | "failed";
+  readonly files?: readonly FileEntry[];
+}
+
+export type TransferStatus = "queued" | "running" | "completed" | "partial_failure" | "failed" | "cancelling" | "cancelled";
+
+export interface TransferItemResult {
+  readonly path?: string;
+  readonly state?: string;
+  readonly error?: string;
+  readonly bytes?: number;
+}
+
+export interface TransferJob {
+  readonly id: string;
+  readonly sourceNodeId: string;
+  readonly sourcePaths: readonly string[];
+  readonly destinationNodeId: string;
+  readonly destinationDir: string;
+  readonly conflictPolicy?: ConflictPolicy;
+  readonly status: TransferStatus;
+  readonly progressPercent: number;
+  readonly totalBytes?: number | null;
+  readonly copiedBytes?: number;
+  readonly items?: readonly TransferItemResult[];
+  readonly createdAt: string;
+  readonly startedAt?: string | null;
+  readonly completedAt?: string | null;
+  readonly error?: { readonly code: string; readonly message: string; readonly requestId?: string };
+}
+
+export interface CreateTransferRequest {
+  readonly sourceNodeId: string;
+  readonly sourcePaths: readonly string[];
+  readonly destinationNodeId: string;
+  readonly destinationDir: string;
+  readonly conflictPolicy: ConflictPolicy;
+  readonly followSymlinks?: false;
+  readonly dryRun?: boolean;
+}

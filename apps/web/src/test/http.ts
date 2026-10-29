@@ -11,6 +11,17 @@ export function textResponse(body: string, status = 200, contentType = "text/pla
   return new Response(body, { status, headers: { "Content-Type": contentType } });
 }
 
+export function sseResponse(chunks: readonly string[], keepOpen = false): Response {
+  const encoder = new TextEncoder();
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const chunk of chunks) controller.enqueue(encoder.encode(chunk));
+      if (!keepOpen) controller.close();
+    },
+  });
+  return new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } });
+}
+
 export type FetchHandler = (init: RequestInit | undefined, url: URL) => Response | Promise<Response>;
 export type FetchRoutes = Record<string, FetchHandler>;
 

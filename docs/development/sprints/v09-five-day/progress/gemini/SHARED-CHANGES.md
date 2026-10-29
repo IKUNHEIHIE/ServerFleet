@@ -29,3 +29,23 @@
 - 现状：仅 `POST /api/v1/backups/{backupId}/verify` 与灾害恢复预览/作业，没有备份记录列表、创建备份操作。
 - 影响：备份与恢复页面不能列出真实备份或创建备份；只能说明缺口与现有恢复入口。
 - 请求：确认 DS-01/DS-09 是否提供备份列表/创建端点，或明确由恢复预览承担。
+
+## 5. 任务契约：重复路径与创建响应不一致（GM-05 已按可实施子集接线）
+
+- 现状：`api/openapi/g2-merged-candidate.yaml` 同时存在核心任务与 SafeTasks/Batch 的 `/api/v1/tasks` 与 `/api/v1/tasks/{jobId}` 定义；前者返回 `TaskSummary`（`taskId/state/revision/planDigest`），后者返回 `BatchTaskJob`（`jobId/state/targetType/...`）。YAML 键重复，YAML 解析会以后者覆盖前者。
+- 前端当前选择：列表/详情/审批/取消/恢复/逐节点执行/SSE 使用核心 `TaskSummary` 语义（`taskId`）；创建与预演使用批量 DTO，取响应 `jobId` 作为任务详情 ID。若总控最终选择另一套字段，需要一次 DTO 适配提交，不在 UI 里同时猜测两套字段。
+- 请求：总控确认唯一任务 DTO/路径（建议保留核心 `TaskSummary` + 创建返回 `taskId`，或明确 `jobId === taskId`），并补 `GET /tasks/{id}/events` 的事件 data schema。SSE 当前只投影已知字段（state/nodeId/progressPercent/message/sequence），不显示原始 data。
+- 影响：详情从创建结果跳转依赖 `jobId` 与核心 `taskId` 是同一 ID；目前按契约缺省未额外转换，若服务端不是同一 ID 会显示“任务不存在”，不会伪造详情。
+- 分批/金丝雀参数：`BatchTaskCreateRequest` 没有 `batchSize/canarySize/dryRunLevel`；创建页只提交 `dispatchMode` 与布尔 `dryRun`，并明确提示缺口。
+
+## 6. 文件上传/下载通道（GM-05 BLOCKED）
+
+- 契约明确“上传会话只声明元数据，实际字节传输通道待技术设计”；没有下载端点。
+- 前端已实现目录浏览、创建文件夹、重命名、删除、大小计算、上传元数据声明、跨节点异步复制/取消；上传只到 `awaiting_data`，不调用 `complete` 冒充完成；下载不显示按钮。
+- 请求：补充受控上传字节流（含断点/校验）与下载（含路径授权、范围/流式）端点，或明确本期交付边界。真实字节验收保持 UNTESTED/BLOCKED。
+
+## 7. 与 CX/DS 检查点的对齐观察（未接收，不切换主线）
+
+- CX 检查点 2fc8dab 提议 `bootstrap` 从 `LoginResult` 改为 204、Cookie 名改 `__Host-sf_session`、`me` 增加 CSRF 重载；前端当前仍按已接收候选的 `LoginResult` 实现，刷新后写入锁定。等总控接收后再改，避免把未接收提案当冻结接口。
+- 前端已按 401/403/503 语义实现：401 终止会话、403 只清当前资源、503 保留会话；节点列表使用 Cookie credentials，等待列表 security 接收后即可真实生效。
+- DS 的 SQLite/storage 接缝不出现在 Web 层；Web 不直连 DB/Agent。

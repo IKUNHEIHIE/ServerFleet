@@ -5,7 +5,12 @@ import type {
   BatchTaskPreview,
   BootstrapRequest,
   BootstrapState,
+  ConflictPolicy,
+  CreateTransferRequest,
   CredentialMetadata,
+  DirectoryList,
+  FileEntry,
+  FileSizeResult,
   Grant,
   HealthPayload,
   Identity,
@@ -31,6 +36,9 @@ import type {
   TaskExecution,
   TaskSummary,
   TrafficQuota,
+  TransferJob,
+  UploadCompletion,
+  UploadSession,
   User,
 } from "./dto";
 
@@ -255,6 +263,63 @@ export const trafficApi = {
       "/api/v1/traffic-risks",
       { signal },
     ),
+};
+
+export const filesApi = {
+  list: (
+    nodeId: string,
+    query: { path: string; search?: string; cursor?: string; limit?: number },
+    signal?: AbortSignal,
+  ) =>
+    apiClient.request<DirectoryList>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files`, { query, signal }),
+  remove: (nodeId: string, path: string, recursive: boolean) =>
+    apiClient.request<void>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files`, {
+      method: "DELETE",
+      query: { path, recursive },
+    }),
+  size: (nodeId: string, path: string) =>
+    apiClient.request<FileSizeResult>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files/size`, {
+      method: "POST",
+      body: { path },
+    }),
+  createDirectory: (nodeId: string, body: { parentPath: string; name: string }) =>
+    apiClient.request<FileEntry>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files/directories`, {
+      method: "POST",
+      body,
+    }),
+  rename: (nodeId: string, body: { path: string; newName: string; expectedVersion?: string }) =>
+    apiClient.request<FileEntry>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files/rename`, {
+      method: "PATCH",
+      body,
+    }),
+  createUpload: (
+    nodeId: string,
+    body: {
+      destinationDir: string;
+      conflictPolicy?: ConflictPolicy;
+      files: readonly { name: string; sizeBytes: number; sha256?: string }[];
+    },
+  ) =>
+    apiClient.request<UploadSession>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads`, {
+      method: "POST",
+      body,
+    }),
+  completeUpload: (nodeId: string, uploadId: string) =>
+    apiClient.request<UploadCompletion>(
+      `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}/complete`,
+      { method: "POST" },
+    ),
+};
+
+export const transfersApi = {
+  list: (query: { status?: string; cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
+    apiClient.request<ItemList<TransferJob>>("/api/v1/transfers", { query, signal }),
+  create: (body: CreateTransferRequest, idempotencyKey: string) =>
+    apiClient.request<TransferJob>("/api/v1/transfers", { method: "POST", body, idempotencyKey }),
+  get: (transferId: string, signal?: AbortSignal) =>
+    apiClient.request<TransferJob>(`/api/v1/transfers/${encodeURIComponent(transferId)}`, { signal }),
+  cancel: (transferId: string) =>
+    apiClient.request<TransferJob>(`/api/v1/transfers/${encodeURIComponent(transferId)}/cancel`, { method: "POST" }),
 };
 
 export type { RequestOptions };

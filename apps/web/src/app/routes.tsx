@@ -15,6 +15,9 @@ import { ServiceGroupDetailPage, ServiceGroupsPage } from "@/features/service-gr
 import { UsersPage } from "@/features/users/users-page";
 import { AuditPage } from "@/features/audit/audit-page";
 import { SettingsPage } from "@/features/settings/settings-page";
+import { TasksPage } from "@/features/tasks/tasks-page";
+import { TaskDetailPage } from "@/features/tasks/task-detail-page";
+import { FilesPage } from "@/features/files/files-page";
 import { NotFoundPage, PendingPage } from "@/features/pending/pending-page";
 
 export interface RouteContext {
@@ -37,9 +40,9 @@ export const ROUTES: readonly RouteEntry[] = [
   { path: "/nodes/new", render: () => <NodeAddPage /> },
   { path: "/nodes/:nodeId", render: ({ params }) => <NodeDetailPage nodeId={params.nodeId} /> },
   { path: "/groups", render: () => <GroupsPage /> },
-  { path: "/files", render: pending("文件互传", "双栏目录浏览、上传下载与跨节点复制任务。") },
-  { path: "/tasks", render: pending("批量任务", "冻结目标快照、分批/金丝雀、审批与进度。") },
-  { path: "/tasks/:taskId", render: pending("任务详情", "任务状态、逐节点执行、SSE 进度与审批。") },
+  { path: "/files", render: () => <FilesPage /> },
+  { path: "/tasks", render: () => <TasksPage /> },
+  { path: "/tasks/:taskId", render: ({ params }) => <TaskDetailPage taskId={params.taskId} /> },
   { path: "/monitoring", render: pending("监控告警", "资源概况、HTTP/TCP/TLS 可用性与告警事件。") },
   { path: "/ai", render: pending("AI 运维", "会话资源授权、工具审批与流式消息。") },
   { path: "/ai/:sessionId", render: pending("AI 会话", "资源授权、审批模式、消息与工具事件。") },
