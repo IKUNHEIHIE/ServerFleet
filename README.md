@@ -16,7 +16,9 @@ Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Mono
 
 第六批先行接收目标快照/未启动15分钟等待规则及焦点返修，W04-R01关闭，历史见 [部分验收](docs/development/reviews/BATCH-06-PARTIAL-REVIEW.md)。随后G2-R02A通过独立复审，仅接收节点只读候选/兼容矩阵/检查工件；r03已接入根契约检查，来源注释已修正，D01–D07及P1-C10仍OPEN。最新见 [契约复审](docs/development/reviews/G2-R02A-REVIEW.md)。
 
-Codex后续见 [AUTH-01B任务单](docs/development/CODEX-AUTH-01B-WORK-PACKAGE.md)：离线读取预检/不可变策略范围；DeepSeek/Gemini继续 [原并行任务](docs/development/PARALLEL-FOLLOWUP-01.md)。G2未冻结，尚未接真实节点/API/执行，App仍是开发空壳；候选接收不批准认证/字段迁移或运行时profile。
+随后TASK-01B默认分批/当前批纯判定通过审查；W05加载容器因恢复来源首帧旧数据、标识trim合并两个P2退回，尚未进入main。结论与证据见 [本轮审查](docs/development/reviews/FOLLOWUP-01-REVIEW.md)；DeepSeek补顺序进度纯值、Gemini原分支返修，见 [两位后续任务](docs/development/PARALLEL-FOLLOWUP-02.md)。
+
+Codex继续原 [AUTH-01B任务单](docs/development/CODEX-AUTH-01B-WORK-PACKAGE.md)：离线读取预检/不可变策略范围。G2未冻结，尚未接真实节点/API/执行，App仍是开发空壳；候选接收不批准认证/字段迁移或运行时profile。
 
 ## 快速验证
 

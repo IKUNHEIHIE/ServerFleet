@@ -1,0 +1,48 @@
+
+ RUN  v5.0.5 D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-loader-gm01/apps/web
+
+ ❯ ../../reports/_review/followup01/source-return.test.tsx (2 tests | 2 failed) 70ms
+   × restoring the same source after null must hide old ready data in the first commit 52ms
+   × changing the exact scope key must not collapse padded identities 18ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ../../reports/_review/followup01/source-return.test.tsx > restoring the same source after null must hide old ready data in the first commit
+AssertionError: expected '搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选…' not to contain 'aws-tokyo-01'
+
+Expected: "aws-tokyo-01"
+Received: "搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-29 02:41 UTC2026-10-29 02:41 UTCazure-us-01node-offline-01离线Ubuntu 22.04v0.0.9—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）2026-10-26 11:05 UTCgcp-osaka-01node-suspended-01已暂停Debian 12v0.1.0—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）2026-10-28 19:12 UTClegacy-revoked-01node-revoked-01已吊销Debian 11—未知—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）—未知node-unknown-07未知—未知—未知—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）—未知仅新鲜样本显示百分比；缺失、非法、未来时间或超出 0–100 范围的读数显示“无有效数据”，陈旧读数带“陈旧”与采样时间（UTC）；均不按 0 计。"
+
+ ❯ ../../reports/_review/followup01/source-return.test.tsx:34:26
+     32|   rerender(view(source));
+     33|   expect(load).toHaveBeenCalledTimes(2);
+     34|   expect(commits[0]).not.toContain("aws-tokyo-01");
+       |                          ^
+     35|   expect(commits[0]).not.toContain("共 8 个节点");
+     36|   expect(commits[0]).toContain("正在加载节点");
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ../../reports/_review/followup01/source-return.test.tsx > changing the exact scope key must not collapse padded identities
+AssertionError: expected '搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选…' not to contain 'aws-tokyo-01'
+
+Expected: "aws-tokyo-01"
+Received: "搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-29 02:41 UTC2026-10-29 02:41 UTCazure-us-01node-offline-01离线Ubuntu 22.04v0.0.9—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）2026-10-26 11:05 UTCgcp-osaka-01node-suspended-01已暂停Debian 12v0.1.0—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）2026-10-28 19:12 UTClegacy-revoked-01node-revoked-01已吊销Debian 11—未知—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）—未知node-unknown-07未知—未知—未知—无有效数据（节点不在线或状态未确认）—无有效数据（节点不在线或状态未确认）—未知仅新鲜样本显示百分比；缺失、非法、未来时间或超出 0–100 范围的读数显示“无有效数据”，陈旧读数带“陈旧”与采样时间（UTC）；均不按 0 计。"
+
+ ❯ ../../reports/_review/followup01/source-return.test.tsx:50:26
+     48|   commits.length = 0;
+     49|   rerender(view(b));
+     50|   expect(commits[0]).not.toContain("aws-tokyo-01");
+       |                          ^
+     51|   expect(commits[0]).not.toContain("共 8 个节点");
+     52| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  16:58:11
+   Duration  1.39s (environment 41%, import 35%, transform 11%, setup 8%, tests 5%)
+
+JUNIT report written to D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-loader-gm01/reports/followup01-loader-probe-junit.xml

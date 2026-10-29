@@ -1,0 +1,34 @@
+{
+  "task": "FOLLOWUP01-REVIEW",
+  "reviewerSession": "codex-review-01",
+  "date": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "baseMain": "1f8f8cbcb9655484d391a287865b38eee9c6885b",
+  "testedCodeHead": "4e6c1f28aafb14ae7bc42d4bb5866833f246c481",
+  "decisions": [
+    {"task":"TASK-01B","session":"deepseek-01","head":"e23a4c543e539cd6398077400bef5dab7caa64e8","decision":"ACCEPT","moduleCoveragePercent":100,"independentProbeAssertions":69,"nextTask":"TASK-01C"},
+    {"task":"W05","session":"gemini-01","head":"0ebe81224e63065d40a608e9eccb15123d9c8d60","decision":"CHANGES_REQUESTED","merged":false,"webTestsPassed":169,"independentProbeTestsFailed":2,"findings":["W05-R01","W05-R02"],"nextTask":"W05-R1"}
+  ],
+  "findings": [
+    {"id":"W05-R01","priority":"P2","status":"OPEN","file":"apps/web/src/features/nodes/node-loader.tsx","startLine":58,"endLine":60,"behavior":"ready A -> null -> A reuses old ready snapshot in first committed DOM before passive effect clears it"},
+    {"id":"W05-R02","priority":"P2","status":"OPEN","file":"apps/web/src/features/nodes/node-loader.tsx","startLine":48,"endLine":49,"behavior":"trim aliases different exact source keys; replacement load is not started and old rows/count remain"}
+  ],
+  "checks": {
+    "combinedNpmCi":"PASS",
+    "combinedToolsInstall":"PASS",
+    "combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":175,"goSubtestsPassed":629,"goFailures":0,"webPassed":151},
+    "combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},
+    "w05Policy":{"status":"PASS","initialAuthorStatus":"FAIL: spawnSync go ENOENT","firstReviewStatus":"FAIL: local actionlint missing","resolution":"fixed environment and fixed npm run tools:install, then rerun PASS"},
+    "w05IndependentProbe":{"status":"FAIL","failed":2,"passed":0,"evidence":"evidence/followup01-loader-probe-fail.log"},
+    "g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "originalFilesVerified":69,
+    "byteExactOriginalCandidatesVerified":3,
+    "initialPreparation":"NOT_RUN: missing reports directory; complete successful rerun recorded"
+  },
+  "codexTask":{"id":"AUTH-01B","base":"1f8f8cbcb9655484d391a287865b38eee9c6885b","scopeChanged":false,"uncommittedFilesInspected":false,"newDeliveryReceived":false},
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "notVerified":["real browser interaction in this review","runtime HTTP/authentication/storage","WSS/mTLS","task dispatch/approval/execution","Linux race","GitHub CI","1C1G performance"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

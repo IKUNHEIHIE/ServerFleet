@@ -1,0 +1,1 @@
+{"initialAttempt":"NOT_RUN","reason":"reports directory did not exist; PowerShell log redirection failed before npm ci/tools:install started","resolution":"created reports through review-probe setup, reran both commands with ErrorActionPreference=Stop; later logs record actual results"}

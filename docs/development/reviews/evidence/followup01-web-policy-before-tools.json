@@ -1,0 +1,10 @@
+{
+  "executedAt": "2026-10-29T09:01:18.508Z",
+  "results": [
+    {
+      "name": "policy",
+      "status": "FAIL",
+      "error": "actionlint failed (exit unavailable)"
+    }
+  ]
+}

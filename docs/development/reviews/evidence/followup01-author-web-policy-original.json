@@ -1,0 +1,10 @@
+{
+  "executedAt": "2026-10-29T08:32:05.623Z",
+  "results": [
+    {
+      "name": "policy",
+      "status": "FAIL",
+      "error": "module-boundaries failed (exit unavailable)"
+    }
+  ]
+}
