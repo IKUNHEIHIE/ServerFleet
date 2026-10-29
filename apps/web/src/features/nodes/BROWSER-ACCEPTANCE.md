@@ -54,11 +54,11 @@
 | 截图 | 内容 | 结论 |
 |---|---|---|
 | `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06\loading-state.png` | 首次加载 | 骨架/提示清晰，无表格 |
-| `...\reports\_review\w06\error-state.png` | 失败 + 重试按钮 | 固定文案，按钮可见可用 |
-| `...\reports\_review\w06\focus-row-1280.png` | 1280，键盘聚焦行 | 行有可见 focus ring；全 7 列可见；陈旧时间、0%/100%、离线破折号可读 |
-| `...\reports\_review\w06\focus-detail-1280.png` | 1280，详情聚焦 | 详情卡片有 focus ring；字段三列排布，无裁切 |
-| `...\reports\_review\w06\wide-1280.png` | 1280，详情打开 | 表格 + 详情同屏可读 |
-| `...\reports\_review\w06\narrow-420.png` | 420 窄屏 | 卡片在视口内、右边界可见；表格在卡片内横向滚动；长名称不折行、不重叠 |
+| `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06\error-state.png` | 失败 + 重试按钮 | 固定文案，按钮可见可用 |
+| `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06\focus-row-1280.png` | 1280，键盘聚焦行 | 行有可见 focus ring；全 7 列可见；陈旧时间、0%/100%、离线破折号可读 |
+| `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06\focus-detail-1280.png` | 1280，详情聚焦 | 详情卡片有 focus ring；字段三列排布，无裁切 |
+| `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06\wide-1280.png` | 1280，详情打开 | 表格 + 详情同屏可读 |
+| `D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06\narrow-420.png` | 420 窄屏 | 卡片在视口内、右边界可见；表格在卡片内横向滚动；长名称不折行、不重叠 |
 
 ## 复现步骤
 
@@ -92,9 +92,9 @@ npm run check:policy
 |---|---|---|
 | 原 19 项（C1–C19） | 断言不变；C7 更名为“关闭后 Space 重开”，C6 注明只验证 Escape | 新目录复跑，全部 PASS |
 | 新增 R01（C20–C22） | 同 ID 保持选中时的真实键盘重复激活（Enter / Space）；键盘激活关闭按钮后焦点返回 | 新增，PASS |
-| 新增 R02（C23–C25） | 来源切换后旧请求迟到失败；同 key 失效恢复后旧拒绝；pending 卸载 + 迟到成功/失败 | 新增，PASS |
+| 新增 R02（C23–C25） | 来源切换后旧请求迟到失败；跨 key/无效来源恢复后旧拒绝；pending 卸载 + 迟到成功/失败；真正同 key 另由总控补验 | 新增，PASS |
 
-本轮共 **25/25 PASS**（原 19 + 新增 6）。
+作者本轮驱动共 **25/25 断言 PASS**（原 19 + 新增 6）；其中 C24 的原实际来源前提不同于“同 key”，不能独立证明该边界。总控另补真实同 key 用例，见下方接收注。
 
 ### 新增用例与实际记录
 
@@ -104,13 +104,13 @@ npm run check:policy
 | C21 | 同一保持选中状态下，Shift+Tab 回行后 **Space** 重复激活 | PASS | `<TR>` → `<SECTION>`(节点详情) |
 | C22 | **键盘激活关闭按钮**：Tab 到按钮后 Enter / Space 各一次（两次独立重开） | PASS | Enter：`<BUTTON>关闭详情` → `<TR>` 且详情消失；重开后 Space：同样 `<TR>` 且详情消失 |
 | C23 | 来源切换（B 旧请求仍 pending → 切回 A 成功）后**旧请求迟到失败** | PASS | `aborted=true`；`hasAlert=false`；仍显示 `aws-tokyo-01`；焦点仍在 `<INPUT>` |
-| C24 | 同 key 失效恢复后**旧请求迟到失败** | PASS | 仍 `hasLoading=true`、`hasAlert=false`、无表格 |
+| C24 | B 旧请求 → key 为 A 的无效来源 → A 恢复后**旧请求迟到失败**（跨 key） | PASS | 仍 `hasLoading=true`、`hasAlert=false`、无表格 |
 | C25 | **pending 卸载**：两个独立请求分别迟到成功 / 迟到失败 | PASS | 卸载时 `aborted=true`；卸载后与两次迟到 settle 后 `hasTable/hasAlert/hasDetail` 均为 false；未处理拒绝计数 `0 → 0 → 0` |
 
 ### 首提交原文（布局阶段记录，完整保留）
 
 C12 / C15 / C16 的首个提交文本均为：
-`搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选 筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表 加载中 正在加载节点…`（67 字符），
+`搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…`（实际原文以 JSON 为准），
 不含 `aws-tokyo-01`、`共 8 个节点` 或 `节点详情`。完整字符串与每例状态见
 `reports/_review/w06r1/w06r1-results.json` 的 `traces`（`firstCommitC12/C15/C16`、`r01`、`r01Close`、
 `lateFailureSwitch`、`lateFailureSameKey`、`unmount`）。
@@ -118,8 +118,8 @@ C12 / C15 / C16 的首个提交文本均为：
 ### 证据（绝对路径，均在 git 忽略的 reports 下）
 
 - 驱动：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\browser-qa-r1.mjs`
-- 预览：`...\reports\_review\w06r1\preview.tsx`、`preview.html`、`vite.preview.config.ts`
-- 记录：`...\reports\_review\w06r1\w06r1-results.json`、`w06r1.log`
+- 预览：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\preview.tsx`、`preview.html`、`vite.preview.config.ts`
+- 记录：`D:\admin\desktop\codex\myproject\ks\.worktrees\chore--web-node-browser-qa-gm01\reports\_review\w06r1\w06r1-results.json`、`w06r1.log`
 - 新增截图：`r01-repeat-enter-1280.png`（重复激活后详情聚焦）、`r01-close-return-1280.png`（关闭后行聚焦）、
   `r02-late-failure-1280.png`、`r02-unmounted.png`
 - 复跑截图：`loading-state.png`、`error-state.png`、`focus-detail-1280.png`、`focus-row-1280.png`、
@@ -130,6 +130,14 @@ C12 / C15 / C16 的首个提交文本均为：
 
 W06 的 `w06-results.json` 曾把按键机制概括为 `rawKeyDown`；实际 **Enter 使用 `keyDown` + `text:"\r"`**（`rawKeyDown`
 不会激活原生按钮）。本轮 `keyMechanism` 已按实际写明；原文件保留不改。
+
+### 总控接收注（W06R1-REVIEW）
+
+作者R1记录的代码HEAD是99cd6635b3da4739a4e2b30816bb9749d14419ae（此次提交仅改报告，运行时代码仍与ddf8c5b相同），不是原W06首部的验证HEAD。原25项作者断言/截图保留；总控没有重跑这25项。R01的同ID重复激活和关闭按钮证据已核验。
+
+作者C24实际上使旧scope-b请求经broken(scope-a)切到scope-a，而非同一个key；预览snapshot中的sourceKind又因初始闭包始终为a，不能作为来源切换证明。总控在独立integration/w06r1-review目录重新构建相同预览，用Computer Use的本地页CDP开发能力实跑3项：同scope-a pending→同key无效load→scope-a恢复→旧拒绝忽略/新请求成功；pending卸载后迟到成功；另一独立pending卸载后迟到失败。记录真实请求key、两次abort、settle、页面/焦点/错误数组，3项PASS、错误/未处理拒绝0。没有修改生产组件或作者目录/记录。
+
+总控补验原始记录/截图与预览来源归档在docs/development/reviews/evidence/w06r1-*，完整结论见docs/development/reviews/W06-R1-REVIEW.md；W06-R01/R02由作者证据与这3项补验共同关闭。父级useLayoutEffect只证明所观察的来源更新提交，不覆盖所有子组件独立更新。此处仍不证明真实身份、网络来源、HTTP缓存或跨主体授权。
 
 ## 局限与未验证（UNTESTED）
 
