@@ -39,6 +39,7 @@ writeFileSync(path.join(work,"identity_bearer_test.go"),readFileSync(new URL("id
 writeFileSync(path.join(work,"enrollment_sql_test.go"),readFileSync(new URL("enrollment_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"workflows_sql_test.go"),readFileSync(new URL("workflows_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"ai_sessions_sql_test.go"),readFileSync(new URL("ai_sessions_sql_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"approvals_sql_test.go"),readFileSync(new URL("approvals_sql_test.go.txt",import.meta.url)));
 try{
  run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s","."],{cwd:work,name:"v09-real-sqlite-identity"});
  if(bootstrap){

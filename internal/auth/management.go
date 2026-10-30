@@ -77,7 +77,7 @@ func newIdentityService(store IdentityStore, resolver ResourceResolver, extra []
 		return nil, ErrIdentityUnavailable
 	}
 	s := &IdentityService{store: store, now: time.Now, random: rand.Reader, resources: resolver, permissions: map[string]PermissionDefinition{}}
-	for _, p := range []PermissionDefinition{{"nodes.read", "Read explicitly granted nodes", "node", true, false}, {"tasks.submit", "Submit controlled tasks", "node", false, false}, {"tasks.read", "Read granted-node tasks", "node", true, false}, {"audit.read", "Read permitted audit events", "node", true, false}} {
+	for _, p := range []PermissionDefinition{{"nodes.read", "Read explicitly granted nodes", "node", true, false}, {"tasks.submit", "Submit controlled tasks", "node", false, false}, {"tasks.approve", "Approve controlled tasks on explicitly granted nodes", "node", false, false}, {"tasks.read", "Read granted-node tasks", "node", true, false}, {"audit.read", "Read permitted audit events", "node", true, false}} {
 		s.permissions[p.Key] = p
 	}
 	for _, p := range extra {

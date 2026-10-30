@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"slices"
 	"strings"
 	"time"
 )
@@ -101,6 +102,7 @@ type identityState struct {
 	CredentialKeyUses map[string]uint64
 	CredentialUses    map[string]credentialUse
 	Tokens            map[string]restrictedToken
+	Approvals         map[string]approvalRecord
 	requestID         string
 	requestSource     string
 }
@@ -163,6 +165,29 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	}
 	if s.Tokens == nil {
 		s.Tokens = map[string]restrictedToken{}
+	}
+	if s.Approvals == nil {
+		s.Approvals = map[string]approvalRecord{}
+	}
+	if len(s.Approvals) > 10000 {
+		return nil, ErrIdentityUnavailable
+	}
+	for id, record := range s.Approvals {
+		if id != record.View.ID || !validSecret(id) || record.View.Revision == 0 || record.SubjectEpoch == 0 || record.PolicyRevision == 0 || s.Users[record.Plan.SubjectID].ID == "" || record.Plan.SubjectID != record.View.SubjectID || record.Plan.Digest != record.View.Digest || record.Plan.ID != record.View.PlanID || record.Plan.ActionID != record.View.ActionID || record.Plan.Source != record.View.Source || !slices.Equal(record.Plan.NodeIDs, record.View.NodeIDs) || record.View.ExpiresAt.IsZero() || record.View.ExpiresAt.After(record.Plan.ExpiresAt) {
+			return nil, ErrIdentityUnavailable
+		}
+		switch record.View.State {
+		case "pending", "expired":
+		case "approved", "denied", "consumed":
+			if record.ApproverID == "" || s.Users[record.ApproverID].ID == "" || record.ApproverEpoch == 0 || !record.HumanWeb {
+				return nil, ErrIdentityUnavailable
+			}
+		default:
+			return nil, ErrIdentityUnavailable
+		}
+		if record.View.State == "consumed" && (!validPolicyID(record.ConsumedTaskID) || len(record.ConsumedTaskID) > 128) {
+			return nil, ErrIdentityUnavailable
+		}
 	}
 	if len(s.Tokens) > 10000 {
 		return nil, ErrIdentityUnavailable

@@ -50,6 +50,8 @@ namespace 仅组合根绑定的 auth 命名空间；Read 返回复制；无记�
 
 ## S03 唯一 tasks 请求扩展（DS+契约 owner）
 
+**后续具体补充（仍未接收）**：审批完整任务绑定、PreparePlan、AISessionID持久和消费签名见APPROVAL-WIRING.md；工作流SubmitTx/WorkflowBinding见WORKFLOW-WIRING.md。旧S03下方字段建议是历史讨论输入，PlanDigest必须服务器计算，不得接受客户端自报摘要。DS现有Command尚缺executionId/schema/timeout/privilege/expiry/scope等转换Agent Offer的必要字段；不得只按taskId/action/params构造默认root/approval证明。未经接收继续在各自模块和隔离测试实施，不在main组合。
+
 文件 `internal/tasks/ports.go`，保留 Request 的原字段，建议精确增量：
 
 ```diff

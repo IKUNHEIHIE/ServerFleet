@@ -110,6 +110,14 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R11 更新工件私有暂存与复验
 
+提交 `c986bf9d9acaffb1eaf14bad3e67afd919955908`；更新模块/架构复验PASS 1.913s/1.904s。
+
 新增ArtifactStager/StagedArtifact，更新签名/平台/序列/哈希验证后写私有文件，再同FD复验；向唯一任务安装器仅借限长只读流，没有任意文件路径或写者，前后当前策略gate、一次使用、失败UNKNOWN不重跑，清理仅自己随机目录文件。原始UPDATE缺失不阻塞这些安全IO逻辑，但不批准实际安装profile/健康协议/自动迁移回退。
 
 `go test ./internal/updates -count=1 -v` PASS 2.028s，staticcheck PASS；实际文件负向见UPDATE-STAGING.md。Windows未作Linux断电持久/真实安装证明。继续审批/插件/恢复与其他包内未完成项。
+
+## R12 持久审批及完整消费绑定
+
+实现ApprovalService/Identity aggregate记录：服务器准备计划引用、当前主体/批准者双侧节点动作及tasks.approve授权、AI任意root真人管理员、epoch/策略世代/期限/CAS、单次消费、同DS Tx写审计及已消费taskId。ConsumeTx强制实际任务的source/plugin/AI session/scopeRevision/action等完整字段，不能只按摘要/节点匹配。精确S03补充和已核对的DS缺口在APPROVAL-WIRING.md，未改公共接口/生成/schema/锁。
+
+单元验证首轮PASS 10.675s，完整binding补严后PASS 20.995s（同时有隔离Go构建占用CPU），staticcheck PASS。固定锁真实SQLite组合十项PASS 6.015s，含批准持久、消费+审计在外层失败一起回滚、重启后批准仍可用、最终消费后再次重启拒绝重放。计划和任务metadata为明确fixture，不是完整统一任务/浏览器批准/Agent执行验收。main与共享接收状态仍8a7dd470，继续其他独立项。
