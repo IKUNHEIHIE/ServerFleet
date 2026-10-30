@@ -9,6 +9,7 @@ import (
 
 type SessionAuditEvent struct {
 	SubjectID, Action, SessionID string
+	MessageID, Result            string
 	ScopeRevision                uint64
 	At                           time.Time
 	NodeIDs                      []string
@@ -81,7 +82,11 @@ func (s *SQLSessionStore) Update(ctx context.Context, fn func([]byte) ([]byte, e
 		if tx.AppendAudit != nil && len(st.Outbox) > 0 {
 			events := make([]SessionAuditEvent, 0, len(st.Outbox))
 			for _, event := range st.Outbox {
-				events = append(events, SessionAuditEvent{event.SubjectID, event.Action, event.SessionID, event.ScopeRevision, event.At, append([]string{}, event.NodeIDs...)})
+				result := event.Result
+				if result == "" {
+					result = "success" // Version-1 scope-only outbox compatibility.
+				}
+				events = append(events, SessionAuditEvent{SubjectID: event.SubjectID, Action: event.Action, SessionID: event.SessionID, MessageID: event.MessageID, Result: result, ScopeRevision: event.ScopeRevision, At: event.At, NodeIDs: append([]string{}, event.NodeIDs...)})
 			}
 			if err = tx.AppendAudit(ctx, events); err != nil {
 				return err

@@ -63,13 +63,15 @@ type SessionView struct {
 	ApprovalPolicy ApprovalPolicy  `json:"approvalPolicy"`
 }
 type sessionRecord struct {
-	Scope   Scope
-	Grants  map[string]ResourceGrant
-	Created time.Time
-	Closed  bool
+	Scope        Scope
+	Grants       map[string]ResourceGrant
+	Created      time.Time
+	Closed       bool
+	Conversation *conversationRecord `json:",omitempty"`
 }
 type sessionAudit struct {
 	SubjectID, Action, SessionID string
+	MessageID, Result            string `json:",omitempty"`
 	At                           time.Time
 	ScopeRevision                uint64
 	NodeIDs                      []string
@@ -127,6 +129,9 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 			return nil, ErrSessionUnavailable
 		}
 		if scope.Mode != EveryCall && scope.Mode != LowRisk && scope.Mode != FullAccess {
+			return nil, ErrSessionUnavailable
+		}
+		if validateConversation(id, record.Conversation) != nil {
 			return nil, ErrSessionUnavailable
 		}
 		groups := map[string]bool{}
@@ -197,7 +202,7 @@ func (s *SessionService) change(ctx context.Context, fn func(*sessionState, time
 		}
 		return out, nil
 	})
-	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired} {
+	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired, ErrGenerationUnknown, ErrModelUnavailable} {
 		if errors.Is(err, kind) {
 			return kind
 		}
@@ -234,7 +239,7 @@ func (s *SessionService) audit(st *sessionState, record sessionRecord, action st
 		}
 	}
 	sort.Strings(nodes)
-	st.Outbox = append(st.Outbox, sessionAudit{record.Scope.SubjectID, action, record.Scope.SessionID, now, record.Scope.Revision, nodes})
+	st.Outbox = append(st.Outbox, sessionAudit{SubjectID: record.Scope.SubjectID, Action: action, SessionID: record.Scope.SessionID, Result: "success", At: now, ScopeRevision: record.Scope.Revision, NodeIDs: nodes})
 	return nil
 }
 func recordScope(record sessionRecord) Scope {

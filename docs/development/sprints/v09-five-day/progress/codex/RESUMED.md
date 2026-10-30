@@ -146,6 +146,14 @@ R14完成后结果：recovery/architecture复验PASS 2.390s/2.080s，staticcheck
 
 ## R15 Xray自定义配置审查及管理API代理隔离
 
+提交 `d4e45fe9659d897a8a7de5c9452f1f85c41f03f9`；补充模块/architecture复验PASS 2.772s/1.909s，staticcheck PASS。
+
 新增ReviewCustomJSON，精确边界见XRAY-CUSTOM-REVIEW.md。保留原JSON并绑定摘要，严格有界/重复字段拒绝、精确文件授权、API回环/专用路由及代理端口拒绝、固定风险warning；没有用最小审查冒充目标完整schema。标准模板补入管理端口/回环目标blackhole，避免普通代理客户端绕进本机API。未改公共契约/锁或将Xray编入核心。
 
 首轮模块测试PASS 2.658s/staticcheck PASS。首次实际Xray模板-test FAIL：新增IPv4-mapped CIDR不被目标26.6.1接受，使用无秘密最小配置确认具体错误（CIDR104>32）；移除该不受支持写法，保留127/8、::1/128及独立管理端口拒绝。随后run-xray.mjs PASS 2.957s，含两模板实际-test/启动、两份custom实际-test、真实目标拒绝未知协议，以及本机真实SOCKS代理不能取得私有API的HTTP/2响应（直接连接先确认API真实可用）。不是Linux部署/完整VLESS流量/Host准入证明。继续包内独立功能。
+
+## R16 AI持久消息、生成未知防重放及真实SSE
+
+新增ConversationService/消息和生成状态/持久事件、未挂载MessageEventsHTTP，复用scope聚合和审计同Tx，无自动执行器。消息脱敏与模型配置/Provider无默认实现，BYOK仍须受控凭据桥；文本输出不能声明真实taskId。精确行为/容量/共享字段候选见AI-MESSAGES-WIRING.md。补入乱序排队历史成对组合，生成前持久fence，出错/停用/撤权/超限/提交失败UNKNOWN不重放，忽略emit错误也不能将部分结果标成功。
+
+初轮AI测试PASS 2.075s/staticcheck PASS；新增SSE与修订后AI/auth/architecture PASS 2.875s/27.588s/1.556s。继续加固后AI复验PASS 2.924s/staticcheck PASS。固定锁SQLite首次FAIL：领域unknown到DS审计的原因码大写不被允许，终态保持generating、未误报成功；改用明确小写ai_generation_unknown映射（领域仍unknown，未改DS枚举）。随后十二项实际SQLite组合PASS 8.869s，含消息+审计提交前故障、回答+审计回滚、重启后保留unknown防重放、真实HTTPS Cookie SSE/游标续读/撤销关闭。模型/过滤器为明确double，没有实际模型或真实秘密。继续包内实施，R15—16后的全量检查另记。
