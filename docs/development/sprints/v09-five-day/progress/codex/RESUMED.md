@@ -302,9 +302,17 @@ Ubuntu UID1000实际执行本地私钥CSR→HTTPS pending→SQLite重启→真�
 
 ## R34 插件密文配置历史、一次性恢复源与实际SQLite
 
+提交3da275be465348a9107a591471064887d990b52f。
+
 新增平台HistoryVault/SQLHistoryStore：三元scope隔离、专用密钥+每记录随机salt/HKDF派生AES256-GCM、元数据AAD、只列非秘密元数据、CAS/不逐出有界历史、借用前永久claim/完整审计出箱与UNKNOWN不重跑；可信txCtx提交门/服务构造阶段，无新默认Host授权。WithRestoreSource明确delivered仅表示源已交付，不假记Xray部署完成；未导入可选业务、改根依赖或公共迁移。精确端口/schema候选PLUGIN-CONFIG-HISTORY.md。
 
 Windows插件/architecture PASS2.438s/1.857s、staticcheck PASS；六项新增单元含篡改/错误key/跨节点实例/提交失败/撤权/取消/消费者panic/CAS/上限/丢回调假成功负向。实际SQLite十三项PASS17.557s，新增历史项实际加密落库/审计写后失败与提交前失败回滚、数据库重开后源交付、真实临时文件effect、delivered及unknown claim不复活；全字段audit probe是隔离同Tx适配验证，不伪装DS已接收新schema。Agent21 PASS9.686s，Linux-only注册Windows明确SKIP。Ubuntu非root原生plugins11/SQLite13顶层PASS，LINUX-PLUGIN-HISTORY-EVIDENCE.json。正式插件能力/签名启用/sole task与审批/当前profile仍需真实门适配，旧库回退必须外部quarantine不绕永久claim；没有执行/安装不安全Xray。继续包内下一项。
 
 R34安全复验PASS10:18:13Z，根依赖/公共API/Proto/gen及实际docs/development/dependencies.json零基线差异；原生runner现将实际依赖图/模块归属/依赖规则一并纳入保护哈希（原路径曾误列根dependencies.json），随后plugins11/SQLite13原生重跑PASS，证据已更新。
 
+
+## R35 可选Xray单用户导出格式与交付闸
+
+新增export.go/test，固定当前user/instance/credential/config/plugin修订与真人同recipient、短期限，服务端digest；中央凭据loan/审计完成后再重查当前状态并一次交付URI/outbound JSON，撤权/轮换/审计失败/重复或迟到callback不给秘密，未知结果不重试。格式原文按保护FR/原POST及官方分享提案核对，无管理API/服务端私钥/不安全校验绕过，不执行被漏洞门阻断的Xray。XRAY-CLIENT-EXPORT.md列精确接口、真实kind/实例绑定/持久user/QR/Host/HTTP页面剩余；没有将借用double冒充真实中央fence或单次跨重启验收。
+
+首次编译FAIL为未使用strings import，修正；三个新增顶层测试PASS4.800s，完整可选包/architecture/staticcheck PASS见export-r35-final.log。Ubuntu UID1000可选包11顶层PASS/3真实Xray二进制SKIP；LINUX-XRAY-EXPORT-EVIDENCE.json包含精确源/二进制/日志。主线仍8a7dd470，无新共享接收。当前只实现URI/JSON，QR明确拒绝；中央CredentialService暂未支持Xray kind，不错用DNS/AI key，也不单造插件凭据库；继续补中央实例绑定材料候选及实际持久测试。
