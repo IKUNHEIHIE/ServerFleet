@@ -41,6 +41,7 @@ SSE 读取 3 事件 <1ms。Linux 内存低于 1GB（464MB），单 CPU 运行；
 - certificates HTTP、gateway/publishing HTTP 未注册：契约语义与实现模型存在差异，需契约 owner 决策（见 `INTEGRATION.md`）。
 - monitoring/quota HTTP 未注册：g2-merged 候选无相应路径。
 - 已在隔离 Debian 13 VM 验证：Linux amd64 全量 Go 测试通过；Cloudflare Token 真实 TXT 创建/读取/删除并清理（`xihuani.com`）；ACME Let's Encrypt staging DNS-01 dry-run 成功并清理挑战记录；QQ Bot 取得 access_token；Nginx 1.26.3 运行/HTTP 200。
-- 仍未验证：真实 mTLS Agent/WSS 端到端、Nginx 受控接管 POC-05、QQ 实际消息投递（缺 targetId）、SMTP、arm64、严格 1C1G 主机；publishing 只有注入端口。
+- 仍未验证：真实 mTLS Agent/WSS 端到端、Nginx 受控接管 POC-05、QQ 实际消息投递（缺 targetId）、SMTP、arm64 真机运行、严格 1C1G 主机；publishing 只有注入端口。
+- 已补：arm64 交叉构建成功（未运行）；真实 HTTP 监控 up/down/recovery 在 Windows/Linux 通过；Nginx 端口冲突实测 EADDRINUSE。
 - `go.mod/go.sum`、迁移编号、HTTP 契约仍待总控接收。
 - `npm run check` 的 g2r03 契约检查 FAIL：候选 provenance 固定了 `internal/nodes/node.go` 的旧哈希，DS-02 的合法字段扩展使其变化；需总控重基线，不通过删除测试/改候选规避。

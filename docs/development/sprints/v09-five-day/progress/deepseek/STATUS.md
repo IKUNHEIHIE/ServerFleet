@@ -112,5 +112,7 @@
 - Cloudflare：Token verify active；`xihuani.com` Zone 可读；用 `tests/poc/v09/services/cloudflare` 真实创建 TXT `sf-it-*`、读回、删除，清理核验 remaining=0。
 - ACME：`certbot --dns-cloudflare --dry-run`（Let's Encrypt staging，DNS-01，`sf-stage.xihuani.com`）成功；挑战 TXT 清理 remaining=0。
 - QQ：`getAppAccessToken` HTTP 200，取得 access_token（expires_in=7200）；未提供 targetId，未发送消息。
-- Nginx：1.26.3 安装并 active，`http://127.0.0.1/` 200；POC-05 受控接管仍缺 Agent/Controller 接线，未验收。
+- Nginx：1.26.3 安装并 active，`http://127.0.0.1/` 200；端口 80 已被 nginx 监听，第二个绑定得到 `EADDRINUSE`；POC-05 受控接管仍缺 Agent/Controller 接线，未验收。
+- arm64：`GOOS=linux GOARCH=arm64` 交叉构建 controller/agent 成功，ELF machine=183（AArch64）；未在 arm64 真机运行。
+- 真实监控：本地回环 HTTP 探针 up→down→up，持久状态与两条迁移告警正确；Windows/Linux 均 PASS（`tests/poc/v09/services/monitoring`）。
 - 凭据仅存于本机/VM 临时 0600 文件，未入仓库/Git/日志；测试后应轮换 VM 密码、Cloudflare Token、QQ AppSecret。
