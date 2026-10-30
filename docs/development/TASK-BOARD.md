@@ -1,9 +1,10 @@
 # 任务登记板
 
-更新：2026-10-31。Wave 1 三线复合实施（`V09-5D-CX` `aef07e5`、`V09-5D-DS` `07f4154`、`V09-5D-GM` `86e0cf5`）已通过总控独立审查、组合与安全验证并合入 `main`（详见 `reviews/V09-WAVE1-REVIEW.md`），现进入 Wave 2（`apps/controller` 组合接线与 Web/API 端到端对齐）。G2/D01–D07/P1-C10 仍 OPEN。
+更新：2026-10-31。Wave 1 三线复合实施（`V09-5D-CX` `aef07e5`、`V09-5D-DS` `07f4154`、`V09-5D-GM` `86e0cf5`）与 Wave 2 主控组合接线及 Web/API 端到端集成（`V09-WAVE2-WIRING` `c840800`）均已通过总控审查、组合与安全验证并合入 `main`（详见 `reviews/V09-WAVE1-REVIEW.md` 与 `reviews/V09-WAVE2-REVIEW.md`）。G2/D01–D07/P1-C10 仍 OPEN。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-WAVE2-WIRING | Controller SQLite WAL组合接线、Web会话CSRF/Bootstrap对齐及HTTPS端到端集成测试通过（Go 547+1116、Web 283、0漏洞），合入main | agy-review-01 | integration/v09-wave2-wiring / `.worktrees/integration--v09-wave1-review` | apps/controller组合服务、internal/auth与internal/tasks组合辅助、apps/web会话对齐、tests/integration/v09及审查文档 | 项目负责人；起始4f5a459；代码c840800；见reviews/V09-WAVE2-REVIEW.md |
 | V09-WAVE1-REVIEW | 三线独立审查/共享协调/组合及安全检查通过（Go 546+1116、Web 282、0漏洞），合入main并推进Wave 2 | agy-review-01 | integration/v09-wave1-review / `.worktrees/integration--v09-wave1-review` | 三线提交审查、go.mod与tests/browser/v09及g2r03 provenance协调、审查证据/任务板/README | 项目负责人；起始8a7dd47；代码5d103a0；见reviews/V09-WAVE1-REVIEW.md |
 | V09-5D-DISPATCH | 全量派发包/24AC覆盖/13新域依赖及14方向检查/组合安全检查通过，三目录准备完成；交接后停止 | codex-review-01 | integration/v09-five-day-dispatch / `.worktrees/integration--v09-five-day-dispatch` | 全量责任/每日里程碑、三复合任务及目录、依赖协调/架构负向、状态与证据；不实现业务或替代安全冻结 | 项目负责人；起始6052f59；结果见reviews/V09-FIVE-DAY-DISPATCH.md |
 | V09-5D-CX | WAVE 1 ACCEPTED：CX-01—08 全部38个提交（aef07e5）通过独立与组合审查合入main | codex-02 / codex-03 | feature/v09-platform-cx02 / `.worktrees/feature--v09-platform-cx02` | CX-01—08：auth/transport/plugins/Controller+Agent及AI/工作流/更新恢复新域、可选Xray、专用测试/进度 | agy-review-01；起始8a7dd47，交付aef07e5 |

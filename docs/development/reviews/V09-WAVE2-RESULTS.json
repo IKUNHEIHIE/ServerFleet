@@ -1,0 +1,33 @@
+{
+  "taskId": "V09-WAVE2-WIRING",
+  "reviewerSession": "agy-review-01",
+  "reviewedAt": "2026-10-31T02:29:00+08:00",
+  "baselineCommit": "4f5a4593d3a0d1f04c0ccd59809b4e5cd36b7283",
+  "codeCommit": "c840800ec06b1cc41e8b3d5e2b5a85535536d891",
+  "status": "ACCEPTED",
+  "deliverables": [
+    "apps/controller/server/server.go",
+    "apps/controller/main.go",
+    "internal/auth/session_views.go",
+    "internal/auth/management.go",
+    "internal/tasks/service.go",
+    "apps/web/src/lib/api/dto.ts",
+    "apps/web/src/lib/api/endpoints.ts",
+    "apps/web/src/app/session.tsx",
+    "apps/web/src/App.test.tsx",
+    "tests/integration/v09/controller_wave2_test.go"
+  ],
+  "verification": {
+    "npmRunCheck": "PASS",
+    "npmRunCheckSecurity": "PASS",
+    "goTopLevelTestsPassed": 547,
+    "goSubTestsPassed": 1116,
+    "goTotalTestPasses": 1663,
+    "goTestsFailed": 0,
+    "webTestFilesPassed": 34,
+    "webTestsPassed": 283,
+    "webTestsFailed": 0,
+    "npmAuditHigh": 0,
+    "govulncheck": 0
+  }
+}
