@@ -1,12 +1,8 @@
 /**
- * 本地浏览器验收桩（GM-09）。仅监听 127.0.0.1，只为在缺少真实管理 API 时验证已构建的前端。
- *
- * 这不是 Controller 实现，也永远不会被 `apps/web/src` 引用或打包进 dist：
- * 生产代码在请求失败时只显示错误分类，绝不回退到这里的假数据。
- *
- * 用法：
- *   node apps/web/acceptance/stub-server.mjs --port 5180            # 契约桩 + 静态 dist
- *   node apps/web/acceptance/stub-server.mjs --port 5181 --healthz-only  # 只暴露 /healthz（复现真实后端缺失）
+ * 鏈湴娴忚鍣ㄩ獙鏀舵々锛圙M-09锛夈€備粎鐩戝惉 127.0.0.1锛屽彧涓哄湪缂哄皯鐪熷疄绠＄悊 API 鏃堕獙璇佸凡鏋勫缓鐨勫墠绔€? *
+ * 杩欎笉鏄?Controller 瀹炵幇锛屼篃姘歌繙涓嶄細琚?`apps/web/src` 寮曠敤鎴栨墦鍖呰繘 dist锛? * 鐢熶骇浠ｇ爜鍦ㄨ姹傚け璐ユ椂鍙樉绀洪敊璇垎绫伙紝缁濅笉鍥為€€鍒拌繖閲岀殑鍋囨暟鎹€? *
+ * 鐢ㄦ硶锛? *   node apps/web/acceptance/stub-server.mjs --port 5180            # 濂戠害妗?+ 闈欐€?dist
+ *   node apps/web/acceptance/stub-server.mjs --port 5181 --healthz-only  # 鍙毚闇?/healthz锛堝鐜扮湡瀹炲悗绔己澶憋級
  */
 import { createServer } from "node:http";
 import { readFile, stat } from "node:fs/promises";
@@ -16,7 +12,7 @@ import { randomUUID, randomBytes } from "node:crypto";
 import { errorBody, unwrap } from "./harness.mjs";
 
 const here = fileURLToPath(new URL(".", import.meta.url));
-const distDir = resolve(here, "../dist");
+const distDir = resolve(here, "../../../apps/web/dist");
 
 const args = process.argv.slice(2);
 function argValue(name, fallback) {
@@ -29,7 +25,7 @@ const loginPassword = argValue("password", "accept123");
 
 const IDENTITY = {
   userId: "u-admin",
-  displayName: "验收管理员",
+  displayName: "楠屾敹绠＄悊鍛?,
   roles: ["admin"],
   permissions: [
     "node.read", "node.manage", "task.read", "task.submit", "task.approve", "audit.read",
@@ -127,16 +123,16 @@ function matchFault(method, path) {
 function sseScript(kind, id) {
   if (kind === "task") {
     return [
-      { event: "task.state", data: { taskId: id, state: "queued", message: "已入队", progressPercent: 0, sequence: 1 } },
-      { event: "task.state", data: { taskId: id, state: "running", nodeId: "n-1", message: "正在执行", progressPercent: 35, sequence: 2 } },
+      { event: "task.state", data: { taskId: id, state: "queued", message: "宸插叆闃?, progressPercent: 0, sequence: 1 } },
+      { event: "task.state", data: { taskId: id, state: "running", nodeId: "n-1", message: "姝ｅ湪鎵ц", progressPercent: 35, sequence: 2 } },
       { event: "task.progress", data: { taskId: id, state: "running", nodeId: "n-1", progressPercent: 72, sequence: 3 } },
-      { event: "task.state", data: { taskId: id, state: "completed", message: "执行完成", progressPercent: 100, sequence: 4 } },
+      { event: "task.state", data: { taskId: id, state: "completed", message: "鎵ц瀹屾垚", progressPercent: 100, sequence: 4 } },
     ];
   }
   return [
-    { event: "ai.tool", data: { toolName: "metrics.read", approvalId: "ap-stub-1", state: "running", message: "读取节点指标", output: "SECRET-STUB-OUTPUT-MUST-NOT-RENDER" } },
-    { event: "ai.tool", data: { toolName: "metrics.read", approvalId: "ap-stub-1", state: "succeeded", message: "已返回授权范围内的指标", output: "SECRET-STUB-OUTPUT-MUST-NOT-RENDER" } },
-    { event: "ai.scope", data: { state: "scope_changed", message: "scopeRevision 已递增" } },
+    { event: "ai.tool", data: { toolName: "metrics.read", approvalId: "ap-stub-1", state: "running", message: "璇诲彇鑺傜偣鎸囨爣", output: "SECRET-STUB-OUTPUT-MUST-NOT-RENDER" } },
+    { event: "ai.tool", data: { toolName: "metrics.read", approvalId: "ap-stub-1", state: "succeeded", message: "宸茶繑鍥炴巿鏉冭寖鍥村唴鐨勬寚鏍?, output: "SECRET-STUB-OUTPUT-MUST-NOT-RENDER" } },
+    { event: "ai.scope", data: { state: "scope_changed", message: "scopeRevision 宸查€掑" } },
   ];
 }
 
@@ -226,11 +222,11 @@ async function handleApi(req, res, url) {
   const fault = matchFault(method, pathname);
   if (fault) {
     if (fault.delayMs) await new Promise(done => setTimeout(done, fault.delayMs));
-    return sendJson(res, fault.status, fault.body ?? errorBody(fault.code ?? `HTTP_${fault.status}`, `验收桩注入的 ${fault.status} 响应`));
+    return sendJson(res, fault.status, fault.body ?? errorBody(fault.code ?? `HTTP_${fault.status}`, `楠屾敹妗╂敞鍏ョ殑 ${fault.status} 鍝嶅簲`));
   }
 
   if (healthzOnly) {
-    return sendJson(res, 404, errorBody("NOT_FOUND", "该 Controller 只提供 /healthz；管理 API 尚未实现"));
+    return sendJson(res, 404, errorBody("NOT_FOUND", "璇?Controller 鍙彁渚?/healthz锛涚鐞?API 灏氭湭瀹炵幇"));
   }
 
   if (pathname === "/api/v1/auth/bootstrap-status") {
@@ -240,7 +236,7 @@ async function handleApi(req, res, url) {
   if (pathname === "/api/v1/auth/login" && method === "POST") {
     const body = await readBody(req);
     if (!body.username || body.password !== loginPassword) {
-      return sendJson(res, 401, errorBody("UNAUTHENTICATED", "用户名或密码不正确"));
+      return sendJson(res, 401, errorBody("UNAUTHENTICATED", "鐢ㄦ埛鍚嶆垨瀵嗙爜涓嶆纭?));
     }
     const id = randomBytes(16).toString("hex");
     const csrf = `csrf-${randomBytes(12).toString("hex")}`;
@@ -259,18 +255,17 @@ async function handleApi(req, res, url) {
   }
 
   if (!session || !session.valid) {
-    return sendJson(res, 401, errorBody("UNAUTHENTICATED", "会话不存在或已失效"));
+    return sendJson(res, 401, errorBody("UNAUTHENTICATED", "浼氳瘽涓嶅瓨鍦ㄦ垨宸插け鏁?));
   }
 
   if (pathname === "/api/v1/auth/me") {
-    // 契约缺口 §1：/auth/me 不返回 CSRF，刷新后写操作在前端被锁定。
-    return sendJson(res, 200, IDENTITY);
+    // 濂戠害缂哄彛 搂1锛?auth/me 涓嶈繑鍥?CSRF锛屽埛鏂板悗鍐欐搷浣滃湪鍓嶇琚攣瀹氥€?    return sendJson(res, 200, IDENTITY);
   }
 
   if (MUTATING.has(method) && !CSRF_EXEMPT.has(pathname)) {
     const token = req.headers["x-csrf-token"];
-    if (!token) return sendJson(res, 403, errorBody("CSRF_MISSING", "缺少 X-CSRF-Token"));
-    if (token !== session.csrf) return sendJson(res, 403, errorBody("CSRF_INVALID", "X-CSRF-Token 与会话不匹配"));
+    if (!token) return sendJson(res, 403, errorBody("CSRF_MISSING", "缂哄皯 X-CSRF-Token"));
+    if (token !== session.csrf) return sendJson(res, 403, errorBody("CSRF_INVALID", "X-CSRF-Token 涓庝細璇濅笉鍖归厤"));
   }
 
   if (method === "GET" && /^\/api\/v1\/(?:tasks\/[^/]+|ai\/sessions\/[^/]+)\/events$/.test(pathname)) {
@@ -281,7 +276,7 @@ async function handleApi(req, res, url) {
 
   const found = findRoute(method, pathname);
   if (!found) {
-    return sendJson(res, 404, errorBody("NOT_FOUND", `验收桩没有实现 ${method} ${pathname}`));
+    return sendJson(res, 404, errorBody("NOT_FOUND", `楠屾敹妗╂病鏈夊疄鐜?${method} ${pathname}`));
   }
 
   const ctx = {
@@ -339,7 +334,7 @@ async function handleStubControl(req, res, pathname, method) {
     return sendJson(res, 200, { cleared: true });
   }
   if (pathname === "/__stub/state" && method === "GET") return sendJson(res, 200, state);
-  return sendJson(res, 404, errorBody("NOT_FOUND", "未知的桩控制端点"));
+  return sendJson(res, 404, errorBody("NOT_FOUND", "鏈煡鐨勬々鎺у埗绔偣"));
 }
 
 await loadFixtures();
