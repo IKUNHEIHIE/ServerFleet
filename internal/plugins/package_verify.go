@@ -62,7 +62,7 @@ func VerifyPackage(raw, signature, payload []byte, keyID string, trust PackageTr
 		return PackageManifest{}, ErrPackageRejected
 	}
 	u, err := url.Parse(m.Source)
-	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || !trust.Sources[m.Source] || m.Format != 1 || m.ID != "xray-manager" || !pluginVersion.MatchString(m.Version) || m.PayloadBytes != len(payload) || m.PayloadBytes == 0 {
+	if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" || u.ForceQuery || !trust.Sources[m.Source] || m.Format != 1 || m.ID != "xray-manager" || !pluginVersion.MatchString(m.Version) || m.PayloadBytes != len(payload) || m.PayloadBytes == 0 {
 		return PackageManifest{}, ErrPackageRejected
 	}
 	h := sha256.Sum256(payload)

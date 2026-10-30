@@ -118,6 +118,14 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R12 持久审批及完整消费绑定
 
+提交 `5cb1801b95fed00518bebdaf26a3e6a989787269`。
+
 实现ApprovalService/Identity aggregate记录：服务器准备计划引用、当前主体/批准者双侧节点动作及tasks.approve授权、AI任意root真人管理员、epoch/策略世代/期限/CAS、单次消费、同DS Tx写审计及已消费taskId。ConsumeTx强制实际任务的source/plugin/AI session/scopeRevision/action等完整字段，不能只按摘要/节点匹配。精确S03补充和已核对的DS缺口在APPROVAL-WIRING.md，未改公共接口/生成/schema/锁。
 
 单元验证首轮PASS 10.675s，完整binding补严后PASS 20.995s（同时有隔离Go构建占用CPU），staticcheck PASS。固定锁真实SQLite组合十项PASS 6.015s，含批准持久、消费+审计在外层失败一起回滚、重启后批准仍可用、最终消费后再次重启拒绝重放。计划和任务metadata为明确fixture，不是完整统一任务/浏览器批准/Agent执行验收。main与共享接收状态仍8a7dd470，继续其他独立项。
+
+## R13 插件私有工件与持久生命周期
+
+新增PackageVault/LifecycleManager/SQLLifecycleStore：精确签名源/工件验证、默认禁用、显式启动停止、严格新版本与能力重新consent、卸载保留节点资源、单调revision/taskId防重放、未知运行态不假装卸载。唯一runtime实例ID防旧实例借新租约/晚到结果覆盖；禁用先封Host再停实例。没有正式运行时/源/密钥就不启用、不构造假官方包，不增加根依赖。详见PLUGIN-LIFECYCLE.md。
+
+实际测试：真实SQLite/私有文件/DS审计事务组合十一项PASS 6.574s，含安装+审计故障回滚、重启保留disabled/防重放、nil runtime不能enable、卸载不删除工件。runtime正向和并发为明确double；没有假记实际WASM/Xray业务执行。首轮staticcheck提示等价struct可直接类型转换，修正后PASS。补入晚启动实例隔离/严格升级/新增权限consent测试后`go test ./internal/plugins ./tests/architecture -count=1` PASS 2.290s/1.926s，staticcheck PASS。继续恢复/入口组合及仍可独立实现项。

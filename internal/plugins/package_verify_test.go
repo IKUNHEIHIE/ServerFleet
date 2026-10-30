@@ -28,6 +28,13 @@ func TestPackageSignatureSourceUIAndDisable(t *testing.T) {
 		t.Fatal(err)
 	}
 	trust.Capabilities["shell.root"] = true
+	querySource := manifest.Source + "?token=must-not-persist"
+	trust.Sources[querySource] = true
+	badSource := manifest
+	badSource.Source = querySource
+	if err = verify(badSource); err == nil {
+		t.Fatal("credential-bearing source query accepted even when pinned")
+	}
 	for _, change := range []func(*PackageManifest){func(m *PackageManifest) { m.Source = "https://untrusted.test/fork" }, func(m *PackageManifest) { m.ID = "removed-demo-plugin" }, func(m *PackageManifest) { m.Version = "latest" }, func(m *PackageManifest) { m.PayloadSHA256 = "bad" }, func(m *PackageManifest) { m.Capabilities = []string{"shell.root"} }, func(m *PackageManifest) { m.UI = []UIElement{{"script", "script", "Run", ""}} }, func(m *PackageManifest) { m.UI = []UIElement{{"button", "action", "Run", "shell.root"}} }} {
 		m := manifest
 		change(&m)
