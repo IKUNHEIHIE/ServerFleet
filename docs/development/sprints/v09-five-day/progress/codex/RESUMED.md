@@ -334,3 +334,15 @@ R34安全复验PASS10:18:13Z，根依赖/公共API/Proto/gen及实际docs/develo
 本会话重新npm ci PASS（127包/25s）、tools:install PASS；全量check五组PASS（2026-10-30T17:03:40.852Z，上海2026-10-31），Web179项；security PASS17:03:01.722Z，npm audit0/govulncheck无漏洞。Context7已resolve并query固定Go1.27.3；检索未命中ecdh确切签名，以固定本地go doc crypto/ecdh.Curve核验，不误用其返回的math/rand示例。根受保护文件相对派发基线零差异。
 
 真实用户/配置/插件修订、任务/确认/profile仍是明确fixture；正式typed审计schema/统一任务/Host/路由/页面未接收，v2启用后禁止直接降级旧auth。外部Xray发布物安全FAIL不变，本轮未执行/安装。AC-23及完整v0.9仍未完成，继续用户状态等包内独立项。
+
+## R38 / codex-03持久用户与明确应用状态
+
+新增可选ManagedUserService/Host私有store契约：node+instance隔离、不可变user/inbound/中央reference、原模板一致sf-user-ID统计归属、CAS/永久幂等receipt、删除tombstone、pending/applied/unknown区分、严格绑定sole task/plan与实际输入、物理变化严格递增config revision、启用应用确认前再次中央材料复核；缺损/跨scope不自动seed，禁用/删除不因私钥撤销而被阻塞，重新启用/导出仍关闭。有界1—100分页绑定准确元数据快照/主体/实例/删除过滤，旧游标不混新修订。typed审计包含完整operation、实际Change/Application证据，同Tx失败关闭；不造任务队列、不碰Agent/原始API/公共迁移或运行profile。精确调用/接收项XRAY-MANAGED-USERS.md、S06。
+
+Windows可选包/architecture初验PASS4.812s/1.448s及staticcheck；新增6顶层单元覆盖CAS并发、原子审计、未知/迟到回执、跨源/实例/ref、失效材料、分页及状态复制等。实际SQLite扩展原中央导出组合，真实身份/node权限+中央ref/cipher/fence+用户元数据/typed及DS审计：阻止跨user复用ref；改名后同UUID/新标签；用户审计插入后故障回滚；数据库重开后pending disable仍拒绝导出并保留分页状态；BEGIN前会话撤销拒绝用户修改。task/config/health/plugin profile证据仍明确fixture，不冒称真实Xray停用或配置部署。
+
+首轮实际SQLite FAIL（新增权限fixture缺必填Description，auth正确ErrInvalidCheck），修正fixture说明后通过；失败原日志users-r38-sql.log保留，未修改生产权限校验。最终Windows SQLite15顶层PASS9.608s（该Xray组合1.27s）/Agent21 PASS8.631s，Linux-only注册Windows明确SKIP。最终Ubuntu UID1000可选包17顶层PASS/3阻断二进制SKIP、SQLite15顶层PASS/无skip；LINUX-XRAY-USERS-EVIDENCE.json为最终源/二进制/日志哈希，初版原生证据另留reports不冒用为新源。
+
+最终全量check五组PASS（2026-10-30T17:38:25.159Z，上海2026-10-31），Web179项；security PASS17:38:15.568Z，npm audit0/govulncheck无漏洞。延用同会话npm ci/tools:install PASS，根依赖未变。整个接替过程中main仍8a7dd470，保护文件零差异；旧两份外部Xray安全FAIL保留，未运行/安装/豁免，amd64 WSL非物理VPS/arm64/完整发行验收。
+
+R37已提交7f05242；本增量精确SHA见codex-03交接。本包保持ACTIVE，尚有唯一任务/Host/公共接口/真实运行及页面验收工作，本次检查点不称完整v0.9交付，也不重申原先“无独立工作”的停止结论。

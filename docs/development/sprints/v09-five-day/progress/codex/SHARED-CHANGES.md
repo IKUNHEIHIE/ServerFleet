@@ -86,3 +86,9 @@ wazero v1.12.0仅在同一隔离PoC验证128KiB内存上限、未注册Host拒�
 精确auth候选见`XRAY-CENTRAL-MATERIALS.md`及`internal/auth/xray_materials.go`；`IdentitySQLStatements.AppendXrayMaterialAudit func(context.Context, []XrayMaterialAuditEvent) error`必须映射同一真实Tx，保留scope/instance/inbound/user/reference/plan/revision/result，不可转成丢字段的旧事件。无sink时新材料写入明确拒绝；当前父ctx不能继承以前事务的审计能力。现有SQL表形状和公共迁移编号未改。
 
 兼容变化：首次持久reserved将auth payload切到v2；新实现兼容v1并保留v2，固定R36旧writer实际拒绝v2且未改原字节。接收方必须协调新auth部署与降级/恢复准入；不可清除永久claim或改版本绕开。回退只能保持未启用材料或使用审查过的恢复流程。调用方为受控plugin task及单用户客户端导出，已在隔离SQLite真实cipher/fence/审计组合通过；持久用户/配置/profile与正式Host/任务/schema/页面仍待接收，无新增公开credential kind/API/Proto/锁/核心可选插件依赖。
+
+## S06 可选Xray用户Host持久化与应用证据（PROPOSED，R38）
+
+精确本域候选见`XRAY-MANAGED-USERS.md`及可选包`users.go`。ManagedUserStore.Update回调返回state+完整ManagedUserAudit，必须由Host同Tx原子提交，真实txCtx绑定当前权限/中央材料reader。包含operation/Change/Application的完整gate检查不可退化成只看TaskID或自报planDigest；新实例seed不得用于恢复丢失状态。用户只保存中央reference，停用/删除为pending而非假称Xray已生效。
+
+总控待协调Host私有元数据存储、完整typed审计schema/公共迁移、node范围`xray.users.read/manage/export`目录、唯一任务已应用配置/健康证据与旧DTO映射；本包没有修改公共接口/迁移或授权额外import。实际隔离SQLite已接真实身份/grant/中央cipher与fence/同Tx审计并通过改名同身份、重启停用与源撤销；部署/插件profile/sole-task evidence仍fixture，不是公共接收SHA。回退为不注册新Host/路由且保留私有元数据和tombstone，不清状态或重放未知部署。

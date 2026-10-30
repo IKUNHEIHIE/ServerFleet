@@ -173,7 +173,7 @@ func WithTemplate(ctx context.Context, spec TemplateSpec, facts PreflightFacts, 
 			if !canonicalVLESSID(secret) {
 				return ErrConfigurationRejected
 			}
-			users = append(users, map[string]any{"id": string(secret), "email": "sf-user-" + u.ID, "flow": "xtls-rprx-vision", "level": 0})
+			users = append(users, map[string]any{"id": string(secret), "email": managedStatsEmail(u.ID), "flow": "xtls-rprx-vision", "level": 0})
 			return nil
 		})
 		if err != nil {
