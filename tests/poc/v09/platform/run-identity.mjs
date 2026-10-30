@@ -1,4 +1,4 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import path from "node:path";
@@ -43,9 +43,20 @@ writeFileSync(path.join(work,"ai_sessions_sql_test.go"),readFileSync(new URL("ai
 writeFileSync(path.join(work,"approvals_sql_test.go"),readFileSync(new URL("approvals_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"plugins_sql_test.go"),readFileSync(new URL("plugins_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"recovery_sql_test.go"),readFileSync(new URL("recovery_sql_test.go.txt",import.meta.url)));
+// Actual Agent application sources, not a rewritten client. Only the isolated
+// test adapter imports DS SQL; production Agent still has no database dependency.
+const agentWork=path.join(work,"agentapp");mkdirSync(agentWork,{recursive:true});
+const agentFiles=readdirSync(path.join(root,"apps/agent")).filter(name=>name.endsWith(".go"));
+for(const name of readdirSync(agentWork).filter(name=>name.endsWith(".go")&&!agentFiles.includes(name)&&name!=="registration_sql_test.go")){
+ const target=path.resolve(agentWork,name);if(path.dirname(target)!==path.resolve(agentWork))throw new Error("Invalid stale Agent source path");unlinkSync(target);
+}
+const sourceHashes={};
+for(const name of agentFiles){const source=readFileSync(path.join(root,"apps/agent",name));writeFileSync(path.join(agentWork,name),source);sourceHashes[`apps/agent/${name}`]=createHash("sha256").update(source).digest("hex");}
+writeFileSync(path.join(agentWork,"registration_sql_test.go"),readFileSync(new URL("agent_registration_sql_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"agent-source-hashes.json"),JSON.stringify(sourceHashes,null,2)+"\n");
 try{
  if(bootstrap)run(go,["mod","tidy"],{cwd:work,name:"v09-isolated-sqlite-all-platform-lock"});
- if(!process.argv.includes("--prepare-only"))run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s","."],{cwd:work,name:"v09-real-sqlite-identity"});
+ if(!process.argv.includes("--prepare-only"))run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s",".","./agentapp"],{cwd:work,name:"v09-real-sqlite-identity"});
  if(bootstrap){
   const generatedModule=readFileSync(path.join(work,"go.mod"),"utf8");
   if(!/^replace serverfleet\.local\/serverfleet => .+$/m.test(generatedModule))throw new Error("Missing local workspace replacement");

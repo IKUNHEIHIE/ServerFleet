@@ -18,7 +18,7 @@ type EnrollmentSQLStatements struct {
 }
 type EnrollmentSQLBackend struct {
 	Read func(context.Context, string, ...any) ([]byte, error)
-	InTx func(context.Context, func(EnrollmentSQLStatements) error) error
+	InTx func(context.Context, func(context.Context, EnrollmentSQLStatements) error) error
 }
 type SQLEnrollmentStore struct{ backend EnrollmentSQLBackend }
 
@@ -52,22 +52,22 @@ func (s *SQLEnrollmentStore) View(ctx context.Context, fn func([]byte) error) er
 	}
 	return err
 }
-func (s *SQLEnrollmentStore) Update(ctx context.Context, fn func([]byte) ([]byte, error)) error {
+func (s *SQLEnrollmentStore) Update(ctx context.Context, fn func(context.Context, []byte) ([]byte, error)) error {
 	if s == nil || ctx == nil || fn == nil || ctx.Err() != nil {
 		return ErrEnrollmentUnavailable
 	}
-	return s.backend.InTx(ctx, func(tx EnrollmentSQLStatements) error {
-		if tx.Read == nil || tx.Exec == nil {
+	return s.backend.InTx(ctx, func(txCtx context.Context, tx EnrollmentSQLStatements) error {
+		if txCtx == nil || txCtx.Err() != nil || ctx.Err() != nil || tx.Read == nil || tx.Exec == nil {
 			return ErrEnrollmentUnavailable
 		}
-		b, err := tx.Read(ctx, enrollmentReadSQL)
+		b, err := tx.Read(txCtx, enrollmentReadSQL)
 		if err != nil || len(b) == 0 {
 			return ErrEnrollmentUnavailable
 		}
 		if _, err = decodeEnrollment(b); err != nil {
 			return err
 		}
-		next, err := fn(bytes.Clone(b))
+		next, err := fn(txCtx, bytes.Clone(b))
 		if err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func (s *SQLEnrollmentStore) Update(ctx context.Context, fn func([]byte) ([]byte
 			for _, e := range st.Outbox {
 				events = append(events, EnrollmentAuditEvent{e.Actor, e.Action, e.NodeID, e.EnrollmentID, e.At.UnixMilli()})
 			}
-			if err = tx.AppendAudit(ctx, events); err != nil {
+			if err = tx.AppendAudit(txCtx, events); err != nil {
 				return err
 			}
 			st.Outbox = nil
@@ -89,14 +89,14 @@ func (s *SQLEnrollmentStore) Update(ctx context.Context, fn func([]byte) ([]byte
 				return ErrEnrollmentUnavailable
 			}
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || txCtx.Err() != nil {
 			return ErrEnrollmentUnavailable
 		}
-		rows, err := tx.Exec(ctx, `UPDATE cx_agent_enrollment SET payload=? WHERE singleton=1`, bytes.Clone(next))
+		rows, err := tx.Exec(txCtx, `UPDATE cx_agent_enrollment SET payload=? WHERE singleton=1`, bytes.Clone(next))
 		if err != nil || rows != 1 {
 			return ErrEnrollmentUnavailable
 		}
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || txCtx.Err() != nil {
 			return ErrEnrollmentUnavailable
 		}
 		return nil

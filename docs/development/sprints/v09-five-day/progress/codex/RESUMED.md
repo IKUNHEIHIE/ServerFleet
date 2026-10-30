@@ -284,6 +284,16 @@ Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；
 
 ## R32 注册管理事务提交前当前权限复查
 
+提交a9f1069f9707ddda3add70e53a83ff463450c55a。
+
 组合审查发现EnrollmentService此前只在操作进入时调用管理员门，不能证明等待/签发期间撤权后不提交。本轮改为构造必须显式提供before+commit，后者在写事务内同完整operation复查后才允许返回持久字节；IssueToken/Decide/Revoke及受限List均覆盖。取消/panic/源不可用失败关闭，不提供旧三参数默认放行。ENROLLMENT-WIRING.md已给精确候选及事务只读/跨源世代、最终HTTP输出局限，未改共享基线。
 
 负向验证进入检查允许、提交检查拒绝时，整个令牌/证书映射/吊销/审计出箱及列表观察字节原样回滚，响应不含凭据；缺commit、进入/提交panic、源故障、取消均拒绝。`go test ./internal/transport ./apps/agent ./tests/architecture -count=1` PASS5.584s/8.202s/0.762s；staticcheck PASS。真实SQLite十二项PASS8.828s，构造调用全部显式同步，未删除测试。Ubuntu变化包transport50/SQLite12顶层PASS，LINUX-ENROLLMENT-FENCE-EVIDENCE.json记录精确源/二进制/日志；仍继续真实持久注册客户端组合。
+
+## R33 实际Linux注册客户端/SQLite/事务内身份/审计/mTLS
+
+Enrollment自有Update/InTx候选回调增可信txCtx，业务/SQL/commit门贯穿，隔离组合用同一真实DS Tx绑定只读auth reader；不改DS公共端口/原始YAML/根依赖。run-identity复制实际Agent源并编译agentapp，Linux runner新增agent-sql目标。AGENT-REGISTRATION-SQL.md给精确签名/兼容与局限。
+
+Ubuntu UID1000实际执行本地私钥CSR→HTTPS pending→SQLite重启→真实登录身份决定/审计故障回滚→issued本地重开→真实mTLS→默认零节点权限拒绝吊销→显式grant→持久吊销新TLS失败/注册重放拒绝；额外真实会话进入后/BEGIN前撤销，由同Tx reader拒绝发令牌。首次原生FAIL为大写HTTP原因码不符合DS审计小写约束，固定映射保留原因后重跑transport50/SQLite12/Agent22顶层PASS/无skip，保留原FAIL目录。WindowsSQLite12/Agent21 PASS，Linux-only组合明确SKIP；LINUX-REGISTRATION-SQL-EVIDENCE.json精确记录实际环境/源/二进制/日志。
+
+根模块transport/Agent/architecture PASS3.671s/7.752s/1.438s、staticcheck PASS；Linux隔离module含测试全包govulncheck PASS（首次工具路径误用子目录未执行扫描，修正从worktree设置绝对工具/缓存路径后得到No vulnerabilities found，不算首次成功）。全量check五套PASS10:04:17Z/security PASS10:01:10Z，根受保护文件零差异；本轮npm ci/tools:install先前已PASS且根依赖未变。真实组件不代替正式新节点角色/监听器/PKI政策、Node域/统一任务、页面、安装/arm64/1C1G；继续可独立Xray等包内实现。

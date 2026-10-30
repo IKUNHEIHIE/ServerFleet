@@ -26,7 +26,8 @@ type EnrollmentOperation struct {
 type EnrollmentGate func(context.Context, EnrollmentOperation) error
 type EnrollmentStore interface {
 	View(context.Context, func([]byte) error) error
-	Update(context.Context, func([]byte) ([]byte, error)) error
+	// Callback context carries the trusted transaction-bound policy reader.
+	Update(context.Context, func(context.Context, []byte) ([]byte, error)) error
 }
 type EnrollmentTokenInput struct {
 	Name          string
@@ -160,11 +161,14 @@ func x509CSR(raw []byte) (*x509.CertificateRequest, error) {
 	}
 	return csr, nil
 }
-func (s *EnrollmentService) change(ctx context.Context, fn func(*enrollmentState, time.Time) error) error {
+func (s *EnrollmentService) change(ctx context.Context, fn func(context.Context, *enrollmentState, time.Time) error) error {
 	if s == nil || ctx == nil || ctx.Err() != nil {
 		return ErrEnrollmentUnavailable
 	}
-	err := s.store.Update(ctx, func(b []byte) ([]byte, error) {
+	err := s.store.Update(ctx, func(txCtx context.Context, b []byte) ([]byte, error) {
+		if txCtx == nil || txCtx.Err() != nil || ctx.Err() != nil {
+			return nil, ErrEnrollmentUnavailable
+		}
 		st, err := decodeEnrollment(b)
 		if err != nil {
 			return nil, err
@@ -174,11 +178,11 @@ func (s *EnrollmentService) change(ctx context.Context, fn func(*enrollmentState
 			return nil, ErrEnrollmentUnavailable
 		}
 		st.ClockFloor = now
-		if err = fn(st, now); err != nil {
+		if err = fn(txCtx, st, now); err != nil {
 			return nil, err
 		}
 		out, err := json.Marshal(st)
-		if err != nil || len(out) > 16<<20 || ctx.Err() != nil {
+		if err != nil || len(out) > 16<<20 || ctx.Err() != nil || txCtx.Err() != nil {
 			return nil, ErrEnrollmentUnavailable
 		}
 		return out, nil
@@ -217,14 +221,14 @@ func invokeEnrollmentGate(ctx context.Context, gate EnrollmentGate, op Enrollmen
 	}
 	return nil
 }
-func (s *EnrollmentService) privileged(ctx context.Context, op EnrollmentOperation, fn func(*enrollmentState, time.Time) error) error {
-	return s.change(ctx, func(st *enrollmentState, now time.Time) error {
-		if err := fn(st, now); err != nil {
+func (s *EnrollmentService) privileged(ctx context.Context, op EnrollmentOperation, fn func(context.Context, *enrollmentState, time.Time) error) error {
+	return s.change(ctx, func(txCtx context.Context, st *enrollmentState, now time.Time) error {
+		if err := fn(txCtx, st, now); err != nil {
 			return err
 		}
 		// A successful entry check cannot authorize a later transaction. A
 		// denial rolls back the mutation, certificate mapping AND audit outbox.
-		return invokeEnrollmentGate(ctx, s.commit, op)
+		return invokeEnrollmentGate(txCtx, s.commit, op)
 	})
 }
 func appendEnrollmentAudit(st *enrollmentState, op EnrollmentOperation, action, node, id string, now time.Time) error {
@@ -242,7 +246,7 @@ func (s *EnrollmentService) IssueToken(ctx context.Context, op EnrollmentOperati
 		return EnrollmentToken{}, ErrEnrollmentRejected
 	}
 	var result EnrollmentToken
-	err := s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
+	err := s.privileged(ctx, op, func(_ context.Context, st *enrollmentState, now time.Time) error {
 		if input.ReplaceNodeID != "" {
 			exists := false
 			for _, id := range st.Identities {
@@ -295,7 +299,7 @@ func (s *EnrollmentService) Submit(ctx context.Context, input AgentEnrollmentInp
 	digest := enrollmentDigest(string(digestBytes))
 	var result AgentEnrollmentResult
 	var outcome error
-	err = s.change(ctx, func(st *enrollmentState, now time.Time) error {
+	err = s.change(ctx, func(_ context.Context, st *enrollmentState, now time.Time) error {
 		token, ok := st.Tokens[enrollmentDigest(input.EnrollmentToken)]
 		if !ok || !now.Before(token.Expires) {
 			outcome = ErrEnrollmentRejected
@@ -354,7 +358,7 @@ func (s *EnrollmentService) List(ctx context.Context, op EnrollmentOperation) ([
 		return nil, err
 	}
 	var out []EnrollmentView
-	err := s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
+	err := s.privileged(ctx, op, func(_ context.Context, st *enrollmentState, now time.Time) error {
 		out = []EnrollmentView{}
 		for _, record := range st.Requests {
 			v := record.View
@@ -377,7 +381,7 @@ func (s *EnrollmentService) Decide(ctx context.Context, op EnrollmentOperation, 
 	}
 	var result EnrollmentView
 	var outcome error
-	err := s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
+	err := s.privileged(ctx, op, func(txCtx context.Context, st *enrollmentState, now time.Time) error {
 		record, ok := st.Requests[op.EnrollmentID]
 		if !ok || record.View.NodeID != op.NodeID || record.View.Revision != op.ExpectedRevision || record.View.Status != "pending" {
 			return ErrEnrollmentRejected
@@ -394,7 +398,7 @@ func (s *EnrollmentService) Decide(ctx context.Context, op EnrollmentOperation, 
 			if err != nil {
 				return err
 			}
-			certificate, err := s.issuer.issue(ctx, record.View.NodeID, csr, now)
+			certificate, err := s.issuer.issue(txCtx, record.View.NodeID, csr, now)
 			if err != nil {
 				return ErrEnrollmentUnavailable
 			}
@@ -456,7 +460,7 @@ func (s *EnrollmentService) Revoke(ctx context.Context, op EnrollmentOperation, 
 	if op.Fingerprint != fingerprint {
 		return ErrEnrollmentRejected
 	}
-	return s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
+	return s.privileged(ctx, op, func(_ context.Context, st *enrollmentState, now time.Time) error {
 		id, ok := st.Identities[fingerprint]
 		if !ok || id.NodeID != op.NodeID || id.Revoked || op.ExpectedRevision != id.TrustGeneration || st.RevocationSequence == ^uint64(0) {
 			return ErrEnrollmentRejected

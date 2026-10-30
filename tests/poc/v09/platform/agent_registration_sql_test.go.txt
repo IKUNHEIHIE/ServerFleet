@@ -1,0 +1,466 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"runtime"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/transport"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+type registrationActorKey struct{}
+type registrationReaderKey struct{}
+type registrationActor struct {
+	secret      string
+	observation auth.Identity
+}
+
+func registrationIdentityStatements(q ds.Queryer) auth.IdentitySQLStatements {
+	return auth.IdentitySQLStatements{
+		Read: func(ctx context.Context, sql string, args ...any) ([]byte, bool, error) {
+			var b []byte
+			var initialized bool
+			err := q.QueryRow(ctx, sql, args...).Scan(&b, &initialized)
+			return b, initialized, err
+		},
+		Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
+			r, err := q.Exec(ctx, sql, args...)
+			if err != nil {
+				return 0, err
+			}
+			return r.RowsAffected()
+		},
+	}
+}
+func registrationEnrollmentStatements(q ds.Queryer) transport.EnrollmentSQLStatements {
+	return transport.EnrollmentSQLStatements{
+		Read: func(ctx context.Context, sql string, args ...any) ([]byte, error) {
+			var b []byte
+			err := q.QueryRow(ctx, sql, args...).Scan(&b)
+			return b, err
+		},
+		Exec: registrationIdentityStatements(q).Exec,
+	}
+}
+
+// This is an isolated candidate composition, not a production listener/profile.
+// Admin login/epoch, explicit node grant, SQL/audit/issuer/client and mTLS are real.
+// The NEW-node registration role policy and local listener profile are explicit
+// test policy inputs; no fleet task/Node-domain acceptance is implied.
+func TestAgentRealSQLiteRegistrationClientApprovalRestartAndRevocation(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Controller candidate intentionally accepts only actual Linux Agent metadata; run native Ubuntu target agent-sql")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	identity, ca, key, identityDir := identityStoreFixture(t)
+	prepared, err := identity.Prepare(ctx, "0.9.0-registration-poc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	dbPath := filepath.Join(t.TempDir(), "actual-registration.db")
+	db, err := ds.Open(ctx, ds.Config{Path: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = db.Close() }()
+	for _, sql := range append(auth.IdentitySchemaStatements(), transport.EnrollmentSchemaStatements()...) {
+		if _, err = db.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, migration := range audit.Migrations() {
+		for _, sql := range migration.Statements {
+			if _, err = db.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	validator, err := audit.NewValidator([]string{"auth.setup", "auth.bootstrap", "auth.login", "auth.session.revoke", "auth.grant.create", "enrollment.token.issue", "enrollment.request", "enrollment.approved", "enrollment.rejected", "enrollment.http.rejected", "agent.revoke"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recorder *audit.SQLRecorder
+	var identityService *auth.IdentityService
+	var registeredNode string
+	makeIdentity := func(q ds.Queryer, writable bool) *auth.IdentityService {
+		backend := auth.IdentitySQLBackend{Read: registrationIdentityStatements(q).Read, InTx: func(context.Context, func(auth.IdentitySQLStatements) error) error {
+			return auth.ErrIdentityUnavailable
+		}}
+		if writable {
+			backend.InTx = func(ctx context.Context, fn func(auth.IdentitySQLStatements) error) error {
+				return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+					ops := registrationIdentityStatements(tx)
+					ops.AppendAudit = func(ctx context.Context, events []auth.IdentityAuditEvent) error {
+						for _, e := range events {
+							if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.SubjectID, Action: e.Action, Result: e.Result, RequestID: e.RequestID, Source: audit.Source(e.Source), NodeIDs: e.NodeIDs, At: e.At}); err != nil {
+								return err
+							}
+						}
+						return nil
+					}
+					return fn(ops)
+				})
+			}
+		}
+		store, err := auth.NewSQLIdentityStore(backend)
+		if err != nil {
+			t.Fatal(err)
+		}
+		service, err := auth.NewIdentityServiceWithResources(store, func(_ context.Context, kind, id string) ([]string, error) {
+			if kind == "node" && id == registeredNode && id != "" {
+				return []string{id}, nil
+			}
+			return nil, errors.New("resource unavailable")
+		}, []auth.PermissionDefinition{{Key: "agents.identity.manage", Description: "Explicit test node identity management", ResourceType: "node", AdminOnly: true}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return service
+	}
+	rebindIdentity := func() {
+		var err error
+		recorder, err = audit.NewSQLRecorder(db, validator, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identityService = makeIdentity(db, true)
+	}
+	rebindIdentity()
+	setup, err := identityService.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = identityService.Bootstrap(ctx, setup, "registration-admin", "long-local-registration-password"); err != nil {
+		t.Fatal(err)
+	}
+	login := func() auth.LoginSession {
+		s, err := identityService.Login(ctx, "registration-admin", "long-local-registration-password", "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	admin := login()
+	actorContext := func(session auth.LoginSession) context.Context {
+		observed, err := identityService.Authenticate(ctx, session.Secret, session.CSRF, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return context.WithValue(ctx, registrationActorKey{}, registrationActor{session.Secret, observed})
+	}
+	adminCtx := actorContext(admin)
+	checkActor := func(ctx context.Context, service *auth.IdentityService, op transport.EnrollmentOperation) error {
+		actor, ok := ctx.Value(registrationActorKey{}).(registrationActor)
+		if !ok || service == nil || !actor.observation.Administrator || op.ActorID != actor.observation.SubjectID {
+			return transport.ErrEnrollmentRejected
+		}
+		if err := service.CheckObservationReadOnly(ctx, actor.secret, actor.observation); err != nil {
+			if errors.Is(err, auth.ErrIdentityUnavailable) {
+				return transport.ErrEnrollmentUnavailable
+			}
+			return transport.ErrEnrollmentRejected
+		}
+		switch op.Action {
+		case "enrollment.issue", "enrollment.list", "enrollment.decide", "agent.revoke":
+		default:
+			return transport.ErrEnrollmentRejected
+		}
+		if op.Action == "agent.revoke" || op.Action == "enrollment.issue" && op.NodeID != "" {
+			if err := service.Authorize(ctx, auth.Check{SubjectID: op.ActorID, Action: "agents.identity.manage", NodeIDs: []string{op.NodeID}}); err != nil {
+				return transport.ErrEnrollmentRejected
+			}
+		}
+		return nil
+	}
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	issuer, err := transport.NewCertificateIssuer(ca.Raw, key, roots, nil, prepared.RootSPKI, 3, 30*time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var beforeTransaction func() error
+	var failAfterAudit bool
+	makeEnrollment := func() *transport.EnrollmentService {
+		store, err := transport.NewSQLEnrollmentStore(transport.EnrollmentSQLBackend{Read: registrationEnrollmentStatements(db).Read, InTx: func(ctx context.Context, fn func(context.Context, transport.EnrollmentSQLStatements) error) error {
+			if beforeTransaction != nil {
+				hook := beforeTransaction
+				beforeTransaction = nil
+				if err := hook(); err != nil {
+					return err
+				}
+			}
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+				ops := registrationEnrollmentStatements(tx)
+				ops.AppendAudit = func(ctx context.Context, events []transport.EnrollmentAuditEvent) error {
+					for _, e := range events {
+						source := audit.SourceWeb
+						if e.ActorID == "enrolling-agent" {
+							source = audit.SourceAgent
+						}
+						var nodes []string
+						if e.NodeID != "" {
+							nodes = []string{e.NodeID}
+						}
+						if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.ActorID, Action: e.Action, Result: "success", RequestID: e.EnrollmentID, Source: source, NodeIDs: nodes, At: time.UnixMilli(e.AtUnixMilli)}); err != nil {
+							return err
+						}
+					}
+					if failAfterAudit {
+						return errors.New("injected after real audit insert")
+					}
+					return nil
+				}
+				return fn(context.WithValue(ctx, registrationReaderKey{}, makeIdentity(tx, false)), ops)
+			})
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		service, err := transport.NewEnrollmentService(store, issuer, func(ctx context.Context, op transport.EnrollmentOperation) error {
+			return checkActor(ctx, identityService, op)
+		}, func(ctx context.Context, op transport.EnrollmentOperation) error {
+			reader, _ := ctx.Value(registrationReaderKey{}).(*auth.IdentityService)
+			return checkActor(ctx, reader, op)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return service
+	}
+	service := makeEnrollment()
+	issueOp := transport.EnrollmentOperation{ActorID: admin.Identity.SubjectID, Action: "enrollment.issue"}
+	if _, err = service.IssueToken(ctx, issueOp, transport.EnrollmentTokenInput{Name: "forged actor", TTLSeconds: 600}); err != transport.ErrEnrollmentRejected {
+		t.Fatal("actor ID authenticated itself", err)
+	}
+	// Actual auth revocation occurs after entry, BEFORE SQLite begins. The
+	// commit gate receives a reader of the SAME writer transaction and rejects.
+	beforeTransaction = func() error {
+		return identityService.RevokeSession(ctx, admin.Secret, admin.CSRF, admin.Identity.SessionID)
+	}
+	if token, err := service.IssueToken(adminCtx, issueOp, transport.EnrollmentTokenInput{Name: "revoked between gates", TTLSeconds: 600}); err != transport.ErrEnrollmentRejected || token.Token != "" {
+		t.Fatal("revoked admin issued token", err)
+	}
+	admin = login()
+	adminCtx = actorContext(admin)
+	token, err := service.IssueToken(adminCtx, issueOp, transport.EnrollmentTokenInput{Name: "real local Linux Agent", TTLSeconds: 600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var enrollmentHandler atomic.Pointer[transport.EnrollmentHTTP]
+	_, origin := enrollmentClientServer(t, ca, key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if h := enrollmentHandler.Load(); h != nil {
+			h.ServeHTTP(w, r)
+		} else {
+			w.WriteHeader(503)
+		}
+	}), "localhost")
+	bindHandler := func() {
+		h, err := transport.NewEnrollmentHTTP(service, transport.EnrollmentHTTPConfig{Authority: strings.TrimPrefix(origin, "https://"), ServerName: "localhost", MaxConcurrent: 2, MaxIPs: 8, PerIPPerMinute: 30, GlobalPerMinute: 60, Current: func(context.Context) error { return nil }, Rejected: func(ctx context.Context, e transport.EnrollmentHTTPRejection) error {
+			// Wire problem codes are uppercase; this pinned DS audit candidate
+			// requires lowercase. Preserve an explicit reviewed fixed mapping.
+			reason := map[string]string{"ENROLLMENT_SOURCE_UNAVAILABLE": "enrollment_source_unavailable", "ENROLLMENT_SOURCE_REJECTED": "enrollment_source_rejected", "INVALID_REQUEST": "invalid_request", "NOT_FOUND": "not_found", "METHOD_NOT_ALLOWED": "method_not_allowed", "RATE_LIMITED": "rate_limited", "ENROLLMENT_REJECTED": "enrollment_rejected"}[e.ReasonCode]
+			if reason == "" {
+				return errors.New("unmapped fixed enrollment reason")
+			}
+			return recorder.Append(ctx, audit.Event{SubjectID: "enrolling-agent", Action: "enrollment.http.rejected", Result: "denied", RequestID: e.RequestID, Source: audit.SourceAgent, ReasonCode: reason, At: time.Now()})
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		enrollmentHandler.Store(h)
+	}
+	bindHandler()
+	client, err := newAgentEnrollmentClient(identity, enrollmentClientConfig(ca, origin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out, err := client.EnrollOnce(ctx, token.Token); err != nil || out.State != "pending" {
+		t.Fatal("real pending registration failed", out.State, err)
+	}
+	if _, err = os.Stat(filepath.Join(identityDir, "issued.json")); !os.IsNotExist(err) {
+		t.Fatal("unapproved identity installed", err)
+	}
+	// No online server can auto-approve this request. Reopen the actual DB and
+	// reuse exactly the prepared key/CSR and pending registration.
+	enrollmentHandler.Store(nil)
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db, err = ds.Open(ctx, ds.Config{Path: dbPath})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rebindIdentity()
+	service = makeEnrollment()
+	bindHandler()
+	list, err := service.List(adminCtx, transport.EnrollmentOperation{ActorID: admin.Identity.SubjectID, Action: "enrollment.list"})
+	if err != nil || len(list) != 1 || list[0].ID != prepared.RequestID || list[0].Status != "pending" {
+		t.Fatal("pending identity did not survive real DB restart", err)
+	}
+	decideOp := transport.EnrollmentOperation{ActorID: admin.Identity.SubjectID, Action: "enrollment.decide", EnrollmentID: list[0].ID, NodeID: list[0].NodeID, ExpectedRevision: list[0].Revision}
+	auditsBefore, err := recorder.Count(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failAfterAudit = true
+	if _, err = service.Decide(adminCtx, decideOp, true); err != transport.ErrEnrollmentUnavailable {
+		t.Fatal("failed audit transaction acknowledged approval", err)
+	}
+	failAfterAudit = false
+	if count, err := recorder.Count(ctx); err != nil || count != auditsBefore {
+		t.Fatal("failed certificate transaction leaked audit", count, err)
+	}
+	if out, err := client.EnrollOnce(ctx, token.Token); err != nil || out.State != "pending" {
+		t.Fatal("failed transaction published certificate", out.State, err)
+	}
+	if _, err = service.Decide(adminCtx, decideOp, true); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := client.EnrollOnce(ctx, token.Token); err != nil || out.State != "issued" {
+		t.Fatal("real certificate not installed", out.State, err)
+	}
+	registeredNode = decideOp.NodeID
+	var material []byte
+	if err = db.QueryRow(ctx, "SELECT payload FROM cx_agent_enrollment WHERE singleton=1").Scan(&material); err != nil || bytes.Contains(material, []byte(token.Token)) || bytes.Contains(material, []byte("PRIVATE KEY")) {
+		t.Fatal("enrollment database leaked secret", err)
+	}
+	if err = identity.Close(); err != nil {
+		t.Fatal(err)
+	}
+	identity, err = openAgentIdentity(identityDir, prepared.RootSPKI, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer identity.Close()
+	verifier, err := transport.NewPeerVerifier(service.Lookup)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var serverCalls atomic.Int32
+	mtls, _ := enrollmentClientServer(t, ca, key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := verifier.Verify(r.Context(), *r.TLS, registeredNode); err != nil {
+			w.WriteHeader(403)
+			return
+		}
+		serverCalls.Add(1)
+		w.WriteHeader(204)
+	}), "localhost")
+	// Replace the initially test-started listener with an mTLS listener using
+	// its same local server certificate; no command/event channel is opened.
+	serverCert := mtls.TLS.Certificates[0]
+	mtls.Close()
+	secure := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if _, err := verifier.Verify(r.Context(), *r.TLS, registeredNode); err != nil {
+			w.WriteHeader(403)
+			return
+		}
+		serverCalls.Add(1)
+		w.WriteHeader(204)
+	}))
+	secure.TLS, err = verifier.ControllerTLSConfig(serverCert, roots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	secure.StartTLS()
+	defer secure.Close()
+	if err = identity.WithCertificate(ctx, func(_ context.Context, f agentIdentityFacts) error {
+		if f.NodeID != registeredNode {
+			return errAgentIdentity
+		}
+		return nil
+	}, func(ctx context.Context, cert tls.Certificate) error {
+		cfg, err := transport.AgentTLSConfig(cert, roots, "localhost")
+		if err != nil {
+			return err
+		}
+		httpClient := &http.Client{Transport: &http.Transport{TLSClientConfig: cfg, DisableKeepAlives: true}, Timeout: 3 * time.Second}
+		defer httpClient.CloseIdleConnections()
+		response, err := httpClient.Get(secure.URL)
+		if err != nil {
+			return err
+		}
+		_ = response.Body.Close()
+		if response.StatusCode != 204 {
+			return errors.New("persisted identity did not authenticate")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	// A new authenticated administrator still has ZERO node authority.
+	var facts agentIdentityFacts
+	if err = identity.WithCertificate(ctx, func(_ context.Context, f agentIdentityFacts) error { facts = f; return nil }, func(context.Context, tls.Certificate) error { return nil }); err != nil {
+		t.Fatal(err)
+	}
+	revokeOp := transport.EnrollmentOperation{ActorID: admin.Identity.SubjectID, Action: "agent.revoke", NodeID: registeredNode, Fingerprint: facts.Fingerprint, ExpectedRevision: 3}
+	if err = service.Revoke(adminCtx, revokeOp, facts.Fingerprint); err != transport.ErrEnrollmentRejected {
+		t.Fatal("administrator implicitly gained node permission", err)
+	}
+	if _, err = identityService.CreateResourceGrant(ctx, admin.Secret, admin.CSRF, auth.GrantRequest{PrincipalID: admin.Identity.SubjectID, ResourceType: "node", ResourceID: registeredNode, Permissions: []string{"agents.identity.manage"}}); err != nil {
+		t.Fatal(err)
+	}
+	adminCtx = actorContext(admin)
+	if err = service.Revoke(adminCtx, revokeOp, facts.Fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	if err = identity.WithCertificate(ctx, func(context.Context, agentIdentityFacts) error { return nil }, func(ctx context.Context, cert tls.Certificate) error {
+		cfg, err := transport.AgentTLSConfig(cert, roots, "localhost")
+		if err != nil {
+			return err
+		}
+		httpClient := &http.Client{Transport: &http.Transport{TLSClientConfig: cfg, DisableKeepAlives: true}, Timeout: 3 * time.Second}
+		defer httpClient.CloseIdleConnections()
+		response, err := httpClient.Get(secure.URL)
+		if err == nil {
+			_ = response.Body.Close()
+			return errors.New("revoked identity completed new TLS handshake")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if serverCalls.Load() != 1 {
+		t.Fatal("revoked identity reached HTTP handler", serverCalls.Load())
+	}
+	// HTTP polling after revocation must not return the old certificate.
+	client, err = newAgentEnrollmentClient(identity, enrollmentClientConfig(ca, origin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = client.EnrollOnce(ctx, token.Token); err != errAgentEnrollment {
+		t.Fatal("revoked certificate was reissued by replay", err)
+	}
+	page, err := recorder.Query(ctx, audit.Query{Limit: 100})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seen := map[string]int{}
+	for _, e := range page.Items {
+		seen[e.Action]++
+		if e.Action == "enrollment.http.rejected" && e.ReasonCode != "enrollment_rejected" {
+			t.Fatal("fixed denial reason lost")
+		}
+		if strings.Contains(e.RequestID, token.Token) {
+			t.Fatal("secret in audit")
+		}
+	}
+	if seen["enrollment.approved"] != 1 || seen["agent.revoke"] != 1 || seen["enrollment.http.rejected"] != 1 {
+		t.Fatal("actual approval/revocation audit missing or duplicated", seen)
+	}
+	t.Log("actual Linux CSR -> HTTPS pending -> SQLite restart -> authenticated decision/audit rollback -> issued local key -> mTLS -> explicit node grant -> persistent revocation; no fleet task/runtime admission claimed")
+}

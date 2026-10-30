@@ -66,6 +66,7 @@ try{
   ['agent',root,'./apps/agent'],['auth',root,'./internal/auth'],['transport',root,'./internal/transport'],['ai',root,'./internal/ai'],
   ['updates',root,'./internal/updates'],['recovery',root,'./internal/recovery'],['plugins',root,'./internal/plugins'],['workflows',root,'./internal/workflows'],['xray-pure',root,'./plugins/xray-manager'],
   ['sqlite',path.join(isolated,'identity-poc'),'.'],['wss-wasm',path.join(isolated,'poc'),'.'],['agent-wss',path.join(isolated,'poc'),'./agentapp'],
+  ['agent-sql',path.join(isolated,'identity-poc'),'./agentapp'],
  ];
  if(requested?.some(name=>!targets.some(t=>t[0]===name)))throw new Error('Unknown native package selection');
  const selected=requested?targets.filter(t=>requested.includes(t[0])):targets;

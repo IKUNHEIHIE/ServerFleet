@@ -28,10 +28,10 @@ func (s *enrollmentTestStore) View(ctx context.Context, fn func([]byte) error) e
 	defer s.mu.Unlock()
 	return fn(bytes.Clone(s.data))
 }
-func (s *enrollmentTestStore) Update(ctx context.Context, fn func([]byte) ([]byte, error)) error {
+func (s *enrollmentTestStore) Update(ctx context.Context, fn func(context.Context, []byte) ([]byte, error)) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	next, err := fn(bytes.Clone(s.data))
+	next, err := fn(ctx, bytes.Clone(s.data))
 	if err != nil {
 		return err
 	}

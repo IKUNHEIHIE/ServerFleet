@@ -63,7 +63,7 @@ func TestEnrollmentRealSQLiteRestartIssuedMTLSAndRevocation(t *testing.T) {
 	}
 	fail := false
 	store := func(db *ds.DB) *transport.SQLEnrollmentStore {
-		s, err := transport.NewSQLEnrollmentStore(transport.EnrollmentSQLBackend{Read: enrollmentStatements(db).Read, InTx: func(ctx context.Context, fn func(transport.EnrollmentSQLStatements) error) error {
+		s, err := transport.NewSQLEnrollmentStore(transport.EnrollmentSQLBackend{Read: enrollmentStatements(db).Read, InTx: func(ctx context.Context, fn func(context.Context, transport.EnrollmentSQLStatements) error) error {
 			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
 				ops := enrollmentStatements(tx)
 				ops.AppendAudit = func(ctx context.Context, events []transport.EnrollmentAuditEvent) error {
@@ -83,7 +83,7 @@ func TestEnrollmentRealSQLiteRestartIssuedMTLSAndRevocation(t *testing.T) {
 					}
 					return nil
 				}
-				if err := fn(ops); err != nil {
+				if err := fn(ctx, ops); err != nil {
 					return err
 				}
 				if fail {

@@ -1,5 +1,7 @@
 # 共享变更请求 / codex-02
 
+R30—33补充候选（REQUESTED）：agent-enrollment.patch.json精确RFC6902修订与兼容测试，保持原始YAML字节；EnrollmentService构造必填before+commit，EnrollmentStore.Update/SQLBackend.InTx回调新增可信txCtx，让commit使用同Tx只读auth reader。详见ENROLLMENT-HTTP.md、ENROLLMENT-WIRING.md、AGENT-REGISTRATION-SQL.md。所有本分支调用方已同步，旧三参数/旧callback签名不能编译，无默认放行。Linux真实注册/SQLite/审计回滚/身份重开/mTLS/零节点权限/显式grant吊销证据已交，但未接收正式角色/PKI/profile/Node业务组合；生产回退是不挂载监听器，保留持久材料与隔离。此增量无公共文件/根依赖/DS源码修改，不作为G2冻结或RecordTx接收证据。
+
 2026-10-30；状态 REQUESTED，未经接收不修改公共文件或主线消费端。CX-01 无共享文件改动，无新增依赖。
 
 ## S01 OpenAPI 认证迁移（API owner）

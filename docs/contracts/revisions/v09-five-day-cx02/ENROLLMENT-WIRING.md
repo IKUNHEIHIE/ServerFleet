@@ -1,5 +1,7 @@
 # 短期接入、CSR与证书映射接线候选
 
+R33事务ctx精确增量及Linux真实注册组合见[AGENT-REGISTRATION-SQL.md](AGENT-REGISTRATION-SQL.md)：EnrollmentStore.Update与SQLBackend.InTx回调均新增可信txCtx参数，commit从中取得同Tx只读权限reader，缺绑定关闭。此为待接收的本域候选修订，不能假定DS公共接口已接收。
+
 transport.EnrollmentService自有状态仓储，SQLEnrollmentStore通过DS单一事务Read/Exec/RowsAffected接入；EnrollmentSchemaStatements返回独立业务表语句，不分配编号/自动建库。没有内存生产回退，缺表/行失败关闭。AppendAudit非nil须同Tx写入DS；nil仅真实保留持久出箱，不声称完成统一audit域消费。
 
 精确程序端口：IssueToken(ctx, EnrollmentOperation, EnrollmentTokenInput)、Submit(ctx, AgentEnrollmentInput)、List(ctx,op)、Decide(ctx,op,approve)、Lookup(ctx,fingerprint)、Revoke(ctx,op,fingerprint)。operation的actor/action/enrollmentId/nodeId/fingerprint/revision来自可信Controller，强制gate逐字段核验当前真实管理员/统一任务或审批证明；字符串和客户端boolean不构成认证。
