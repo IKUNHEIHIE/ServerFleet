@@ -29,6 +29,7 @@ const (
 	ReasonZeroTime              Reason = "zero time"
 	ReasonInFuture              Reason = "in the future"
 	ReasonTooOld                Reason = "too old"
+	ReasonDuplicate             Reason = "duplicate"
 )
 
 // FieldError identifies a rejected event field. It never contains the field value.
@@ -45,23 +46,30 @@ func (e *FieldError) Unwrap() error { return ErrInvalidEvent }
 
 // Limits bounds accepted event text and time. Zero MaxPastAge disables the lower time bound.
 type Limits struct {
-	MaxSubjectIDBytes int
-	MaxActionBytes    int
-	MaxResultBytes    int
-	MaxRequestIDBytes int
-	MaxFutureSkew     time.Duration
-	MaxPastAge        time.Duration
+	MaxSubjectIDBytes  int
+	MaxActionBytes     int
+	MaxResultBytes     int
+	MaxRequestIDBytes  int
+	MaxTaskIDBytes     int
+	MaxNodeIDs         int
+	MaxReasonCodeBytes int
+	MaxFutureSkew      time.Duration
+	MaxPastAge         time.Duration
+	RequireSource      bool
 }
 
 // DefaultLimits returns local provisional bounds, not a frozen G2 contract.
 func DefaultLimits() Limits {
 	return Limits{
-		MaxSubjectIDBytes: 128,
-		MaxActionBytes:    128,
-		MaxResultBytes:    32,
-		MaxRequestIDBytes: 128,
-		MaxFutureSkew:     time.Minute,
-		MaxPastAge:        0,
+		MaxSubjectIDBytes:  128,
+		MaxActionBytes:     128,
+		MaxResultBytes:     32,
+		MaxRequestIDBytes:  128,
+		MaxTaskIDBytes:     128,
+		MaxNodeIDs:         200,
+		MaxReasonCodeBytes: 64,
+		MaxFutureSkew:      time.Minute,
+		MaxPastAge:         0,
 	}
 }
 
@@ -97,7 +105,8 @@ func NewValidator(actions []string, limits Limits) (*Validator, error) {
 		return nil, ErrInvalidValidator
 	}
 	if limits.MaxSubjectIDBytes <= 0 || limits.MaxActionBytes <= 0 ||
-		limits.MaxResultBytes <= 0 || limits.MaxRequestIDBytes <= 0 {
+		limits.MaxResultBytes <= 0 || limits.MaxRequestIDBytes <= 0 ||
+		limits.MaxTaskIDBytes <= 0 || limits.MaxNodeIDs <= 0 || limits.MaxReasonCodeBytes <= 0 {
 		return nil, ErrInvalidValidator
 	}
 	if limits.MaxFutureSkew < 0 || limits.MaxPastAge < 0 {
@@ -137,6 +146,36 @@ func (v *Validator) Validate(event Event, now time.Time) error {
 	}
 	if err := validateText("requestId", event.RequestID, v.limits.MaxRequestIDBytes); err != nil {
 		return err
+	}
+	if event.TaskID != "" {
+		if err := validateText("taskId", event.TaskID, v.limits.MaxTaskIDBytes); err != nil {
+			return err
+		}
+	}
+	if len(event.NodeIDs) > v.limits.MaxNodeIDs {
+		return &FieldError{Field: "nodeIds", Reason: ReasonTooLong}
+	}
+	seenNodes := make(map[string]struct{}, len(event.NodeIDs))
+	for _, nodeID := range event.NodeIDs {
+		if err := validateText("nodeIds", nodeID, v.limits.MaxSubjectIDBytes); err != nil {
+			return err
+		}
+		if _, duplicate := seenNodes[nodeID]; duplicate {
+			return &FieldError{Field: "nodeIds", Reason: ReasonDuplicate}
+		}
+		seenNodes[nodeID] = struct{}{}
+	}
+	if event.Source == "" {
+		if v.limits.RequireSource {
+			return &FieldError{Field: "source", Reason: ReasonEmpty}
+		}
+	} else if !knownSource(event.Source) {
+		return &FieldError{Field: "source", Reason: ReasonNotAllowed}
+	}
+	if event.ReasonCode != "" {
+		if err := validateReasonCode(event.ReasonCode, v.limits.MaxReasonCodeBytes); err != nil {
+			return err
+		}
 	}
 	if event.At.IsZero() {
 		return &FieldError{Field: "at", Reason: ReasonZeroTime}
@@ -179,4 +218,26 @@ func unsafeRuneReason(value string) (Reason, bool) {
 		}
 	}
 	return "", false
+}
+
+func knownSource(source Source) bool {
+	switch source {
+	case SourceWeb, SourceAI, SourcePlugin, SourceAgent, SourceSystem:
+		return true
+	default:
+		return false
+	}
+}
+
+func validateReasonCode(value string, maxBytes int) error {
+	if len(value) > maxBytes {
+		return &FieldError{Field: "reasonCode", Reason: ReasonTooLong}
+	}
+	for _, r := range value {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == '-' {
+			continue
+		}
+		return &FieldError{Field: "reasonCode", Reason: ReasonNotAllowed}
+	}
+	return nil
 }
