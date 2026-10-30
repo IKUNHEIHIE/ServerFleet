@@ -243,3 +243,9 @@ AI/architecture PASS 8.132s/1.410s，修正HTTP Redirect静态常量后staticche
 AI/architecture PASS12.699s/1.406s、staticcheck PASS；各字段篡改/无观察/撤权/范围/Profile变化/会话关闭/unknown/晚到上下文负向通过。固定DS源SQLite十二项PASS8.850s，含持久generating当前闸与Background伪观察拒绝。没有新增共享依赖/API/Proto/迁移。全量R25—26随后复验，包仍ACTIVE且未完整交付。
 
 R25—26全量check五套PASS（2026-10-30T08:40:30Z），security PASS（08:37:14Z，npm audit0/govulncheck无漏洞）。受保护go.mod/go.sum/npm manifests/锁/dependencies/API/Proto/gen/CI/AGENTS相对基线零差异。外部Xray FAIL不变。继续CX-03本地身份材料和其他独立项，不因该检查点停止。
+
+## R27 Agent本地P256私钥/CSR与持久证书材料
+
+新增apps/agent私有identityStore，明确本地生成/持久CSR意图与key、无秘密Request构造、严格pinned Root/配对公钥/节点/用途/期限/世代证书接收、真实重开借用与必需当前gate，不启用main或注册网络；AgentEnrollmentInput fmt打印token脱敏，不改JSON合同。部分/丢失/损坏不自动重新生成，不把Windows伪装为Linux，详见AGENT-LOCAL-IDENTITY.md。
+
+Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；增加PEM严格界限后本地身份专用PASS6.157s（含实际TLS1.3+mTLS与当前Controller撤销拒绝）。真实临时key/CSR/重开/精确证书、错误Root/节点/世代/期限/扩权/私钥PEM/损坏/缺gate均测；追加错误公钥负向随后复验。CA/签发/当前身份映射及部分gate为明确fixture，不当管理员/注册HTTPS或Linux安装证明。继续包内独立项。

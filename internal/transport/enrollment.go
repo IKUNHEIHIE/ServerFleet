@@ -50,6 +50,12 @@ type AgentEnrollmentInput struct {
 	AgentVersion    string `json:"agentVersion"`
 	Platform        string `json:"platform"`
 }
+
+func (i AgentEnrollmentInput) String() string {
+	return "transport.AgentEnrollmentInput{token:redacted,csr:public}"
+}
+func (i AgentEnrollmentInput) GoString() string { return i.String() }
+
 type EnrollmentView struct {
 	ID          string    `json:"id"`
 	NodeID      string    `json:"nodeId"`
