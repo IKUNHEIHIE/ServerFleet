@@ -8,7 +8,7 @@ request由可信Controller产生，包含当前真人Web主体、相同recipient
 
 borrow必须是中央凭据服务的当前、持久一次性借用/确认/审计适配：只有其回调后授权及审计提交成功、再次读取的用户/凭据/配置/插件仍与冻结值相同，才调用一次deliver。错误/panic、回调丢失/重复、撤权/轮换、输出结果不明都失败/UNKNOWN，不自动重试；保留的借用回调在函数返回后失效。输出缓冲尽力clear，fmt隐藏client metadata；Go URL/JSON字符串和运行时拷贝不能保证完全擦除。deliver只能供当前受保护响应，须no-store/同源Cookie+CSRF/安全输出处理，不能交普通日志、AI或另一个收件人。
 
-**具体未接收接缝**：auth当前通用CredentialService仅支持已有四种kind，不接受Xray UUID/REALITY；本轮未把其他种类伪装Xray凭据，也没有绕过中央库另造秘密来源。Read/admit/borrow测试明确double，真实实例绑定Xray材料/凭据借用及用户持久服务继续实施，正式typed Host与安全政策/审计/路由/页面仍未接收。单次跨重启语义只有真正中央fence接通后才可验收，不由格式函数自己新建队列或临时map证明。
+**R35历史接缝与R37后续**：通用CredentialService仍仅支持原四种公开kind；R37在中央auth聚合内增加实例绑定材料及永久借用fence，精确端口/typed审计/Version 2升级限制见[XRAY-CENTRAL-MATERIALS.md](XRAY-CENTRAL-MATERIALS.md)。实际SQLite已组合中央生成、真实cipher/身份/grant/事务审计→本导出格式→一次交付，并验证数据库重开防重放及审计失败不给输出；无第二套秘密库。当前用户/配置/插件修订和task/confirmation/profile仍明确fixture，正式持久用户服务、typed Host与安全政策/审计schema/路由/页面仍未接收。该组合只证明列明的中央fence接缝，不是完整Xray业务或生产验收。
 
 Windows三个新增顶层测试PASS（含URI/TLS/REALITY/JSON/撤权/轮换/审计失败/双回调/源与地址负向），完整可选包/architecture及staticcheck PASS，精确日志export-r35-final.log。首次编译FAIL多余strings import，移除后通过，未删除失败例。Ubuntu非root原生可选包11顶层PASS/3真实Xray二进制测试SKIP，LINUX-XRAY-EXPORT-EVIDENCE.json记录精确源/二进制/日志；未执行任何已知不安全发布物。
 

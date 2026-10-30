@@ -12,6 +12,16 @@ const hash=file=>createHash("sha256").update(readFileSync(path.join(root,file)))
 const protectedFiles=["go.mod","go.sum","package-lock.json"];
 const before=protectedFiles.map(hash);
 const git=args=>{const r=spawnSync("git",args,{cwd:root,env,encoding:"utf8",maxBuffer:8*1024*1024});if(r.status!==0)throw new Error(r.stderr||"git source read failed");return r.stdout};
+// Pinned OWN prior writer for real forward-format refusal evidence. No rewrite
+// or import substitution: old auth production files contain no local imports.
+const legacyAuthRef="ecb7cd405a0630d814580d1a6123d3e9a56c3e97";
+const legacyWork=path.join(work,"legacyauth");mkdirSync(legacyWork,{recursive:true});
+const legacyFiles=git(["ls-tree","-r","--name-only",legacyAuthRef,"internal/auth"]).trim().split(/\r?\n/).filter(p=>/^internal\/auth\/[^/]+\.go$/.test(p)&&!p.endsWith("_test.go"));
+if(!legacyFiles.length)throw new Error("Missing pinned prior auth writer");
+const legacyNames=new Set(legacyFiles.map(p=>path.basename(p)));
+for(const name of readdirSync(legacyWork).filter(n=>n.endsWith(".go")&&!legacyNames.has(n))){const target=path.resolve(legacyWork,name);if(path.dirname(target)!==path.resolve(legacyWork))throw new Error("Invalid prior writer path");unlinkSync(target)}
+const legacyHashes={};for(const p of legacyFiles){const source=git(["show",`${legacyAuthRef}:${p}`]);writeFileSync(path.join(legacyWork,path.basename(p)),source);legacyHashes[p]=createHash("sha256").update(source).digest("hex")}
+writeFileSync(path.join(work,"prior-auth-source-hashes.json"),JSON.stringify({ref:legacyAuthRef,files:legacyHashes},null,2)+"\n");
 mkdirSync(path.join(work,"dsstore"),{recursive:true});
 mkdirSync(path.join(work,"dsaudit"),{recursive:true});
 const files=git(["ls-tree","-r","--name-only",dsRef,"internal/storage"]).trim().split(/\r?\n/).filter(file=>/^internal\/storage\/[^/]+\.go$/.test(file)&&!file.endsWith("_test.go"));
@@ -34,6 +44,7 @@ writeFileSync(path.join(work,"go.mod"),bootstrap?initial:readFileSync(new URL("i
 if(!bootstrap)writeFileSync(path.join(work,"go.sum"),readFileSync(new URL("identity-dependency-sums.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_sql_test.go"),readFileSync(new URL("identity_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_transaction_sql_test.go"),readFileSync(new URL("identity_transaction_sql_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"xray_material_sql_test.go"),readFileSync(new URL("xray_material_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_http_test.go"),readFileSync(new URL("identity_http_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_audit_test.go"),readFileSync(new URL("identity_audit_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"identity_credentials_test.go"),readFileSync(new URL("identity_credentials_test.go.txt",import.meta.url)));

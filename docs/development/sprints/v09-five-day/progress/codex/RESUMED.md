@@ -324,3 +324,13 @@ R34安全复验PASS10:18:13Z，根依赖/公共API/Proto/gen及实际docs/develo
 新增可选IdentityTransactionStore.UpdateWithContext/IdentitySQLBackend.InTxContext与私有updateTransaction；保留旧业务/适配兼容，需要新同Tx权限来源时禁止旧InTx回退；缺少/重复callback、nil/取消ctx、初始化反转均关闭。AUTH-TRANSACTION-CONTEXT.md列精确候选，未假定RecordTx接收/改DS公共schema，未将来源字段当认证。
 
 两个新顶层单元PASS4.045s；初次fixture已初始化却误断言空数据导致FAIL，改成原始字节比较后通过，未放宽生产门。完整auth/architecture PASS28.516s/1.514s、staticcheck PASS。实际SQLite十四项PASS8.951s，新增真实同Tx reader/无旧源回退/取消回滚/永久标记保护；Agent21 PASS7.053s，Linux-only注册Windows明确SKIP。Ubuntu UID1000原生auth58/SQLite14顶层PASS，LINUX-AUTH-TRANSACTION-EVIDENCE.json保留精确源/二进制/日志。继续中央实例绑定Xray材料及真凭据fence导出组合，不把此接缝准备算作材料服务完成。
+
+## R37 / codex-03接续中央实例绑定材料及实际导出fence
+
+2026-10-31用户授权接替原中断会话。接手HEAD为ecb7cd405a0630d814580d1a6123d3e9a56c3e97，核验并完成原7项未提交代码；新会话codex-03，允许目录/审查/停止条件沿用V09-5D-CX，不改公共任务板/所有权。新增XrayMaterialService将UUID/REALITY私钥保存在中央加密聚合，共享GCM预算，scope完整AAD、先永久reserved后生成、当前来源/同Tx节点grant/完整typed审计、单用loan与UNKNOWN不重跑；服务端私钥不得web reveal。v2格式保护永久claim，真实固定R36旧writer拒绝写入且字节不变。精确兼容/接线XRAY-CENTRAL-MATERIALS.md与S05。
+
+接续首轮auth/Xray/architecture PASS11.989s/4.441s/1.418s；实际SQLite15顶层PASS（中央cipher/fence/同Tx身份审计与R35导出、重启重放/提交失败不交付/旧writer拒绝/BEGIN前撤销），Agent21 PASS9.057s，Linux-only注册Windows明确SKIP。Ubuntu UID1000原生auth67/SQLite15顶层PASS/无skip，LINUX-XRAY-MATERIALS-EVIDENCE.json保留接手源快照、二进制与日志哈希。旧会话R37首轮失败与修正日志保留，不以本轮成功覆盖。
+
+本会话重新npm ci PASS（127包/25s）、tools:install PASS；全量check五组PASS（2026-10-30T17:03:40.852Z，上海2026-10-31），Web179项；security PASS17:03:01.722Z，npm audit0/govulncheck无漏洞。Context7已resolve并query固定Go1.27.3；检索未命中ecdh确切签名，以固定本地go doc crypto/ecdh.Curve核验，不误用其返回的math/rand示例。根受保护文件相对派发基线零差异。
+
+真实用户/配置/插件修订、任务/确认/profile仍是明确fixture；正式typed审计schema/统一任务/Host/路由/页面未接收，v2启用后禁止直接降级旧auth。外部Xray发布物安全FAIL不变，本轮未执行/安装。AC-23及完整v0.9仍未完成，继续用户状态等包内独立项。

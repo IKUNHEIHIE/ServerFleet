@@ -92,27 +92,30 @@ type identityAudit struct {
 	NodeIDs                   []string
 }
 type identityState struct {
-	Version           int
-	Initialized       bool
-	SetupDigest       string
-	SetupExpires      time.Time
-	ClockFloor        time.Time
-	PolicyRevision    uint64
-	Users             map[string]identityUser
-	Sessions          map[string]identitySession
-	Failures          map[string]loginWindow
-	Outbox            []identityAudit
-	Grants            map[string]identityGrant
-	Receipts          map[string]identityReceipt
-	AuditSequence     uint64
-	Credentials       map[string]storedCredential
-	CredentialChanges map[string]credentialChange
-	CredentialKeyUses map[string]uint64
-	CredentialUses    map[string]credentialUse
-	Tokens            map[string]restrictedToken
-	Approvals         map[string]approvalRecord
-	requestID         string
-	requestSource     string
+	Version            int
+	Initialized        bool
+	SetupDigest        string
+	SetupExpires       time.Time
+	ClockFloor         time.Time
+	PolicyRevision     uint64
+	Users              map[string]identityUser
+	Sessions           map[string]identitySession
+	Failures           map[string]loginWindow
+	Outbox             []identityAudit
+	Grants             map[string]identityGrant
+	Receipts           map[string]identityReceipt
+	AuditSequence      uint64
+	Credentials        map[string]storedCredential
+	CredentialChanges  map[string]credentialChange
+	CredentialKeyUses  map[string]uint64
+	CredentialUses     map[string]credentialUse
+	XrayMaterials      map[string]xrayMaterialRecord `json:",omitempty"`
+	XrayMaterialUses   map[string]xrayMaterialUse    `json:",omitempty"`
+	XrayMaterialOutbox []XrayMaterialAuditEvent      `json:",omitempty"`
+	Tokens             map[string]restrictedToken
+	Approvals          map[string]approvalRecord
+	requestID          string
+	requestSource      string
 }
 
 // IdentityService implements auth-local lifecycle logic. The public contract and
@@ -137,13 +140,15 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	if len(data) > 16<<20 {
 		return nil, ErrIdentityUnavailable
 	}
-	if len(data) > 0 && (json.Unmarshal(data, s) != nil || s.Version != 1) {
+	if len(data) > 0 && (json.Unmarshal(data, s) != nil || s.Version != 1 && s.Version != 2) {
 		return nil, ErrIdentityUnavailable
 	}
 	if len(data) > 0 && (!s.Initialized && len(s.Users) > 0 || s.Initialized && len(s.Users) == 0) {
 		return nil, ErrIdentityUnavailable
 	}
-	s.Version = 1
+	if s.Version == 0 {
+		s.Version = 1
+	}
 	if s.Users == nil {
 		s.Users = map[string]identityUser{}
 	}
@@ -170,6 +175,9 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	}
 	if s.CredentialUses == nil {
 		s.CredentialUses = map[string]credentialUse{}
+	}
+	if err := validateXrayMaterialState(s); err != nil {
+		return nil, err
 	}
 	if s.Tokens == nil {
 		s.Tokens = map[string]restrictedToken{}

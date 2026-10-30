@@ -18,6 +18,9 @@ type IdentitySQLStatements struct {
 	// events or pretends they reached the audit domain. Production review decides
 	// when that deferred mode is admissible. No callback opens a nested writer.
 	AppendAudit func(context.Context, []IdentityAuditEvent) error
+	// Complete typed Xray material events, never folded into a legacy event
+	// that loses instance/user/reference/plan. Mandatory for material mutation.
+	AppendXrayMaterialAudit func(context.Context, []XrayMaterialAuditEvent) error
 }
 type IdentitySQLBackend struct {
 	Read func(context.Context, string, ...any) ([]byte, bool, error)
@@ -112,6 +115,9 @@ func (s *SQLIdentityStore) updateSQL(ctx context.Context, fn func(context.Contex
 			return ErrIdentityUnavailable
 		}
 		called = true
+		// Derive this marker afresh from THIS transaction's actual sink. Never
+		// inherit an earlier transaction's authority through a retained ctx.
+		txCtx = context.WithValue(txCtx, xrayMaterialAuditContextKey{}, tx.AppendXrayMaterialAudit != nil)
 		data, initialized, err := tx.Read(txCtx, readIdentitySQL)
 		if err != nil {
 			return err
@@ -138,6 +144,17 @@ func (s *SQLIdentityStore) updateSQL(ctx context.Context, fn func(context.Contex
 		}
 		if len(next) == 0 {
 			return ErrIdentityUnavailable
+		}
+		if tx.AppendXrayMaterialAudit != nil && len(state.XrayMaterialOutbox) > 0 {
+			events := append([]XrayMaterialAuditEvent(nil), state.XrayMaterialOutbox...)
+			if err = tx.AppendXrayMaterialAudit(txCtx, events); err != nil {
+				return err
+			}
+			state.XrayMaterialOutbox = nil
+			next, err = json.Marshal(state)
+			if err != nil || len(next) > 16<<20 {
+				return ErrIdentityUnavailable
+			}
 		}
 		if tx.AppendAudit != nil && len(state.Outbox) > 0 {
 			events, err := identityAuditEvents(state.Outbox)

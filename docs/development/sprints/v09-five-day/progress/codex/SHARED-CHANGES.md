@@ -80,3 +80,9 @@ namespace 仅组合根绑定的 auth 命名空间；Read 返回复制；无记�
 已通过本目录隔离WSS+mTLS+二进制Protobuf PoC：native主动连接、frame上限、文本/节点不符/吊销/Origin拒绝。测试脚本将版本和sum只写自己忽略的reports子模块，根go.mod/sum/package-lock前后SHA256相同。Context7先resolve再query，并对固定版本本地源码核对API；依赖漏洞扫描含测试也PASS。没有将PoC源import到根工程，没有修改根配置或锁。
 
 wazero v1.12.0仅在同一隔离PoC验证128KiB内存上限、未注册Host拒绝、50ms无限循环终止、随后正常模块返回42；其x/sys v0.44.0也仅隔离锁定。Linux/1C1G/完整Host ABI及持久生命周期未验收，**不申请自动采用生产WASM运行时**。Eino隔离试验另记，不加入根依赖，不等同真实BYOK/POC-06。全部第三方版本和sum保存在tests/poc/v09/platform对应锁文本；根无新增依赖。
+
+## S05 中央Xray材料与完整事务审计（PROPOSED，R37）
+
+精确auth候选见`XRAY-CENTRAL-MATERIALS.md`及`internal/auth/xray_materials.go`；`IdentitySQLStatements.AppendXrayMaterialAudit func(context.Context, []XrayMaterialAuditEvent) error`必须映射同一真实Tx，保留scope/instance/inbound/user/reference/plan/revision/result，不可转成丢字段的旧事件。无sink时新材料写入明确拒绝；当前父ctx不能继承以前事务的审计能力。现有SQL表形状和公共迁移编号未改。
+
+兼容变化：首次持久reserved将auth payload切到v2；新实现兼容v1并保留v2，固定R36旧writer实际拒绝v2且未改原字节。接收方必须协调新auth部署与降级/恢复准入；不可清除永久claim或改版本绕开。回退只能保持未启用材料或使用审查过的恢复流程。调用方为受控plugin task及单用户客户端导出，已在隔离SQLite真实cipher/fence/审计组合通过；持久用户/配置/profile与正式Host/任务/schema/页面仍待接收，无新增公开credential kind/API/Proto/锁/核心可选插件依赖。

@@ -85,3 +85,22 @@ func TestIdentityTransactionRejectsMissingDuplicateNilAndCancelledCallbacks(t *t
 		t.Fatal("parent cancellation committed", err)
 	}
 }
+
+func TestIdentitySQLAuditAuthorityIsDerivedFromCurrentTransactionNotParent(t *testing.T) {
+	read := func(context.Context, string, ...any) ([]byte, bool, error) { return nil, false, nil }
+	store, err := NewSQLIdentityStore(IdentitySQLBackend{Read: read, InTxContext: func(ctx context.Context, fn func(context.Context, IdentitySQLStatements) error) error {
+		return fn(ctx, IdentitySQLStatements{Read: read, Exec: func(context.Context, string, ...any) (int64, error) { return 1, nil }}) // transaction double, deliberately no material sink
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	parent := context.WithValue(context.Background(), xrayMaterialAuditContextKey{}, true)
+	if err = store.UpdateWithContext(parent, func(ctx context.Context, _ []byte) ([]byte, error) {
+		if ctx.Value(xrayMaterialAuditContextKey{}) != false {
+			t.Error("old transaction's audit authority was inherited")
+		}
+		return []byte(`{"Version":1}`), nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
