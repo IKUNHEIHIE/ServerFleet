@@ -134,8 +134,18 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R14 数据库外持久恢复隔离
 
+提交 `daf38b13cdf681c41df75981a0921d0713e4d457`。
+
 新增recovery.QuarantineLatch及RECOVERY-QUARANTINE.md：Begin先独立落盘、绑定外部expected hold/快照/新主控/Root/信任与撤销底线；记录丢失/半写不当新安装，解除后不复用恢复回合。Release只有可信程序回调完成实际离线核验/对账/审计后才能写不可覆盖的解除记录；每次Check仍查当前权威/旧主控隔离，未注入verifier保持quarantine，无HTTP claimed-fenced放行。Linux文件/目录Sync；Windows证据不等于断电持久。
 
 `go test ./internal/recovery -count=1 -v`首轮PASS 2.421s，staticcheck PASS；补入已解除目录不能再次Begin。固定锁实际SQLite十二项PASS 14.646s，包含真实BackupTo→撤销Cookie→RestoreFile到新文件：旧库确含撤销前Cookie，但数据库外hold及重新打开的闸均拒绝访问/解除，已有目标拒绝覆写。真实离线材料/旧主控物理隔离/会话epoch与任务对账事务仍BLOCKED，单元正向verifier明确double。继续包内可独立项。
 
 全量检查正在运行。npm ci PASS（127包/50s），首次tools:install因公共proxy.golang.org IPv6连接超时FAIL；GOPROXY=off复验因deprecation元数据缺失FAIL。随后仅本命令环境切换公开goproxy.cn并保留Go校验及固定版本，四工具安装PASS，未改项目配置/锁。具体日志在自己reports/_review/v09-platform/resumed-*，最终check结果另记，不能把启动命令视为已通过。
+
+R14完成后结果：recovery/architecture复验PASS 2.390s/2.080s，staticcheck PASS。全量npm run check五套policy/contracts/go/web/git全部PASS，check:security PASS（npm audit 0、govulncheck无漏洞），对应reports/check-all.json 2026-10-30T06:19:48Z及check-security.json 06:19:58Z；覆盖R01—R14当前代码（后续改动另验），并非完整v0.9/真实Linux验收。
+
+## R15 Xray自定义配置审查及管理API代理隔离
+
+新增ReviewCustomJSON，精确边界见XRAY-CUSTOM-REVIEW.md。保留原JSON并绑定摘要，严格有界/重复字段拒绝、精确文件授权、API回环/专用路由及代理端口拒绝、固定风险warning；没有用最小审查冒充目标完整schema。标准模板补入管理端口/回环目标blackhole，避免普通代理客户端绕进本机API。未改公共契约/锁或将Xray编入核心。
+
+首轮模块测试PASS 2.658s/staticcheck PASS。首次实际Xray模板-test FAIL：新增IPv4-mapped CIDR不被目标26.6.1接受，使用无秘密最小配置确认具体错误（CIDR104>32）；移除该不受支持写法，保留127/8、::1/128及独立管理端口拒绝。随后run-xray.mjs PASS 2.957s，含两模板实际-test/启动、两份custom实际-test、真实目标拒绝未知协议，以及本机真实SOCKS代理不能取得私有API的HTTP/2响应（直接连接先确认API真实可用）。不是Linux部署/完整VLESS流量/Host准入证明。继续包内独立功能。

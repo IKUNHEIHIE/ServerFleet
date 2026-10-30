@@ -25,7 +25,8 @@ import (
 
 // Explicit opt-in local Windows evidence only. It does not install on a node,
 // claim Linux compatibility, or include the optional binary in core Release.
-func TestPinnedXrayActualConfigTestAndLoopbackStart(t *testing.T) {
+func pinnedLocalXray(t *testing.T) string {
+	t.Helper()
 	binary := os.Getenv("SF_XRAY_LOCAL_TEST_BINARY")
 	if binary == "" {
 		t.Skip("UNTESTED: explicit pinned local Xray binary not supplied")
@@ -43,6 +44,11 @@ func TestPinnedXrayActualConfigTestAndLoopbackStart(t *testing.T) {
 	if err != nil || hex.EncodeToString(h.Sum(nil)) != "9bd2d873d78b5c39303ab16db630a131f9f33836e98d96455f80a8092fecdcd5" {
 		t.Fatal("unrecognized test binary", err)
 	}
+	return binary
+}
+
+func TestPinnedXrayActualConfigTestAndLoopbackStart(t *testing.T) {
+	binary := pinnedLocalXray(t)
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 	version, err := exec.CommandContext(ctx, binary, "version").Output()
@@ -146,5 +152,120 @@ func TestPinnedXrayActualConfigTestAndLoopbackStart(t *testing.T) {
 				_ = api.Close()
 			}
 		})
+	}
+}
+
+func TestCustomActualTargetValidationAndProxyCannotReachAPI(t *testing.T) {
+	binary := pinnedLocalXray(t)
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	for _, raw := range [][]byte{basicCustom(), directAPICustom()} {
+		if _, err := ReviewCustomJSON(raw, customPolicy()); err != nil {
+			t.Fatal(err)
+		}
+		file := filepath.Join(t.TempDir(), "custom.json")
+		if err := os.WriteFile(file, raw, 0600); err != nil {
+			t.Fatal(err)
+		}
+		if err := exec.CommandContext(ctx, binary, "run", "-test", "-config", file).Run(); err != nil {
+			t.Fatal("real target rejected reviewed custom JSON", err)
+		}
+	}
+	invalid := bytes.Replace(basicCustom(), []byte(`"protocol":"socks"`), []byte(`"protocol":"not-a-real-xray-protocol"`), 1)
+	if _, err := ReviewCustomJSON(invalid, customPolicy()); err != nil {
+		t.Fatal("minimum review should not pretend to implement the target's schema", err)
+	}
+	invalidFile := filepath.Join(t.TempDir(), "invalid.json")
+	if err := os.WriteFile(invalidFile, invalid, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := exec.CommandContext(ctx, binary, "run", "-test", "-config", invalidFile).Run(); err == nil {
+		t.Fatal("target-version test failed to reject invalid protocol")
+	}
+	port := func() int {
+		l, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := l.Addr().(*net.TCPAddr).Port
+		_ = l.Close()
+		return n
+	}
+	proxyPort, apiPort := port(), port()
+	for apiPort == proxyPort {
+		apiPort = port()
+	}
+	raw := bytes.ReplaceAll(directAPICustom(), []byte("18500"), []byte(strconv.Itoa(apiPort)))
+	raw = bytes.ReplaceAll(raw, []byte("18384"), []byte(strconv.Itoa(proxyPort)))
+	if _, err := ReviewCustomJSON(raw, customPolicy()); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(t.TempDir(), "local-proxy.json")
+	if err := os.WriteFile(file, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	command := exec.CommandContext(ctx, binary, "run", "-config", file)
+	if err := command.Start(); err != nil {
+		t.Fatal(err)
+	}
+	exited := make(chan error, 1)
+	go func() { exited <- command.Wait() }()
+	defer func() {
+		_ = command.Process.Kill()
+		select {
+		case <-exited:
+		case <-ctx.Done():
+		}
+	}()
+	address := func(n int) string { return net.JoinHostPort("127.0.0.1", strconv.Itoa(n)) }
+	var direct net.Conn
+	var err error
+	deadline := time.Now().Add(3 * time.Second)
+	for time.Now().Before(deadline) {
+		direct, err = net.DialTimeout("tcp", address(apiPort), 50*time.Millisecond)
+		if err == nil {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if err != nil {
+		t.Fatal("actual local API did not start", err)
+	}
+	defer direct.Close()
+	// First establish that the REAL gRPC API responds to an HTTP/2 preface.
+	preface := []byte("PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n\x00\x00\x00\x04\x00\x00\x00\x00\x00")
+	_ = direct.SetDeadline(time.Now().Add(time.Second))
+	if _, err = direct.Write(preface); err != nil {
+		t.Fatal(err)
+	}
+	var response [64]byte
+	if n, err := direct.Read(response[:]); err != nil || n < 9 || response[3] != 4 {
+		t.Fatal("direct local API probe was not valid HTTP/2", n, err)
+	}
+	proxy, err := net.DialTimeout("tcp", address(proxyPort), time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer proxy.Close()
+	_ = proxy.SetDeadline(time.Now().Add(time.Second))
+	if _, err = proxy.Write([]byte{5, 1, 0}); err != nil {
+		t.Fatal(err)
+	}
+	var hello [2]byte
+	if _, err = io.ReadFull(proxy, hello[:]); err != nil || hello != [2]byte{5, 0} {
+		t.Fatal("local SOCKS negotiation failed", err)
+	}
+	request := []byte{5, 1, 0, 1, 127, 0, 0, 1, byte(apiPort >> 8), byte(apiPort)}
+	if _, err = proxy.Write(request); err != nil {
+		t.Fatal(err)
+	}
+	// Xray can acknowledge SOCKS dispatch before an outbound connects. Probe the
+	// destination after that acknowledgment; it must yield NO API response.
+	var reply [10]byte
+	if _, err = io.ReadFull(proxy, reply[:]); err == nil && reply[1] == 0 {
+		_, _ = proxy.Write(preface)
+		if n, _ := proxy.Read(response[:]); n != 0 {
+			t.Fatal("proxy client reached the private management API")
+		}
 	}
 }

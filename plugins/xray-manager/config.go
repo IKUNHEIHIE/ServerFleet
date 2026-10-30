@@ -221,8 +221,14 @@ func renderTemplate(spec TemplateSpec, users []any, stream map[string]any) ([]by
 		"api":       map[string]any{"tag": "sf-api", "services": []string{"StatsService", "HandlerService"}},
 		"policy":    map[string]any{"levels": map[string]any{"0": map[string]any{"statsUserUplink": true, "statsUserDownlink": true}}, "system": map[string]any{"statsInboundUplink": true, "statsInboundDownlink": true}},
 		"inbounds":  []any{map[string]any{"tag": "sf-vless-" + spec.InstanceID, "listen": spec.Listen, "port": spec.Port, "protocol": "vless", "settings": map[string]any{"users": users, "decryption": "none"}, "streamSettings": stream}, map[string]any{"tag": "sf-api-in", "listen": "127.0.0.1", "port": spec.APIPort, "protocol": "dokodemo-door", "settings": map[string]any{"address": "127.0.0.1"}}},
-		"outbounds": []any{map[string]any{"tag": "sf-direct", "protocol": "freedom"}},
-		"routing":   map[string]any{"rules": []any{map[string]any{"type": "field", "inboundTag": []string{"sf-api-in"}, "outboundTag": "sf-api"}}},
+		"outbounds": []any{map[string]any{"tag": "sf-direct", "protocol": "freedom"}, map[string]any{"tag": "sf-block", "protocol": "blackhole"}},
+		// Loopback binding alone does not protect an unauthenticated local API
+		// from proxy clients. Only the dedicated local inbound can reach it.
+		"routing": map[string]any{"rules": []any{
+			map[string]any{"type": "field", "inboundTag": []string{"sf-api-in"}, "outboundTag": "sf-api"},
+			map[string]any{"type": "field", "port": strconv.Itoa(int(spec.APIPort)), "outboundTag": "sf-block"},
+			map[string]any{"type": "field", "ip": []string{"127.0.0.0/8", "::1/128"}, "outboundTag": "sf-block"},
+		}},
 	}
 	raw, err := json.Marshal(config)
 	if err != nil || len(raw) > 1<<20 {
