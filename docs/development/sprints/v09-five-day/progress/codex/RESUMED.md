@@ -246,6 +246,14 @@ R25—26全量check五套PASS（2026-10-30T08:40:30Z），security PASS（08:37:
 
 ## R27 Agent本地P256私钥/CSR与持久证书材料
 
+提交 `d61e7a0e4742fec59c59037715acde93456a9fb1`。
+
 新增apps/agent私有identityStore，明确本地生成/持久CSR意图与key、无秘密Request构造、严格pinned Root/配对公钥/节点/用途/期限/世代证书接收、真实重开借用与必需当前gate，不启用main或注册网络；AgentEnrollmentInput fmt打印token脱敏，不改JSON合同。部分/丢失/损坏不自动重新生成，不把Windows伪装为Linux，详见AGENT-LOCAL-IDENTITY.md。
 
 Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；增加PEM严格界限后本地身份专用PASS6.157s（含实际TLS1.3+mTLS与当前Controller撤销拒绝）。真实临时key/CSR/重开/精确证书、错误Root/节点/世代/期限/扩权/私钥PEM/损坏/缺gate均测；追加错误公钥负向随后复验。CA/签发/当前身份映射及部分gate为明确fixture，不当管理员/注册HTTPS或Linux安装证明。继续包内独立项。
+
+## R28 真实本机Ubuntu WSL/Linux amd64组件执行
+
+既有Ubuntu24.04 WSL2、UID1000、x86_64。新增run-linux-wsl.mjs交叉编译+原生执行及完整源/二进制哈希证据。2026-10-30T09:04:02Z十二包PASS，212顶层运行（含Agent重复）/3真实Xray二进制SKIP；逐包及精确局限见LOCAL-LINUX-VALIDATION.md和LINUX-NATIVE-EVIDENCE.json。实际WSS/mTLS/Proto/Agent副作用与重连、SQLite事务/旧快照外部隔离、Linux文件Sync分支已实跑，仍不称完整安装/ARM/1C1G/正式任务链。
+
+初次Linux只读编译FAIL缺uuid平台校验和，按原libc固定1.6.0补本任务隔离锁，Go mod verify PASS/未改根依赖。接着Agent/恢复测试遇t.TempDir子目录非0700而正确拒绝，两个忽略setup错误的旧测试甚至panic；只修fixture显式0700/错误检查，新增宽松目录拒绝负向，未放宽生产检查/删除测试。各FAIL原始证据另存。Linux两隔离模块含测试govulncheck均PASS。全量根check五套PASS09:04:10Z/security PASS09:02:48Z，Root受保护文件零差异；本轮已通过npm ci/tools:install且根依赖未变。继续模型配置等包内独立实现，不停止等待。

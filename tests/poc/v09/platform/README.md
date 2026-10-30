@@ -25,3 +25,5 @@ Eino v0.9.22的Sonic v1.15.0在当前Go1.27.3下提示支持到1.26，实际回�
 ```
 
 根npm run check不自动运行这些实验。其确切命令、原始摘要和局限在progress/codex/EVIDENCE.json和HANDOFF记录。局部PASS不关闭G2、AC或完整PoC。
+
+R28新增本机已有Ubuntu WSL的Linux原生运行入口：`node tests/poc/v09/platform/run-linux-wsl.mjs`。固定Go交叉编译，再在UID1000/Linux amd64真实执行；不安装发行版、不使用sudo/外部节点/真实秘密。最新12包212顶层运行PASS（Agent重复执行计入运行数），3项实际Xray二进制SKIP。精确快照与局限见LOCAL-LINUX-VALIDATION.md和progress/codex/LINUX-NATIVE-EVIDENCE.json；这更新了上表“完全没有Linux局部证明”的历史限制，但不关闭arm64/安装/1C1G/Host/runtime准入。prepare-only模式只准备源/锁，不能记作测试PASS。

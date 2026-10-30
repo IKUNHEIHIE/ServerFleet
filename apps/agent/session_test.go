@@ -165,8 +165,8 @@ func TestAgentSessionProductionLoopDedupeCancelSyncAndRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	dir := t.TempDir()
-	marker := filepath.Join(t.TempDir(), "effect")
+	dir := privateAgentDirectory(t)
+	marker := filepath.Join(privateAgentDirectory(t), "effect")
 	var calls atomic.Int32
 	e, err := newAgentExecutor(dir, testActions(func(ctx context.Context, _ []byte) executionResult {
 		n := calls.Add(1)
@@ -278,7 +278,7 @@ func TestAgentSessionProductionLoopDedupeCancelSyncAndRevocation(t *testing.T) {
 
 func TestAgentSessionMissingAdmissionOrWrongRootNeverSendsHello(t *testing.T) {
 	state, _, pin := sessionTLSStates(t)
-	e, err := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult {
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
 		t.Fatal("rejected trust executed a capability")
 		return executionResult{}
 	}))

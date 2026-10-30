@@ -13,7 +13,7 @@ import (
 
 func TestAgentOutputFilteredBeforeDiskAndProductionCursorSurvivesReopen(t *testing.T) {
 	ctx := context.Background()
-	dir := t.TempDir()
+	dir := privateAgentDirectory(t)
 	actions := testActions(func(context.Context, []byte) executionResult {
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED, Output: []byte("line with synthetic-secret\nsecond line")}
 	})
@@ -64,7 +64,7 @@ func TestAgentOutputFilteredBeforeDiskAndProductionCursorSurvivesReopen(t *testi
 
 func TestAgentMissingOrFailingOutputPolicyNeverPersistsRawLogs(t *testing.T) {
 	for _, mode := range []string{"missing", "error", "panic"} {
-		dir := t.TempDir()
+		dir := privateAgentDirectory(t)
 		actions := testActions(func(context.Context, []byte) executionResult {
 			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED, Output: []byte("synthetic-secret")}
 		})
@@ -100,7 +100,7 @@ func TestAgentMissingOrFailingOutputPolicyNeverPersistsRawLogs(t *testing.T) {
 }
 
 func TestAgentOutputChunkCountIsBoundedAndTruncationExplicit(t *testing.T) {
-	e, err := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult {
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED, Output: bytes.Repeat([]byte("a"), 1000)}
 	}))
 	if err != nil {

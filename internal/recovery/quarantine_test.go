@@ -5,9 +5,32 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
+
+func privateQuarantineDirectory(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
+func TestQuarantineRejectsNonPrivateLinuxDirectory(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux directory permission check")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if latch, err := BeginQuarantine(context.Background(), dir, restoreIntent(), QuarantineVerifier{}); err != ErrRecoveryRejected || latch != nil {
+		t.Fatal("public restore-control directory admitted", err)
+	}
+}
 
 func restoreIntent() RestoreIntent {
 	return RestoreIntent{strings.Repeat("a", 64), "new-controller", strings.Repeat("b", 64), 4, 7}
@@ -19,7 +42,7 @@ func clearanceFixture(h QuarantineHold) ReleaseClearance {
 }
 func TestQuarantineDurableAndLiveVerifierRequired(t *testing.T) {
 	ctx := context.Background()
-	dir := t.TempDir()
+	dir := privateQuarantineDirectory(t)
 	l, err := BeginQuarantine(ctx, dir, restoreIntent(), QuarantineVerifier{})
 	if err != nil {
 		t.Fatal(err)
@@ -98,7 +121,7 @@ func TestQuarantineRejectsMisbindingStaleAndAmbiguousRecords(t *testing.T) {
 		func(c *ReleaseClearance) { c.ReconciledStateSHA256 = "" },
 		func(c *ReleaseClearance) { c.AuditRecordID = "" },
 	} {
-		l, err := BeginQuarantine(ctx, t.TempDir(), restoreIntent(), QuarantineVerifier{
+		l, err := BeginQuarantine(ctx, privateQuarantineDirectory(t), restoreIntent(), QuarantineVerifier{
 			Prepare: func(_ context.Context, h QuarantineHold) (ReleaseClearance, error) {
 				c := clearanceFixture(h)
 				mutate(&c)
@@ -115,7 +138,7 @@ func TestQuarantineRejectsMisbindingStaleAndAmbiguousRecords(t *testing.T) {
 		_ = l.Close()
 	}
 	for _, corrupt := range []string{"", "{}", "{", strings.Repeat("a", 4097)} {
-		dir := t.TempDir()
+		dir := privateQuarantineDirectory(t)
 		l, err := BeginQuarantine(ctx, dir, restoreIntent(), QuarantineVerifier{})
 		if err != nil {
 			t.Fatal(err)
@@ -140,7 +163,7 @@ func TestQuarantineRejectsMisbindingStaleAndAmbiguousRecords(t *testing.T) {
 func TestQuarantineCancellationPanicAndPartialReleaseDeny(t *testing.T) {
 	ctx := context.Background()
 	for _, mode := range []string{"canceled", "panic", "partial", "duplicate-json"} {
-		dir := t.TempDir()
+		dir := privateQuarantineDirectory(t)
 		called := false
 		verifier := QuarantineVerifier{
 			Prepare: func(_ context.Context, h QuarantineHold) (ReleaseClearance, error) {

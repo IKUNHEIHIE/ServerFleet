@@ -20,6 +20,7 @@ for(const file of files)writeFileSync(path.join(work,"dsstore",path.basename(fil
 const auditFiles=git(["ls-tree","-r","--name-only",dsRef,"internal/audit"]).trim().split(/\r?\n/).filter(file=>/^internal\/audit\/[^/]+\.go$/.test(file)&&!file.endsWith("_test.go"));
 for(const file of auditFiles){const source=git(["show",`${dsRef}:${file}`]).replaceAll('"serverfleet.local/serverfleet/internal/storage"','"serverfleet.local/serverfleet/persistence-poc/dsstore"');writeFileSync(path.join(work,"dsaudit",path.basename(file)),source);}
 const bootstrap=process.argv.includes("--bootstrap-lock");
+if(bootstrap&&process.argv.includes("--prepare-only"))throw new Error("Lock bootstrap requires actual checks; do not combine it with prepare-only");
 const workspace=JSON.stringify(root.replaceAll("\\","/").replace(/\/$/,""));
 const initial=`module serverfleet.local/serverfleet/persistence-poc
 go 1.27.3
@@ -43,10 +44,13 @@ writeFileSync(path.join(work,"approvals_sql_test.go"),readFileSync(new URL("appr
 writeFileSync(path.join(work,"plugins_sql_test.go"),readFileSync(new URL("plugins_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"recovery_sql_test.go"),readFileSync(new URL("recovery_sql_test.go.txt",import.meta.url)));
 try{
- run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s","."],{cwd:work,name:"v09-real-sqlite-identity"});
+ if(bootstrap)run(go,["mod","tidy"],{cwd:work,name:"v09-isolated-sqlite-all-platform-lock"});
+ if(!process.argv.includes("--prepare-only"))run(go,["test",bootstrap?"-mod=mod":"-mod=readonly","-count=1","-v","-timeout=90s","."],{cwd:work,name:"v09-real-sqlite-identity"});
  if(bootstrap){
-  writeFileSync(new URL("identity-module.txt",import.meta.url),readFileSync(path.join(work,"go.mod"),"utf8").replace(workspace,"__WORKSPACE__"));
+  const generatedModule=readFileSync(path.join(work,"go.mod"),"utf8");
+  if(!/^replace serverfleet\.local\/serverfleet => .+$/m.test(generatedModule))throw new Error("Missing local workspace replacement");
+  writeFileSync(new URL("identity-module.txt",import.meta.url),generatedModule.replace(/^replace serverfleet\.local\/serverfleet => .+$/m,"replace serverfleet.local/serverfleet => __WORKSPACE__"));
   writeFileSync(new URL("identity-dependency-sums.txt",import.meta.url),readFileSync(path.join(work,"go.sum")));
  }
 }finally{if(protectedFiles.some((file,i)=>hash(file)!==before[i]))throw new Error("Root dependencies changed");}
-console.log(`PASS: actual SQLite auth integration with DS source ${dsRef}; isolated only, public integration still pending.`);
+console.log(process.argv.includes("--prepare-only")?"PREPARED isolated SQLite source/locks only; NO tests executed.":`PASS: actual SQLite auth integration with DS source ${dsRef}; isolated only, public integration still pending.`);

@@ -12,7 +12,7 @@ import (
 
 func TestExecutionAckAndStartFollowDurableLedgerAndDoNotReplay(t *testing.T) {
 	ctx := context.Background()
-	dir := t.TempDir()
+	dir := privateAgentDirectory(t)
 	calls := 0
 	e, err := newAgentExecutor(dir, testActions(func(context.Context, []byte) executionResult {
 		calls++
@@ -66,7 +66,7 @@ func TestExecutionFailedNotificationLeavesUnknownReservationAcrossRestart(t *tes
 	ctx := context.Background()
 	for _, stop := range []string{"accepted", "started"} {
 		t.Run(stop, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := privateAgentDirectory(t)
 			calls := 0
 			actions := testActions(func(context.Context, []byte) executionResult {
 				calls++
@@ -104,7 +104,7 @@ func TestExecutionFailedNotificationLeavesUnknownReservationAcrossRestart(t *tes
 
 func TestExecutionPanicAndCorruptSnapshotAreNeverReportedSuccessful(t *testing.T) {
 	ctx := context.Background()
-	dir := t.TempDir()
+	dir := privateAgentDirectory(t)
 	calls := 0
 	e, err := newAgentExecutor(dir, testActions(func(context.Context, []byte) executionResult {
 		calls++
@@ -134,7 +134,7 @@ func TestExecutionPanicAndCorruptSnapshotAreNeverReportedSuccessful(t *testing.T
 
 func TestExecutionSnapshotBoundsTruncationAndNoOutputDisclosure(t *testing.T) {
 	ctx := context.Background()
-	e, err := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult {
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED, Output: []byte("private-capability-output")}
 	}))
 	if err != nil {

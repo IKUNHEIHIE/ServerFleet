@@ -109,8 +109,8 @@ func TestActualAgentApplicationWSSExecutionReconnectAndRevocation(t *testing.T) 
 	}
 	client := &http.Client{Transport: &http.Transport{TLSClientConfig: clientTLS}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect rejected") }}
 	defer client.CloseIdleConnections()
-	ledger := t.TempDir()
-	marker := filepath.Join(t.TempDir(), "effect")
+	ledger := privateAgentDirectory(t)
+	marker := filepath.Join(privateAgentDirectory(t), "effect")
 	var calls, probes atomic.Int32
 	var dropOutput atomic.Bool
 	actions := testActions(func(ctx context.Context, _ []byte) executionResult {

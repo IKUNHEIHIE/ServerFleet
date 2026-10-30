@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -13,6 +14,15 @@ import (
 
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 )
+
+func privateAgentDirectory(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
 
 func testOffer() *agentv1.TaskOffer {
 	return &agentv1.TaskOffer{TaskId: "task-1", ExecutionId: "exec-1", PlanDigestSha256: strings.Repeat("a", 64), ActionId: "test.write-marker", CanonicalParametersJson: []byte(`{}`), Privilege: agentv1.Privilege_PRIVILEGE_NORMAL, ExpiresAtUnixMs: time.Now().Add(time.Minute).UnixMilli(), TimeoutSeconds: 10, ScopeRevision: 1, ActionSchemaVersion: "1"}
@@ -27,8 +37,8 @@ func testActions(run func(context.Context, []byte) executionResult) map[string]a
 }
 
 func TestAgentExecutorActualFileEffectDeduplicatedAfterReopen(t *testing.T) {
-	ledger := t.TempDir()
-	effect := filepath.Join(t.TempDir(), "effect")
+	ledger := privateAgentDirectory(t)
+	effect := filepath.Join(privateAgentDirectory(t), "effect")
 	actions := testActions(func(context.Context, []byte) executionResult {
 		if err := os.WriteFile(effect, []byte("one execution"), 0600); err != nil {
 			t.Fatal(err)
@@ -69,7 +79,7 @@ func TestAgentExecutorActualFileEffectDeduplicatedAfterReopen(t *testing.T) {
 
 func TestAgentExecutorConcurrentDuplicateAndCrashReservation(t *testing.T) {
 	var count atomic.Int32
-	e, err := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult {
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
 		count.Add(1)
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED}
 	}))
@@ -103,7 +113,10 @@ func TestAgentExecutorConcurrentDuplicateAndCrashReservation(t *testing.T) {
 
 func TestAgentExecutorRejectsUnsafeOffersBeforeSideEffect(t *testing.T) {
 	var count int
-	e, _ := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult { count++; return executionResult{} }))
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult { count++; return executionResult{} }))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer e.Close()
 	for _, change := range []func(*agentv1.TaskOffer){func(o *agentv1.TaskOffer) { o.Privilege = agentv1.Privilege_PRIVILEGE_ROOT }, func(o *agentv1.TaskOffer) { o.ActionId = "shell" }, func(o *agentv1.TaskOffer) { o.ExecutionId = "../escape" }, func(o *agentv1.TaskOffer) { o.ExpiresAtUnixMs = time.Now().UnixMilli() }, func(o *agentv1.TaskOffer) { o.ScopeRevision = 0 }, func(o *agentv1.TaskOffer) { o.PluginId = "xray-manager" }, func(o *agentv1.TaskOffer) { o.CanonicalParametersJson = []byte(`{"command":"root"}`) }} {
 		offer := testOffer()
@@ -118,10 +131,13 @@ func TestAgentExecutorRejectsUnsafeOffersBeforeSideEffect(t *testing.T) {
 }
 
 func TestAgentExecutorLostCompletionRemainsUnknown(t *testing.T) {
-	dir := t.TempDir()
-	e, _ := newAgentExecutor(dir, testActions(func(context.Context, []byte) executionResult {
+	dir := privateAgentDirectory(t)
+	e, err := newAgentExecutor(dir, testActions(func(context.Context, []byte) executionResult {
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED}
 	}))
+	if err != nil {
+		t.Fatal(err)
+	}
 	defer e.Close()
 	offer := testOffer()
 	if err := e.ledger.Mkdir(offer.ExecutionId, 0700); err != nil {
@@ -136,9 +152,25 @@ func TestAgentExecutorLostCompletionRemainsUnknown(t *testing.T) {
 	}
 }
 
+func TestAgentExecutorRejectsNonPrivateLedgerOnLinux(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux directory permission check")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if e, err := newAgentExecutor(dir, testActions(func(context.Context, []byte) executionResult {
+		t.Error("rejected ledger executed")
+		return executionResult{}
+	})); err != errExecutionRejected || e != nil {
+		t.Fatal("public ledger admitted", err)
+	}
+}
+
 func TestAgentExecutorRechecksExpiryBeforeActionAndBoundsRecords(t *testing.T) {
 	var calls int
-	e, err := newAgentExecutor(t.TempDir(), testActions(func(context.Context, []byte) executionResult { calls++; return executionResult{} }))
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult { calls++; return executionResult{} }))
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -42,8 +42,8 @@ for(const name of agentFiles){const source=readFileSync(path.join(root,"apps/age
 writeFileSync(path.join(agentWork,"actual_wss_test.go"),readFileSync(new URL("agent_session_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"agent-source-hashes.json"),JSON.stringify(sources,null,2)+"\n");
 try {
-  run(go, ["test", "-mod=readonly", "-count=1", "-v", "-timeout=45s", ".", "./agentapp"], { cwd: work, name: "v09-isolated-platform-poc" });
+  if(!process.argv.includes("--prepare-only"))run(go, ["test", "-mod=readonly", "-count=1", "-v", "-timeout=45s", ".", "./agentapp"], { cwd: work, name: "v09-isolated-platform-poc" });
 } finally {
   if (shared.some((file, i) => digest(file) !== before[i])) throw new Error("Root dependency files changed during isolated PoC");
 }
-console.log("PASS: root dependency hashes unchanged. Windows local PoC only; Linux/1C1G/full Host admission remain unverified.");
+console.log(process.argv.includes("--prepare-only")?"PREPARED isolated source/locks only; NO tests executed.":"PASS: root dependency hashes unchanged. Windows local PoC only; Linux/1C1G/full Host admission remain unverified.");
