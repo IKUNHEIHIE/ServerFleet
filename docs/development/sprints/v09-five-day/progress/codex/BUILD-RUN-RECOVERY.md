@@ -14,6 +14,7 @@
 & .tools/node-v24.22.1-win-x64/node.exe --test tests/integration/v09/platform/auth-candidate.test.mjs
 & .tools/node-v24.22.1-win-x64/node.exe tests/poc/v09/platform/run.mjs
 & .tools/node-v24.22.1-win-x64/node.exe tests/poc/v09/platform/run-eino.mjs
+& .tools/node-v24.22.1-win-x64/node.exe tests/poc/v09/platform/run-identity.mjs
 & .tools/node-v24.22.1-win-x64/node.exe tests/integration/v09/platform/build.mjs
 ```
 
@@ -31,3 +32,7 @@
 6. 更新仅对已验证私有staging对象执行受控替换，并验证真实健康/迁移；缺UPDATE原文/替代决定不宣称可回退。恢复组件只产隔离计划，离线密钥验证、信任连续、最新撤销、旧主控fencing及DS原子恢复完成前不得开调度。
 
 本包没有真实安装/升级/灾备成功步骤，因为相应实现/准入/材料尚缺；给出假命令会掩盖风险。上述BLOCKED项需要总控提供接收SHA/隔离测试条件，不能由本会话越权改共享文件或上线替代。
+
+R14—26新增实际SQLite恢复隔离、AI消息HTTP/SSE/推理凭据闸、Agent连接/日志和私有更新切换组件；步骤与局限分别见RECOVERY-QUARANTINE、AI-MESSAGES-HTTP、AI-GENERATION-ADMISSION、AGENT-SESSION-WIRING、AGENT-OUTPUT-WIRING、UPDATE-INSTALL。更新的服务/health/迁移与审计适配仍须接收；Controller不能内联停止自己的进程后假设还能继续升级，必须由独立受控监管进程实际承接。
+
+可选Xray26.6.1历史功能实验证据保留，但额外二进制扫描55项FAIL；新正式26.10.29三项FAIL且未启动。复查`node tests/poc/v09/platform/audit-xray-release.mjs 26.10.29`应如实返回非零并写静态证据；不能因根安全扫描PASS而发布。run-xray.mjs现在先扫旧工件，FAIL直接拦截，不提供跳扫描开关。更多来源/pin见XRAY-ARTIFACT-SECURITY。没有可发布Xray安装命令。

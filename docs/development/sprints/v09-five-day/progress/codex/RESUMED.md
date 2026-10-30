@@ -236,6 +236,10 @@ AI/architecture PASS 8.132s/1.410s，修正HTTP Redirect静态常量后staticche
 
 ## R26 凭据绑定当前持久推理及封闭观察
 
+提交 `bc97a05a0d04dc3a2a23f7170877733e4631a2bb`。
+
 新增ConversationService.CheckCredentialOperation/私有生成观察，精确接线AI-GENERATION-ADMISSION.md；完整op绑定、当前身份/scope交集/Profile与持久generating复查，回调返回立即关闭，WithoutCancel不能续权。R25实际凭据/TLS串联改用真实闸，未用默认放行注册生产。
 
 AI/architecture PASS12.699s/1.406s、staticcheck PASS；各字段篡改/无观察/撤权/范围/Profile变化/会话关闭/unknown/晚到上下文负向通过。固定DS源SQLite十二项PASS8.850s，含持久generating当前闸与Background伪观察拒绝。没有新增共享依赖/API/Proto/迁移。全量R25—26随后复验，包仍ACTIVE且未完整交付。
+
+R25—26全量check五套PASS（2026-10-30T08:40:30Z），security PASS（08:37:14Z，npm audit0/govulncheck无漏洞）。受保护go.mod/go.sum/npm manifests/锁/dependencies/API/Proto/gen/CI/AGENTS相对基线零差异。外部Xray FAIL不变。继续CX-03本地身份材料和其他独立项，不因该检查点停止。
