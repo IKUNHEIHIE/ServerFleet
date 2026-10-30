@@ -11,14 +11,15 @@ npm run dev --workspace @serverfleet/web   # 127.0.0.1:5173
 
 真实 Controller 当前只有 `/healthz`。按契约启动管理 API 之前，登录页会明确显示“无法验证管理会话”，不会伪造登录或节点数据。
 
-## 实际验证（累计，截至 GM-08）
+## 实际验证（累计，截至 GM-09）
 
 - `npm run typecheck --workspace @serverfleet/web`：通过（`tsc --noEmit` 无错误）。
-- `npm test --workspace @serverfleet/web`：34 个文件、282 个测试通过（GM-01 207 → GM-02/03 235 → GM-04 253 → GM-05 259 → GM-06 266 → GM-07 275 → GM-08 282）。
+- `npm test --workspace @serverfleet/web`：34 个文件、282 个测试通过（GM-01 207 → GM-02/03 235 → GM-04 253 → GM-05 259 → GM-06 266 → GM-07 275 → GM-08 282；GM-09 未新增测试，改为浏览器验收）。
 - `npm run build --workspace @serverfleet/web`：通过（`dist/assets/index-*.js` 约 612 kB，gzip 170 kB；未做代码分割）。
 - `node scripts/web-boundaries.mjs`：PASS（无测试/fixture 生产导入、无 Agent WebSocket）。
 - 测试中的 HTTP 全部来自 `apps/web/src/test/http.ts` 的 fetch 桩，用于在缺少真实管理 API 时验证前端行为；**不是生产回退数据**，生产代码失败时只显示错误分类。
-- 未做：真实管理 API 联调（后端只有 `/healthz`）、浏览器端到端证据（GM-09）。
+- 浏览器验收：见 `ACCEPTANCE.md` 与 `evidence/`（22 张截图，127.0.0.1 验收桩 + 生产构建）。
+- 未做：真实管理 API 联调（后端只有 `/healthz`；本机无 Go 工具链）。
 
 ## 已知限制
 

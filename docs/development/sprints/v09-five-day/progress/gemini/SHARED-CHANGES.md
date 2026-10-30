@@ -76,3 +76,10 @@
 - **灾难恢复作业没有列表**：只有 `POST /api/v1/disaster-recovery/jobs` 与 `GET …/jobs/{jobId}`，页面刷新后无法从服务端找回作业；前端不本地存储作业记录，也不伪造历史。请求：补 `GET /api/v1/disaster-recovery/jobs?cursor=&limit=`。
 - **`POST /api/v1/backups/{backupId}/verify` 返回 202 + `RecoveryPlan08`**：语义上“校验”返回的是恢复计划而不是校验结果（没有 `verified/valid` 字段或校验时间）。前端只按服务端返回的 `checks[]` 显示结论，未通过即禁止创建恢复作业；请求确认是否应返回独立 `BackupVerification`（含校验时间、校验和结果、可恢复性结论）。
 - **`RecoveryPlan08.oldControllerFenced` 是声明**：契约注释已说明它不是充分的技术隔离证据。前端要求管理员显式勾选并提示服务端仍需独立校验；请求后端确认会用真实 fencing 证据覆盖该声明。
+
+## 11. GM-09 验收桩说明（不是契约变更）
+
+- `apps/web/acceptance/` 下新增本地验收桩（`stub-server.mjs` 托管 `dist` 并响应候选契约、`fixtures.mjs` 内存数据、`cdp-driver.mjs` 截图/求值驱动）。仅监听 127.0.0.1，**不被 `apps/web/src` 引用、不进入 dist**；生产失败路径仍只显示错误分类。
+- 桩的目的是在 Controller 管理 API 缺失时验证**正式前端**的真实交互（登录/CSRF/401/403/503/SSE/迟到响应等）。它不是后端实现，也不能作为后端验收证据。
+- 本机没有 Go 工具链，未运行 `apps/controller` 骨架；“仅 healthz”场景用同路由集的 `--healthz-only` 桩复现。
+- 若总控不希望仓库内保留验收桩，可整体删除 `apps/web/acceptance/`，`ACCEPTANCE.md` 中的步骤与截图仍可复核当时行为。
