@@ -1,0 +1,223 @@
+package persistencepoc
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"encoding/pem"
+	"errors"
+	"math/big"
+	"net"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/transport"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func enrollmentStatements(q ds.Queryer) transport.EnrollmentSQLStatements {
+	return transport.EnrollmentSQLStatements{Read: func(ctx context.Context, sql string, args ...any) ([]byte, error) {
+		var b []byte
+		err := q.QueryRow(ctx, sql, args...).Scan(&b)
+		return b, err
+	}, Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
+		r, err := q.Exec(ctx, sql, args...)
+		if err != nil {
+			return 0, err
+		}
+		return r.RowsAffected()
+	}}
+}
+func TestEnrollmentRealSQLiteRestartIssuedMTLSAndRevocation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "enrollment.db")
+	db := newDB(t, path, true)
+	defer db.Close()
+	for _, sql := range transport.EnrollmentSchemaStatements() {
+		if _, err := db.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, migration := range audit.Migrations() {
+		for _, sql := range migration.Statements {
+			if _, err := db.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	validator, err := audit.NewValidator([]string{"enrollment.token.issue", "enrollment.request", "enrollment.approved", "enrollment.rejected", "agent.revoke"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder, err := audit.NewSQLRecorder(db, validator, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fail := false
+	store := func(db *ds.DB) *transport.SQLEnrollmentStore {
+		s, err := transport.NewSQLEnrollmentStore(transport.EnrollmentSQLBackend{Read: enrollmentStatements(db).Read, InTx: func(ctx context.Context, fn func(context.Context, transport.EnrollmentSQLStatements) error) error {
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+				ops := enrollmentStatements(tx)
+				ops.AppendAudit = func(ctx context.Context, events []transport.EnrollmentAuditEvent) error {
+					for _, e := range events {
+						source := audit.SourceWeb
+						if e.ActorID == "enrolling-agent" {
+							source = audit.SourceAgent
+						}
+						if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.ActorID, Action: e.Action, Result: "success", RequestID: e.EnrollmentID, Source: source, NodeIDs: func() []string {
+							if e.NodeID == "" {
+								return nil
+							}
+							return []string{e.NodeID}
+						}(), At: time.UnixMilli(e.AtUnixMilli)}); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+				if err := fn(ctx, ops); err != nil {
+					return err
+				}
+				if fail {
+					return errors.New("injected before commit")
+				}
+				return nil
+			})
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	caKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now()
+	caTemplate := &x509.Certificate{SerialNumber: big.NewInt(1), NotBefore: now.Add(-time.Minute), NotAfter: now.Add(6 * time.Hour), BasicConstraintsValid: true, IsCA: true, KeyUsage: x509.KeyUsageCertSign}
+	caDER, err := x509.CreateCertificate(rand.Reader, caTemplate, caTemplate, &caKey.PublicKey, caKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ca, _ := x509.ParseCertificate(caDER)
+	roots := x509.NewCertPool()
+	roots.AddCert(ca)
+	rootFP := sha256.Sum256(ca.RawSubjectPublicKeyInfo)
+	issuer, err := transport.NewCertificateIssuer(caDER, caKey, roots, nil, hex.EncodeToString(rootFP[:]), 1, time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	gate := func(context.Context, transport.EnrollmentOperation) error { return nil } // Test admission only.
+	service, _ := transport.NewEnrollmentService(store(db), issuer, gate, gate)
+	token, err := service.IssueToken(ctx, transport.EnrollmentOperation{ActorID: "admin-fixture", Action: "enrollment.issue"}, transport.EnrollmentTokenInput{Name: "Isolated", TTLSeconds: 600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	agentKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	csr, _ := x509.CreateCertificateRequest(rand.Reader, &x509.CertificateRequest{}, agentKey)
+	input := transport.AgentEnrollmentInput{EnrollmentToken: token.Token, RequestID: "sqlite-agent-01", CSRPEM: string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr})), PinnedRootSPKI: hex.EncodeToString(rootFP[:]), AgentVersion: "test-only", Platform: "linux"}
+	if result, err := service.Submit(ctx, input); err != nil || result.State != "pending" {
+		t.Fatal(result, err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	service, _ = transport.NewEnrollmentService(store(db), issuer, gate, gate)
+	list, err := service.List(ctx, transport.EnrollmentOperation{ActorID: "admin-fixture", Action: "enrollment.list"})
+	if err != nil || len(list) != 1 {
+		t.Fatal(list, err)
+	}
+	approve := transport.EnrollmentOperation{ActorID: "admin-fixture", Action: "enrollment.decide", EnrollmentID: input.RequestID, NodeID: list[0].NodeID, ExpectedRevision: 1}
+	fail = true
+	if _, err = service.Decide(ctx, approve, true); err != transport.ErrEnrollmentUnavailable {
+		t.Fatal(err)
+	}
+	fail = false
+	var auditCount int
+	if err = db.QueryRow(ctx, "SELECT COUNT(*) FROM audit_events").Scan(&auditCount); err != nil || auditCount != 2 {
+		t.Fatal("failed approval audit did not roll back", auditCount, err)
+	}
+	if result, err := service.Submit(ctx, input); err != nil || result.CertificatePEM != "" {
+		t.Fatal("commit failure leaked certificate", err)
+	}
+	if _, err = service.Decide(ctx, approve, true); err != nil {
+		t.Fatal(err)
+	}
+	result, err := service.Submit(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyDER, _ := x509.MarshalPKCS8PrivateKey(agentKey)
+	clientCert, err := tls.X509KeyPair([]byte(result.CertificatePEM), pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: keyDER}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, _ := x509.ParseCertificate(clientCert.Certificate[0])
+	fp := sha256.Sum256(leaf.Raw)
+	fingerprint := hex.EncodeToString(fp[:])
+	verifier, _ := transport.NewPeerVerifier(service.Lookup)
+	serverKey, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	serverTemplate := &x509.Certificate{SerialNumber: big.NewInt(2), DNSNames: []string{"fleet.test"}, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}
+	serverDER, _ := x509.CreateCertificate(rand.Reader, serverTemplate, ca, &serverKey.PublicKey, caKey)
+	serverTLS, err := verifier.ControllerTLSConfig(tls.Certificate{Certificate: [][]byte{serverDER}, PrivateKey: serverKey}, roots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	listener, err := tls.Listen("tcp", "127.0.0.1:0", serverTLS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer listener.Close()
+	state := make(chan tls.ConnectionState, 1)
+	errs := make(chan error, 1)
+	go func() {
+		c, err := listener.Accept()
+		if err != nil {
+			errs <- err
+			return
+		}
+		defer c.Close()
+		_ = c.SetDeadline(time.Now().Add(5 * time.Second))
+		tlsConn := c.(*tls.Conn)
+		err = tlsConn.Handshake()
+		if err == nil {
+			state <- tlsConn.ConnectionState()
+		}
+		errs <- err
+	}()
+	clientTLS, err := transport.AgentTLSConfig(clientCert, roots, "fleet.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client, err := tls.DialWithDialer(&net.Dialer{Timeout: 5 * time.Second}, "tcp", listener.Addr().String(), clientTLS)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer client.Close()
+	if err = <-errs; err != nil {
+		t.Fatal(err)
+	}
+	authenticated := <-state
+	if _, err = verifier.Verify(ctx, authenticated, result.NodeID); err != nil {
+		t.Fatal("issued identity failed actual mTLS", err)
+	}
+	if err = service.Revoke(ctx, transport.EnrollmentOperation{ActorID: "admin-fixture", Action: "agent.revoke", NodeID: result.NodeID, Fingerprint: fingerprint, ExpectedRevision: 1}, fingerprint); err != nil {
+		t.Fatal(err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	service, _ = transport.NewEnrollmentService(store(db), issuer, gate, gate)
+	verifier, _ = transport.NewPeerVerifier(service.Lookup)
+	if _, err = verifier.Verify(ctx, authenticated, result.NodeID); err != transport.ErrPeerIdentity {
+		t.Fatal("restart revived revoked mTLS mapping", err)
+	}
+}

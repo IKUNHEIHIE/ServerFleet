@@ -1,0 +1,161 @@
+package persistencepoc
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func statements(q ds.Queryer) auth.IdentitySQLStatements {
+	return auth.IdentitySQLStatements{
+		Read: func(ctx context.Context, query string, args ...any) ([]byte, bool, error) {
+			var b []byte
+			var initialized bool
+			err := q.QueryRow(ctx, query, args...).Scan(&b, &initialized)
+			return b, initialized, err
+		},
+		Exec: func(ctx context.Context, query string, args ...any) (int64, error) {
+			result, err := q.Exec(ctx, query, args...)
+			if err != nil {
+				return 0, err
+			}
+			return result.RowsAffected()
+		},
+	}
+}
+func identityStore(t *testing.T, db *ds.DB) *auth.SQLIdentityStore {
+	t.Helper()
+	s, err := auth.NewSQLIdentityStore(auth.IdentitySQLBackend{Read: statements(db).Read, InTx: func(ctx context.Context, fn func(auth.IdentitySQLStatements) error) error {
+		return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error { return fn(statements(tx)) })
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+func newDB(t *testing.T, path string, initialize bool) *ds.DB {
+	t.Helper()
+	db, err := ds.Open(context.Background(), ds.Config{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if initialize {
+		for _, statement := range auth.IdentitySchemaStatements() {
+			if _, err = db.Exec(context.Background(), statement); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	return db
+}
+func TestIdentityRealSQLiteConcurrentBootstrapRestartAndRevocation(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "identity.db")
+	db := newDB(t, path, true)
+	defer db.Close()
+	store := identityStore(t, db)
+	service, _ := auth.NewIdentityService(store)
+	token, err := service.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second := newDB(t, path, false)
+	defer second.Close()
+	other, _ := auth.NewIdentityService(identityStore(t, second))
+	var wg sync.WaitGroup
+	out := make(chan error, 2)
+	for _, s := range []*auth.IdentityService{service, other} {
+		wg.Go(func() { out <- s.Bootstrap(ctx, token, "admin", "long-synthetic-password") })
+	}
+	wg.Wait()
+	close(out)
+	successes := 0
+	for err := range out {
+		if err == nil {
+			successes++
+		} else if !errors.Is(err, auth.ErrAlreadyInitialized) {
+			t.Fatal(err)
+		}
+	}
+	if successes != 1 {
+		t.Fatal(successes)
+	}
+	session, err := service.Login(ctx, "admin", "long-synthetic-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted []byte
+	var marker bool
+	// Query only auth-owned state. No application fake, credentials or provider.
+	persisted, marker, err = statements(db).Read(ctx, "SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1")
+	if err != nil || !marker || bytes.Contains(persisted, []byte(token)) || bytes.Contains(persisted, []byte(session.Secret)) || bytes.Contains(persisted, []byte("long-synthetic-password")) {
+		t.Fatal("plaintext credential persisted", err)
+	}
+	if err = service.RevokeSession(ctx, session.Secret, session.CSRF, session.Identity.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	_ = second.Close()
+	_ = db.Close()
+	reopened := newDB(t, path, false)
+	defer reopened.Close()
+	restarted, _ := auth.NewIdentityService(identityStore(t, reopened))
+	if _, err = restarted.Authenticate(ctx, session.Secret, "", false); !errors.Is(err, auth.ErrCredential) {
+		t.Fatal("restart revived session", err)
+	}
+	if _, err = restarted.PrepareSetup(ctx); !errors.Is(err, auth.ErrAlreadyInitialized) {
+		t.Fatal("restart reopened setup", err)
+	}
+}
+func TestIdentitySQLCancellationAndPermanentMarker(t *testing.T) {
+	ctx := context.Background()
+	db := newDB(t, filepath.Join(t.TempDir(), "identity.db"), true)
+	defer db.Close()
+	store := identityStore(t, db)
+	service, _ := auth.NewIdentityService(store)
+	token, err := service.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	before, _, err := statements(db).Read(ctx, "SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	canceled, cancel := context.WithCancel(ctx)
+	err = store.Update(canceled, func(b []byte) ([]byte, error) { cancel(); return b, nil })
+	if !errors.Is(err, context.Canceled) {
+		t.Fatal(err)
+	}
+	after, _, _ := statements(db).Read(ctx, "SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1")
+	if !bytes.Equal(before, after) {
+		t.Fatal("canceled transaction committed")
+	}
+	if err = service.Bootstrap(ctx, token, "admin", "long-synthetic-password"); err != nil {
+		t.Fatal(err)
+	}
+	err = store.Update(ctx, func(b []byte) ([]byte, error) {
+		var st map[string]any
+		if err := json.Unmarshal(b, &st); err != nil {
+			return nil, err
+		}
+		st["Initialized"] = false
+		st["Users"] = nil
+		return json.Marshal(st)
+	})
+	if err == nil {
+		t.Fatal("initialized marker reset")
+	}
+	// Deleting the aggregate is corruption, never interpreted as a fresh install.
+	if _, err = db.Exec(ctx, "DELETE FROM cx_auth_identity"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.Initialized(ctx); !errors.Is(err, auth.ErrIdentityUnavailable) {
+		t.Fatal("missing state reopened setup", err)
+	}
+}

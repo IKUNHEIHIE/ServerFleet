@@ -1,0 +1,11 @@
+[
+  {"op":"test","path":"/components/schemas/AgentEnrollRequest/required","value":["enrollmentToken","requestId","csrPem","pinnedRootSpkiSha256","agentVersion"]},
+  {"op":"test","path":"/components/schemas/AgentEnrollResult/required","value":["state"]},
+  {"op":"test","path":"/components/schemas/AgentEnrollResult/properties/state/enum","value":["pending","issued","denied"]},
+  {"op":"test","path":"/components/schemas/AgentEnrollResult/additionalProperties","value":false},
+  {"op":"add","path":"/components/schemas/AgentEnrollRequest/required/-","value":"platform"},
+  {"op":"add","path":"/components/schemas/AgentEnrollResult/properties/trustGeneration","value":{"type":"integer","minimum":1,"description":"Issued identity trust generation; must meet independently provisioned minimum, not proof of current enablement"}},
+  {"op":"add","path":"/components/schemas/AgentEnrollResult/properties/expiresAt","value":{"type":"string","format":"date-time","description":"Pending/denied request expiry or issued certificate NotAfter"}},
+  {"op":"add","path":"/components/schemas/AgentEnrollResult/required/-","value":"expiresAt"},
+  {"op":"add","path":"/components/schemas/AgentEnrollResult/allOf","value":[{"if":{"properties":{"state":{"const":"issued"}},"required":["state"]},"then":{"required":["nodeId","certificatePem","intermediateChainPem","trustGeneration"]},"else":{"not":{"anyOf":[{"required":["nodeId"]},{"required":["certificatePem"]},{"required":["intermediateChainPem"]},{"required":["trustGeneration"]}]}}}]}
+]

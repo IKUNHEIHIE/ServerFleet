@@ -1,0 +1,46 @@
+{
+  "note": "This inventory records prior implementation checkpoints; final evidence-only commit HEAD is supplied in chat.",
+  "baseline": "8a7dd4707d2d7e142e137d098296788d2c80eddd",
+  "commits": [
+    {
+      "sha": "2fc8dab314a906c0e48543d4735ee5509d08e355",
+      "title": "docs(platform): 提交CX01接口与共享依赖检查点"
+    },
+    {
+      "sha": "8ad55cc3a81c702f124a4ee8f2084709157ec7a7",
+      "title": "feat(auth): 实现受控初始化与可撤销会话组件"
+    },
+    {
+      "sha": "96b0568297bba7efc3ee2eb74f4c1a04758eec6c",
+      "title": "feat(agent): 添加mTLS身份复核与持久执行去重"
+    },
+    {
+      "sha": "51714c4e6348850084a4f9b3c340df8240fadd0a",
+      "title": "fix(transport): 移除弃用检查并澄清契约修订边界"
+    },
+    {
+      "sha": "fb0245add5e0e3021598fcc874f51cb2fb43e0fd",
+      "title": "feat(ai): 实现资源审批策略与工作流任务计划"
+    },
+    {
+      "sha": "52ea2b9a6b1ba21ee5b85cd25b84ac8d6937bbc2",
+      "title": "feat(plugins): 校验签名声明包并处理Xray计数缺口"
+    },
+    {
+      "sha": "7303301d936d9a1ff1aa509265979d4d081c5696",
+      "title": "feat(security): 添加凭据密封与更新恢复校验组件"
+    },
+    {
+      "sha": "0ce9268d6089cc900de98ec81cf129fc46291424",
+      "title": "fix(platform): 加固执行记录边界与跨主体负向检查"
+    },
+    {
+      "sha": "fecc456164fa87b8fbc505e73b50f2d0b606fefc",
+      "title": "docs(contract): 提交独立认证修订与安全决策候选"
+    },
+    {
+      "sha": "7c0fccda0d3e3000a871a2bcbe570f29ca39e1f5",
+      "title": "test(platform): 交付隔离WSS WASM Eino实验与编译证据"
+    }
+  ]
+}

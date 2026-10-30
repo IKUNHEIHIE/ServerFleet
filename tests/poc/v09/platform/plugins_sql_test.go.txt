@@ -1,0 +1,159 @@
+package persistencepoc
+
+import (
+	"context"
+	"crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/plugins"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func TestPluginActualSQLiteAndPrivateFilesRestartWithoutRuntimeAdmission(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "plugins.db")
+	db := newDB(t, path, true)
+	defer db.Close()
+	for _, sql := range plugins.LifecycleSchemaStatements() {
+		if _, err := db.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, migration := range audit.Migrations() {
+		for _, sql := range migration.Statements {
+			if _, err := db.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	artifacts := filepath.Join(dir, "artifacts")
+	if err := os.Mkdir(artifacts, 0700); err != nil {
+		t.Fatal(err)
+	}
+	vault, err := plugins.NewPackageVault(artifacts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer vault.Close()
+	pub, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := []byte("opaque signed fixture, never executed")
+	hash := sha256.Sum256(payload)
+	manifest := plugins.PackageManifest{Format: 1, ID: "xray-manager", Version: "0.9.0", Source: "https://source.invalid/plugin/0.9.0", PayloadSHA256: hex.EncodeToString(hash[:]), PayloadBytes: len(payload), Capabilities: []string{"xray.read"}, UI: []plugins.UIElement{{ID: "metric", Kind: "metric", Label: "Local fixture"}}}
+	raw, _ := json.Marshal(manifest)
+	signature := ed25519.Sign(key, append([]byte("serverfleet.plugin.v1\x00"), raw...))
+	trust := plugins.PackageTrust{Keys: map[string]ed25519.PublicKey{"test-key": pub}, Sources: map[string]bool{manifest.Source: true}, Capabilities: map[string]bool{"xray.read": true}}
+	descriptor, err := plugins.VerifiedDescriptor(raw, signature, payload, "test-key", trust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	validator, err := audit.NewValidator([]string{"plugins.install", "plugins.uninstall"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fail := false
+	manager := func(db *ds.DB) *plugins.LifecycleManager {
+		recorder, err := audit.NewSQLRecorder(db, validator, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		read := func(q ds.Queryer) func(context.Context, string, ...any) ([]byte, error) {
+			return func(ctx context.Context, sql string, args ...any) ([]byte, error) {
+				var b []byte
+				err := q.QueryRow(ctx, sql, args...).Scan(&b)
+				return b, err
+			}
+		}
+		store, err := plugins.NewSQLLifecycleStore(plugins.LifecycleSQLBackend{Read: read(db), InTx: func(ctx context.Context, fn func(plugins.LifecycleSQLStatements) error) error {
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+				ops := plugins.LifecycleSQLStatements{Read: read(tx), Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
+					r, err := tx.Exec(ctx, sql, args...)
+					if err != nil {
+						return 0, err
+					}
+					return r.RowsAffected()
+				}, AppendAudit: func(ctx context.Context, events []plugins.LifecycleAuditEvent) error {
+					for _, e := range events {
+						if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.ActorID, Action: e.Action, Result: e.Result, TaskID: e.TaskID, RequestID: e.TaskID, Source: audit.SourceSystem, At: e.At}); err != nil {
+							return err
+						}
+					}
+					return nil
+				}}
+				if err := fn(ops); err != nil {
+					return err
+				}
+				if fail {
+					return errors.New("injected before domain+audit commit")
+				}
+				return nil
+			})
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		m, err := plugins.NewLifecycleManager(store, vault, func(context.Context) (plugins.PackageTrust, error) { return trust, nil }, func(context.Context, plugins.LifecycleOperation) error { return nil }, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	m := manager(db)
+	op := plugins.LifecycleOperation{ActorID: "admin-fixture", TaskID: "task-install-fixture", Action: "plugins.install", Digest: descriptor.Digest, ConsentedCapabilities: manifest.Capabilities}
+	fail = true
+	if _, err = m.Install(ctx, op, raw, signature, payload, "test-key"); err != plugins.ErrPackageRejected {
+		t.Fatal(err)
+	}
+	fail = false
+	state, err := m.Get(ctx)
+	if err != nil || state.Installed {
+		t.Fatal("failed transaction installed package", state, err)
+	}
+	var count int
+	if err = db.QueryRow(ctx, "SELECT COUNT(*) FROM audit_events").Scan(&count); err != nil || count != 0 {
+		t.Fatal("failed audit survived", count, err)
+	}
+	installed, err := m.Install(ctx, op, raw, signature, payload, "test-key")
+	if err != nil || installed.Enabled {
+		t.Fatal(installed, err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	m = manager(db)
+	state, err = m.Get(ctx)
+	if err != nil || !state.Installed || state.Enabled || state.Digest != descriptor.Digest {
+		t.Fatal(state, err)
+	}
+	if _, err = m.Install(ctx, op, raw, signature, payload, "test-key"); err != plugins.ErrLifecycleReplay {
+		t.Fatal("restart replayed install", err)
+	}
+	op.Action = "plugins.enable"
+	op.TaskID = "task-enable-fixture"
+	op.ExpectedRevision = state.Revision
+	if _, err = m.Enable(ctx, op); err != plugins.ErrPackageRejected {
+		t.Fatal("nil admitted runtime enabled executable plugin", err)
+	}
+	op.Action = "plugins.uninstall"
+	op.TaskID = "task-remove-fixture"
+	removed, err := m.Uninstall(ctx, op)
+	if err != nil || removed.Installed {
+		t.Fatal(removed, err)
+	}
+	// Uninstall removes the Controller registration, not node Xray/files/data.
+	if _, err = vault.Load(ctx, descriptor.Digest, trust); err != nil {
+		t.Fatal("uninstall erased signed artifact/node data", err)
+	}
+}

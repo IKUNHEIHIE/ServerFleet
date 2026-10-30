@@ -1,0 +1,17 @@
+# AI会话与逐资源动作授权持久化候选
+
+ai.SessionService/SQLSessionStore实现Create/Get/AddGrant/RevokeGrant/SetPolicy/Close/AssessTool。新会话零资源、per_action；单独scopeRevision，变更CAS，关闭不可重新授权。当前身份通过mandatory SessionAccess重新核验，授权变更/完整访问须真实Web actor，模型不能调用自己扩大范围。SessionAccess必须是事务内可用的只读当前身份/权限核对，不可在持有DS写事务时再次调用auth.Authenticate/CommitGate开启writer。
+
+本包新增auth.CheckObservationReadOnly专用于该组合边界：先在事务外完成真实TLS/Origin/Cookie/CSRF认证，再在领域事务用auth自有仓储的当前只读观察核验session/epoch/policy；不刷新Seen/时钟、不替代最终输出CommitGate。事务内适配应使用同Tx或已明确接收的稳定快照。独立SQLite实验确实组合了真实auth/AI/audit同一个文件，没嵌套writer、没把已知subjectId当认证。此端口仍待owner接收。
+
+授权记录每个resourceType/resourceId的allowedActions及服务组成员快照，AssessTool从持久记录重建Scope而非读取模型提交scope。节点范围与动作同时求交当前RBAC/精确节点/工具和插件状态。发现早期纯Scope仅控制资源、不按grant限制动作，现已增加NodeActions/GroupActions，缺动作默认拒绝，并更新正向fixture明确动作。防止持有read会话范围的用户因当前账号另有modify能力而扩大AI操作。
+
+同服务组只允许一条grant；重复添加409，须明确撤销再添加，不把不同时间/不同动作的成员快照合并成更宽权限。新增组成员不继承，移除成员立即失权。完整访问只有经gate确认资格的真实Web用户可设置15/30/60分钟，视图保留configured mode并给effectiveMode；到期恢复per_action且保存时钟观察，回拨失败关闭。full_access始终不能豁免AI任意root Shell真实管理员审批或秘密禁止直出。
+
+SessionView/ApprovalPolicy按既有候选字段返回id/scopeRevision/resourceGrants/allowedNodeIds/status/createdBy/createdAt与sessionId/mode/effectiveMode/expiresAt/maxFullAccessSeconds/enforcedRestrictions；内部each/auto/full显式映射per_action/automatic/full_access，不修改原OpenAPI/生成。HTTP挂载、强If-Match和GM DTO适配仍需协调，当前不默认启用生产入口。
+
+AssessTool只对服务器固定工具目录规范参数并评估权限/是否需要审批、计算绑定摘要；不执行、不凭模型自报风险/批准boolean、不提交任务，也不独立消费审批。S03同Tx审批/统一任务/每次dispatch仍须重复验证scopeRevision与当前授权。Eino隔离试验已随动作限制更新；仍未选择生产框架，缺真实BYOK模型不声称AI聊天完成。
+
+审计在AI聚合保留真实出箱；SQL适配AppendAudit非nil必须同DS Tx追加并清空出箱，失败都回滚。记录actor/session/action/scopeRevision/冻结节点快照（撤销保留原节点），不含参数/秘密。DS schema尚无通用资源引用，需协调将sessionId/scopeRevision映射为正式可检索字段，不能用临时RequestID映射充当完整目标引用。1000 sessions/每session1000 grants、8MiB状态/10000待审计事件上限，1C1G性能未验收。
+
+剩余：消息与SSE、真实可关闭BYOK供应商、审批持久/原子消费和统一任务、资源推荐真人确认、页面/当前输出闸门、PoC-06真实环境。相应具体依赖与后续本地实施持续记在RESUMED.md。

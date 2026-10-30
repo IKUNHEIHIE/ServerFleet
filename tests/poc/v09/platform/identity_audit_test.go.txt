@@ -1,0 +1,135 @@
+package persistencepoc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func TestIdentityAuditAndMutationShareActualSQLiteTransaction(t *testing.T) {
+	ctx := context.Background()
+	db := newDB(t, filepath.Join(t.TempDir(), "atomic-auth-audit.db"), true)
+	defer db.Close()
+	for _, migration := range audit.Migrations() {
+		for _, statement := range migration.Statements {
+			if _, err := db.Exec(ctx, statement); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	actions := []string{"auth.setup", "auth.bootstrap", "auth.login", "auth.user.create", "auth.user.patch", "auth.session.revoke", "auth.grant.create", "auth.grant.revoke", "auth.password.change"}
+	limits := audit.DefaultLimits()
+	limits.RequireSource = true
+	validator, err := audit.NewValidator(actions, limits)
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder, err := audit.NewSQLRecorder(db, validator, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	failAfterAudit := false
+	failAfterBoth := false
+	backend := auth.IdentitySQLBackend{Read: statements(db).Read, InTx: func(ctx context.Context, fn func(auth.IdentitySQLStatements) error) error {
+		return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+			ops := statements(tx)
+			ops.AppendAudit = func(ctx context.Context, events []auth.IdentityAuditEvent) error {
+				for _, event := range events {
+					if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: event.SubjectID, Action: event.Action, Result: event.Result, RequestID: event.RequestID, Source: audit.Source(event.Source), At: event.At, NodeIDs: event.NodeIDs}); err != nil {
+						return err
+					}
+					if failAfterAudit && event.Action == "auth.user.create" {
+						return errors.New("injected after audit insert")
+					}
+				}
+				return nil
+			}
+			if err := fn(ops); err != nil {
+				return err
+			}
+			if failAfterBoth {
+				return errors.New("injected before commit")
+			}
+			return nil
+		})
+	}}
+	store, err := auth.NewSQLIdentityStore(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	service, _ := auth.NewIdentityService(store)
+	token, err := service.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Bootstrap(ctx, token, "admin", "long-test-admin-password"); err != nil {
+		t.Fatal(err)
+	}
+	session, err := service.Login(ctx, "admin", "long-test-admin-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	page, err := recorder.Query(ctx, audit.Query{Limit: 100})
+	if err != nil || page.Total != 3 {
+		t.Fatal("initial audit missing", page.Total, err)
+	}
+	input := auth.UserCreation{Username: "reader", Password: "long-test-reader-password", RoleIDs: []string{"reader"}, Enabled: true}
+	failAfterAudit = true
+	if user, err := service.CreateUserIdempotent(ctx, session.Secret, session.CSRF, input, "atomic-test-request-0001"); !errors.Is(err, auth.ErrIdentityUnavailable) || user.UserID != "" {
+		t.Fatal("audit failure acknowledged mutation", err)
+	}
+	failAfterAudit = false
+	page, err = recorder.Query(ctx, audit.Query{Limit: 100})
+	if err != nil || page.Total != 3 {
+		t.Fatal("audit insert was not rolled back", page.Total, err)
+	}
+	failAfterBoth = true
+	if _, err = service.CreateUserIdempotent(ctx, session.Secret, session.CSRF, input, "atomic-test-request-0001"); !errors.Is(err, auth.ErrIdentityUnavailable) {
+		t.Fatal(err)
+	}
+	failAfterBoth = false
+	users, err := service.ListUsers(ctx, session.Secret)
+	if err != nil || len(users) != 1 {
+		t.Fatal("failed transaction left user", len(users), err)
+	}
+	page, err = recorder.Query(ctx, audit.Query{Limit: 100})
+	if err != nil || page.Total != 3 {
+		t.Fatal("precommit failure left audit", page.Total, err)
+	}
+	user, err := service.CreateUserIdempotent(ctx, session.Secret, session.CSRF, input, "atomic-test-request-0001")
+	if err != nil || user.UserID == "" {
+		t.Fatal(err)
+	}
+	page, err = recorder.Query(ctx, audit.Query{Limit: 100})
+	if err != nil || page.Total != 4 {
+		t.Fatal("success not audited exactly once", page.Total, err)
+	}
+	if _, err = service.CreateUserIdempotent(ctx, session.Secret, session.CSRF, input, "atomic-test-request-0001"); err != nil {
+		t.Fatal(err)
+	}
+	page, err = recorder.Query(ctx, audit.Query{Limit: 100})
+	if err != nil || page.Total != 4 {
+		t.Fatal("receipt duplicated creation audit", page.Total, err)
+	}
+	encoded, _ := json.Marshal(page.Items)
+	if strings.Contains(string(encoded), "long-test-") || strings.Contains(string(encoded), session.Secret) || strings.Contains(string(encoded), session.CSRF) {
+		t.Fatal("audit leaked credentials")
+	}
+	var payload []byte
+	var marker bool
+	if err = db.QueryRow(ctx, "SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1").Scan(&payload, &marker); err != nil {
+		t.Fatal(err)
+	}
+	var persisted struct{ Outbox []json.RawMessage }
+	if err = json.Unmarshal(payload, &persisted); err != nil || len(persisted.Outbox) != 0 {
+		t.Fatal("transactional audit did not consume outbox", err)
+	}
+}

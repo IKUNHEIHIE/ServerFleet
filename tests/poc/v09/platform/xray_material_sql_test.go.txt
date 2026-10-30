@@ -1,0 +1,646 @@
+package persistencepoc
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"net/url"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+	legacy "serverfleet.local/serverfleet/persistence-poc/legacyauth"
+	xray "serverfleet.local/serverfleet/plugins/xray-manager"
+)
+
+type materialSQLReaderKey struct{}
+type materialSQLActorKey struct{}
+type materialSQLActor struct {
+	secret      string
+	observation auth.Identity
+}
+
+// Isolated Host storage/audit adapter on the actual DS transaction. These probe
+// tables do not allocate a public migration or grant a plugin raw SQL access.
+type managedUsersSQLStore struct {
+	db          *ds.DB
+	scope       xray.ManagedUserScope
+	bindReader  func(ds.Queryer) *auth.IdentityService
+	failAudit   *bool
+	recorder    *audit.SQLRecorder
+	beforeBegin func() error
+}
+
+func (s *managedUsersSQLStore) View(ctx context.Context, fn func(context.Context, []byte) error) error {
+	return s.db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+		var raw []byte
+		if err := tx.QueryRow(ctx, `SELECT payload FROM managed_user_probe WHERE scope=?`, materialSQLDigest(s.scope)).Scan(&raw); err != nil {
+			return err
+		}
+		return fn(context.WithValue(ctx, materialSQLReaderKey{}, s.bindReader(tx)), raw)
+	})
+}
+func (s *managedUsersSQLStore) Update(ctx context.Context, fn func(context.Context, []byte) ([]byte, []xray.ManagedUserAudit, error)) error {
+	if s.beforeBegin != nil {
+		hook := s.beforeBegin
+		s.beforeBegin = nil
+		if err := hook(); err != nil {
+			return err
+		}
+	}
+	return s.db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+		var raw []byte
+		if err := tx.QueryRow(ctx, `SELECT payload FROM managed_user_probe WHERE scope=?`, materialSQLDigest(s.scope)).Scan(&raw); err != nil {
+			return err
+		}
+		next, events, err := fn(context.WithValue(ctx, materialSQLReaderKey{}, s.bindReader(tx)), raw)
+		if err != nil {
+			return err
+		}
+		for _, e := range events {
+			payload, err := json.Marshal(e)
+			if err != nil {
+				return err
+			}
+			if _, err = tx.Exec(ctx, `INSERT INTO managed_user_audit_probe(payload) VALUES(?)`, payload); err != nil {
+				return err
+			}
+			result, reason := "success", ""
+			if e.Result == "pending" {
+				result = "allowed"
+			}
+			if e.Result == "unknown" {
+				result, reason = "failure", "xray_user_unknown"
+			}
+			if err = s.recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.Operation.SubjectID, Action: "xray.user." + e.Operation.Action, Result: result, ReasonCode: reason, RequestID: e.Operation.OperationID, Source: audit.Source(e.Operation.Source), NodeIDs: []string{e.Operation.Scope.NodeID}, At: e.At}); err != nil {
+				return err
+			}
+		}
+		if *s.failAudit {
+			return errors.New("injected after actual user audit insert")
+		}
+		result, err := tx.Exec(ctx, `UPDATE managed_user_probe SET payload=? WHERE scope=?`, next, materialSQLDigest(s.scope))
+		if err != nil {
+			return err
+		}
+		count, err := result.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if count != 1 {
+			return xray.ErrManagedUser
+		}
+		return nil
+	})
+}
+
+func materialSQLDigest(v any) string {
+	raw, _ := json.Marshal(v)
+	hash := sha256.Sum256(raw)
+	return hex.EncodeToString(hash[:])
+}
+
+func TestXrayActualCentralSQLiteMaterialExportFenceAuditAndScope(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	dbPath := filepath.Join(t.TempDir(), "central-material.db")
+	db := newDB(t, dbPath, true)
+	defer func() { _ = db.Close() }()
+	for _, migration := range audit.Migrations() {
+		for _, sql := range migration.Statements {
+			if _, err := db.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	// Complete typed delivery probe on the REAL Tx, in addition to the REAL
+	// DS summary recorder. This test table is not an accepted public migration.
+	if _, err := db.Exec(ctx, `CREATE TABLE material_audit_probe(id INTEGER PRIMARY KEY,payload BLOB NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	userScope := xray.ManagedUserScope{NodeID: "node-a", InstanceID: "instance-a"}
+	for _, sql := range []string{`CREATE TABLE managed_user_probe(scope TEXT PRIMARY KEY,payload BLOB NOT NULL)`, `CREATE TABLE managed_user_audit_probe(id INTEGER PRIMARY KEY,payload BLOB NOT NULL)`} {
+		if _, err := db.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed, err := xray.ManagedUserSeed(userScope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, `INSERT INTO managed_user_probe(scope,payload) VALUES(?,?)`, materialSQLDigest(userScope), seed); err != nil {
+		t.Fatal(err)
+	}
+	validator, err := audit.NewValidator([]string{"auth.setup", "auth.bootstrap", "auth.login", "auth.grant.create", "auth.grant.revoke", "auth.session.revoke", "xray.material.generate", "xray.material.reveal", "xray.material.use", "xray.material.revoke", "xray.user.create", "xray.user.rename", "xray.user.set-enabled", "xray.user.remove", "xray.user.application"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var recorder *audit.SQLRecorder
+	var identity *auth.IdentityService
+	var credentials *auth.CredentialService
+	var materials *auth.XrayMaterialService
+	var users *xray.ManagedUserService
+	var userStore *managedUsersSQLStore
+	var failMaterialAudit, omitMaterialAudit bool
+	var failUserAudit bool
+	var beforeTransaction func() error
+	approved := map[string]auth.XrayMaterialOperation{} // explicit task/confirmation/profile fixture, NOT a second scheduler
+	approvedUsers := map[string]xray.ManagedUserCheck{} // explicit sole-task/evidence fixture
+	materialPermissions := append(auth.XrayMaterialPermissions(),
+		auth.PermissionDefinition{Key: "xray.users.read", Description: "Read managed user metadata", ResourceType: "node", ReadOnly: true},
+		auth.PermissionDefinition{Key: "xray.users.manage", Description: "Manage explicitly granted Xray users", ResourceType: "node"},
+		auth.PermissionDefinition{Key: "xray.users.export", Description: "Export explicitly confirmed Xray client connections", ResourceType: "node"})
+	var makeIdentity func(ds.Queryer, bool) *auth.IdentityService
+	makeIdentity = func(q ds.Queryer, writable bool) *auth.IdentityService {
+		backend := auth.IdentitySQLBackend{Read: statements(q).Read, InTx: func(context.Context, func(auth.IdentitySQLStatements) error) error {
+			return auth.ErrIdentityUnavailable
+		}}
+		if writable {
+			backend.InTxContext = func(ctx context.Context, fn func(context.Context, auth.IdentitySQLStatements) error) error {
+				if beforeTransaction != nil {
+					hook := beforeTransaction
+					beforeTransaction = nil
+					if err := hook(); err != nil {
+						return err
+					}
+				}
+				return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+					ops := statements(tx)
+					ops.AppendAudit = func(ctx context.Context, events []auth.IdentityAuditEvent) error {
+						for _, e := range events {
+							if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.SubjectID, Action: e.Action, Result: e.Result, RequestID: e.RequestID, Source: audit.Source(e.Source), NodeIDs: e.NodeIDs, At: e.At}); err != nil {
+								return err
+							}
+						}
+						return nil
+					}
+					if !omitMaterialAudit {
+						ops.AppendXrayMaterialAudit = func(ctx context.Context, events []auth.XrayMaterialAuditEvent) error {
+							for _, e := range events {
+								raw, err := json.Marshal(e)
+								if err != nil {
+									return err
+								}
+								if _, err = tx.Exec(ctx, `INSERT INTO material_audit_probe(payload) VALUES(?)`, raw); err != nil {
+									return err
+								}
+								result, reason := "success", ""
+								if e.Result == "reserved" {
+									result = "allowed"
+								}
+								if e.Result == "unknown" {
+									result, reason = "failure", "xray_material_unknown"
+								}
+								if err = recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.SubjectID, Action: "xray.material." + e.Action, Result: result, RequestID: e.OperationID, Source: audit.Source(e.Source), NodeIDs: []string{e.Scope.NodeID}, ReasonCode: reason, At: e.At}); err != nil {
+									return err
+								}
+							}
+							if failMaterialAudit {
+								return errors.New("injected after real typed and DS audit insert")
+							}
+							return nil
+						}
+					}
+					return fn(context.WithValue(ctx, materialSQLReaderKey{}, makeIdentity(tx, false)), ops)
+				})
+			}
+		}
+		store, err := auth.NewSQLIdentityStore(backend)
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := auth.NewIdentityServiceWithResources(store, func(_ context.Context, kind, id string) ([]string, error) {
+			if kind == "node" && id == "node-a" {
+				return []string{id}, nil
+			}
+			return nil, auth.ErrPolicyUnavailable
+		}, materialPermissions)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	bind := func() {
+		var err error
+		recorder, err = audit.NewSQLRecorder(db, validator, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		identity = makeIdentity(db, true)
+		credentials, err = auth.NewCredentialService(identity, "material-data-key", map[string][]byte{"material-data-key": bytes.Repeat([]byte{79}, 32)}, nil, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		materialGate := func(ctx context.Context, check auth.XrayMaterialCheck) error {
+			proof, ok := ctx.Value(materialSQLActorKey{}).(materialSQLActor)
+			if !ok || proof.observation.SubjectID != check.Operation.SubjectID {
+				return auth.ErrDenied
+			}
+			reader, inside := ctx.Value(materialSQLReaderKey{}).(*auth.IdentityService)
+			if strings.HasPrefix(check.Stage, "commit-") && !inside {
+				return auth.ErrIdentityUnavailable
+			}
+			if !inside {
+				reader = identity
+			}
+			if err := reader.CheckObservationReadOnly(ctx, proof.secret, proof.observation); err != nil {
+				return err
+			}
+			wanted, ok := approved[check.Operation.OperationID]
+			if !ok || materialSQLDigest(wanted) != materialSQLDigest(check.Operation) || check.Operation.Scope.NodeID != "node-a" || (check.Operation.Scope.InstanceID != "instance-a" && check.Operation.Scope.InstanceID != "instance-b") {
+				return auth.ErrDenied
+			}
+			return nil
+		}
+		materials, err = auth.NewXrayMaterialService(credentials, materialGate)
+		if err != nil {
+			t.Fatal(err)
+		}
+		userStore = &managedUsersSQLStore{db: db, scope: userScope, bindReader: func(q ds.Queryer) *auth.IdentityService { return makeIdentity(q, false) }, failAudit: &failUserAudit, recorder: recorder}
+		users, err = xray.NewManagedUserService(userScope, userStore, func(ctx context.Context, check xray.ManagedUserCheck) error {
+			proof, ok := ctx.Value(materialSQLActorKey{}).(materialSQLActor)
+			if !ok || proof.observation.SubjectID != check.Operation.SubjectID || check.Operation.Scope != userScope {
+				return auth.ErrDenied
+			}
+			reader, inside := ctx.Value(materialSQLReaderKey{}).(*auth.IdentityService)
+			if (strings.HasPrefix(check.Stage, "commit") || check.Stage == "read-current") && !inside {
+				return auth.ErrIdentityUnavailable
+			}
+			if !inside {
+				reader = identity
+			}
+			if err := reader.CheckObservationReadOnly(ctx, proof.secret, proof.observation); err != nil {
+				return err
+			}
+			wanted, ok := approvedUsers[check.Operation.OperationID]
+			check.Stage = ""
+			if !ok || materialSQLDigest(wanted) != materialSQLDigest(check) {
+				return auth.ErrDenied
+			}
+			permission := "xray.users.manage"
+			if check.Operation.Action == "read" || check.Operation.Action == "list" {
+				permission = "xray.users.read"
+			}
+			if check.Operation.Action == "export" {
+				permission = "xray.users.export"
+			}
+			return reader.Authorize(ctx, auth.Check{SubjectID: check.Operation.SubjectID, Action: permission, NodeIDs: []string{userScope.NodeID}})
+		}, func(ctx context.Context, scope xray.ManagedUserScope, u xray.ManagedUser) error {
+			reader, ok := ctx.Value(materialSQLReaderKey{}).(*auth.IdentityService)
+			proof, real := ctx.Value(materialSQLActorKey{}).(materialSQLActor)
+			if !ok || !real {
+				return auth.ErrIdentityUnavailable
+			}
+			c, err := auth.NewCredentialService(reader, "material-data-key", map[string][]byte{"material-data-key": bytes.Repeat([]byte{79}, 32)}, nil, nil)
+			if err != nil {
+				return err
+			}
+			m, err := auth.NewXrayMaterialService(c, materialGate)
+			if err != nil {
+				return err
+			}
+			op := auth.XrayMaterialOperation{SubjectID: proof.observation.SubjectID, OperationID: "check-user-material-" + u.ID, Action: "metadata", Source: "web", ReferenceID: u.IdentityRef, Scope: auth.XrayMaterialScope{NodeID: scope.NodeID, InstanceID: scope.InstanceID, InboundID: u.InboundID, UserID: u.ID, Purpose: "xray-user"}, ExpectedRevision: u.CredentialRevision, ExpiresAt: time.Now().Add(time.Minute)}
+			op.PlanDigest = materialSQLDigest(op)
+			approved[op.OperationID] = op
+			meta, err := m.Metadata(ctx, op)
+			if err != nil {
+				return err
+			}
+			if meta.State != "ready" && u.Enabled && !u.Deleted {
+				return auth.ErrDenied
+			}
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	}
+	bind()
+	setup, err := identity.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = identity.Bootstrap(ctx, setup, "material-admin", "long-local-material-test-password"); err != nil {
+		t.Fatal(err)
+	}
+	login := func() auth.LoginSession {
+		s, err := identity.Login(ctx, "material-admin", "long-local-material-test-password", "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	admin := login()
+	actorContext := func(session auth.LoginSession) context.Context {
+		observation, err := identity.Authenticate(ctx, session.Secret, session.CSRF, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return context.WithValue(ctx, materialSQLActorKey{}, materialSQLActor{session.Secret, observation})
+	}
+	actorCtx := actorContext(admin)
+	makeOp := func(action, id string, scope auth.XrayMaterialScope) auth.XrayMaterialOperation {
+		ref, err := auth.XrayMaterialReference(scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		op := auth.XrayMaterialOperation{SubjectID: admin.Identity.SubjectID, OperationID: id, Action: action, Source: "web", Scope: scope, ReferenceID: ref, ExpiresAt: time.Now().Add(time.Minute)}
+		if action != "generate" {
+			op.ExpectedRevision = 1
+		}
+		if action == "reveal" {
+			op.RecipientID = op.SubjectID
+		}
+		if action == "use" {
+			op.Source = "plugin"
+		}
+		op.PlanDigest = materialSQLDigest(op)
+		approved[id] = op
+		return op
+	}
+	scope := auth.XrayMaterialScope{NodeID: "node-a", InstanceID: "instance-a", InboundID: "inbound-a", UserID: "user-a", Purpose: "xray-user"}
+	generate := makeOp("generate", "generate-material-a", scope)
+	if _, err = materials.Generate(actorCtx, generate); err != auth.ErrDenied {
+		t.Fatal("real administrator got default node material grant", err)
+	}
+	permissions := []string{}
+	for _, p := range materialPermissions {
+		permissions = append(permissions, p.Key)
+	}
+	if _, err = identity.CreateResourceGrant(ctx, admin.Secret, admin.CSRF, auth.GrantRequest{PrincipalID: admin.Identity.SubjectID, ResourceType: "node", ResourceID: "node-a", Permissions: permissions}); err != nil {
+		t.Fatal(err)
+	}
+	actorCtx = actorContext(admin)
+	omitMaterialAudit = true
+	if _, err = materials.Generate(actorCtx, generate); err != auth.ErrIdentityUnavailable {
+		t.Fatal("missing complete same-Tx sink did not close", err)
+	}
+	omitMaterialAudit = false
+	meta, err := materials.Generate(actorCtx, generate)
+	if err != nil || meta.State != "ready" {
+		t.Fatal("actual central material generation failed", err)
+	}
+	userOperation := func(action, id string, rev uint64) xray.ManagedUserOperation {
+		op := xray.ManagedUserOperation{Scope: userScope, SubjectID: admin.Identity.SubjectID, OperationID: id, TaskID: "task-" + id, Source: "web", Action: action, UserID: scope.UserID, PlanDigest: strings.Repeat("b", 64), ExpectedRevision: rev, ExpiresAt: time.Now().Add(time.Minute)}
+		if action == "read" || action == "export" {
+			op.TaskID = ""
+		}
+		return op
+	}
+	approveUser := func(op xray.ManagedUserOperation, change xray.ManagedUserChange, evidence xray.ManagedUserApplication) {
+		approvedUsers[op.OperationID] = xray.ManagedUserCheck{Operation: op, Change: change, Application: evidence}
+	}
+	createUser := userOperation("create", "create-user-a", 0)
+	userChange := xray.ManagedUserChange{InboundID: scope.InboundID, DisplayName: "Local user", IdentityRef: meta.ID, CredentialRevision: meta.Revision, Enabled: true}
+	wrongUser := userOperation("create", "wrong-user-reference", 0)
+	wrongUser.UserID = "user-b"
+	approveUser(wrongUser, userChange, xray.ManagedUserApplication{})
+	if _, err := users.Change(actorCtx, wrongUser, userChange); err == nil {
+		t.Fatal("central user identity reference transplanted to another persistent user")
+	}
+	approveUser(createUser, userChange, xray.ManagedUserApplication{})
+	managed, err := users.Change(actorCtx, createUser, userChange)
+	if err != nil || managed.Application != "pending" {
+		t.Fatal("persistent user create failed", err)
+	}
+	confirmUser := userOperation("application", "confirm-user-a", managed.Revision)
+	confirmUser.TaskID, confirmUser.PlanDigest = managed.PendingTaskID, managed.PendingPlanDigest
+	userEvidence := xray.ManagedUserApplication{Result: "applied", ConfigRevision: 1} // explicit config/sole-task result fixture; NOT real Xray deployment
+	approveUser(confirmUser, xray.ManagedUserChange{}, userEvidence)
+	managed, err = users.RecordApplication(actorCtx, confirmUser, userEvidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// User metadata, central identity reference/revision, auth/grants, cipher and
+	// one-use are now REAL SQL; current applied config/plugin/profile remain fixtures.
+	request := xray.ClientExportRequest{RequestID: "actual-export-1", SubjectID: admin.Identity.SubjectID, RecipientID: admin.Identity.SubjectID, Source: "web", Format: "vless-uri", NodeID: scope.NodeID, InstanceID: scope.InstanceID, UserID: scope.UserID, ExpiresAt: time.Now().Add(time.Minute)}
+	reader := func(ctx context.Context, req xray.ClientExportRequest) (xray.ClientExportSnapshot, error) {
+		uop := userOperation("export", "read-user-"+req.RequestID, managed.Revision)
+		approveUser(uop, xray.ManagedUserChange{}, xray.ManagedUserApplication{})
+		u, err := users.Read(ctx, uop)
+		if err != nil {
+			return xray.ClientExportSnapshot{}, err
+		}
+		op := makeOp("metadata", "metadata-"+req.RequestID, scope)
+		m, err := materials.Metadata(ctx, op)
+		if err != nil {
+			return xray.ClientExportSnapshot{}, err
+		}
+		return xray.ClientExportSnapshot{NodeID: scope.NodeID, InstanceID: scope.InstanceID, InboundID: u.InboundID, UserID: u.ID, IdentityRef: u.IdentityRef, TemplateID: "vless-tls-vision", TargetVersion: xray.TestedXrayVersion, Host: "fleet.test", ServerName: "fleet.test", Label: u.DisplayName, Port: 443, ConfigRevision: u.AppliedConfigRevision, UserRevision: u.Revision, PluginRevision: 1, CredentialRevision: m.Revision, PluginEnabled: true, UserEnabled: u.Enabled && !u.Deleted && m.State == "ready", ObservedAt: time.Now()}, nil
+	}
+	admit := func(ctx context.Context, b xray.ClientExportBinding) error {
+		proof, ok := ctx.Value(materialSQLActorKey{}).(materialSQLActor)
+		if !ok || b.Request.SubjectID != proof.observation.SubjectID || b.Snapshot.IdentityRef != meta.ID {
+			return auth.ErrDenied
+		}
+		return identity.CheckObservationReadOnly(ctx, proof.secret, proof.observation)
+	}
+	var lastLoan auth.XrayMaterialOperation
+	borrow := func(ctx context.Context, b xray.ClientExportBinding, use func([]byte) error) error {
+		op := makeOp("reveal", b.Request.RequestID, scope)
+		op.PlanDigest = b.DigestSHA256
+		op.ExpiresAt = b.Request.ExpiresAt
+		approved[op.OperationID] = op
+		lastLoan = op
+		return materials.WithMaterial(ctx, op, func(_ context.Context, raw []byte) error { return use(raw) })
+	}
+	deliveries := 0
+	var clientUUID string
+	if err = xray.WithClientExport(actorCtx, request, reader, admit, borrow, func(_ context.Context, _ string, raw []byte, _ time.Time) error {
+		deliveries++
+		u, err := url.Parse(string(raw))
+		if err != nil {
+			return err
+		}
+		clientUUID = u.User.Username()
+		if len(clientUUID) != 36 || u.Hostname() != "fleet.test" || u.Query().Get("security") != "tls" {
+			return errors.New("invalid generated connection")
+		}
+		return nil
+	}); err != nil || deliveries != 1 {
+		t.Fatal("actual credential-fenced export failed", err)
+	}
+	var payload []byte
+	if err = db.QueryRow(ctx, `SELECT payload FROM cx_auth_identity WHERE singleton=1`).Scan(&payload); err != nil || bytes.Contains(payload, []byte(clientUUID)) {
+		t.Fatal("UUID plaintext in auth SQL", err)
+	}
+	var auditRaw []byte
+	if err = db.QueryRow(ctx, `SELECT payload FROM material_audit_probe ORDER BY id DESC LIMIT 1`).Scan(&auditRaw); err != nil {
+		t.Fatal(err)
+	}
+	var event auth.XrayMaterialAuditEvent
+	if json.Unmarshal(auditRaw, &event) != nil || event.Result != "delivered" || event.ReferenceID != meta.ID || event.Scope != scope || event.PlanDigest != lastLoan.PlanDigest || bytes.Contains(auditRaw, []byte(clientUUID)) {
+		t.Fatal("complete material audit binding/secret protection failed")
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db = newDB(t, dbPath, false)
+	bind()
+	if err = materials.WithMaterial(actorCtx, lastLoan, func(context.Context, []byte) error { t.Error("real SQL loan repeated after reopen"); return nil }); err != auth.ErrCredentialReplay {
+		t.Fatal("SQL claim lost", err)
+	}
+	// Fill the export buffer, then fail the complete audit Tx: browser delivery
+	// must remain zero, and the reserved SQL claim survives another restart.
+	request.RequestID = "actual-export-audit-fail"
+	failedBorrow := func(ctx context.Context, b xray.ClientExportBinding, use func([]byte) error) error {
+		op := makeOp("reveal", b.Request.RequestID, scope)
+		op.PlanDigest = b.DigestSHA256
+		op.ExpiresAt = b.Request.ExpiresAt
+		approved[op.OperationID] = op
+		lastLoan = op
+		return materials.WithMaterial(ctx, op, func(_ context.Context, raw []byte) error {
+			if err := use(raw); err != nil {
+				return err
+			}
+			failMaterialAudit = true
+			return nil
+		})
+	}
+	if err = xray.WithClientExport(actorCtx, request, reader, admit, failedBorrow, func(context.Context, string, []byte, time.Time) error { deliveries++; return nil }); err != xray.ErrClientExportUnknown || deliveries != 1 {
+		t.Fatal("secret delivered before real audit commit", err)
+	}
+	failMaterialAudit = false
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db = newDB(t, dbPath, false)
+	bind()
+	if err = materials.WithMaterial(actorCtx, lastLoan, func(context.Context, []byte) error { t.Error("unknown SQL export retried"); return nil }); err != auth.ErrCredentialReplay {
+		t.Fatal("unknown claim became retryable", err)
+	}
+	if generic, err := credentials.List(ctx, admin.Secret); err != nil || len(generic) != 0 {
+		t.Fatal("typed Xray material entered generic public credential kinds", err)
+	}
+	// Actual pinned R36 auth production source must refuse this newer payload;
+	// a prior writer must not silently drop private materials/permanent claims.
+	priorOps := func(q ds.Queryer) legacy.IdentitySQLStatements {
+		ops := statements(q)
+		return legacy.IdentitySQLStatements{Read: ops.Read, Exec: ops.Exec}
+	}
+	priorStore, err := legacy.NewSQLIdentityStore(legacy.IdentitySQLBackend{Read: priorOps(db).Read, InTx: func(ctx context.Context, fn func(legacy.IdentitySQLStatements) error) error {
+		return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error { return fn(priorOps(tx)) })
+	}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prior, err := legacy.NewIdentityService(priorStore)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var beforeOld, afterOld []byte
+	if err = db.QueryRow(ctx, `SELECT payload FROM cx_auth_identity WHERE singleton=1`).Scan(&beforeOld); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = prior.PrepareSetup(ctx); err != legacy.ErrIdentityUnavailable {
+		t.Fatal("old real writer accepted material payload instead of failing closed", err)
+	}
+	if err = db.QueryRow(ctx, `SELECT payload FROM cx_auth_identity WHERE singleton=1`).Scan(&afterOld); err != nil || !bytes.Equal(beforeOld, afterOld) {
+		t.Fatal("old writer erased material/fences", err)
+	}
+	// Real persistent rename preserves attribution; a failed same-Tx user audit
+	// changes neither the metadata nor either audit stream.
+	rename := userOperation("rename", "rename-user-a", managed.Revision)
+	renameChange := xray.ManagedUserChange{DisplayName: "Renamed user"}
+	approveUser(rename, renameChange, xray.ManagedUserApplication{})
+	var beforeUser, afterUser []byte
+	var beforeAudits, afterAudits int
+	if err = db.QueryRow(ctx, `SELECT payload FROM managed_user_probe WHERE scope=?`, materialSQLDigest(userScope)).Scan(&beforeUser); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(beforeUser, []byte(clientUUID)) {
+		t.Fatal("persistent user metadata contains plaintext UUID")
+	}
+	if err = db.QueryRow(ctx, `SELECT count(*) FROM managed_user_audit_probe`).Scan(&beforeAudits); err != nil {
+		t.Fatal(err)
+	}
+	failUserAudit = true
+	if got, err := users.Change(actorCtx, rename, renameChange); err == nil || got.ID != "" {
+		t.Fatal("failed user audit reported success", err)
+	}
+	failUserAudit = false
+	if err = db.QueryRow(ctx, `SELECT payload FROM managed_user_probe WHERE scope=?`, materialSQLDigest(userScope)).Scan(&afterUser); err != nil || !bytes.Equal(beforeUser, afterUser) {
+		t.Fatal("user write survived rolled-back audit", err)
+	}
+	if err = db.QueryRow(ctx, `SELECT count(*) FROM managed_user_audit_probe`).Scan(&afterAudits); err != nil || afterAudits != beforeAudits {
+		t.Fatal("user audit survived failed transaction", err)
+	}
+	renamed, err := users.Change(actorCtx, rename, renameChange)
+	if err != nil || renamed.StatsEmail != managed.StatsEmail || renamed.IdentityRef != managed.IdentityRef || renamed.Application != "pending" {
+		t.Fatal("real rename lost identity/attribution", err)
+	}
+	managed = renamed
+	confirmRename := userOperation("application", "confirm-rename-user-a", managed.Revision)
+	confirmRename.TaskID, confirmRename.PlanDigest = managed.PendingTaskID, managed.PendingPlanDigest
+	approveUser(confirmRename, xray.ManagedUserChange{}, userEvidence)
+	managed, err = users.RecordApplication(actorCtx, confirmRename, userEvidence)
+	if err != nil {
+		t.Fatal(err)
+	}
+	request.RequestID = "renamed-user-export"
+	if err = xray.WithClientExport(actorCtx, request, reader, admit, borrow, func(_ context.Context, _ string, raw []byte, _ time.Time) error {
+		u, err := url.Parse(string(raw))
+		if err != nil {
+			return err
+		}
+		if u.User.Username() != clientUUID || u.Fragment != "Renamed user" {
+			return errors.New("rename changed identity or lost label")
+		}
+		deliveries++
+		return nil
+	}); err != nil || deliveries != 2 {
+		t.Fatal("real renamed user export failed", err)
+	}
+	disable := userOperation("set-enabled", "disable-user-a", managed.Revision)
+	approveUser(disable, xray.ManagedUserChange{}, xray.ManagedUserApplication{})
+	managed, err = users.Change(actorCtx, disable, xray.ManagedUserChange{})
+	if err != nil || managed.Enabled || managed.Application != "pending" {
+		t.Fatal("real disable was falsely acknowledged applied", err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db = newDB(t, dbPath, false)
+	bind()
+	request.RequestID = "disabled-user-export"
+	if err = xray.WithClientExport(actorCtx, request, reader, admit, borrow, func(context.Context, string, []byte, time.Time) error { t.Error("disabled user delivered"); return nil }); err != xray.ErrClientExport {
+		t.Fatal("disabled/pending state was revived by reopen", err)
+	}
+	listOp := userOperation("list", "list-persistent-users", 0)
+	listOp.TaskID, listOp.UserID = "", ""
+	pageRequest := xray.ManagedUserPageRequest{Limit: 1}
+	approvedUsers[listOp.OperationID] = xray.ManagedUserCheck{Operation: listOp, Page: pageRequest}
+	page, err := users.List(actorCtx, listOp, pageRequest)
+	if err != nil || len(page.Users) != 1 || page.Users[0].Enabled || page.Users[0].Application != "pending" || page.Users[0].DisplayName != "Renamed user" || page.Users[0].StatsEmail != managed.StatsEmail {
+		t.Fatal("actual SQL metadata page lost current user state", err)
+	}
+	// A REAL session revoked after entry but before user BEGIN must be rejected
+	// by the transaction-bound reader; the pending disable remains unchanged.
+	staleRename := userOperation("rename", "rename-after-revoke", managed.Revision)
+	approveUser(staleRename, xray.ManagedUserChange{DisplayName: "Revoked"}, xray.ManagedUserApplication{})
+	userStore.beforeBegin = func() error { return identity.RevokeSession(ctx, admin.Secret, admin.CSRF, admin.Identity.SessionID) }
+	if _, err = users.Change(actorCtx, staleRename, xray.ManagedUserChange{DisplayName: "Revoked"}); err == nil {
+		t.Fatal("revoked real session mutated user after entry")
+	}
+	admin = login()
+	actorCtx = actorContext(admin)
+	// Real authenticated session revocation between entry and BEGIN is observed
+	// by the SAME Tx reader and cannot allocate a second user identity.
+	otherScope := scope
+	otherScope.UserID = "user-b"
+	other := makeOp("generate", "generate-after-revoke", otherScope)
+	beforeTransaction = func() error { return identity.RevokeSession(ctx, admin.Secret, admin.CSRF, admin.Identity.SessionID) }
+	if _, err = materials.Generate(actorCtx, other); err != auth.ErrDenied {
+		t.Fatal("revoked session generated material after entry", err)
+	}
+	if _, err = materials.Generate(ctx, other); err != auth.ErrDenied {
+		t.Fatal("known subject/ref acted as source credential", err)
+	}
+}

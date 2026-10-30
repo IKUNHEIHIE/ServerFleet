@@ -1,0 +1,16 @@
+[
+  {"op":"test","path":"/components/securitySchemes/cookieSession/name","value":"sf_session"},
+  {"op":"test","path":"/components/securitySchemes/bearerAuth/bearerFormat","value":"JWT"},
+  {"op":"test","path":"/paths/~1api~1v1~1nodes/get/operationId","value":"listNodesForTransfer"},
+  {"op":"test","path":"/paths/~1api~1v1~1auth~1bootstrap/post/responses/200/content/application~1json/schema/$ref","value":"#/components/schemas/LoginResult"},
+  {"op":"add","path":"/x-serverfleet-status","value":"PROPOSED-NOT-FROZEN-CX02-AUTH-SESSION"},
+  {"op":"replace","path":"/components/securitySchemes/cookieSession/name","value":"__Host-sf_session"},
+  {"op":"replace","path":"/components/securitySchemes/bearerAuth/bearerFormat","value":"opaque-restricted-token"},
+  {"op":"add","path":"/paths/~1api~1v1~1nodes/get/security","value":[{"cookieSession":[]},{"bearerAuth":[]}]},
+  {"op":"remove","path":"/paths/~1api~1v1~1auth~1bootstrap/post/responses/200"},
+  {"op":"add","path":"/paths/~1api~1v1~1auth~1bootstrap/post/responses/204","value":{"description":"初始化已提交；通过普通登录取得会话；Cache-Control: no-store"}},
+  {"op":"copy","from":"/components/schemas/Identity","path":"/components/schemas/CurrentIdentityResult"},
+  {"op":"add","path":"/components/schemas/CurrentIdentityResult/properties/csrfToken","value":{"type":"string","description":"当前Cookie会话绑定的CSRF值；仅同源受保护交付；禁止日志/缓存","minLength":43,"maxLength":43}},
+  {"op":"add","path":"/components/schemas/CurrentIdentityResult/required/-","value":"csrfToken"},
+  {"op":"replace","path":"/paths/~1api~1v1~1auth~1me/get/responses/200/content/application~1json/schema/$ref","value":"#/components/schemas/CurrentIdentityResult"}
+]
