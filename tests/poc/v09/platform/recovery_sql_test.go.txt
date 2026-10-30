@@ -1,0 +1,105 @@
+package persistencepoc
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/recovery"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func TestActualSQLiteOldSnapshotCannotClearExternalQuarantine(t *testing.T) {
+	ctx := context.Background()
+	dir := t.TempDir()
+	db := newDB(t, filepath.Join(dir, "current.db"), true)
+	defer db.Close()
+	// Create the real DS ledger with an empty isolated registry. Auth tables
+	// above remain unnumbered test setup, not an adopted public migration.
+	migrator, err := ds.NewMigrator()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrator.Apply(ctx, db); err != nil {
+		t.Fatal(err)
+	}
+	s, err := auth.NewIdentityService(identityStore(t, db))
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup, err := s.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = s.Bootstrap(ctx, setup, "admin", "long-synthetic-password"); err != nil {
+		t.Fatal(err)
+	}
+	login, err := s.Login(ctx, "admin", "long-synthetic-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	snapshot := filepath.Join(dir, "old-snapshot.db")
+	if err = db.BackupTo(ctx, snapshot); err != nil {
+		t.Fatal(err)
+	}
+	if err = s.RevokeSession(ctx, login.Secret, login.CSRF, login.Identity.SessionID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = s.Authenticate(ctx, login.Secret, "", false); err != auth.ErrCredential {
+		t.Fatal("live database retained revoked session", err)
+	}
+	digest, err := ds.ChecksumFile(snapshot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	control := filepath.Join(dir, "external-restore-control")
+	if err = os.Mkdir(control, 0700); err != nil {
+		t.Fatal(err)
+	}
+	intent := recovery.RestoreIntent{SnapshotSHA256: digest, ControllerID: "new-local-target", RootSPKISHA256: strings.Repeat("a", 64), MinTrustGeneration: 2, MinRevocationSequence: 8}
+	latch, err := recovery.BeginQuarantine(ctx, control, intent, recovery.QuarantineVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	hold := latch.Hold()
+	if err = latch.Check(ctx); err != recovery.ErrQuarantined {
+		t.Fatal("pre-restore scheduling enabled", err)
+	}
+	restoredPath := filepath.Join(dir, "new-target.db")
+	if err = ds.RestoreFile(ctx, snapshot, restoredPath); err != nil {
+		t.Fatal(err)
+	}
+	restored := newDB(t, restoredPath, false)
+	defer restored.Close()
+	oldService, err := auth.NewIdentityService(identityStore(t, restored))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The OLD database really contains the pre-revocation session. This direct
+	// domain call deliberately demonstrates why restored state is not authority.
+	// Production must gate access before opening management/Agent/task routes.
+	if _, err = oldService.Authenticate(ctx, login.Secret, "", false); err != nil {
+		t.Fatal("fixture was not a real old database snapshot", err)
+	}
+	if err = latch.Check(ctx); err != recovery.ErrQuarantined {
+		t.Fatal("old database cleared external hold", err)
+	}
+	if err = latch.Release(ctx); err != recovery.ErrQuarantined {
+		t.Fatal("missing offline evidence released target", err)
+	}
+	_ = latch.Close()
+	latch, err = recovery.OpenQuarantine(control, hold, recovery.QuarantineVerifier{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer latch.Close()
+	if err = latch.Check(ctx); err != recovery.ErrQuarantined {
+		t.Fatal("restart cleared hold", err)
+	}
+	if err = ds.RestoreFile(ctx, snapshot, restoredPath); err == nil {
+		t.Fatal("restore overwrote existing database")
+	}
+}

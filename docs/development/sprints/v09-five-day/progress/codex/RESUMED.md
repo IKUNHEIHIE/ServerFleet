@@ -126,6 +126,16 @@ transport新增CertificateIssuer、EnrollmentService、SQLEnrollmentStore与测�
 
 ## R13 插件私有工件与持久生命周期
 
+提交 `2ce83a8a8ef5d4df2192b835cdf15cec8eb5dc73`。
+
 新增PackageVault/LifecycleManager/SQLLifecycleStore：精确签名源/工件验证、默认禁用、显式启动停止、严格新版本与能力重新consent、卸载保留节点资源、单调revision/taskId防重放、未知运行态不假装卸载。唯一runtime实例ID防旧实例借新租约/晚到结果覆盖；禁用先封Host再停实例。没有正式运行时/源/密钥就不启用、不构造假官方包，不增加根依赖。详见PLUGIN-LIFECYCLE.md。
 
 实际测试：真实SQLite/私有文件/DS审计事务组合十一项PASS 6.574s，含安装+审计故障回滚、重启保留disabled/防重放、nil runtime不能enable、卸载不删除工件。runtime正向和并发为明确double；没有假记实际WASM/Xray业务执行。首轮staticcheck提示等价struct可直接类型转换，修正后PASS。补入晚启动实例隔离/严格升级/新增权限consent测试后`go test ./internal/plugins ./tests/architecture -count=1` PASS 2.290s/1.926s，staticcheck PASS。继续恢复/入口组合及仍可独立实现项。
+
+## R14 数据库外持久恢复隔离
+
+新增recovery.QuarantineLatch及RECOVERY-QUARANTINE.md：Begin先独立落盘、绑定外部expected hold/快照/新主控/Root/信任与撤销底线；记录丢失/半写不当新安装，解除后不复用恢复回合。Release只有可信程序回调完成实际离线核验/对账/审计后才能写不可覆盖的解除记录；每次Check仍查当前权威/旧主控隔离，未注入verifier保持quarantine，无HTTP claimed-fenced放行。Linux文件/目录Sync；Windows证据不等于断电持久。
+
+`go test ./internal/recovery -count=1 -v`首轮PASS 2.421s，staticcheck PASS；补入已解除目录不能再次Begin。固定锁实际SQLite十二项PASS 14.646s，包含真实BackupTo→撤销Cookie→RestoreFile到新文件：旧库确含撤销前Cookie，但数据库外hold及重新打开的闸均拒绝访问/解除，已有目标拒绝覆写。真实离线材料/旧主控物理隔离/会话epoch与任务对账事务仍BLOCKED，单元正向verifier明确double。继续包内可独立项。
+
+全量检查正在运行。npm ci PASS（127包/50s），首次tools:install因公共proxy.golang.org IPv6连接超时FAIL；GOPROXY=off复验因deprecation元数据缺失FAIL。随后仅本命令环境切换公开goproxy.cn并保留Go校验及固定版本，四工具安装PASS，未改项目配置/锁。具体日志在自己reports/_review/v09-platform/resumed-*，最终check结果另记，不能把启动命令视为已通过。

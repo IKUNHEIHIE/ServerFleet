@@ -1,30 +1,24 @@
 # V09-5D-CX / codex-02
 
-**ACTIVE：用户要求继续完成，已恢复实施。下表与“停止判断”为b61ad15时历史检查点，不能作为当前已无独立工作的证明；该判断已撤回。当前新增实现与实际验证持续记录在RESUMED.md。**
+**ACTIVE，完整v0.9尚未完成。** 用户要求持续完成CX-01—08；先前b61ad15“无独立工作”的停止判断已撤回。这里是当前状态，逐增量SHA/实际验证/历史失败见[RESUMED.md](RESUMED.md)；早期HANDOFF/EVIDENCE/COMMITS为历史快照，不能覆盖这里的新实现或当作最新全量检查。
 
-基线 `8a7dd4707d2d7e142e137d098296788d2c80eddd`；审查 codex-review-01 + 安全/契约/模块 owner。2026-10-30，Asia/Shanghai。
+基线/main `8a7dd4707d2d7e142e137d098296788d2c80eddd`；分支feature/v09-platform-cx02；实际目录 `D:\admin\desktop\codex\myproject\ks\.worktrees\feature--v09-platform-cx02`。用户消息中的外置ks.worktrees目录不存在，实际目录与任务单/Git一致。审查codex-review-01+安全/契约/owner。2026-10-30，Asia/Shanghai。
 
-实际目录为任务单/Git 已登记的 `ks/.worktrees/feature--v09-platform-cx02`；用户消息中的同名外置目录不存在。没有移动工作目录、切换他人分支或修改 main。
-
-| 子项 | 已提交的实现/证据 | 未完成及当前阻塞 |
+| 子项 | 当前实现与可复验证据 | 尚未交付 / 具体依赖 |
 |---|---|---|
-| CX-01 | 2fc8dab首接口检查点；fecc456独立认证JSON Patch和2项兼容/陈旧输入测试；精确S04依赖patch | 候选待总控接收；未改原始API/Proto/gen/配置/锁，不冻结G2 |
-| CX-02 | 8ad55cc认证/会话组件；7303301私有AES-GCM组件；0ce9268跨主体/执行负向加固 | BLOCKED：S01迁移/新安全决策、DS事务/审计出箱/身份与授权仓储未接收。无真实登录/用户角色管理/MFA、受限Bearer、凭据CRUD/服务内使用接线 |
-| CX-03 | 96b0568 TLS1.3/mTLS当前证书映射/吊销组件；7c0fccd真实本机WSS/二进制Protobuf局部实验 | BLOCKED：生产WSS依赖/注册签发/重装状态与仓储回调/完整PKI适用决策未接收；无安装器、轮换、真实Agent接入 |
-| CX-04 | 96b0568+0ce9268 Agent私有执行器、先落盘去重、局部文件副作用/重启/UNKNOWN/并发/期限/记录上限测试 | BLOCKED：S03完整受控任务参数/审批消费/调度/审计/取消与事件端口；root/Shell/插件能力无安全准入并明确拒绝；无真实Linux执行链 |
-| CX-05 | fb0245a AI资源/审批策略、工作流计划组件；7c0fccd Eino工具门禁集成模拟实验 | BLOCKED：持久scope/审批消费/S03任务/模型与BYOK秘密/通知来源/SSE/调度接线。无真实模型；Sonic在Go1.27回退兼容风险；Eino未选生产框架 |
-| CX-06 | 52ea2b9签名/来源/声明UI/启用修订检查及可选Xray计数段组件；7c0fccd WASM内存/取消/无Host局部实验 | BLOCKED：Host ABI/生命周期与隔离准入、持久插件状态/S03受控能力、Xray目标版本/受控预检/用户与导出API/实时采集器；无两模板发布/安装/升级卸载/完整Xray，POC-03/04缺Linux双架构 |
-| CX-07 | 7303301更新签名/哈希/组件平台/序列校验、恢复隔离/撤销并集/在途UNKNOWN计划 | BLOCKED：UPDATE/PKI新决策与离线权威材料/旧主控隔离、DS快照恢复事务、S03执行端口；无真实安装/health/回退/备份解密/灾备演练 |
-| CX-08 | 7c0fccd可复现Linux双架构Controller/Agent交叉编译脚本、构建/接线顺序与边界说明 | BLOCKED：尚无本包新端口或DS模块接收SHA；不组合未接收模块，两个入口仍骨架；无可安装完整v0.9发行物 |
+| CX-01 | 首接口检查点2fc8dab；独立认证RFC6902候选/兼容测试；S01—S04及各模块接线说明持续补充 | 认证/事务/tasks/Proto/WSS共享差异尚无总控接收SHA，未改受保护API/Proto/gen/根锁/迁移序列，不冻结G2 |
+| CX-02 | 持久初始化/口令/限速/Cookie/CSRF/Origin/epoch/Tgate；未挂载真实HTTP handler含用户/角色/grants；同Tx审计；凭据密文/暂存/服务使用永久防重放；只读受限opaque Bearer；持久审批与完整任务消费绑定。实际SQLite/HTTPS、重启撤权/回滚测试 | 正式迁移/安全决策/唯一任务实际消费尚未接收；MFA政策与实现未完成（要求MFA即拒绝启用）；凭据轮换/撤销任务与页面、scope/approval实际接线未完成 |
+| CX-03 | TLS1.3+mTLS当前指纹/吊销；ControllerLinks状态机；一次性接入token/CSR审批/签发/重装撤销持久化。真实本机WSS/Proto、证书真实TLS和SQLite重启证据 | WSS生产依赖、PKI profile/轮换/信任包/Node同Tx接线未接收；无完整安装器与实际Agent运行profile，Linux实机未验收 |
+| CX-04 | Agent私有执行器，副作用前落盘去重、UNKNOWN不重跑、并发/TTL/取消/有界日志；审批消费外层rollback与重放负向 | DS Command缺完整Offer字段、ApprovalConsumer缺source/AI session等完整绑定、SubmitTx未提供；root/Shell/插件执行准入未获批，实际Linux统一链未交付 |
+| CX-05 | 持久AI零资源/逐动作grant/组快照/三级模式/过期撤权；工作流可信触发/冻结顺序任务/停用再查/UNKNOWN暂停；真实SQLite+当前Cookie+审计回滚。Eino隔离PoC | 消息/SSE/BYOK/实际模型、正式HTTP与页面、统一任务/审批与通知接线尚未完成；Eino未定生产框架 |
+| CX-06 | 签名源/清单/声明UI/私有工件/持久生命周期；默认disabled、严格升级consent、独立实例ID/晚到启动隔离/禁用先封Host/未知态不卸载。WASM隔离PoC。可选Xray两模板在固定26.6.1真实-test及本机进程启动；流量段纯对账 | WASM/Host准入与正式来源/密钥未接收；Xray Linux双架构安装/接管/发布/自定义JSON/配置历史/用户导出/实际Stats采集/持久业务未完成。核心未编入可选Xray |
+| CX-07 | 更新签名/序列/平台/哈希、私有暂存同FD复验及一次借用；恢复连续Root/撤销并集/在途UNKNOWN计划；新增数据库外永久hold/当前verifier闸。真实SQLite旧快照仍不能清除外部隔离 | UPDATE/PKI新决策/离线解密材料/旧主控隔离/实际恢复事务未接收；安装/health/失败回退与完整灾备尚未交付。无默认放行verifier |
+| CX-08 | Controller/Agent骨架及四个Linux交叉编译脚本，构建/组合/恢复接缝说明 | main尚无新模块接收SHA，未在入口组装未接收业务；正式中间件/路由组合、Agent安装与完整发行物尚未完成 |
 
-完整 AC-01—24 未验收，G2 未冻结。实现/单元测试与真实 E2E 分开记录。没有使用生产、VPS、云、真实凭据或启动其他 Agent。
+最新完成检查点：插件`2ce83a8a8ef5d4df2192b835cdf15cec8eb5dc73`；随后R14恢复隔离增量见RESUMED与Git。每次增量只提交自己的目录，继续下一项。当前进行本轮全量检查及其他独立功能，未停止等待。
 
-## 交接状态和继续条件
+实际SQLite隔离组合固定DS源`bb8954988fe7b2f832edf291803529d7745e4f0a`，单独module/sum；它不是共享接收SHA。当前十二项PASS，含真实快照还原、重启、事务审计回滚及缺接口拒绝。模拟Gate/Runtime/Task明确记录，不等于真实节点/模型/物理隔离验收。上轮全套root检查在b61ad15通过；新一轮npm ci已PASS，tools:install公共源超时后固定版本镜像重试PASS，check/security结果等待完成，不能引用旧绿覆盖新代码。
 
-代码/隔离实验检查点 `7c0fccda0d3e3000a871a2bcbe570f29ca39e1f5`（后续证据记录提交见COMMITS.json及交接给出的最终HEAD）。逐提交SHA/文件/实际命令/历史FAIL及修复见HANDOFF.md、COMMITS.json；机器可读摘要见EVIDENCE.json。
+总控已确认98f6d94d仅依赖边登记且已在基线；RecordTx/扩展Request/DS新SQL接缝不是共同接口。四份PRIV/WC/PKI-OPS/UPDATE完整正式原文缺失，只提交独立PROPOSED决策，未补写历史。缺项只暂停具体接线，继续可独立实现及本地负向验证。没有访问生产/VPS/云/真实凭据、远程推送、合并main或启动其他Agent。
 
-已连续推进包内不依赖共享接线的组件、负向测试、WSS/WASM/Eino隔离实验与编译；当前剩余的可交付功能均需至少一个未接收的公共端口、来源/安全新决策或真实环境准入。现停在这些具体依赖，**不是完整v0.9完成，也不是仅完成CX-01后等待**。再添加未审生产端点、内存数据库或伪造执行/安装/恢复成功会违反任务约束；没有这样替代。
-
-总控已确认98f6d94d仅依赖方向登记且已在起始基线，不重复合并；S01—S04仍没有接收SHA，RecordTx和扩展Request都不存在于共同接口。四份完整安全原文当前不可取得，本包已提交独立新决策候选供审查，不把缺失解释为条款失效。下一步按BUILD-RUN-RECOVERY.md接收接缝/安全候选与真实隔离条件后继续对应子项；无自动云资源/调度/远程推送或main合并。
-
-最终验证：npm ci、tools:install、npm run check全部五套、check:security、平台模块测试、独立契约2项、WSS/WASM/Eino局部实验及实验依赖漏洞检查、四个Linux交叉编译均PASS。真实环境/完整AC与POC未通过，保持BLOCKED/UNTESTED。
+AC-01—24与完整PoC仍未验收。Windows局部实验/交叉编译不能替代Linux amd64/arm64、1核1GB、外部供应商或真实灾备证据。最终停止必须给最新HEAD、对应检查及未完成清单；当前不声明完整v0.9交付。
