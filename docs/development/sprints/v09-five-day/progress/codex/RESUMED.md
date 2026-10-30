@@ -218,6 +218,16 @@ R17—R19全量复验：npm run check五套PASS（2026-10-30T07:23:09Z），chec
 
 ## R24 AI消息HTTP提交与有界分页
 
+提交 `d61e563a3fc85156903c1d0ea4923158d77e4752`。
+
 新增未挂载MessagesHTTP，复用既有GET/POST消息路径与AIMessage/PageOfAIMessage；强制实际Authenticate/CommitGate，无默认身份/模型/任务执行器。严格有界JSON与幂等，当前修订/owner/资源脱敏复核，按条目与字节有界分页及会话/修订游标，提交后撤权扣留响应而不重复消息。精确候选行为及接线见AI-MESSAGES-HTTP.md。
 
 AI/updates/architecture复验PASS 2.929s/2.757s/1.484s，staticcheck PASS；固定DS源实际SQLite十二项PASS 8.893s，AI项目1.32s，含真实HTTPS Cookie+CSRF、数据库提交故障503、幂等POST、分页/SSE、撤销Cookie后401。Provider调用次数未增加，模型/Profile/Filter和部分动作权限桥仍明确fixture，未称实际BYOK/生产内容过滤/页面或完整v0.9。全量check/security正在覆盖R20—24，不用R19旧绿覆盖。
+
+R20—24全量check五套PASS（2026-10-30T08:15:41Z，Web179项），check:security PASS（08:14:43Z，npm audit0/govulncheck无漏洞）。固定依赖未变，沿用本轮npm ci/tools:install已PASS证据；外部Xray两版本FAIL单列，不用源码绿覆盖。
+
+## R25 BYOK原生文本适配及实际本机TLS
+
+新增可选OpenAITextProvider/严格有界Response解析、完整生成计划摘要与真实CredentialService借用。固定HTTPS、无默认模型/key/代理/跳转/SDK重试，tools关闭，store=false，当前凭据及审计后才交付最终文本；模型文本不执行操作。缺Resolver/当前配置或准入关闭。具体接线/隐私局限AI-BYOK-TEXT.md，不宣称真实外部模型已验证。
+
+AI/architecture PASS 8.132s/1.410s，修正HTTP Redirect静态常量后staticcheck PASS。实际本机TLS+合成Key+auth真实加密/使用fence与Conversation串联通过；错误/UNKNOWN重复请求、跳转、请求中真实撤销、密钥回显等负向通过。模型/来源策略及聚合存储为明确double。首次取消fixture只等未读请求的server ctx，60秒测试超时FAIL，改为有界300ms等待后通过；未放宽生产取消/重试策略。R25全量另验，继续包内独立项。
