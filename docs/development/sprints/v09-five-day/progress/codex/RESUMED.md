@@ -190,4 +190,12 @@ R17—R19全量复验：npm run check五套PASS（2026-10-30T07:23:09Z），chec
 
 ## R20 自定义Xray出站覆盖目标的API隔离补严
 
+提交 `bfb8ab35a0b0cbf2751658953b21eba3a8101c25`；实际目标-test/负向复验PASS 3.424s，模块/architecture PASS 2.492s/2.007s，staticcheck PASS。
+
 复核固定上游Freedom源码发现，routing后的redirect/出站端点可改写实际目的地，仅检查原始端口/路由tag不足。增加出站endpoint/URL/structured address+port到管理端口的拒绝，含DNS别名与非规范前导零；redirect/finalRules追加明确风险码。只修自己候选审查，不接生产或修改原始需求/契约。根模块/实际版本测试随后记录；首次run-xray复验PASS 3.343s，新增危险配置“实际-test语法通过、安全审查拒绝”回归，不启动该配置。
+
+## R21 Stats精确读取、真实TLS/Vision计数及外部包安全FAIL
+
+新增StatsBinding/DecodeStatsJSON、精确int64/缺失不可用/实例不双计/有界及重放负向；真实固定Xray客户端/服务端TLS+Vision请求及Stats非复位读取、实际进程重启区段测试，无allowInsecure。首轮实际目标测试PASS 5.886s，复验PASS 6.000s（流量测试1.52s）；user上/下行45208/28829，inbound和instance各46773/28947。模块/architecture PASS 4.855s/1.449s，staticcheck PASS。补拒绝masterKeyLog/目录能力；精确局限XRAY-STATS-WIRING.md，未用TaskOutput或float64暗藏遥测。
+
+随后**外部Xray26.6.1二进制安全扫描FAIL，exit3/55项符号级漏洞**，buildGo1.26.3；根/隔离源码扫描PASS不覆盖它。新增runner先扫再执行，该包不得发布，历史功能证据不改写为生产验收。详见XRAY-ARTIFACT-SECURITY.md。当前只读核对新正式发布26.10.29，继续独立静态扫描/兼容验证，不访问实际节点、不擅自升级根依赖/冻结运行profile。

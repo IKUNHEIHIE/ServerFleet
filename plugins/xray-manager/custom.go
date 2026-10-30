@@ -290,7 +290,7 @@ func reviewCustomTree(v any, policy CustomPolicy, warnings map[string]bool) erro
 	case map[string]any:
 		for key, child := range x {
 			value, isString := child.(string)
-			if key == "exec" || key == "command" || key == "script" || key == "include" || key == "confdir" {
+			if key == "exec" || key == "command" || key == "script" || key == "include" || key == "confdir" || key == "masterkeylog" || key == "dir" {
 				return ErrConfigurationRejected
 			}
 			if strings.Contains(key, "file") || key == "access" || key == "error" {

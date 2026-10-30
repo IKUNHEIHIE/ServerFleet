@@ -52,7 +52,7 @@ type ConfigAdmission func(context.Context, TemplateSpec, PreflightFacts) error
 type MaterialResolver func(context.Context, string, string, string, func([]byte) error) error
 
 func safeConfigID(id string) bool {
-	return id != "" && len(id) <= 128 && !strings.ContainsAny(id, "/\\*?[] \t\r\n\x00")
+	return id != "" && len(id) <= 128 && !strings.Contains(id, ">>>") && !strings.ContainsAny(id, "/\\*?[] \t\r\n\x00")
 }
 func validDNS(name string) bool {
 	if name == "" || len(name) > 253 || strings.ToLower(name) != name || strings.ContainsAny(name, " /\\:@*?[]\r\n\x00") {

@@ -117,7 +117,7 @@ func TestCustomReviewRejectsAmbiguityBoundsAndFiles(t *testing.T) {
 			t.Fatal("ambiguous/unbounded JSON accepted", err)
 		}
 	}
-	for _, field := range []string{`"certificateFile":"/etc/shadow"`, `"keyFile":"/var/lib/serverfleet/xray/other/tls/key.pem"`, `"keyFile":"none"`, `"access":"/etc/cron.d/xray"`, `"include":"another-config.json"`} {
+	for _, field := range []string{`"certificateFile":"/etc/shadow"`, `"keyFile":"/var/lib/serverfleet/xray/other/tls/key.pem"`, `"keyFile":"none"`, `"access":"/etc/cron.d/xray"`, `"include":"another-config.json"`, `"masterKeyLog":"/tmp/session.keys"`, `"masquerade":{"dir":"/etc"}`} {
 		raw := bytes.Replace(basicCustom(), []byte(`"loglevel":"none"`), []byte(`"loglevel":"none",`+field), 1)
 		if _, err := ReviewCustomJSON(raw, customPolicy()); err != ErrConfigurationRejected {
 			t.Fatal("ungranted file/directive accepted", err)
