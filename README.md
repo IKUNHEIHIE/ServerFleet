@@ -40,6 +40,8 @@ HTTP返修4fbdcf5与Web返修39b2b7c现已接收为PROPOSED，原四个P2关闭�
 
 2026-10-30负责人要求五天完成**完整v0.9**，现切换为[三位复合实施包](docs/development/sprints/v09-five-day/PLAN.md)：Codex平台安全/Agent、DeepSeek数据业务、Gemini完整管理台与浏览器验收，各包连续多子项，检查点增量集成；W07并入GM，不再单项等待。新本地实施授权不代表已有实现、G2冻结、生产/VPS/云或远程准入；24项真实验收均须证据，五日全量目标风险高，未完成项如实保留。最新授权和唯一会话/目录以任务板及本计划为准。
 
+2026-10-31 **Wave 1 三线复合实施已通过独立审查与组合验证并合入 `main`**（`V09-5D-CX` `aef07e5`、`V09-5D-DS` `07f4154`、`V09-5D-GM` `86e0cf5`，总控集成验证 `5d103a0`：Go 546 顶层 + 1,116 子测试 PASS、Web 282 单测 PASS、安全扫描 0 漏洞），详见[Wave 1 审查报告](docs/development/reviews/V09-WAVE1-REVIEW.md)。现推进 **Wave 2**（`apps/controller` 组合接线与 Web/API 端到端对齐）。G2 及 D01–D07/P1-C10 仍 OPEN。
+
 ## 快速验证
 
 环境固定为 Go `1.27.3`、Node `24.22.1`，npm 11，详见 [工具说明](docs/development/TOOLCHAIN.md)。

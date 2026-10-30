@@ -1,13 +1,14 @@
 # 任务登记板
 
-更新：2026-10-30。负责人要求五天完成并明确验收“完整 v0.9”，本轮切换为三个复合实施任务，范围见`sprints/v09-five-day/PLAN.md`和24项AC登记表；不再受旧三设计“仅文档”或W07单项待批限制。Codex/DeepSeek/Gemini使用全新02会话和独立目录，连续做包内子项、检查点增量交审；不自动启动/代发消息。既有三设计和四P2收口状态保留；真实身份/HTTP/Agent尚未接通，G2/D01–D07/P1-C10仍OPEN，派发不等于安全/运行时冻结或完整功能已验收。
+更新：2026-10-31。Wave 1 三线复合实施（`V09-5D-CX` `aef07e5`、`V09-5D-DS` `07f4154`、`V09-5D-GM` `86e0cf5`）已通过总控独立审查、组合与安全验证并合入 `main`（详见 `reviews/V09-WAVE1-REVIEW.md`），现进入 Wave 2（`apps/controller` 组合接线与 Web/API 端到端对齐）。G2/D01–D07/P1-C10 仍 OPEN。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-WAVE1-REVIEW | 三线独立审查/共享协调/组合及安全检查通过（Go 546+1116、Web 282、0漏洞），合入main并推进Wave 2 | agy-review-01 | integration/v09-wave1-review / `.worktrees/integration--v09-wave1-review` | 三线提交审查、go.mod与tests/browser/v09及g2r03 provenance协调、审查证据/任务板/README | 项目负责人；起始8a7dd47；代码5d103a0；见reviews/V09-WAVE1-REVIEW.md |
 | V09-5D-DISPATCH | 全量派发包/24AC覆盖/13新域依赖及14方向检查/组合安全检查通过，三目录准备完成；交接后停止 | codex-review-01 | integration/v09-five-day-dispatch / `.worktrees/integration--v09-five-day-dispatch` | 全量责任/每日里程碑、三复合任务及目录、依赖协调/架构负向、状态与证据；不实现业务或替代安全冻结 | 项目负责人；起始6052f59；结果见reviews/V09-FIVE-DAY-DISPATCH.md |
-| V09-5D-CX | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | codex-02 | feature/v09-platform-cx02 / `.worktrees/feature--v09-platform-cx02` | CX-01—08：auth/transport/plugins/Controller+Agent及AI/工作流/更新恢复新域、可选Xray、专用测试/进度；具体CODEX.md；共享文件交精确patch总控协调 | codex-review-01+安全/契约/owner；基线为本包最终派发main SHA，交接明示；不复用旧设计目录 |
-| V09-5D-DS | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | deepseek-02 | feature/v09-services-ds02 / `.worktrees/feature--v09-services-ds02` | DS-01—09：storage/nodes/tasks/audit及文件/监控通知/配额/DNS/证书/网关/服务组/发布新域、专用测试/进度；具体DEEPSEEK.md；迁移/依赖单写 | codex-review-01+安全/契约/owner；基线为本包最终派发main SHA，交接明示 |
-| V09-5D-GM | READY：完整v0.9复合实施授权，待负责人粘贴任务启动 | gemini-02 | feature/v09-console-gm02 / `.worktrees/feature--v09-console-gm02` | GM-01—09：正式Web全部功能/真实API适配/浏览器验收；W07并入GM-03；具体GEMINI.md；不抢改npm锁/配置/后端 | codex-review-01+UI/安全/契约；基线为本包最终派发main SHA，交接明示 |
+| V09-5D-CX | WAVE 1 ACCEPTED：CX-01—08 全部38个提交（aef07e5）通过独立与组合审查合入main | codex-02 / codex-03 | feature/v09-platform-cx02 / `.worktrees/feature--v09-platform-cx02` | CX-01—08：auth/transport/plugins/Controller+Agent及AI/工作流/更新恢复新域、可选Xray、专用测试/进度 | agy-review-01；起始8a7dd47，交付aef07e5 |
+| V09-5D-DS | WAVE 1 ACCEPTED：DS-01—09 全部16个提交（07f4154）通过独立与组合审查合入main | deepseek-02 | feature/v09-services-ds02 / `.worktrees/feature--v09-services-ds02` | DS-01—09：storage/nodes/tasks/audit及文件/监控通知/配额/DNS/证书/网关/服务组/发布新域、专用测试/进度 | agy-review-01；起始8a7dd47，交付07f4154 |
+| V09-5D-GM | WAVE 1 ACCEPTED：GM-01—09 全部6个提交（86e0cf5）通过独立与组合审查合入main | gemini-02 | feature/v09-console-gm02 / `.worktrees/feature--v09-console-gm02` | GM-01—09：正式Web全部功能/真实API适配/浏览器验收；W07并入GM-03 | agy-review-01；起始8a7dd47，交付86e0cf5 |
 | READ-DESIGN-R1-REVIEW | 返修/组合/安全检查通过，接收两设计并关闭原四P2；交接后停止 | codex-review-01 | integration/read-design-r1-review / `.worktrees/integration--read-design-r1-review` | 原精确复审/接收及文义澄清、审查证据/状态/README/P1-C10与下一步具体待批范围；不启动实现或批准详细D项 | 项目负责人验收；起始3c817f8 |
 | W07-LEGACY-VIEW | SUPERSEDED：范围纳入V09-5D-GM的GM-03，不再单项待批/另派 | gemini-02（新复合包） | 使用feature/v09-console-gm02；旧拟目录未创建 | 旧提案保留历史，不以其8文件限制覆盖本次完整管理台授权 | 见本轮PLAN/GEMINI.md；仍需真实模块/浏览器验收 |
 | READ-DESIGN-REVIEW | 复审/组合/安全检查完成：接收认证提案，HTTP/Web各退回2P2，交接后停止 | codex-review-01 | integration/read-design-review / `.worktrees/integration--read-design-review` | 原三设计审查/工件/证据/状态与限定返修/组合清单范围；不批准详细D项或启动实现 | 项目负责人验收；起始4196b2e |
