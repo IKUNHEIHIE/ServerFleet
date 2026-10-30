@@ -42,6 +42,7 @@ writeFileSync(path.join(work,"workflows_sql_test.go"),readFileSync(new URL("work
 writeFileSync(path.join(work,"ai_sessions_sql_test.go"),readFileSync(new URL("ai_sessions_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"approvals_sql_test.go"),readFileSync(new URL("approvals_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"plugins_sql_test.go"),readFileSync(new URL("plugins_sql_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"plugin_history_sql_test.go"),readFileSync(new URL("plugin_history_sql_test.go.txt",import.meta.url)));
 writeFileSync(path.join(work,"recovery_sql_test.go"),readFileSync(new URL("recovery_sql_test.go.txt",import.meta.url)));
 // Actual Agent application sources, not a rewritten client. Only the isolated
 // test adapter imports DS SQL; production Agent still has no database dependency.

@@ -11,11 +11,11 @@
 | CX-03 | TLS1.3+mTLS当前指纹/吊销、ControllerLinks/Agent连接循环、接入审批/签发/重装撤销持久化；本地私钥/CSR/证书与固定Root HTTPS注册客户端/handler。新增Ubuntu实际CSR→pending→SQLite重启→真实身份/同Tx审批审计回滚→issued持久材料→mTLS→显式grant吊销/重放拒绝；真实WSS/Proto/Ping组件另有原生证据 | WSS生产依赖、PKI profile/轮换/信任包/Node同Tx接线未接收；注册管理角色/当前listener profile仍测试输入，无完整安装器与Agent运行profile，独立Linux安装/arm64/1C1G未验收 |
 | CX-04 | Agent副作用前claim/start持久化、去重/TTL/取消/live对账/UNKNOWN；输出落盘前强制注册过滤、持久生产序号/有界日志；实际WSS→临时文件→脱敏日志→重连/部分丢帧实验。审批外层rollback/重放负向 | DS Command缺完整Offer字段、ApprovalConsumer缺source/AI session等完整绑定、SubmitTx及日志序号/补读/ACK未接收；root/Shell/插件准入未获批，真实Linux统一链未交付 |
 | CX-05 | 持久AI零资源/逐动作grant/组快照/三级模式；消息幂等/fence/UNKNOWN；未挂载POST/list有界分页及真实Cookie HTTPS SSE；BYOK文本HTTPS适配、当前持久推理闸；新增默认停用的持久模型设置/版本绑定/同Tx独立审计与重启使用；工作流冻结顺序任务/停用/UNKNOWN暂停；Eino隔离PoC | 正式外发政策/生产内容过滤器、设置公开路由与页面组合、统一任务/审批/通知接线未完成；实际外部模型/BYOK未验收，元数据/角色/过滤/模型部分仍明确double，Eino未定生产框架 |
-| CX-06 | 签名源/清单/声明UI/私有工件/持久生命周期，默认disabled/实例隔离/禁用先封Host/UNKNOWN；WASM PoC。可选Xray两模板/custom最小审查/管理API隔离；历史26.6.1真实TLS/Vision与精确Stats读取/非复位/重启计数段验证 | 两份官方外部发布物安全FAIL，不得安装/发布；WASM/Host/来源/密钥未准入。Xray Linux双架构安装/接管/配置历史/用户导出/typed遥测与持久采样业务未完成；最小审查不代替目标-test，核心未编入Xray |
+| CX-06 | 签名源/清单/声明UI/私有工件/持久生命周期，默认disabled/实例隔离/禁用先封Host/UNKNOWN；WASM PoC。新增平台密文配置历史/CAS/实例隔离/一次性恢复源与同Tx审计出箱，真实SQLite重启及unknown不重跑。可选Xray两模板/custom最小审查/管理API隔离；历史26.6.1真实TLS/Vision/Stats实验 | 两份官方外部发布物安全FAIL，不得安装/发布；WASM/Host/来源/密钥未准入。平台历史的正式Host/统一审计/业务页面、Xray双架构安装/接管/真实目标预检与恢复部署/用户导出/typed遥测持久业务未完成；历史源delivered不是部署成功，核心未编入Xray |
 | CX-07 | 更新签名/序列/平台/哈希、同FD暂存一次借用；新增真实文件备份/切换/持久阶段与回执，UNKNOWN永久锁、明确健康失败+兼容性核验才精确恢复本次备份；恢复连续Root/撤销并集/数据库外hold闸，SQLite旧快照不清隔离 | UPDATE/PKI新决策/离线解密/旧主控隔离/实际恢复事务未接收；服务/health/审计提交适配仍明确double，Linux真实更新/迁移/回退/灾备未验收。无默认放行verifier |
 | CX-08 | Controller/Agent骨架及四个Linux交叉编译脚本，构建/组合/恢复接缝说明 | main尚无新模块接收SHA，未在入口组装未接收业务；正式中间件/路由组合、Agent安装与完整发行物尚未完成 |
 
-已提交R32 `a9f1069f9707ddda3add70e53a83ff463450c55a`（注册提交前权限门），R31 c680e37（Agent注册客户端）、R30 7d0d8d1（注册HTTP）、R29 27eb181（持久模型设置）。R33可信txCtx/实际Ubuntu注册组合已通过50+12+22顶层测试，精确源/二进制/日志见LINUX-REGISTRATION-SQL-EVIDENCE.json；Windows全注册路径明确SKIP。全量check五套PASS（10:04:17Z），security PASS（10:01:10Z），Linux隔离module含新Agent测试govulncheck亦PASS；外部Xray FAIL另列。继续其他包内独立实现。
+已提交R33 `60e67e583670894232ddca0787a74e31d35ba165`（事务内身份/实际Linux注册），R32 a9f1069、R31 c680e37、R30 7d0d8d1。R34密文历史/一次性源已完成实际SQLite及Ubuntu plugins11/SQLite13顶层验证，精确证据LINUX-PLUGIN-HISTORY-EVIDENCE.json；正式Host/统一审计与真实部署未验收。全量check最近五套PASS（10:04:17Z，R33），R34模块/architecture与staticcheck PASS，security新PASS（10:18:13Z）；外部Xray FAIL另列。继续包内独立实现。
 
 **新增实际Linux组件证据**：本机已有Ubuntu24.04 WSL2、UID1000、amd64；12包212顶层测试运行PASS（含Agent重复）/3实际Xray二进制SKIP。真实WSS/Agent副作用与重连、SQLite旧快照外部隔离、私有文件/Sync分支均已执行。Agent/恢复旧fixture的0700准备及错误检查问题修正，未放宽生产门槛；首轮FAIL归档。逐项见LINUX-NATIVE-EVIDENCE.json和LOCAL-LINUX-VALIDATION.md。不是物理VPS/安装/arm64/1C1G或完整统一任务验收。
 

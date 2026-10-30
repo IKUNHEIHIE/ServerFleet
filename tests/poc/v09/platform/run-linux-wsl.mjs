@@ -18,7 +18,7 @@ const git=args=>{const r=spawnSync('git',args,{cwd:root,encoding:'utf8'});if(r.s
 const head=git(['rev-parse','HEAD']);
 const sourceInventory=()=>[...new Set(git(['ls-files','--cached','--others','--exclude-standard','-z']).split('\0').filter(p=>p.endsWith('.go')||p.startsWith('tests/poc/v09/platform/')&&(p.endsWith('.txt')||p.endsWith('.mjs'))))].sort();
 const sourceFiles=sourceInventory();
-const protectedFiles=git(['ls-files','go.mod','go.sum','package.json','package-lock.json','dependencies.json','api','proto','gen','.github','AGENTS.md']).split(/\r?\n/).filter(Boolean);
+const protectedFiles=git(['ls-files','go.mod','go.sum','package.json','package-lock.json','docs/development/dependencies.json','docs/development/MODULE-OWNERSHIP.md','docs/development/DEPENDENCY-RULES.md','api','proto','gen','.github','AGENTS.md']).split(/\r?\n/).filter(Boolean);
 const hashFiles=files=>Object.fromEntries(files.map(p=>[p,digest(path.join(root,p))]));
 const beforeSource=hashFiles(sourceFiles),beforeProtected=hashFiles(protectedFiles);
 // WSL's Windows diagnostic prefix may be UTF-16 followed by Linux UTF-8 stderr.

@@ -1,0 +1,212 @@
+package persistencepoc
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"serverfleet.local/serverfleet/internal/plugins"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+type historySQLTxKey struct{}
+
+func TestPluginHistoryActualSQLiteCiphertextOneShotAndAuditRollback(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "history.db")
+	db := newDB(t, path, false)
+	defer func() { _ = db.Close() }()
+	scope := plugins.HistoryScope{PluginID: "xray-manager", NodeID: "node-a", InstanceID: "instance-a"}
+	for _, sql := range plugins.HistorySchemaStatements() {
+		if _, err := db.Exec(ctx, sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed, args, err := plugins.HistorySeed(scope)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec(ctx, seed, args...); err != nil {
+		t.Fatal(err)
+	}
+	// A real same-Tx typed audit delivery probe, preserving every field. This
+	// private test table is NOT adoption of a richer shared DS audit schema.
+	if _, err = db.Exec(ctx, `CREATE TABLE history_audit_probe(id INTEGER PRIMARY KEY,payload BLOB NOT NULL)`); err != nil {
+		t.Fatal(err)
+	}
+	ops := func(q ds.Queryer) plugins.HistorySQLStatements {
+		return plugins.HistorySQLStatements{Read: func(ctx context.Context, sql string, args ...any) ([]byte, error) {
+			var b []byte
+			err := q.QueryRow(ctx, sql, args...).Scan(&b)
+			return b, err
+		}, Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
+			r, err := q.Exec(ctx, sql, args...)
+			if err != nil {
+				return 0, err
+			}
+			return r.RowsAffected()
+		}}
+	}
+	var failAudit, failCommit bool
+	backend := func() plugins.HistorySQLBackend {
+		return plugins.HistorySQLBackend{Read: ops(db).Read, InTx: func(ctx context.Context, fn func(context.Context, plugins.HistorySQLStatements) error) error {
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+				statements := ops(tx)
+				statements.AppendAudit = func(ctx context.Context, events []plugins.HistoryAuditEvent) error {
+					for _, e := range events {
+						raw, err := json.Marshal(e)
+						if err != nil {
+							return err
+						}
+						if _, err := tx.Exec(ctx, `INSERT INTO history_audit_probe(payload) VALUES(?)`, raw); err != nil {
+							return err
+						}
+					}
+					if failAudit {
+						return errors.New("injected after typed audit")
+					}
+					return nil
+				}
+				if err := fn(context.WithValue(ctx, historySQLTxKey{}, true), statements); err != nil {
+					return err
+				}
+				if failCommit {
+					return errors.New("injected before commit")
+				}
+				return nil
+			})
+		}}
+	}
+	keys := map[string][]byte{"history-key": bytes.Repeat([]byte{53}, 32)}
+	before := func(_ context.Context, c plugins.HistoryCheck) error {
+		op := c.Operation
+		if op.ActorID != "test-admin" || op.Scope != scope || op.PluginRevision != 4 || op.CurrentConfigRevision != 8 {
+			return plugins.ErrHistoryRejected
+		}
+		return nil
+	} // explicit sole-task/profile double
+	commit := func(ctx context.Context, c plugins.HistoryCheck) error {
+		if ctx.Value(historySQLTxKey{}) != true {
+			return plugins.ErrHistoryRejected
+		}
+		return before(ctx, c)
+	}
+	open := func() (*plugins.HistoryVault, *plugins.SQLHistoryStore) {
+		s, err := plugins.NewSQLHistoryStore(backend(), scope)
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := plugins.NewHistoryVault(s, scope, "history-key", keys, before, commit)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v, s
+	}
+	v, store := open()
+	defer v.Close()
+	raw := []byte(`{"inbounds":[{"id":"3b37d23e-e729-4f43-9d02-8a4249125551"}]}`)
+	hash := sha256.Sum256(raw)
+	op := plugins.HistoryOperation{Scope: scope, ActorID: "test-admin", TaskID: "save-config-1", Action: "plugins.history.save", VersionID: "save-config-1", ContentSHA256: hex.EncodeToString(hash[:]), TargetVersion: "26.6.1", PluginRevision: 4, CurrentConfigRevision: 8}
+	for _, failure := range []string{"audit", "commit"} {
+		failAudit = failure == "audit"
+		failCommit = failure == "commit"
+		if meta, err := v.Save(ctx, op, raw); err == nil || meta.ID != "" {
+			t.Fatal("failed SQL transaction acknowledged snapshot", err)
+		}
+		var count int
+		if err = db.QueryRow(ctx, `SELECT COUNT(*) FROM history_audit_probe`).Scan(&count); err != nil || count != 0 {
+			t.Fatal("history/audit did not roll back together", count, err)
+		}
+	}
+	failAudit, failCommit = false, false
+	if _, err = v.Save(ctx, op, raw); err != nil {
+		t.Fatal(err)
+	}
+	if err = store.View(ctx, func(ciphertext []byte) error {
+		if bytes.Contains(ciphertext, raw) || bytes.Contains(ciphertext, []byte("3b37d23e-e729-4f43-9d02-8a4249125551")) {
+			t.Error("plaintext stored in SQL")
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db = newDB(t, path, false)
+	v.Close()
+	v, store = open()
+	restore := op
+	restore.Action = "plugins.history.restore-source"
+	restore.TaskID = "restore-config-1"
+	restore.ExpectedHistoryRevision = 1
+	marker := filepath.Join(t.TempDir(), "restored-config")
+	calls := 0
+	consumer := func(_ context.Context, meta plugins.HistoryVersion, b []byte) error {
+		calls++
+		if meta.ID != op.VersionID || !bytes.Equal(b, raw) {
+			return errors.New("wrong source")
+		}
+		return os.WriteFile(marker, b, 0600)
+	}
+	if err = v.WithRestoreSource(ctx, restore, consumer); err != nil {
+		t.Fatal(err)
+	}
+	if material, err := os.ReadFile(marker); err != nil || !bytes.Equal(material, raw) {
+		t.Fatal("real temporary file not restored", err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db = newDB(t, path, false)
+	v.Close()
+	v, store = open()
+	defer v.Close()
+	if err = v.WithRestoreSource(ctx, restore, consumer); err != plugins.ErrHistoryReplay || calls != 1 {
+		t.Fatal("completed SQL claim replayed after DB restart", calls, err)
+	}
+	// Commit a reservation, write the real temporary file, then lose outcome.
+	restore.TaskID = "restore-unknown"
+	if err = v.WithRestoreSource(ctx, restore, func(ctx context.Context, m plugins.HistoryVersion, b []byte) error {
+		if err := consumer(ctx, m, b); err != nil {
+			return err
+		}
+		return errors.New("injected after actual file effect")
+	}); err != plugins.ErrHistoryUnknown {
+		t.Fatal("unknown restoration became success", err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatal(err)
+	}
+	db = newDB(t, path, false)
+	v.Close()
+	v, store = open()
+	defer v.Close()
+	if err = v.WithRestoreSource(ctx, restore, consumer); err != plugins.ErrHistoryReplay || calls != 2 {
+		t.Fatal("unknown SQL claim repeated effect after restart", calls, err)
+	}
+	var auditRaw []byte
+	if err = db.QueryRow(ctx, `SELECT payload FROM history_audit_probe ORDER BY id DESC LIMIT 1`).Scan(&auditRaw); err != nil {
+		t.Fatal(err)
+	}
+	var event plugins.HistoryAuditEvent
+	if json.Unmarshal(auditRaw, &event) != nil || event.Result != "unknown" || event.ContentSHA256 != op.ContentSHA256 || event.Scope != scope || event.VersionID != op.VersionID || event.TaskID != restore.TaskID {
+		t.Fatal("typed durable audit lost operation binding")
+	}
+	// Missing instance row never becomes a fresh history or copies a peer row.
+	other := scope
+	other.InstanceID = "instance-missing"
+	missing, err := plugins.NewSQLHistoryStore(backend(), other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = missing.View(ctx, func([]byte) error { t.Error("missing instance read foreign row"); return nil }); err != plugins.ErrHistoryRejected {
+		t.Fatal("missing row treated as empty history", err)
+	}
+}

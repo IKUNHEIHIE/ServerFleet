@@ -292,8 +292,19 @@ Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；
 
 ## R33 实际Linux注册客户端/SQLite/事务内身份/审计/mTLS
 
+提交60e67e583670894232ddca0787a74e31d35ba165。
+
 Enrollment自有Update/InTx候选回调增可信txCtx，业务/SQL/commit门贯穿，隔离组合用同一真实DS Tx绑定只读auth reader；不改DS公共端口/原始YAML/根依赖。run-identity复制实际Agent源并编译agentapp，Linux runner新增agent-sql目标。AGENT-REGISTRATION-SQL.md给精确签名/兼容与局限。
 
 Ubuntu UID1000实际执行本地私钥CSR→HTTPS pending→SQLite重启→真实登录身份决定/审计故障回滚→issued本地重开→真实mTLS→默认零节点权限拒绝吊销→显式grant→持久吊销新TLS失败/注册重放拒绝；额外真实会话进入后/BEGIN前撤销，由同Tx reader拒绝发令牌。首次原生FAIL为大写HTTP原因码不符合DS审计小写约束，固定映射保留原因后重跑transport50/SQLite12/Agent22顶层PASS/无skip，保留原FAIL目录。WindowsSQLite12/Agent21 PASS，Linux-only组合明确SKIP；LINUX-REGISTRATION-SQL-EVIDENCE.json精确记录实际环境/源/二进制/日志。
 
 根模块transport/Agent/architecture PASS3.671s/7.752s/1.438s、staticcheck PASS；Linux隔离module含测试全包govulncheck PASS（首次工具路径误用子目录未执行扫描，修正从worktree设置绝对工具/缓存路径后得到No vulnerabilities found，不算首次成功）。全量check五套PASS10:04:17Z/security PASS10:01:10Z，根受保护文件零差异；本轮npm ci/tools:install先前已PASS且根依赖未变。真实组件不代替正式新节点角色/监听器/PKI政策、Node域/统一任务、页面、安装/arm64/1C1G；继续可独立Xray等包内实现。
+
+## R34 插件密文配置历史、一次性恢复源与实际SQLite
+
+新增平台HistoryVault/SQLHistoryStore：三元scope隔离、专用密钥+每记录随机salt/HKDF派生AES256-GCM、元数据AAD、只列非秘密元数据、CAS/不逐出有界历史、借用前永久claim/完整审计出箱与UNKNOWN不重跑；可信txCtx提交门/服务构造阶段，无新默认Host授权。WithRestoreSource明确delivered仅表示源已交付，不假记Xray部署完成；未导入可选业务、改根依赖或公共迁移。精确端口/schema候选PLUGIN-CONFIG-HISTORY.md。
+
+Windows插件/architecture PASS2.438s/1.857s、staticcheck PASS；六项新增单元含篡改/错误key/跨节点实例/提交失败/撤权/取消/消费者panic/CAS/上限/丢回调假成功负向。实际SQLite十三项PASS17.557s，新增历史项实际加密落库/审计写后失败与提交前失败回滚、数据库重开后源交付、真实临时文件effect、delivered及unknown claim不复活；全字段audit probe是隔离同Tx适配验证，不伪装DS已接收新schema。Agent21 PASS9.686s，Linux-only注册Windows明确SKIP。Ubuntu非root原生plugins11/SQLite13顶层PASS，LINUX-PLUGIN-HISTORY-EVIDENCE.json。正式插件能力/签名启用/sole task与审批/当前profile仍需真实门适配，旧库回退必须外部quarantine不绕永久claim；没有执行/安装不安全Xray。继续包内下一项。
+
+R34安全复验PASS10:18:13Z，根依赖/公共API/Proto/gen及实际docs/development/dependencies.json零基线差异；原生runner现将实际依赖图/模块归属/依赖规则一并纳入保护哈希（原路径曾误列根dependencies.json），随后plugins11/SQLite13原生重跑PASS，证据已更新。
+
