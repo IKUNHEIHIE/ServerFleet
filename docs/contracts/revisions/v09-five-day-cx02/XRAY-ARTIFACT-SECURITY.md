@@ -10,6 +10,13 @@
 
 处置：该包不得作为Server Fleet发布/安装目标；保留历史功能证据，新增runner扫描前置，非零直接停止执行，不关扫描/删记录/降门槛。没有安装到实际节点，核心入口和插件runtime依旧未启用，不是线上事故。
 
-GitHub连接工具已只读核对当前正式发布v26.10.29（2026-10-29发布、非prerelease），只作为下一个验证候选；二进制下载工具不支持，公开release下载会另核固定asset SHA256。必须先静态扫描、再核版本/API/两模板/真实流量与负向，才可更新本包兼容目标；不追浮动latest、不借此冻结G2/Host/profile或伪造官方签名。尚未给出该候选扫描结论。
+GitHub连接工具已只读核对正式发布v26.10.29（2026-10-29发布、非prerelease）。公开HTTPS下载并核对固定asset SHA256后，静态扫描同样 **FAIL / exit3 / 3项符号级发现**：GO-2026-6866、GO-2026-6860（x/net v0.61.0，修复版本v0.62.0），GO-2026-5932（x/crypto v0.58.0，停止维护的openpgp，无修复版本）。Go build info为go1.27.3、主模块(devel)。未执行该新版二进制，未把它替换为模板目标。
+
+- 新版ZIP SHA256：fce33e81cccf50e7aab572b175519a50b5e0f9d2f5c8d1ed73012ea5c9ad4d58
+- 新版EXE SHA256：07a332b714a3c0eee047a22a9c0ea749b64df33e4e1ff6d28a8c7f9ef943ce10
+- 原始日志：reports/_review/v09-platform/xray-v26.10.29/binary-security.log。
+- 复查入口：`node tests/poc/v09/platform/audit-xray-release.mjs 26.10.29`（或26.6.1）。只允许两份精确pin，校验归档/EXE、只读build info、扫描并保存static-audit.json；非零保持FAIL，永不启动EXE。新下载有超时/64MiB界限/独立partial，失败不污染正常缓存。
+
+两份工件均不作为可发布/安装目标；没有默认豁免或自行重编译的“官方包”。后续候选必须先静态扫描、再核版本/API/两模板/真实流量与负向，才可更新本包兼容目标；不追浮动latest、不借此冻结G2/Host/profile或伪造官方签名。Linux两架构尚未扫描/安装验证，不能外推本次Windows结果。
 
 扫描方法和限制依据[固定govulncheck1.9.0文档](https://pkg.go.dev/golang.org/x/vuln/cmd/govulncheck@v1.9.0)。最终生产准入还需要发行来源/签名/双架构/安装/当前策略与任务审批证据；单次扫描无已知漏洞不等于全面安全。

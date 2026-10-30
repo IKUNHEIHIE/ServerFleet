@@ -15,9 +15,11 @@
 | CX-07 | 更新签名/序列/平台/哈希、私有暂存同FD复验及一次借用；恢复连续Root/撤销并集/在途UNKNOWN计划；新增数据库外永久hold/当前verifier闸。真实SQLite旧快照仍不能清除外部隔离 | UPDATE/PKI新决策/离线解密材料/旧主控隔离/实际恢复事务未接收；安装/health/失败回退与完整灾备尚未交付。无默认放行verifier |
 | CX-08 | Controller/Agent骨架及四个Linux交叉编译脚本，构建/组合/恢复接缝说明 | main尚无新模块接收SHA，未在入口组装未接收业务；正式中间件/路由组合、Agent安装与完整发行物尚未完成 |
 
-最新代码检查点 `1dcfcf2d5c4ab6445d8b2dd252e7eec1ff6d94a2`（R19日志）；本轮恢复隔离daf38b1、Xray配置d4e45fe、AI消息/SSE68233b8、Agent持久阶段62f3e7d、连接循环5fd0ba3。每次增量只提交自己目录，精确命令/结果/阻塞见RESUMED，继续包内下一项。R17—R19后全量检查/双架构交叉编译和隔离依赖扫描正在运行，未停止等待。
+最新实现检查点 `f179f7eb57692ae6ccdef058ca7ae1f569eb00e6`（R21 Stats），R20为bfb8ab3。R17—R19全量check五套PASS（07:23:09Z）/security PASS（07:23:18Z），四个Linux骨架交叉编译与隔离依赖扫描PASS；R20—21模块/架构/staticcheck PASS，未用旧全量检查覆盖后续代码。每次增量只提交自己目录，精确命令/结果/阻塞见RESUMED，继续包内下一项。
 
-实际SQLite组合固定DS源`bb8954988fe7b2f832edf291803529d7745e4f0a`，单独module/sum，不是共享接收SHA。十二项PASS（最新8.869s），含旧库恢复仍隔离、AI消息/真实HTTPS SSE、重启撤权、域/审计回滚、缺接口拒绝。模拟Gate/Runtime/Task/Model明确记录。R19真实WSS/Agent隔离包PASS 9.323s，业务准入仍fixture。npm ci/tools:install本轮已PASS；全量check五套和security在R14、R16后均PASS（最新06:55Z），R17—19的新全量结果待记录，不能用旧绿覆盖新代码。
+**Xray外部发布物安全FAIL**：26.6.1符号扫描55项；正式新版26.10.29独立下载/双哈希核验后扫描3项，未执行新版。两份均不得发布/安装。R21真实TLS/Vision Stats/进程重启功能实验证据保留，不当安全验收。精确pin/发现/复查命令见XRAY-ARTIFACT-SECURITY.md；生产Stats typed telemetry/持久历史仍未接收，不能通过TaskOutput/float64绕接缝。
+
+实际SQLite组合固定DS源`bb8954988fe7b2f832edf291803529d7745e4f0a`，单独module/sum，不是共享接收SHA。十二项PASS（最新8.869s），含旧库恢复仍隔离、AI消息/真实HTTPS SSE、重启撤权、域/审计回滚、缺接口拒绝。模拟Gate/Runtime/Task/Model明确记录。R19真实WSS/Agent隔离包PASS 9.323s，业务准入仍fixture。npm ci/tools:install本轮已PASS；最新全量检查覆盖R19，后续增量另验。根security无漏洞不覆盖可选外部Xray二进制。
 
 总控已确认98f6d94d仅依赖边登记且已在基线；RecordTx/扩展Request/DS新SQL接缝不是共同接口。四份PRIV/WC/PKI-OPS/UPDATE完整正式原文缺失，只提交独立PROPOSED决策，未补写历史。缺项只暂停具体接线，继续可独立实现及本地负向验证。没有访问生产/VPS/云/真实凭据、远程推送、合并main或启动其他Agent。
 

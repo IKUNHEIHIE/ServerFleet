@@ -196,6 +196,12 @@ R17—R19全量复验：npm run check五套PASS（2026-10-30T07:23:09Z），chec
 
 ## R21 Stats精确读取、真实TLS/Vision计数及外部包安全FAIL
 
+提交 `f179f7eb57692ae6ccdef058ca7ae1f569eb00e6`。
+
 新增StatsBinding/DecodeStatsJSON、精确int64/缺失不可用/实例不双计/有界及重放负向；真实固定Xray客户端/服务端TLS+Vision请求及Stats非复位读取、实际进程重启区段测试，无allowInsecure。首轮实际目标测试PASS 5.886s，复验PASS 6.000s（流量测试1.52s）；user上/下行45208/28829，inbound和instance各46773/28947。模块/architecture PASS 4.855s/1.449s，staticcheck PASS。补拒绝masterKeyLog/目录能力；精确局限XRAY-STATS-WIRING.md，未用TaskOutput或float64暗藏遥测。
 
 随后**外部Xray26.6.1二进制安全扫描FAIL，exit3/55项符号级漏洞**，buildGo1.26.3；根/隔离源码扫描PASS不覆盖它。新增runner先扫再执行，该包不得发布，历史功能证据不改写为生产验收。详见XRAY-ARTIFACT-SECURITY.md。当前只读核对新正式发布26.10.29，继续独立静态扫描/兼容验证，不访问实际节点、不擅自升级根依赖/冻结运行profile。
+
+## R22 新正式Xray发布物独立扫描与可复查入口
+
+26.10.29公开归档SHA256与GitHub官方asset吻合，EXE SHA256另固定；Go1.27.3/main(devel)。静态govulncheck exit3/3项符号级发现（x/net两个HTML问题、x/crypto未维护openpgp），未启动新版，不擅自豁免或宣称它可发布。固定两版本的audit-xray-release.mjs只下载/双哈希/读build info/扫描，拒绝未知版本、超时/超量/脏缓存。精确证据见XRAY-ARTIFACT-SECURITY.md。缺少可准入Xray发布物只阻断实际安装，继续更新/其他独立实现。
