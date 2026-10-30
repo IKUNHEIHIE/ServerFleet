@@ -1,0 +1,92 @@
+package persistencepoc
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"testing"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+type identityBoundSQLKey struct{}
+
+func TestIdentityActualSQLiteTransactionContextNoFallbackCancellationAndPermanentMarker(t *testing.T) {
+	ctx := context.Background()
+	db := newDB(t, filepath.Join(t.TempDir(), "bound-identity.db"), true)
+	defer db.Close()
+	legacy := identityStore(t, db)
+	if err := legacy.UpdateWithContext(ctx, func(context.Context, []byte) ([]byte, error) {
+		t.Error("legacy adapter manufactured trusted transaction")
+		return nil, nil
+	}); err != auth.ErrIdentityUnavailable {
+		t.Fatal("missing transaction adapter succeeded", err)
+	}
+	backend := auth.IdentitySQLBackend{Read: statements(db).Read, InTxContext: func(ctx context.Context, fn func(context.Context, auth.IdentitySQLStatements) error) error {
+		return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+			return fn(context.WithValue(ctx, identityBoundSQLKey{}, tx), statements(tx))
+		})
+	}}
+	store, err := auth.NewSQLIdentityStore(backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	calls := 0
+	if err = store.UpdateWithContext(ctx, func(ctx context.Context, raw []byte) ([]byte, error) {
+		calls++
+		tx, ok := ctx.Value(identityBoundSQLKey{}).(ds.Tx)
+		if !ok {
+			return nil, errors.New("actual transaction reader missing")
+		}
+		var count int
+		if err := tx.QueryRow(ctx, `SELECT COUNT(*) FROM cx_auth_identity`).Scan(&count); err != nil || count != 1 {
+			return nil, errors.New("reader is not usable inside transaction")
+		}
+		return []byte(`{"Version":1}`), nil
+	}); err != nil || calls != 1 {
+		t.Fatal("bound update failed", calls, err)
+	}
+	before, _, err := statements(db).Read(ctx, `SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelCtx, cancel := context.WithCancel(ctx)
+	if err = store.UpdateWithContext(cancelCtx, func(ctx context.Context, raw []byte) ([]byte, error) {
+		cancel()
+		return []byte(`{"Version":1,"PolicyRevision":123}`), nil
+	}); err != context.Canceled {
+		t.Fatal("cancelled SQL context succeeded", err)
+	}
+	after, _, err := statements(db).Read(ctx, `SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1`)
+	if err != nil || !bytes.Equal(before, after) {
+		t.Fatal("cancelled update escaped rollback", err)
+	}
+	service, err := auth.NewIdentityService(store)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup, err := service.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Bootstrap(ctx, setup, "bound-admin", "long-local-transaction-password"); err != nil {
+		t.Fatal(err)
+	}
+	// Legacy service operations transparently use the configured context adapter;
+	// the new path still cannot clear the permanent initialization marker.
+	if err = store.UpdateWithContext(ctx, func(context.Context, []byte) ([]byte, error) { return []byte(`{"Version":1}`), nil }); err != auth.ErrIdentityUnavailable {
+		t.Fatal("transaction extension reset initialization", err)
+	}
+	var initialized bool
+	var payload []byte
+	if err = db.QueryRow(ctx, `SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1`).Scan(&payload, &initialized); err != nil || !initialized {
+		t.Fatal("permanent marker lost", err)
+	}
+	var state map[string]any
+	if json.Unmarshal(payload, &state) != nil || state["Initialized"] != true {
+		t.Fatal("domain initialization lost")
+	}
+}

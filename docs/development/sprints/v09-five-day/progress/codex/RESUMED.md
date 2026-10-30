@@ -313,6 +313,14 @@ R34安全复验PASS10:18:13Z，根依赖/公共API/Proto/gen及实际docs/develo
 
 ## R35 可选Xray单用户导出格式与交付闸
 
+提交72d4a0fedd12623cc3cf1c4f529e286c097be685。
+
 新增export.go/test，固定当前user/instance/credential/config/plugin修订与真人同recipient、短期限，服务端digest；中央凭据loan/审计完成后再重查当前状态并一次交付URI/outbound JSON，撤权/轮换/审计失败/重复或迟到callback不给秘密，未知结果不重试。格式原文按保护FR/原POST及官方分享提案核对，无管理API/服务端私钥/不安全校验绕过，不执行被漏洞门阻断的Xray。XRAY-CLIENT-EXPORT.md列精确接口、真实kind/实例绑定/持久user/QR/Host/HTTP页面剩余；没有将借用double冒充真实中央fence或单次跨重启验收。
 
 首次编译FAIL为未使用strings import，修正；三个新增顶层测试PASS4.800s，完整可选包/architecture/staticcheck PASS见export-r35-final.log。Ubuntu UID1000可选包11顶层PASS/3真实Xray二进制SKIP；LINUX-XRAY-EXPORT-EVIDENCE.json包含精确源/二进制/日志。主线仍8a7dd470，无新共享接收。当前只实现URI/JSON，QR明确拒绝；中央CredentialService暂未支持Xray kind，不错用DNS/AI key，也不单造插件凭据库；继续补中央实例绑定材料候选及实际持久测试。
+
+## R36 中央凭据后续操作所需auth事务上下文
+
+新增可选IdentityTransactionStore.UpdateWithContext/IdentitySQLBackend.InTxContext与私有updateTransaction；保留旧业务/适配兼容，需要新同Tx权限来源时禁止旧InTx回退；缺少/重复callback、nil/取消ctx、初始化反转均关闭。AUTH-TRANSACTION-CONTEXT.md列精确候选，未假定RecordTx接收/改DS公共schema，未将来源字段当认证。
+
+两个新顶层单元PASS4.045s；初次fixture已初始化却误断言空数据导致FAIL，改成原始字节比较后通过，未放宽生产门。完整auth/architecture PASS28.516s/1.514s、staticcheck PASS。实际SQLite十四项PASS8.951s，新增真实同Tx reader/无旧源回退/取消回滚/永久标记保护；Agent21 PASS7.053s，Linux-only注册Windows明确SKIP。Ubuntu UID1000原生auth58/SQLite14顶层PASS，LINUX-AUTH-TRANSACTION-EVIDENCE.json保留精确源/二进制/日志。继续中央实例绑定Xray材料及真凭据fence导出组合，不把此接缝准备算作材料服务完成。

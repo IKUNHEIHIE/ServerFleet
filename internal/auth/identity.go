@@ -32,6 +32,14 @@ type IdentityStore interface {
 	Update(context.Context, func([]byte) ([]byte, error)) error
 }
 
+// IdentityTransactionStore is a candidate auth-owned extension. Security
+// operations requiring a same-transaction policy reader must require it and
+// never manufacture a transaction context from a legacy Update callback.
+type IdentityTransactionStore interface {
+	IdentityStore
+	UpdateWithContext(context.Context, func(context.Context, []byte) ([]byte, error)) error
+}
+
 // Identity is an authenticated observation, never accepted as a client claim.
 // It is NOT resource authorization. Administrators start with zero node grants.
 type Identity struct {
@@ -246,13 +254,40 @@ func decodeIdentity(data []byte) (*identityState, error) {
 }
 
 func (s *IdentityService) update(ctx context.Context, fn func(*identityState, time.Time) error) error {
+	if fn == nil {
+		return ErrIdentityUnavailable
+	}
+	return s.updateMode(ctx, func(_ context.Context, st *identityState, now time.Time) error { return fn(st, now) }, false)
+}
+func (s *IdentityService) updateTransaction(ctx context.Context, fn func(context.Context, *identityState, time.Time) error) error {
+	return s.updateMode(ctx, fn, true)
+}
+func (s *IdentityService) updateMode(ctx context.Context, fn func(context.Context, *identityState, time.Time) error, requireTransaction bool) error {
 	if ctx == nil || s == nil || s.store == nil || s.now == nil || s.random == nil {
 		return ErrIdentityUnavailable
 	}
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-	err := s.store.Update(ctx, func(data []byte) ([]byte, error) {
+	if fn == nil {
+		return ErrIdentityUnavailable
+	}
+	run := func(ctx context.Context, callback func(context.Context, []byte) ([]byte, error)) error {
+		return s.store.Update(ctx, func(data []byte) ([]byte, error) { return callback(ctx, data) })
+	}
+	if requireTransaction {
+		store, ok := s.store.(IdentityTransactionStore)
+		if !ok {
+			return ErrIdentityUnavailable
+		}
+		run = store.UpdateWithContext
+	}
+	called := false
+	err := run(ctx, func(txCtx context.Context, data []byte) ([]byte, error) {
+		if called || txCtx == nil || txCtx.Err() != nil || ctx.Err() != nil {
+			return nil, ErrIdentityUnavailable
+		}
+		called = true
 		st, err := decodeIdentity(data)
 		if err != nil {
 			return nil, err
@@ -267,11 +302,14 @@ func (s *IdentityService) update(ctx context.Context, fn func(*identityState, ti
 		if st.requestID != "" {
 			st.requestSource = "web"
 		}
-		if err = fn(st, now); err != nil {
+		if err = fn(txCtx, st, now); err != nil {
 			return nil, err
 		}
 		if err = ctx.Err(); err != nil {
 			return nil, err
+		}
+		if txCtx.Err() != nil {
+			return nil, txCtx.Err()
 		}
 		encoded, err := json.Marshal(st)
 		if err != nil || len(encoded) > 16<<20 {
@@ -279,6 +317,9 @@ func (s *IdentityService) update(ctx context.Context, fn func(*identityState, ti
 		}
 		return encoded, nil
 	})
+	if !called && err == nil {
+		return ErrIdentityUnavailable
+	}
 	return identityStoreError(ctx, err)
 }
 
