@@ -276,6 +276,14 @@ Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；
 
 ## R31 Agent固定HTTPS初始注册客户端
 
+提交c680e373a5b96cf9252ee2e98d7612bc5c247c4f。
+
 新增apps/agent/enrollment_client.go/test，依赖独立公开Root+固定DNS HTTPS Origin+当前门，标准TLS1.3/Root/主机验证并核对pin；无系统Root/代理/重定向/Cookie/环境秘密/GetBody/隐含重试。单次显式EnrollOnce只用同一已持久CSR，pending不安装、denied明确拒绝、issued经本地Accept再验证/不可覆盖；未知保留材料。严格有界响应/当前门前后检查。未启用main/profile或伪造Windows为Linux。
 
 新增实际TLS与重定向目的地零请求/代理零请求/错误DNS/取消/返回体重复/null/越界/状态混用/令牌回显/撤销负向PASS，三个顶层测试5.764s；完整Agent/transport/architecture与staticcheck另记日志enrollment-client-r31-complete.log。Linux非root原生Agent21顶层PASS，精确源/二进制/日志哈希LINUX-ENROLLMENT-CLIENT-EVIDENCE.json。签发与profile仍为明确fixture；AGENT-ENROLLMENT-CLIENT.md记录最小响应profile与正式契约兼容限制，下一步组合真实服务/持久仓储，不把组件通过冒称v0.9完成。
+
+## R32 注册管理事务提交前当前权限复查
+
+组合审查发现EnrollmentService此前只在操作进入时调用管理员门，不能证明等待/签发期间撤权后不提交。本轮改为构造必须显式提供before+commit，后者在写事务内同完整operation复查后才允许返回持久字节；IssueToken/Decide/Revoke及受限List均覆盖。取消/panic/源不可用失败关闭，不提供旧三参数默认放行。ENROLLMENT-WIRING.md已给精确候选及事务只读/跨源世代、最终HTTP输出局限，未改共享基线。
+
+负向验证进入检查允许、提交检查拒绝时，整个令牌/证书映射/吊销/审计出箱及列表观察字节原样回滚，响应不含凭据；缺commit、进入/提交panic、源故障、取消均拒绝。`go test ./internal/transport ./apps/agent ./tests/architecture -count=1` PASS5.584s/8.202s/0.762s；staticcheck PASS。真实SQLite十二项PASS8.828s，构造调用全部显式同步，未删除测试。Ubuntu变化包transport50/SQLite12顶层PASS，LINUX-ENROLLMENT-FENCE-EVIDENCE.json记录精确源/二进制/日志；仍继续真实持久注册客户端组合。

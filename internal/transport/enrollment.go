@@ -101,14 +101,16 @@ type EnrollmentService struct {
 	store  EnrollmentStore
 	issuer *CertificateIssuer
 	gate   EnrollmentGate
+	// Must use current transaction-bound/read-only authority; no nested writer.
+	commit EnrollmentGate
 	now    func() time.Time
 }
 
-func NewEnrollmentService(store EnrollmentStore, issuer *CertificateIssuer, gate EnrollmentGate) (*EnrollmentService, error) {
-	if store == nil || issuer == nil || gate == nil {
+func NewEnrollmentService(store EnrollmentStore, issuer *CertificateIssuer, gate, commit EnrollmentGate) (*EnrollmentService, error) {
+	if store == nil || issuer == nil || gate == nil || commit == nil {
 		return nil, ErrEnrollmentUnavailable
 	}
-	return &EnrollmentService{store, issuer, gate, time.Now}, nil
+	return &EnrollmentService{store: store, issuer: issuer, gate: gate, commit: commit, now: time.Now}, nil
 }
 func decodeEnrollment(b []byte) (*enrollmentState, error) {
 	st := &enrollmentState{}
@@ -190,10 +192,40 @@ func (s *EnrollmentService) change(ctx context.Context, fn func(*enrollmentState
 	return nil
 }
 func (s *EnrollmentService) admit(ctx context.Context, op EnrollmentOperation, action string) error {
-	if s == nil || ctx == nil || s.gate == nil || op.Action != action || !validBindingID(op.ActorID) || len(op.ActorID) > 128 || s.gate(ctx, op) != nil || ctx.Err() != nil {
+	if s == nil || ctx == nil || s.gate == nil || s.commit == nil || op.Action != action || !validBindingID(op.ActorID) || len(op.ActorID) > 128 {
+		return ErrEnrollmentRejected
+	}
+	return invokeEnrollmentGate(ctx, s.gate, op)
+}
+func invokeEnrollmentGate(ctx context.Context, gate EnrollmentGate, op EnrollmentOperation) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = ErrEnrollmentUnavailable
+		}
+	}()
+	if ctx == nil || ctx.Err() != nil || gate == nil {
+		return ErrEnrollmentUnavailable
+	}
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	err = gate(bounded, op)
+	if bounded.Err() != nil || errors.Is(err, ErrEnrollmentUnavailable) {
+		return ErrEnrollmentUnavailable
+	}
+	if err != nil {
 		return ErrEnrollmentRejected
 	}
 	return nil
+}
+func (s *EnrollmentService) privileged(ctx context.Context, op EnrollmentOperation, fn func(*enrollmentState, time.Time) error) error {
+	return s.change(ctx, func(st *enrollmentState, now time.Time) error {
+		if err := fn(st, now); err != nil {
+			return err
+		}
+		// A successful entry check cannot authorize a later transaction. A
+		// denial rolls back the mutation, certificate mapping AND audit outbox.
+		return invokeEnrollmentGate(ctx, s.commit, op)
+	})
 }
 func appendEnrollmentAudit(st *enrollmentState, op EnrollmentOperation, action, node, id string, now time.Time) error {
 	if len(st.Outbox) >= 10000 {
@@ -210,7 +242,7 @@ func (s *EnrollmentService) IssueToken(ctx context.Context, op EnrollmentOperati
 		return EnrollmentToken{}, ErrEnrollmentRejected
 	}
 	var result EnrollmentToken
-	err := s.change(ctx, func(st *enrollmentState, now time.Time) error {
+	err := s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
 		if input.ReplaceNodeID != "" {
 			exists := false
 			for _, id := range st.Identities {
@@ -322,7 +354,7 @@ func (s *EnrollmentService) List(ctx context.Context, op EnrollmentOperation) ([
 		return nil, err
 	}
 	var out []EnrollmentView
-	err := s.change(ctx, func(st *enrollmentState, now time.Time) error {
+	err := s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
 		out = []EnrollmentView{}
 		for _, record := range st.Requests {
 			v := record.View
@@ -345,7 +377,7 @@ func (s *EnrollmentService) Decide(ctx context.Context, op EnrollmentOperation, 
 	}
 	var result EnrollmentView
 	var outcome error
-	err := s.change(ctx, func(st *enrollmentState, now time.Time) error {
+	err := s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
 		record, ok := st.Requests[op.EnrollmentID]
 		if !ok || record.View.NodeID != op.NodeID || record.View.Revision != op.ExpectedRevision || record.View.Status != "pending" {
 			return ErrEnrollmentRejected
@@ -424,7 +456,7 @@ func (s *EnrollmentService) Revoke(ctx context.Context, op EnrollmentOperation, 
 	if op.Fingerprint != fingerprint {
 		return ErrEnrollmentRejected
 	}
-	return s.change(ctx, func(st *enrollmentState, now time.Time) error {
+	return s.privileged(ctx, op, func(st *enrollmentState, now time.Time) error {
 		id, ok := st.Identities[fingerprint]
 		if !ok || id.NodeID != op.NodeID || id.Revoked || op.ExpectedRevision != id.TrustGeneration || st.RevocationSequence == ^uint64(0) {
 			return ErrEnrollmentRejected

@@ -116,7 +116,7 @@ func TestEnrollmentRealSQLiteRestartIssuedMTLSAndRevocation(t *testing.T) {
 		t.Fatal(err)
 	}
 	gate := func(context.Context, transport.EnrollmentOperation) error { return nil } // Test admission only.
-	service, _ := transport.NewEnrollmentService(store(db), issuer, gate)
+	service, _ := transport.NewEnrollmentService(store(db), issuer, gate, gate)
 	token, err := service.IssueToken(ctx, transport.EnrollmentOperation{ActorID: "admin-fixture", Action: "enrollment.issue"}, transport.EnrollmentTokenInput{Name: "Isolated", TTLSeconds: 600})
 	if err != nil {
 		t.Fatal(err)
@@ -130,7 +130,7 @@ func TestEnrollmentRealSQLiteRestartIssuedMTLSAndRevocation(t *testing.T) {
 	_ = db.Close()
 	db = newDB(t, path, false)
 	defer db.Close()
-	service, _ = transport.NewEnrollmentService(store(db), issuer, gate)
+	service, _ = transport.NewEnrollmentService(store(db), issuer, gate, gate)
 	list, err := service.List(ctx, transport.EnrollmentOperation{ActorID: "admin-fixture", Action: "enrollment.list"})
 	if err != nil || len(list) != 1 {
 		t.Fatal(list, err)
@@ -215,7 +215,7 @@ func TestEnrollmentRealSQLiteRestartIssuedMTLSAndRevocation(t *testing.T) {
 	_ = db.Close()
 	db = newDB(t, path, false)
 	defer db.Close()
-	service, _ = transport.NewEnrollmentService(store(db), issuer, gate)
+	service, _ = transport.NewEnrollmentService(store(db), issuer, gate, gate)
 	verifier, _ = transport.NewPeerVerifier(service.Lookup)
 	if _, err = verifier.Verify(ctx, authenticated, result.NodeID); err != transport.ErrPeerIdentity {
 		t.Fatal("restart revived revoked mTLS mapping", err)

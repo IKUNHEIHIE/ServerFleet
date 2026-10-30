@@ -53,7 +53,8 @@ func enrollmentFixture(t *testing.T) (*EnrollmentService, *enrollmentTestStore, 
 		t.Fatal(err)
 	}
 	store := &enrollmentTestStore{}
-	service, err := NewEnrollmentService(store, issuer, func(context.Context, EnrollmentOperation) error { return nil })
+	gate := func(context.Context, EnrollmentOperation) error { return nil } // explicit authority fixture
+	service, err := NewEnrollmentService(store, issuer, gate, gate)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -202,5 +203,127 @@ func TestEnrollmentExpiryPinSignatureAndAdminGate(t *testing.T) {
 	s.gate = func(context.Context, EnrollmentOperation) error { return errors.New("not authorized") }
 	if _, err = s.IssueToken(ctx, EnrollmentOperation{ActorID: "admin", Action: "enrollment.issue"}, EnrollmentTokenInput{Name: "Denied", TTLSeconds: 60}); err != ErrEnrollmentRejected {
 		t.Fatal("untrusted admin claim", err)
+	}
+}
+
+func TestEnrollmentCommitAuthorityRollsBackTokensCertificatesRevocationAndReads(t *testing.T) {
+	s, store, _ := enrollmentFixture(t)
+	ctx := context.Background()
+	allow := s.commit
+	denied := errors.New("authority revoked after entry")
+	checkUnchanged := func(before []byte, err error) {
+		t.Helper()
+		if err != ErrEnrollmentRejected || !bytes.Equal(before, store.data) {
+			t.Fatal("commit denial changed durable enrollment state", err)
+		}
+	}
+	deny := func(want EnrollmentOperation) {
+		s.commit = func(_ context.Context, got EnrollmentOperation) error {
+			if got != want {
+				t.Error("commit authority lost exact operation binding")
+			}
+			return denied
+		}
+	}
+	issueOp := EnrollmentOperation{ActorID: "admin", Action: "enrollment.issue"}
+	before := bytes.Clone(store.data)
+	deny(issueOp)
+	token, err := s.IssueToken(ctx, issueOp, EnrollmentTokenInput{Name: "Revoked issue", TTLSeconds: 600})
+	checkUnchanged(before, err)
+	if token.Token != "" {
+		t.Fatal("denied transaction returned enrollment secret")
+	}
+	s.commit = allow
+	token, err = s.IssueToken(ctx, issueOp, EnrollmentTokenInput{Name: "Test pending", TTLSeconds: 600})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := AgentEnrollmentInput{token.Token, "request-fenced", enrollmentCSR(t), s.issuer.rootPin, "0.9.0", "linux"}
+	if _, err = s.Submit(ctx, input); err != nil {
+		t.Fatal(err)
+	}
+	listOp := EnrollmentOperation{ActorID: "admin", Action: "enrollment.list"}
+	before = bytes.Clone(store.data)
+	deny(listOp)
+	list, err := s.List(ctx, listOp)
+	checkUnchanged(before, err)
+	if list != nil {
+		t.Fatal("commit denial returned privileged list")
+	}
+	s.commit = allow
+	list, err = s.List(ctx, listOp)
+	if err != nil || len(list) != 1 {
+		t.Fatal(err)
+	}
+	decideOp := EnrollmentOperation{ActorID: "admin", Action: "enrollment.decide", EnrollmentID: list[0].ID, NodeID: list[0].NodeID, ExpectedRevision: list[0].Revision}
+	before = bytes.Clone(store.data)
+	deny(decideOp)
+	decision, err := s.Decide(ctx, decideOp, true)
+	checkUnchanged(before, err)
+	if decision.ID != "" {
+		t.Fatal("denied transaction acknowledged certificate")
+	}
+	if result, err := s.Submit(ctx, input); err != nil || result.State != "pending" || result.CertificatePEM != "" {
+		t.Fatal("commit denial published certificate", err)
+	}
+	s.commit = allow
+	if _, err = s.Decide(ctx, decideOp, true); err != nil {
+		t.Fatal(err)
+	}
+	result, err := s.Submit(ctx, input)
+	if err != nil {
+		t.Fatal(err)
+	}
+	block, _ := pem.Decode([]byte(result.CertificatePEM))
+	fp := sha256.Sum256(block.Bytes)
+	fingerprint := hex.EncodeToString(fp[:])
+	revokeOp := EnrollmentOperation{ActorID: "admin", Action: "agent.revoke", NodeID: result.NodeID, Fingerprint: fingerprint, ExpectedRevision: result.TrustGeneration}
+	before = bytes.Clone(store.data)
+	deny(revokeOp)
+	checkUnchanged(before, s.Revoke(ctx, revokeOp, fingerprint))
+	if id, err := s.Lookup(ctx, fingerprint); err != nil || id.Revoked {
+		t.Fatal("unauthorized revocation persisted", err)
+	}
+	s.commit = allow
+	if err = s.Revoke(ctx, revokeOp, fingerprint); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnrollmentMissingPanickingUnavailableAndCancelledAuthorityCloses(t *testing.T) {
+	s, store, _ := enrollmentFixture(t)
+	if _, err := NewEnrollmentService(store, s.issuer, s.gate, nil); err != ErrEnrollmentUnavailable {
+		t.Fatal("missing commit authority accepted", err)
+	}
+	op := EnrollmentOperation{ActorID: "admin", Action: "enrollment.issue"}
+	for _, stage := range []string{"entry", "commit"} {
+		for _, mode := range []string{"panic", "unavailable", "cancel"} {
+			t.Run(stage+"-"+mode, func(t *testing.T) {
+				s, store, _ := enrollmentFixture(t)
+				ctx, cancel := context.WithCancel(context.Background())
+				defer cancel()
+				gate := func(context.Context, EnrollmentOperation) error {
+					switch mode {
+					case "panic":
+						panic("authority source failed")
+					case "cancel":
+						cancel()
+						return nil
+					default:
+						return ErrEnrollmentUnavailable
+					}
+				}
+				if stage == "entry" {
+					s.gate = gate
+				} else {
+					s.commit = gate
+				}
+				before := bytes.Clone(store.data)
+				token, err := s.IssueToken(ctx, op, EnrollmentTokenInput{Name: "Unsafe source", TTLSeconds: 600})
+				if err != ErrEnrollmentUnavailable || token.Token != "" || !bytes.Equal(before, store.data) {
+					t.Fatal("failed authority source allowed mutation", err)
+				}
+			})
+		}
 	}
 }
