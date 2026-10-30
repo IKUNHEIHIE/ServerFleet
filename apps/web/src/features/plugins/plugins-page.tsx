@@ -114,6 +114,7 @@ export function PluginsPage() {
       setOperation(result.data.data);
       setOutcome("安装操作已提交；完成状态以操作详情为准。");
       installed.reload();
+      session.refreshPlugins();
     }
   }
 
@@ -123,6 +124,7 @@ export function PluginsPage() {
       setOperation(result.data.data);
       setOutcome(plugin.enabled ? "停用操作已提交；入口将在服务端确认后消失。" : "启用操作已提交；入口出现仍需服务端确认。");
       installed.reload();
+      session.refreshPlugins();
     }
   }
 
@@ -143,6 +145,7 @@ export function PluginsPage() {
       setOperation(result.data.data);
       setOutcome("更新操作已提交；失败时服务端应保持旧版可用。");
       installed.reload();
+      session.refreshPlugins();
     }
   }
 
@@ -154,6 +157,7 @@ export function PluginsPage() {
       setOperation(result.data.data);
       setOutcome("卸载操作已提交；插件业务菜单应随停用/卸载消失。");
       installed.reload();
+      session.refreshPlugins();
     }
   }
 

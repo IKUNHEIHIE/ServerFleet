@@ -136,7 +136,7 @@ export function Shell({ children }: { readonly children: ReactNode }) {
   const [loggingOut, setLoggingOut] = useState(false);
   const routeMeta = ROUTE_META[location.path];
   const navItem = findNavItem(location.path);
-  const plugins = useResource(`shell:plugins:${session.viewEpoch}`, signal =>
+  const plugins = useResource(`shell:plugins:${session.viewEpoch}:${session.pluginEpoch}`, signal =>
     pluginsApi.installed(signal).then(result => result.data),
   );
   const pluginLinks =

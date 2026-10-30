@@ -51,6 +51,9 @@ export interface SessionContextValue {
   readonly resumeEpoch: number;
   /** 资源 key 的一部分：身份变化或页面恢复时让旧 DOM/迟到响应立即失效。 */
   readonly viewEpoch: string;
+  /** 插件安装/启停后递增，让侧边栏的插件入口立刻重新读取服务端状态。 */
+  readonly pluginEpoch: number;
+  readonly refreshPlugins: () => void;
   readonly writesLocked: boolean;
   readonly can: (permission: string) => boolean;
   readonly login: (username: string, password: string, secondFactorCode?: string) => Promise<SessionActionResult>;
@@ -100,6 +103,7 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
   const stateRef = useRef<SessionState>(state);
   const [epoch, setEpoch] = useState(0);
   const [resumeEpoch, setResumeEpoch] = useState(0);
+  const [pluginEpoch, setPluginEpoch] = useState(0);
   const [initAttempt, setInitAttempt] = useState(0);
   const revalidating = useRef(false);
   const lastRevalidateAt = useRef(0);
@@ -112,6 +116,7 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
   }, []);
 
   const bumpEpoch = useCallback(() => setEpoch(value => value + 1), []);
+  const refreshPlugins = useCallback(() => setPluginEpoch(value => value + 1), []);
 
   useEffect(() => {
     setCsrfProvider(() => csrfRef.current);
@@ -386,6 +391,8 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
     epoch,
     resumeEpoch,
     viewEpoch: `${epoch}:${resumeEpoch}`,
+    pluginEpoch,
+    refreshPlugins,
     writesLocked: state.kind === "authenticated" && !state.csrfToken,
     can,
     login,

@@ -98,8 +98,17 @@ describe("plugin center", () => {
     expect(screen.getByRole("heading", { name: "插件操作 op-1" })).toBeVisible();
   });
 
-  it("submits deactivation through the server and only shows the plugin entry while it is enabled", async () => {
-    const { calls } = await renderAuthenticated("/plugins", pluginRoutes([INSTALLED_ENABLED]));
+  it("submits deactivation through the server and removes the plugin entry once the server confirms", async () => {
+    let enabled = true;
+    const routes = pluginRoutes([]);
+    const { calls } = await renderAuthenticated("/plugins", {
+      ...routes,
+      "GET /api/v1/plugins": () => jsonResponse({ items: [{ ...INSTALLED_ENABLED, enabled, status: enabled ? "enabled" : "installed_disabled" }] }),
+      "PUT /api/v1/plugins/xray-manager/activation": () => {
+        enabled = false;
+        return jsonResponse({ ...OPERATION, action: "deactivate", status: "draining" });
+      },
+    });
     expect(await screen.findByRole("link", { name: "Xray 节点管理器" })).toBeVisible();
     expect(await screen.findByText("已启用")).toBeVisible();
 
@@ -110,6 +119,8 @@ describe("plugin center", () => {
       expect(JSON.parse(String(call?.init?.body))).toEqual({ enabled: false });
     });
     expect(await screen.findByText(/停用操作已提交/)).toBeVisible();
+    await waitFor(() => expect(screen.queryByRole("link", { name: "Xray 节点管理器" })).not.toBeInTheDocument());
+    expect(screen.getByText("已安装·停用")).toBeVisible();
   });
 
   it("hides the plugin navigation entry when the plugin is installed but disabled", async () => {
