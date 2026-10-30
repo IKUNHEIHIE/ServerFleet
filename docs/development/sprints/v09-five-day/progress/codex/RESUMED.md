@@ -204,4 +204,12 @@ R17—R19全量复验：npm run check五套PASS（2026-10-30T07:23:09Z），chec
 
 ## R22 新正式Xray发布物独立扫描与可复查入口
 
+提交 `e345dc1abf279e474beed9102068609de852c12a`。
+
 26.10.29公开归档SHA256与GitHub官方asset吻合，EXE SHA256另固定；Go1.27.3/main(devel)。静态govulncheck exit3/3项符号级发现（x/net两个HTML问题、x/crypto未维护openpgp），未启动新版，不擅自豁免或宣称它可发布。固定两版本的audit-xray-release.mjs只下载/双哈希/读build info/扫描，拒绝未知版本、超时/超量/脏缓存。精确证据见XRAY-ARTIFACT-SECURITY.md。缺少可准入Xray发布物只阻断实际安装，继续更新/其他独立实现。
+
+## R23 更新私有文件切换、健康证据及精确备份回退
+
+新增updates.SlotInstaller/InstallHooks/持久阶段与历史回执，详见UPDATE-INSTALL.md。实际文件使用签名暂存、当前provenance/哈希、永久executionId/跨实例锁、备份/替换、哈希复验；缺当前任务/服务/health/审计适配拒绝。任何模糊结果永久锁并UNKNOWN不重试；明确健康失败且原任务授权+当前兼容性核查才恢复本次精确备份。回退是更新失败后的已确认恢复，不降序列高水位，不对不兼容迁移盲目启动旧程序。未改共享接口/锁/迁移或启用生产profile。
+
+首轮Windows只读属性使Rename失败（未误报成功），改为所有者0700文件；首次time.Time内存单调时钟比较导致序列化回执测试误报，修为完整JSON比较；并发fixture改独立暂存对象以免自身对象锁串行。随后updates/architecture PASS 3.471s/1.961s，staticcheck PASS；真实文件/重开/并发/阶段撤权/损坏/回退负向已测，服务/审计/健康来源/兼容性回调为明确double。Linux断电、实际监管进程/systemd、事务接线及双架构安装仍未验收，继续包内下一项。
