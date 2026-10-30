@@ -136,3 +136,50 @@ func (s *IdentityService) NodeReadPolicy(ctx context.Context, subject string) (*
 	}
 	return policy, nil
 }
+
+// NodeReadPolicySnapshot builds a fresh NodePolicy snapshot across all active
+// subjects whose role permits nodes.read. It satisfies auth.PolicyReader for
+// Controller composition without caching or granting implicit node access.
+func (s *IdentityService) NodeReadPolicySnapshot(ctx context.Context) (*NodePolicy, error) {
+	policy := &NodePolicy{KnownNodes: map[string]struct{}{}, ReadGrants: map[string]map[string]struct{}{}}
+	err := s.read(ctx, func(st *identityState, now time.Time) error {
+		for subject, u := range st.Users {
+			if u.Disabled || !s.roleAllows(u, NodeReadAction) {
+				continue
+			}
+			nodes, err := s.grantedNodes(ctx, st, subject, NodeReadAction, now)
+			if err == ErrDenied {
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			policy.ReadGrants[subject] = nodes
+			for id := range nodes {
+				policy.KnownNodes[id] = struct{}{}
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return policy, nil
+}
+
+// AuthorizeSubjectAction checks whether an active subject's role permits action
+// for non-node-scoped catalog operations (such as audit list, task list, DNS
+// account/zone catalog and notification settings). Node-targeted actions must
+// still use Authorize with explicit NodeIDs.
+func (s *IdentityService) AuthorizeSubjectAction(ctx context.Context, subject, action string) error {
+	if !validPolicyID(subject) || !validPolicyID(action) {
+		return ErrInvalidCheck
+	}
+	return s.read(ctx, func(st *identityState, _ time.Time) error {
+		u, ok := st.Users[subject]
+		if !ok || u.Disabled || !s.roleAllows(u, action) {
+			return ErrDenied
+		}
+		return nil
+	})
+}

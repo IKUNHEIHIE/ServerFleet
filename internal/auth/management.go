@@ -376,6 +376,9 @@ func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf 
 			return ErrIdentityUnavailable
 		}
 		nodes, err := s.resources(ctx, input.ResourceType, input.ResourceID)
+		if errors.Is(err, ErrInvalidCheck) || errors.Is(err, ErrDenied) {
+			return err
+		}
 		if err != nil {
 			return ErrPolicyUnavailable
 		}
@@ -448,6 +451,9 @@ func (s *IdentityService) grantedNodes(ctx context.Context, st *identityState, s
 			return nil, ErrPolicyUnavailable
 		}
 		current, err := s.resources(ctx, g.ResourceType, g.ResourceID)
+		if errors.Is(err, ErrInvalidCheck) || errors.Is(err, ErrDenied) {
+			continue
+		}
 		if err != nil || !validExactIDs(current) {
 			return nil, ErrPolicyUnavailable
 		}

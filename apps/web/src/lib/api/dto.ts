@@ -21,6 +21,8 @@ export interface Identity {
   /** 服务端权限结果。缺失表示被告知“无结果”，不能由客户端按角色推断。 */
   readonly permissions?: readonly string[];
   readonly isBootstrapAdmin?: boolean;
+  /** 服务端在受保护会话恢复（GET /api/v1/auth/me）时返回的内存态 CSRF 令牌。 */
+  readonly csrfToken?: string;
 }
 
 export interface LoginRequest {

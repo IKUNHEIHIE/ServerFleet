@@ -171,11 +171,13 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
             commit({ kind: "unavailable", error: new ApiError({ kind: "invalid", status: me.status }) });
             return;
           }
+          const restoredCsrf =
+            typeof me.data.csrfToken === "string" && me.data.csrfToken.length > 0 ? me.data.csrfToken : null;
           commit({
             kind: "authenticated",
             identity: me.data,
-            // 刷新后 CSRF 需受保护地补取；当前 Identity 契约没有该字段，写入先锁定。
-            csrfToken: null,
+            // 当服务端 /auth/me 返回 csrfToken（S01）时恢复内存态令牌；若省略则保持写入锁定。
+            csrfToken: restoredCsrf,
             sessionExpiresAt: null,
             warning: null,
             notice: null,
@@ -234,8 +236,10 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
           commit({ ...current, warning: "身份刷新返回了无法识别的数据，已保留当前会话。" });
           return;
         }
+        const nextCsrf =
+          typeof me.data.csrfToken === "string" && me.data.csrfToken.length > 0 ? me.data.csrfToken : current.csrfToken;
         const changed = JSON.stringify(current.identity) !== JSON.stringify(me.data);
-        commit({ ...current, identity: me.data, warning: null });
+        commit({ ...current, identity: me.data, csrfToken: nextCsrf, warning: null });
         if (changed) bumpEpoch();
       } catch (error) {
         const apiError = isApiError(error) ? error : new ApiError({ kind: "unknown", status: 0, cause: error });
@@ -344,12 +348,15 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
     async (setupToken: string, username: string, password: string): Promise<SessionActionResult> => {
       try {
         const response = await authApi.bootstrap({ setupToken, username, password });
+        if (response.status === 204 || !response.data) {
+          return await login(username, password);
+        }
         return finishLogin(response.data, true);
       } catch (error) {
         return failure(error);
       }
     },
-    [finishLogin],
+    [finishLogin, login],
   );
 
   const logout = useCallback(async (): Promise<SessionActionResult> => {

@@ -68,4 +68,18 @@ describe("session restore", () => {
     expect(await screen.findByText("安全写入已锁定")).toBeVisible();
     await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "概览仪表盘" })).toBeVisible());
   });
+
+  it("restores in-memory CSRF token on reload when /api/v1/auth/me returns csrfToken (S01)", async () => {
+    installFetch({
+      "GET /api/v1/auth/bootstrap-status": () => new Response(JSON.stringify({ bootstrapAvailable: false, initialized: true }), { headers: { "Content-Type": "application/json" } }),
+      "GET /api/v1/auth/me": () => new Response(JSON.stringify({ userId: "u1", displayName: "运维", roles: ["operator"], permissions: ["node.read"], csrfToken: "csrf-restored" }), { headers: { "Content-Type": "application/json" } }),
+      "GET /healthz": () => new Response(JSON.stringify({ status: "ok" }), { headers: { "Content-Type": "application/json" } }),
+      "GET /api/v1/nodes": () => new Response(JSON.stringify({ items: [] }), { headers: { "Content-Type": "application/json" } }),
+      "GET /api/v1/tasks": () => new Response(JSON.stringify({ items: [], page: { nextCursor: null, limit: 5, hasMore: false } }), { headers: { "Content-Type": "application/json" } }),
+      "GET /api/v1/audit/events": () => new Response(JSON.stringify({ items: [], page: { nextCursor: null, limit: 5, hasMore: false } }), { headers: { "Content-Type": "application/json" } }),
+    });
+    render(<App />);
+    await waitFor(() => expect(screen.getByRole("heading", { level: 1, name: "概览仪表盘" })).toBeVisible());
+    expect(screen.queryByText("安全写入已锁定")).not.toBeInTheDocument();
+  });
 });

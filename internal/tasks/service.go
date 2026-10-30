@@ -430,7 +430,11 @@ func (s *Service) Decide(ctx context.Context, taskID string, expectedRevision ui
 		}, now); err != nil {
 			return err
 		}
-		event := s.event(decision.ApproverID, ActionApprove, record, decision.RequestID, targetIDs, decision.Reason)
+		reasonCode := decision.Reason
+		if reasonCode != "" && !validToken(reasonCode, audit.DefaultLimits().MaxReasonCodeBytes) {
+			reasonCode = approvalDecision
+		}
+		event := s.event(decision.ApproverID, ActionApprove, record, decision.RequestID, targetIDs, reasonCode)
 		event.TaskID = taskID
 		return s.audit.AppendTx(txCtx, tx, event)
 	})

@@ -1,0 +1,950 @@
+// Package server composes the persistent Controller domains, SQLite WAL storage,
+// transactional audit sink, browser session/CSRF boundary, and REST/SSE handlers.
+package server
+
+import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"os"
+	"path/filepath"
+	"sort"
+	"strings"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/ai"
+	"serverfleet.local/serverfleet/internal/audit"
+	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/certificates"
+	"serverfleet.local/serverfleet/internal/dns"
+	"serverfleet.local/serverfleet/internal/files"
+	"serverfleet.local/serverfleet/internal/gateway"
+	"serverfleet.local/serverfleet/internal/monitoring"
+	"serverfleet.local/serverfleet/internal/nodes"
+	"serverfleet.local/serverfleet/internal/notifications"
+	"serverfleet.local/serverfleet/internal/plugins"
+	"serverfleet.local/serverfleet/internal/publishing"
+	"serverfleet.local/serverfleet/internal/quota"
+	"serverfleet.local/serverfleet/internal/servicegroups"
+	"serverfleet.local/serverfleet/internal/storage"
+	"serverfleet.local/serverfleet/internal/tasks"
+	"serverfleet.local/serverfleet/internal/transport"
+	"serverfleet.local/serverfleet/internal/workflows"
+)
+
+// Config configures the composed Controller management runtime.
+type Config struct {
+	DBPath         string
+	Origin         string
+	StagingDir     string
+	Dispatcher     tasks.Dispatcher
+	DNSProvider    dns.Provider
+	GatewayChecker gateway.Checker
+	Now            func() time.Time
+}
+
+// Server holds the wired Controller database, services, and HTTP router.
+type Server struct {
+	DB                *storage.DB
+	Audit             *audit.SQLRecorder
+	IdentityStore     *auth.SQLIdentityStore
+	Identity          *auth.IdentityService
+	Credentials       *auth.CredentialService
+	IdentityHTTP      *auth.IdentityHTTP
+	NodesRepo         *nodes.Repo
+	GroupsRepo        *nodes.GroupRepo
+	ServiceGroupsRepo *servicegroups.Repo
+	Nodes             *nodes.Service
+	ServiceGroups     *servicegroups.Service
+	TasksRepo         *tasks.Repo
+	Tasks             *tasks.Service
+	Files             *files.Service
+	DNS               *dns.Service
+	Notifications     *notifications.Service
+	Gateway           *gateway.Service
+
+	mux *http.ServeMux
+	now func() time.Time
+}
+
+type requestIDContextKey struct{}
+
+// Migrations returns the complete ordered migration sets across DS and CX domains.
+func Migrations() [][]storage.Migration {
+	cxMigrations := []storage.Migration{
+		{
+			Version:    "cx/0001_auth_identity",
+			Name:       "persistent identity, session, RBAC and credential state",
+			Statements: auth.IdentitySchemaStatements(),
+		},
+		{
+			Version:    "cx/0002_agent_enrollment",
+			Name:       "persistent agent enrollment state",
+			Statements: transport.EnrollmentSchemaStatements(),
+		},
+		{
+			Version:    "cx/0003_plugin_lifecycle",
+			Name:       "persistent plugin lifecycle state",
+			Statements: plugins.LifecycleSchemaStatements(),
+		},
+		{
+			Version:    "cx/0004_plugin_history",
+			Name:       "persistent plugin history state",
+			Statements: plugins.HistorySchemaStatements(),
+		},
+		{
+			Version:    "cx/0005_ai_sessions",
+			Name:       "persistent AI session state",
+			Statements: ai.SessionSchemaStatements(),
+		},
+		{
+			Version:    "cx/0006_workflows",
+			Name:       "persistent workflow state",
+			Statements: workflows.WorkflowSchemaStatements(),
+		},
+	}
+	return [][]storage.Migration{
+		cxMigrations,
+		nodes.Migrations(),
+		servicegroups.Migrations(),
+		tasks.Migrations(),
+		files.Migrations(),
+		monitoring.Migrations(),
+		notifications.Migrations(),
+		quota.Migrations(),
+		dns.Migrations(),
+		certificates.Migrations(),
+		gateway.Migrations(),
+		publishing.Migrations(),
+		audit.Migrations(),
+	}
+}
+
+// AuditActions returns the deduplicated catalog of audit actions across all domains.
+func AuditActions() []string {
+	raw := []string{
+		audit.ActionRetention,
+		"auth.setup",
+		"auth.bootstrap",
+		"auth.login",
+		"auth.user.create",
+		"auth.user.patch",
+		"auth.session.revoke",
+		"auth.grant.create",
+		"auth.grant.revoke",
+		"auth.password.change",
+		"auth.http.denied",
+		"auth.token.issue",
+		"auth.token.revoke",
+		"auth.approval.request",
+		"auth.approval.approve",
+		"auth.approval.deny",
+		"auth.approval.consume",
+		"credentials.create",
+		"credentials.rotation.stage",
+		"credentials.rotate",
+		"credentials.revoke",
+		"credentials.use.intent",
+		"credentials.use.complete",
+		"tasks.command",
+		"host.patch",
+		"host.root",
+		"files.transfer",
+		"gateway.provision",
+	}
+	for _, list := range [][]string{
+		nodes.ServiceActions(),
+		servicegroups.ServiceActions(),
+		tasks.ServiceActions(),
+		files.ServiceActions(),
+		monitoring.ServiceActions(),
+		notifications.ServiceActions(),
+		quota.ServiceActions(),
+		dns.ServiceActions(),
+		certificates.ServiceActions(),
+		gateway.ServiceActions(),
+		publishing.ServiceActions(),
+	} {
+		raw = append(raw, list...)
+	}
+	seen := make(map[string]struct{}, len(raw))
+	out := make([]string, 0, len(raw))
+	for _, action := range raw {
+		if _, exists := seen[action]; !exists {
+			seen[action] = struct{}{}
+			out = append(out, action)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
+func ExtraPermissions() []auth.PermissionDefinition {
+	return []auth.PermissionDefinition{
+		{Key: nodes.ActionNodesWrite, Description: "Modify granted nodes", ResourceType: "node"},
+		{Key: nodes.ActionNodeCreate, Description: "Create nodes", ResourceType: "node"},
+		{Key: nodes.ActionGroupsWrite, Description: "Manage node groups on granted nodes", ResourceType: "node"},
+		{Key: servicegroups.ActionRead, Description: "Read service groups on granted nodes", ResourceType: "node", ReadOnly: true},
+		{Key: servicegroups.ActionWrite, Description: "Modify service groups on granted nodes", ResourceType: "node"},
+		{Key: tasks.ActionCancel, Description: "Cancel tasks on granted nodes", ResourceType: "node"},
+		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
+		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
+		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
+		{Key: "host.root", Description: "Execute root-level host changes on granted nodes", ResourceType: "node", AdminOnly: true},
+		{Key: files.ActionRead, Description: "Read files on granted nodes", ResourceType: "node", ReadOnly: true},
+		{Key: files.ActionWrite, Description: "Write files on granted nodes", ResourceType: "node"},
+		{Key: files.ActionTransfer, Description: "Transfer files across granted nodes", ResourceType: "node"},
+		{Key: gateway.ActionRead, Description: "Read gateways and routes on granted nodes", ResourceType: "node", ReadOnly: true},
+		{Key: gateway.ActionWrite, Description: "Manage gateways and routes on granted nodes", ResourceType: "node"},
+		{Key: gateway.ActionProvision, Description: "Provision gateway runtime on granted nodes", ResourceType: "node"},
+		{Key: dns.ActionAccountsRead, Description: "Read DNS provider accounts", ResourceType: "node", ReadOnly: true},
+		{Key: dns.ActionZonesRead, Description: "Read DNS zones", ResourceType: "node", ReadOnly: true},
+		{Key: dns.ActionRecordsRead, Description: "Read DNS records", ResourceType: "node", ReadOnly: true},
+		{Key: dns.ActionAccountCreate, Description: "Create DNS provider accounts", ResourceType: "node", AdminOnly: true},
+		{Key: dns.ActionAccountUpdate, Description: "Update DNS provider accounts", ResourceType: "node", AdminOnly: true},
+		{Key: dns.ActionAccountTest, Description: "Test DNS provider accounts", ResourceType: "node"},
+		{Key: dns.ActionAccountDefault, Description: "Set default DNS provider account", ResourceType: "node", AdminOnly: true},
+		{Key: dns.ActionZoneCreate, Description: "Sync DNS zones", ResourceType: "node"},
+		{Key: dns.ActionRecordCreate, Description: "Create DNS records", ResourceType: "node"},
+		{Key: dns.ActionRecordUpdate, Description: "Update DNS records", ResourceType: "node"},
+		{Key: dns.ActionRecordDelete, Description: "Delete DNS records", ResourceType: "node"},
+		{Key: "notifications.read", Description: "Read notification channels and delivery history", ResourceType: "node", ReadOnly: true},
+		{Key: notifications.ActionWrite, Description: "Configure notification channels and settings", ResourceType: "node", AdminOnly: true},
+		{Key: notifications.ActionChannel, Description: "Update notification channel configuration", ResourceType: "node", AdminOnly: true},
+		{Key: notifications.ActionSecret, Description: "Rotate notification channel credentials", ResourceType: "node", AdminOnly: true},
+		{Key: notifications.ActionSettings, Description: "Update notification event routing settings", ResourceType: "node", AdminOnly: true},
+		{Key: notifications.ActionTest, Description: "Send test notification", ResourceType: "node"},
+		{Key: notifications.ActionSend, Description: "Dispatch notification events", ResourceType: "node"},
+		{Key: notifications.ActionRetry, Description: "Retry failed notification deliveries", ResourceType: "node"},
+	}
+}
+
+// New opens and migrates the SQLite WAL database and wires all Controller services and HTTP routes.
+func New(ctx context.Context, cfg Config) (*Server, error) {
+	if strings.TrimSpace(cfg.DBPath) == "" {
+		return nil, errors.New("controller: database path is required")
+	}
+	if strings.TrimSpace(cfg.Origin) == "" {
+		return nil, errors.New("controller: browser origin is required")
+	}
+	now := cfg.Now
+	if now == nil {
+		now = time.Now
+	}
+	stagingDir := cfg.StagingDir
+	if strings.TrimSpace(stagingDir) == "" {
+		stagingDir = filepath.Join(filepath.Dir(cfg.DBPath), "staging")
+	}
+	if err := os.MkdirAll(stagingDir, 0o700); err != nil {
+		return nil, fmt.Errorf("controller: create staging directory: %w", err)
+	}
+
+	db, err := storage.Open(ctx, storage.Config{Path: cfg.DBPath})
+	if err != nil {
+		return nil, err
+	}
+	cleanup := func(cause error) (*Server, error) {
+		_ = db.Close()
+		return nil, cause
+	}
+
+	migrator, err := storage.NewMigrator(Migrations()...)
+	if err != nil {
+		return cleanup(err)
+	}
+	if _, err := migrator.Apply(ctx, db); err != nil {
+		return cleanup(err)
+	}
+
+	limits := audit.DefaultLimits()
+	limits.RequireSource = true
+	validator, err := audit.NewValidator(AuditActions(), limits)
+	if err != nil {
+		return cleanup(err)
+	}
+	auditRecorder, err := audit.NewSQLRecorder(db, validator, now)
+	if err != nil {
+		return cleanup(err)
+	}
+
+	nodesRepo, err := nodes.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	groupsRepo, err := nodes.NewGroupRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	serviceGroupsRepo, err := servicegroups.NewRepo(db, nodesRepo)
+	if err != nil {
+		return cleanup(err)
+	}
+	tasksRepo, err := tasks.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	filesRepo, err := files.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	dnsRepo, err := dns.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	notificationsRepo, err := notifications.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	gatewayRepo, err := gateway.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+
+	identityStore, err := newIdentityStore(db, auditRecorder)
+	if err != nil {
+		return cleanup(err)
+	}
+	resolver := func(ctx context.Context, kind, id string) ([]string, error) {
+		switch kind {
+		case "node":
+			node, err := nodesRepo.Get(ctx, id)
+			if storage.IsNotFound(err) {
+				return nil, auth.ErrInvalidCheck
+			}
+			if err != nil {
+				return nil, err
+			}
+			return []string{node.ID}, nil
+		case "node_group":
+			group, err := groupsRepo.Get(ctx, id)
+			if storage.IsNotFound(err) {
+				return nil, auth.ErrInvalidCheck
+			}
+			if err != nil {
+				return nil, err
+			}
+			return append([]string(nil), group.Members...), nil
+		case "service_group":
+			group, err := serviceGroupsRepo.Get(ctx, id)
+			if storage.IsNotFound(err) {
+				return nil, auth.ErrInvalidCheck
+			}
+			if err != nil {
+				return nil, err
+			}
+			members := make([]string, 0, len(group.Members))
+			for _, m := range group.Members {
+				members = append(members, m.NodeID)
+			}
+			return members, nil
+		default:
+			return nil, auth.ErrInvalidCheck
+		}
+	}
+	identityService, err := auth.NewIdentityServiceWithResources(identityStore, resolver, ExtraPermissions())
+	if err != nil {
+		return cleanup(err)
+	}
+	credentialsService, err := auth.NewCredentialService(
+		identityService,
+		"local-default",
+		map[string][]byte{"local-default": []byte("0123456789abcdef0123456789abcdef")},
+		func(context.Context, auth.CredentialOperation) error { return auth.ErrDenied },
+		func(context.Context, string, string) ([]string, error) { return []string{}, nil },
+	)
+	if err != nil {
+		return cleanup(err)
+	}
+	identityHTTP, err := auth.NewIdentityHTTP(identityService, auth.IdentityHTTPConfig{
+		Origin:                 cfg.Origin,
+		Credentials:            credentialsService,
+		EnableRestrictedTokens: true,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	authorizer := &composedAuthorizer{identity: identityService}
+	readPolicy := identityService.NodeReadPolicySnapshot
+
+	nodesService, err := nodes.NewService(nodes.Options{
+		DB:         db,
+		Nodes:      nodesRepo,
+		Groups:     groupsRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		ReadPolicy: readPolicy,
+		Now:        now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	eligibility := &composedEligibility{nodes: nodesRepo, gateways: gatewayRepo, db: db, now: now}
+	deleteGuard := &composedDeleteGuard{gateways: gatewayRepo, db: db}
+	serviceGroupsService, err := servicegroups.NewService(servicegroups.Options{
+		DB:          db,
+		Repo:        serviceGroupsRepo,
+		Nodes:       nodesRepo,
+		Audit:       auditRecorder,
+		Authorizer:  authorizer,
+		ReadPolicy:  readPolicy,
+		Eligibility: eligibility,
+		DeleteGuard: deleteGuard,
+		Now:         now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	nodeLookup := &composedNodeLookup{nodes: nodesRepo, now: now}
+	tasksService, err := tasks.NewService(tasks.Options{
+		DB:         db,
+		Repo:       tasksRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		Dispatcher: cfg.Dispatcher,
+		Nodes:      nodeLookup,
+		Now:        now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	taskBridge := &composedTaskBridge{tasks: tasksService}
+	filesService, err := files.NewService(files.Options{
+		DB:         db,
+		Repo:       filesRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		Submitter:  taskBridge,
+		Canceller:  taskBridge,
+		StagingDir: stagingDir,
+		Now:        now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	dnsService, err := dns.NewService(dns.Options{
+		DB:         db,
+		Repo:       dnsRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		Provider:   cfg.DNSProvider,
+		Now:        now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	notificationsService, err := notifications.NewService(notifications.Options{
+		DB:         db,
+		Repo:       notificationsRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		Now:        now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	gatewayService, err := gateway.NewService(gateway.Options{
+		DB:            db,
+		Repo:          gatewayRepo,
+		Nodes:         nodeLookup,
+		ServiceGroups: &composedServiceGroupLookup{repo: serviceGroupsRepo},
+		Checker:       cfg.GatewayChecker,
+		Tasks:         taskBridge,
+		Audit:         auditRecorder,
+		Authorizer:    authorizer,
+		Now:           now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	s := &Server{
+		DB:                db,
+		Audit:             auditRecorder,
+		IdentityStore:     identityStore,
+		Identity:          identityService,
+		Credentials:       credentialsService,
+		IdentityHTTP:      identityHTTP,
+		NodesRepo:         nodesRepo,
+		GroupsRepo:        groupsRepo,
+		ServiceGroupsRepo: serviceGroupsRepo,
+		Nodes:             nodesService,
+		ServiceGroups:     serviceGroupsService,
+		TasksRepo:         tasksRepo,
+		Tasks:             tasksService,
+		Files:             filesService,
+		DNS:               dnsService,
+		Notifications:     notificationsService,
+		Gateway:           gatewayService,
+		mux:               http.NewServeMux(),
+		now:               now,
+	}
+	if err := s.registerRoutes(); err != nil {
+		return cleanup(err)
+	}
+	return s, nil
+}
+
+// Close closes the underlying SQLite database handle.
+func (s *Server) Close() error {
+	if s == nil || s.DB == nil {
+		return nil
+	}
+	return s.DB.Close()
+}
+
+// ServeHTTP sets security headers and a request ID before dispatching to the composed mux.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	reqID := newRequestID()
+	w.Header().Set("X-Request-ID", reqID)
+	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
+	s.mux.ServeHTTP(w, r.WithContext(ctx))
+}
+
+func (s *Server) registerRoutes() error {
+	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave2"})
+	})
+
+	for _, pattern := range []string{
+		"/api/v1/auth/",
+		"/api/v1/users",
+		"/api/v1/users/",
+		"/api/v1/roles",
+		"/api/v1/permissions",
+		"/api/v1/resource-grants",
+		"/api/v1/resource-grants/",
+		"/api/v1/credentials",
+		"/api/v1/credentials/",
+	} {
+		s.mux.Handle(pattern, s.IdentityHTTP)
+	}
+
+	if err := nodes.RegisterHTTP(s.mux, s.Nodes, func(r *http.Request) (nodes.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return nodes.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	if err := servicegroups.RegisterHTTP(s.mux, s.ServiceGroups, func(r *http.Request) (servicegroups.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return servicegroups.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	if err := tasks.Register(
+		s.mux,
+		s.Tasks,
+		func(r *http.Request) (tasks.Principal, error) {
+			sub, reqID, err := s.authenticate(r)
+			return tasks.Principal{SubjectID: sub, RequestID: reqID}, err
+		},
+		&composedGroupResolver{groups: s.GroupsRepo, serviceGroups: s.ServiceGroupsRepo},
+		resolveOperationClass,
+		&composedTaskReadGate{identity: s.Identity, tasks: s.TasksRepo},
+	); err != nil {
+		return err
+	}
+	if err := files.RegisterHTTP(s.mux, s.Files, func(r *http.Request) (files.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return files.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	if err := audit.Register(
+		s.mux,
+		s.Audit,
+		func(r *http.Request) (audit.Principal, error) {
+			sub, reqID, err := s.authenticate(r)
+			return audit.Principal{SubjectID: sub, RequestID: reqID}, err
+		},
+		&composedAuditReadGate{identity: s.Identity},
+	); err != nil {
+		return err
+	}
+	if err := dns.RegisterHTTP(s.mux, s.DNS, func(r *http.Request) (dns.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return dns.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	if err := notifications.RegisterHTTP(
+		s.mux,
+		s.Notifications,
+		func(r *http.Request) (notifications.Principal, error) {
+			sub, reqID, err := s.authenticate(r)
+			return notifications.Principal{SubjectID: sub, RequestID: reqID}, err
+		},
+		&composedNotificationsReadGate{identity: s.Identity},
+	); err != nil {
+		return err
+	}
+	if err := gateway.RegisterHTTP(s.mux, s.Gateway, func(r *http.Request) (gateway.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return gateway.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (s *Server) authenticate(r *http.Request) (string, string, error) {
+	id, err := s.IdentityHTTP.AuthenticateRequest(r)
+	if err != nil {
+		return "", "", err
+	}
+	reqID, _ := r.Context().Value(requestIDContextKey{}).(string)
+	if reqID == "" {
+		reqID = newRequestID()
+	}
+	return id.SubjectID, reqID, nil
+}
+
+func newRequestID() string {
+	var raw [16]byte
+	if _, err := rand.Read(raw[:]); err != nil {
+		return "req-fallback"
+	}
+	return "req-" + hex.EncodeToString(raw[:])
+}
+
+func newIdentityStore(db *storage.DB, recorder *audit.SQLRecorder) (*auth.SQLIdentityStore, error) {
+	statements := func(q storage.Queryer) auth.IdentitySQLStatements {
+		return auth.IdentitySQLStatements{
+			Read: func(ctx context.Context, query string, args ...any) ([]byte, bool, error) {
+				var payload []byte
+				var initialized bool
+				err := q.QueryRow(ctx, query, args...).Scan(&payload, &initialized)
+				return payload, initialized, err
+			},
+			Exec: func(ctx context.Context, query string, args ...any) (int64, error) {
+				result, err := q.Exec(ctx, query, args...)
+				if err != nil {
+					return 0, err
+				}
+				return result.RowsAffected()
+			},
+		}
+	}
+	backend := auth.IdentitySQLBackend{
+		Read: statements(db).Read,
+		InTx: func(ctx context.Context, fn func(auth.IdentitySQLStatements) error) error {
+			return db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+				ops := statements(tx)
+				ops.AppendAudit = func(auditCtx context.Context, events []auth.IdentityAuditEvent) error {
+					for _, event := range events {
+						source := audit.Source(event.Source)
+						if source == "" {
+							source = audit.SourceWeb
+						}
+						reqID := event.RequestID
+						if reqID == "" {
+							reqID = newRequestID()
+						}
+						if err := recorder.AppendTx(auditCtx, tx, audit.Event{
+							SubjectID: event.SubjectID,
+							Action:    event.Action,
+							Result:    event.Result,
+							RequestID: reqID,
+							Source:    source,
+							At:        event.At,
+							NodeIDs:   event.NodeIDs,
+						}); err != nil {
+							return err
+						}
+					}
+					return nil
+				}
+				return fn(ops)
+			})
+		},
+	}
+	backend.InTxContext = func(ctx context.Context, fn func(context.Context, auth.IdentitySQLStatements) error) error {
+		return backend.InTx(ctx, func(ops auth.IdentitySQLStatements) error {
+			return fn(ctx, ops)
+		})
+	}
+	return auth.NewSQLIdentityStore(backend)
+}
+
+type composedAuthorizer struct {
+	identity *auth.IdentityService
+}
+
+func (a *composedAuthorizer) Authorize(ctx context.Context, check auth.Check) error {
+	if a == nil || a.identity == nil {
+		return auth.ErrPolicyUnavailable
+	}
+	if len(check.NodeIDs) == 0 {
+		if check.Action == nodes.ActionGroupsWrite || strings.HasPrefix(check.Action, "dns.") || strings.HasPrefix(check.Action, "notifications.") {
+			return a.identity.AuthorizeSubjectAction(ctx, check.SubjectID, check.Action)
+		}
+		return auth.ErrInvalidCheck
+	}
+	err := a.identity.Authorize(ctx, check)
+	if errors.Is(err, auth.ErrDenied) && (check.Action == "tasks.command" || check.Action == "host.patch") {
+		return a.identity.Authorize(ctx, auth.Check{
+			SubjectID: check.SubjectID,
+			Action:    tasks.ActionSubmit,
+			NodeIDs:   check.NodeIDs,
+		})
+	}
+	return err
+}
+
+var _ auth.Authorizer = (*composedAuthorizer)(nil)
+
+type composedTaskReadGate struct {
+	identity *auth.IdentityService
+	tasks    *tasks.Repo
+}
+
+func (g *composedTaskReadGate) AuthorizeTaskRead(ctx context.Context, subjectID, taskID string) error {
+	if g == nil || g.identity == nil || g.tasks == nil {
+		return auth.ErrPolicyUnavailable
+	}
+	if err := g.identity.AuthorizeSubjectAction(ctx, subjectID, "tasks.read"); err != nil {
+		return err
+	}
+	if taskID == "" {
+		return nil
+	}
+	task, err := g.tasks.Get(ctx, taskID)
+	if err != nil {
+		return err
+	}
+	if len(task.Targets) == 0 {
+		return nil
+	}
+	targetIDs := make([]string, 0, len(task.Targets))
+	for _, target := range task.Targets {
+		targetIDs = append(targetIDs, target.NodeID)
+	}
+	return g.identity.Authorize(ctx, auth.Check{
+		SubjectID: subjectID,
+		Action:    "tasks.read",
+		NodeIDs:   targetIDs,
+	})
+}
+
+type composedAuditReadGate struct {
+	identity *auth.IdentityService
+}
+
+func (g *composedAuditReadGate) AuthorizeAuditRead(ctx context.Context, subjectID string) error {
+	if g == nil || g.identity == nil {
+		return auth.ErrPolicyUnavailable
+	}
+	return g.identity.AuthorizeSubjectAction(ctx, subjectID, "audit.read")
+}
+
+type composedNotificationsReadGate struct {
+	identity *auth.IdentityService
+}
+
+func (g *composedNotificationsReadGate) AuthorizeNotificationsRead(ctx context.Context, subjectID string) error {
+	if g == nil || g.identity == nil {
+		return auth.ErrPolicyUnavailable
+	}
+	return g.identity.AuthorizeSubjectAction(ctx, subjectID, "notifications.read")
+}
+
+type composedGroupResolver struct {
+	groups        *nodes.GroupRepo
+	serviceGroups *servicegroups.Repo
+}
+
+func (r *composedGroupResolver) ResolveTargets(ctx context.Context, targetType, groupID string) ([]string, error) {
+	switch targetType {
+	case "node_group":
+		group, err := r.groups.Get(ctx, groupID)
+		if err != nil {
+			return nil, err
+		}
+		return append([]string(nil), group.Members...), nil
+	case "service_group":
+		group, err := r.serviceGroups.Get(ctx, groupID)
+		if err != nil {
+			return nil, err
+		}
+		out := make([]string, 0, len(group.Members))
+		for _, m := range group.Members {
+			out = append(out, m.NodeID)
+		}
+		return out, nil
+	default:
+		return nil, tasks.ErrInvalidTask
+	}
+}
+
+func resolveOperationClass(actionID string) (tasks.OperationClass, error) {
+	switch actionID {
+	case tasks.ActionSubmit, "tasks.command", files.ActionTransfer:
+		return tasks.OperationClassStandard, nil
+	case "host.root":
+		return tasks.OperationClassRoot, nil
+	default:
+		return tasks.OperationClassModifying, nil
+	}
+}
+
+type composedNodeLookup struct {
+	nodes *nodes.Repo
+	now   func() time.Time
+}
+
+func (l *composedNodeLookup) Online(ctx context.Context, nodeID string) (bool, error) {
+	node, err := l.nodes.Get(ctx, nodeID)
+	if err != nil {
+		return false, err
+	}
+	return node.Status == nodes.StatusOnline, nil
+}
+
+func (l *composedNodeLookup) LookupNode(ctx context.Context, nodeID string) (gateway.NodeRef, bool, error) {
+	node, err := l.nodes.Get(ctx, nodeID)
+	if storage.IsNotFound(err) {
+		return gateway.NodeRef{}, false, nil
+	}
+	if err != nil {
+		return gateway.NodeRef{}, false, err
+	}
+	return gateway.NodeRef{
+		ID:     node.ID,
+		Online: node.Status == nodes.StatusOnline,
+	}, true, nil
+}
+
+type composedServiceGroupLookup struct {
+	repo *servicegroups.Repo
+}
+
+func (l *composedServiceGroupLookup) LookupServiceGroup(ctx context.Context, serviceGroupID string) (gateway.ServiceGroupRef, bool, error) {
+	group, err := l.repo.Get(ctx, serviceGroupID)
+	if storage.IsNotFound(err) {
+		return gateway.ServiceGroupRef{}, false, nil
+	}
+	if err != nil {
+		return gateway.ServiceGroupRef{}, false, err
+	}
+	return gateway.ServiceGroupRef{
+		ID:       group.ID,
+		Revision: group.Revision,
+	}, true, nil
+}
+
+type composedTaskBridge struct {
+	tasks *tasks.Service
+}
+
+func (b *composedTaskBridge) SubmitTransfer(ctx context.Context, command files.TransferCommand) (string, error) {
+	task, err := b.tasks.Submit(ctx, tasks.SubmitRequest{
+		SubjectID:      command.SubjectID,
+		RequestID:      command.RequestID,
+		Name:           "file transfer",
+		ActionID:       files.ActionTransfer,
+		OperationClass: tasks.OperationClassStandard,
+		TargetType:     "node_ids",
+		TargetNodeIDs:  []string{command.SourceNodeID, command.DestinationNodeID},
+		Params: map[string]string{
+			"source_node":     command.SourceNodeID,
+			"dest_node":       command.DestinationNodeID,
+			"dest_dir":        command.DestinationDir,
+			"conflict_policy": string(command.ConflictPolicy),
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return task.ID, nil
+}
+
+func (b *composedTaskBridge) CancelTask(ctx context.Context, taskID, subjectID, requestID string) error {
+	_, err := b.tasks.Cancel(ctx, taskID, subjectID, requestID)
+	return err
+}
+
+func (b *composedTaskBridge) Submit(ctx context.Context, request gateway.TaskRequest) (string, error) {
+	task, err := b.tasks.Submit(ctx, tasks.SubmitRequest{
+		SubjectID:      request.SubjectID,
+		RequestID:      request.RequestID,
+		Name:           "gateway provision " + request.ResourceID,
+		ActionID:       request.ActionID,
+		OperationClass: tasks.OperationClassStandard,
+		TargetType:     "node_ids",
+		TargetNodeIDs:  request.NodeIDs,
+		Params:         request.Params,
+		IdempotencyKey: request.IdempotencyKey,
+	})
+	if err != nil {
+		return "", err
+	}
+	return task.ID, nil
+}
+
+type composedEligibility struct {
+	nodes    *nodes.Repo
+	gateways *gateway.Repo
+	db       *storage.DB
+	now      func() time.Time
+}
+
+func (e *composedEligibility) GatewayEligible(ctx context.Context, _ string) (bool, error) {
+	list, err := e.gateways.ListGateways(ctx, e.db)
+	if err != nil {
+		return false, err
+	}
+	for _, gw := range list {
+		node, err := e.nodes.Get(ctx, gw.NodeID)
+		if err != nil {
+			continue
+		}
+		if gw.SchedulingEligible(node.Status == nodes.StatusOnline) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (e *composedEligibility) NodeHealthy(ctx context.Context, nodeID string) (bool, string, error) {
+	node, err := e.nodes.Get(ctx, nodeID)
+	if err != nil {
+		return false, "node_not_found", err
+	}
+	if node.Status != nodes.StatusOnline {
+		return false, "node_offline", nil
+	}
+	return true, "online", nil
+}
+
+type composedDeleteGuard struct {
+	gateways *gateway.Repo
+	db       *storage.DB
+}
+
+func (g *composedDeleteGuard) CheckDelete(ctx context.Context, serviceGroupID string) error {
+	routes, err := g.gateways.ListRoutes(ctx, g.db, "")
+	if err != nil {
+		return err
+	}
+	for _, route := range routes {
+		if route.ServiceGroupID == serviceGroupID {
+			return errors.New("servicegroups: service group is still referenced by gateway routes")
+		}
+	}
+	return nil
+}

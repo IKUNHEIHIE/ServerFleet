@@ -42,13 +42,16 @@ import type {
   User,
 } from "./dto";
 
-function authPost<T>(path: string, body: unknown): Promise<{ data: T; status: number }> {
-  return apiClient.request<T>(path, { method: "POST", body, csrf: false, authEvent: false });
+function authPost<T>(path: string, body: unknown, idempotencyKey?: string): Promise<{ data: T; status: number }> {
+  return apiClient.request<T>(path, { method: "POST", body, csrf: false, authEvent: false, idempotencyKey });
 }
 
 export const authApi = {
   bootstrapStatus: () => apiClient.request<BootstrapState>("/api/v1/auth/bootstrap-status", { csrf: false }),
-  bootstrap: (body: BootstrapRequest) => authPost<LoginResult>("/api/v1/auth/bootstrap", body),
+  bootstrap: (
+    body: BootstrapRequest,
+    idempotencyKey = `bootstrap-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+  ) => authPost<LoginResult | undefined>("/api/v1/auth/bootstrap", body, idempotencyKey),
   login: (body: LoginRequest) => authPost<LoginResult>("/api/v1/auth/login", body),
   logout: () => apiClient.request<void>("/api/v1/auth/logout", { method: "POST" }),
   me: () => apiClient.request<Identity>("/api/v1/auth/me"),
