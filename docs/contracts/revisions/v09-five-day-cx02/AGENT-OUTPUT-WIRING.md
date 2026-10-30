@@ -1,0 +1,15 @@
+# Agent脱敏输出与持久生产序号（候选）
+
+R19扩展Agent私有组件，不改Proto/API/DS目录或根锁。注册agentAction新增FilterOutput：缺失/返回错误/异常会扣留输出并明确Truncated，不用默认放行过滤器。Run转移返回缓冲所有权；原始stdout在进入result.json/传输之前交程序注册策略过滤，有界64KiB，并尽力清理临时缓冲；不承诺擦除程序回调保留的其他内存副本。固定测试注册器可明确回显合成文本，不能把该fixture当生产策略。
+
+execute的终态文件只保留过滤后的输出，作用结果与日志完整性分开。过滤器不可用不伪造作用失败或成功：真实能力结果照实保存，日志扣留/截断明确标记。当前Output字段定义为受控stdout；没有拿它传文件、任意配置秘密或恢复密钥，stderr独立采集及实际生产runner/profile仍待实施/安全准入。
+
+`prepareOutput`在网络写之前发布不可覆盖output.json：完整offer/claim绑定、已脱敏终态文件SHA256、固定chunk大小/数量/字节范围/截断。终态内容已持久，manifest再同步文件/目录，形成可复验的生产序号。最多64帧、每帧不超协商上限和本地output limit；过长保留有界前缀并在最后帧标Truncated。全被扣留时用零字节+truncated的明确事件，不假装空日志。生产后不能用新分块大小重新解释旧stream。
+
+Agent应用循环在Ack→Started→真实执行完成后，逐帧重新Current/Admit并以既有TaskOutput发送sequence1…N，再发TaskFinished。丢帧/写失败关闭连接，不自动重跑作用或自动重放旧日志。已完成offer重复只返回原结果；旧版终态无stream plan时不再临时生成一个，保持日志不完整。
+
+**LastOutputSequence是源端已持久生产的序号，不是Controller已接收/审计提交的ACK。** StateSync返回该序号，读回会验证manifest与脱敏终态文件哈希，损坏/半写失败关闭。TaskFinished.OutputTruncated描述源端扣留/截断；即使为false，Controller仍须核对自己持久收到的序号是否完整，不能据此填零或显示“日志收齐”。现有Proto没有持久接收ACK/独立日志补读请求，本包不擅自新增字段或借StateSync偷偷重放数据。0表示没有可证明的生产游标，不能推出作用没有输出。
+
+DS接线还需精确补充：按当前证书身份映射的node+execution+streamSequence持久去重及内容hash；相同序号不同数据拒绝；部分序号/源端truncated和未知完整性分别保存；AppendOutput与审计同Tx，失败关闭。Controller应把生产上限N与已保存片段比较，缺口保留未知；补读/ACK协议单独协调，绝不重跑有副作用动作来找回日志。上述是S03候选补充，不假设现有DS已支持executionId/streamSequence。
+
+实际负向：缺失/错误/异常过滤器的合成secret不进终态文件；真过滤结果重开保留生产游标；换分块大小不改旧流；篡改终态拒绝；小帧上限触发64帧截断。真实本机WSS检查脱敏stdout，再注入第二片段发送前失败：第一帧确实到Controller，源端已生产更多片段；重连StateSync明确显示缺口，重发同offer不重复能力或日志，作用计数保持一次。故障注入是明确wrapper，底层连接/首帧/mTLS/Proto/文件作用均真实。Linux断电持久、正式生产能力/DS日志持久及补读仍未验收。

@@ -30,6 +30,9 @@ type agentAction struct {
 	// Validate and Run are fixed program-owned capabilities, never client code.
 	Validate func([]byte) error
 	Run      func(context.Context, []byte) executionResult
+	// Output is withheld when this program-owned policy is absent or fails.
+	// The callback must remove secrets BEFORE output reaches disk or transport.
+	FilterOutput func(context.Context, []byte) ([]byte, error)
 }
 type agentExecutor struct {
 	ledger  *os.Root
@@ -175,6 +178,7 @@ func (e *agentExecutor) executeObserved(ctx context.Context, offer *agentv1.Task
 		result.Output = append([]byte(nil), result.Output[:64<<10]...)
 		result.Truncated = true
 	}
+	result = filterExecutionOutput(runCtx, action, result)
 	if err = e.writeRecord(name+"/result.json", result); err != nil {
 		return unknown, false, errExecutionRejected
 	}

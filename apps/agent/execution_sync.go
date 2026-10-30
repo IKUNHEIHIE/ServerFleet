@@ -119,6 +119,16 @@ func (e *agentExecutor) snapshots(ctx context.Context, request *agentv1.StateSyn
 		if snapshot.UpdatedAtUnixMs <= 0 {
 			return nil, errExecutionRejected
 		}
+		if plan, _, exists, err := e.loadOutputPlan(ctx, name, claim); err != nil {
+			return nil, errExecutionRejected
+		} else if exists {
+			snapshot.LastOutputSequence = uint64(plan.Count)
+			info, err := e.ledger.Stat(name + "/output.json")
+			if err != nil {
+				return nil, errExecutionRejected
+			}
+			snapshot.UpdatedAtUnixMs = max(snapshot.UpdatedAtUnixMs, info.ModTime().UnixMilli())
+		}
 		if snapshot.UpdatedAtUnixMs < request.SinceUnixMs {
 			continue
 		}

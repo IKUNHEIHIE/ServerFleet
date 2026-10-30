@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"crypto/tls"
@@ -346,9 +347,38 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 				if executionErr != nil {
 					outcome = executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
 				}
-				// Output forwarding needs a reviewed durable stream cursor. Do not
-				// fabricate complete logs; retain bounded bytes in the private ledger.
-				finished := &agentv1.TaskFinished{TaskId: offer.TaskId, ExecutionId: offer.ExecutionId, Result: outcome.Result, ExitCode: outcome.ExitCode, FinishedAtUnixMs: time.Now().UnixMilli(), OutputTruncated: outcome.Truncated || len(outcome.Output) > 0}
+				outputTruncated := outcome.Truncated
+				if !seen && executionErr == nil && (len(outcome.Output) > 0 || outcome.Truncated) {
+					plan, stored, err := executor.prepareOutput(workCtx, offer, min(cfg.Semantic.MaxOutputBytes, frameLimit/2))
+					if err != nil {
+						outputTruncated = true
+					} else {
+						outputTruncated = plan.Truncated
+						for i := 0; i < plan.Count; i++ {
+							if admit(workCtx, offer) != nil {
+								fail(errAgentSession)
+								return
+							}
+							start, end := i*plan.ChunkBytes, min((i+1)*plan.ChunkBytes, plan.Bytes)
+							var chunk []byte
+							if start < end {
+								chunk = bytes.Clone(stored.Output[start:end])
+							}
+							output := &agentv1.TaskOutput{TaskId: offer.TaskId, ExecutionId: offer.ExecutionId, StreamSequence: uint64(i + 1), Stream: agentv1.TaskOutput_STREAM_STDOUT, Chunk: chunk, Truncated: plan.Truncated && i == plan.Count-1}
+							if write(&agentv1.Envelope{Message: &agentv1.Envelope_TaskOutput{TaskOutput: output}}, transport.Established) != nil {
+								fail(transport.ErrDeliveryUnknown)
+								return
+							}
+						}
+					}
+				} else if seen && len(outcome.Output) > 0 {
+					// Old terminal records without a stream plan cannot pretend to
+					// have produced complete logs; a replay never regenerates them.
+					claim := executionClaim{offer.TaskId, offer.ExecutionId, offerDigest(offer)}
+					plan, _, exists, err := executor.loadOutputPlan(workCtx, offer.ExecutionId, claim)
+					outputTruncated = err != nil || !exists || plan.Truncated
+				}
+				finished := &agentv1.TaskFinished{TaskId: offer.TaskId, ExecutionId: offer.ExecutionId, Result: outcome.Result, ExitCode: outcome.ExitCode, FinishedAtUnixMs: time.Now().UnixMilli(), OutputTruncated: outputTruncated}
 				if write(&agentv1.Envelope{Message: &agentv1.Envelope_TaskFinished{TaskFinished: finished}}, transport.Established) != nil {
 					fail(transport.ErrDeliveryUnknown)
 				}

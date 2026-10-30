@@ -18,12 +18,12 @@ func testOffer() *agentv1.TaskOffer {
 	return &agentv1.TaskOffer{TaskId: "task-1", ExecutionId: "exec-1", PlanDigestSha256: strings.Repeat("a", 64), ActionId: "test.write-marker", CanonicalParametersJson: []byte(`{}`), Privilege: agentv1.Privilege_PRIVILEGE_NORMAL, ExpiresAtUnixMs: time.Now().Add(time.Minute).UnixMilli(), TimeoutSeconds: 10, ScopeRevision: 1, ActionSchemaVersion: "1"}
 }
 func testActions(run func(context.Context, []byte) executionResult) map[string]agentAction {
-	return map[string]agentAction{"test.write-marker": {func(b []byte) error {
+	return map[string]agentAction{"test.write-marker": {Validate: func(b []byte) error {
 		if string(b) != "{}" {
 			return errExecutionRejected
 		}
 		return nil
-	}, run}}
+	}, Run: run, FilterOutput: func(_ context.Context, b []byte) ([]byte, error) { return b, nil }}}
 }
 
 func TestAgentExecutorActualFileEffectDeduplicatedAfterReopen(t *testing.T) {

@@ -8,7 +8,7 @@ TaskOffer同时要求协商capability、固定本地schema/参数Validate、norm
 
 新执行只在claim持久后发Ack、started marker持久后发TaskStarted，再调用固定注册能力。TaskCancel只按当前taskId+executionId取消对应工作；不能声明取消等于回滚，副作用不明保留UNKNOWN。StateSync返回持久快照，只有本循环确知仍活跃且未完成的worker可覆盖成UNSPECIFIED+实际开始意图；重启后不得把磁盘旧记录当live。未知/损坏状态失败关闭。
 
-当前本增量只回Ack/Started/Finished/Heartbeat/StateSync，尚未转发日志chunks：本地保存的有界输出未转发时Finished.OutputTruncated=true，不假装完整日志。持久日志游标及部分日志接线下一增量推进，lastOutputSequence仍0。没有修改Proto或将TaskOutput偷作文件传输。
+R18当时未转发日志并明确truncated；后续R19新增落盘前过滤、持久生产序号与有界TaskOutput，精确源端/接收语义见[AGENT-OUTPUT-WIRING.md](AGENT-OUTPUT-WIRING.md)。没有修改Proto或将TaskOutput偷作文件传输，日志补读/持久ACK仍需协调。
 
 断开后等待合作worker最多5秒；未退出返回独立errAgentWorkersUnknown，不自动重连或重新派发。程序注册动作/本地Current/Admit/Probe须遵守ctx，Go函数回调不能强杀不合作执行器；正式PRIV进程隔离/profile/安装器仍缺，不得据此开放root/Shell/插件或高权限真实节点。所有资源执行仍须Controller唯一授权/tasks/approval/audit，局部传输证明不能替代DS接缝。
 

@@ -172,6 +172,14 @@ executeObserved增加claim持久后ack、started marker持久后start、最后ct
 
 ## R18 Agent连接应用循环与真实WSS执行实验
 
+提交 `5fd0ba3e74fa5d95dc47e82fb98dbc56e2917f48`；随后Agent/transport/architecture复验PASS 4.718s/3.489s/1.488s，staticcheck PASS。
+
 新增私有runAgentSession：Root pin/真实TLS来源/当前信任与本地Admit无默认放行、有界Hello/能力/帧协商、Proto绑定/序列、真实Probe心跳、持久Ack→Started→Result、在途去重/并发限额/取消/live对账覆盖、断线UNKNOWN与合作worker等待。未接main/根WSS锁/生产profile，日志暂未转发并明确truncated。精确边界AGENT-SESSION-WIRING.md。
 
 首次staticcheck报未被调用的私有循环（U1000），补入有意义的原循环测试和隔离实际WSS调用，不加抑制。根Agent测试PASS 3.626s/staticcheck PASS。run.mjs原样复制应用源码与测试到隔离agentapp，记录逐文件hash；真实WSS测试PASS 2.10s，Agent应用测试包PASS 5.285s，原WSS/WASM/controller实验也PASS。真实临时文件副作用、重连相同Offer只一次、持久终态对账、真实Ping/Pong和吊销断线在途UNKNOWN均已测；业务授权/审批/审计是明确fixture，不声称Linux/正式任务/完整v0.9。继续日志等独立项。
+
+## R19 Agent日志落盘前脱敏与生产游标
+
+新增FilterOutput（缺失/失败即扣留）、绑定脱敏终态哈希的不可覆盖output manifest、最多64帧的既有TaskOutput发送及StateSync生产序号。作用结果/源端截断/接收缺口明确分离，重放不重新产生作用或日志。精确语义和DS缺的execution/streamSequence/日志补读接缝见AGENT-OUTPUT-WIRING.md；未改公开Proto/根锁。
+
+`go test ./apps/agent -count=1` PASS 5.046s/staticcheck PASS。固定WSS/WASM/Controller+Agent隔离实验PASS，Agent包9.323s；真实WSS脱敏日志、游标重开、实际首帧+第二帧前注入故障、重连缺口/同offer不再执行已测。过滤器缺失/错误/异常不持久合成secret；篡改终态、分块重解释、64片段截断负向通过。不是Controller持久日志ACK、正式能力、Linux/实际root执行证明。继续包内工作，本轮全量复验随后记录。

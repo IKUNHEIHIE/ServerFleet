@@ -223,7 +223,7 @@ func TestAgentSessionProductionLoopDedupeCancelSyncAndRevocation(t *testing.T) {
 	}
 	wait(func(e *agentv1.Envelope) bool { return e.GetTaskStarted() != nil })
 	finished := wait(func(e *agentv1.Envelope) bool { return e.GetTaskFinished() != nil }).GetTaskFinished()
-	if finished.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED || !finished.OutputTruncated || calls.Load() != 1 {
+	if finished.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED || finished.OutputTruncated || calls.Load() != 1 {
 		t.Fatal(finished, calls.Load())
 	}
 	if data, err := os.ReadFile(marker); err != nil || string(data) != "one real local effect" {
