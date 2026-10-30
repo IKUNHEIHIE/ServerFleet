@@ -268,6 +268,14 @@ Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；
 
 ## R30 初始Agent注册HTTP与独立契约差异
 
+提交7d0d8d1be0f0d981c53272929b8b7f9eb8d29e9b。
+
 新增未挂载EnrollmentHTTP，复用真实服务令牌/审批与持久签发逻辑；精确Host/SNI/TLS1.3、拒绝浏览器/双来源、严格有界JSON与读取期限、当前PKI/隔离前后门、固定分钟IP/全局/并发预算和强制拒绝审计回调。内部approved/rejected转换既有issued/denied，leaf/chain分离。新增agent-enrollment.patch.json和ENROLLMENT-HTTP.md供总控独立审查，未修改公共YAML/生成代码/Proto/根依赖。
 
 本机真实TLS pending→审批提交失败无证书→明确决定后issued，来源/重复键/null/预算/隔离/输出前失效负向PASS。`go test ./internal/transport ./tests/architecture -count=1` PASS5.544s/1.440s，staticcheck PASS；`node --test tests/integration/v09/platform/auth-candidate.test.mjs`三项PASS，验证185操作/状态/保护字节及重复应用拒绝。`node tests/poc/v09/platform/run-linux-wsl.mjs --targets=transport`本地Ubuntu非root原生48顶层PASS/无skip；精确源/二进制/日志哈希见LINUX-ENROLLMENT-HTTP-EVIDENCE.json。审批Gate/拒绝审计/内存仓储明确fixture，非正式admin/Node持久链验收；匿名拒绝审计聚合/限流部署与监听器profile仍待审，详见候选。继续Agent网络端，不停包。
+
+## R31 Agent固定HTTPS初始注册客户端
+
+新增apps/agent/enrollment_client.go/test，依赖独立公开Root+固定DNS HTTPS Origin+当前门，标准TLS1.3/Root/主机验证并核对pin；无系统Root/代理/重定向/Cookie/环境秘密/GetBody/隐含重试。单次显式EnrollOnce只用同一已持久CSR，pending不安装、denied明确拒绝、issued经本地Accept再验证/不可覆盖；未知保留材料。严格有界响应/当前门前后检查。未启用main/profile或伪造Windows为Linux。
+
+新增实际TLS与重定向目的地零请求/代理零请求/错误DNS/取消/返回体重复/null/越界/状态混用/令牌回显/撤销负向PASS，三个顶层测试5.764s；完整Agent/transport/architecture与staticcheck另记日志enrollment-client-r31-complete.log。Linux非root原生Agent21顶层PASS，精确源/二进制/日志哈希LINUX-ENROLLMENT-CLIENT-EVIDENCE.json。签发与profile仍为明确fixture；AGENT-ENROLLMENT-CLIENT.md记录最小响应profile与正式契约兼容限制，下一步组合真实服务/持久仓储，不把组件通过冒称v0.9完成。
