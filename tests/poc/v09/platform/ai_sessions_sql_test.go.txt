@@ -3,6 +3,8 @@ package persistencepoc
 import (
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"io"
@@ -172,20 +174,29 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 	}
 	providerCalls := 0
 	conversation := func() *ai.ConversationService {
-		result, err := ai.NewConversationService(aiService, ai.ConversationConfig{
+		var result *ai.ConversationService
+		var createErr error
+		result, createErr = ai.NewConversationService(aiService, ai.ConversationConfig{
 			Profile: func(context.Context, string) (ai.ModelProfile, error) {
 				return ai.ModelProfile{ID: "fixture", Model: "test-model", CredentialRef: "fixture-ref", Revision: 1}, nil
 			},
 			Filter: func(_ context.Context, _ ai.SessionView, _ string, text string) (string, error) {
 				return strings.ReplaceAll(text, "synthetic-secret", "[redacted]"), nil
 			},
-			Generate: func(_ context.Context, _ ai.GenerationRequest, emit func(string) error) error {
+			Generate: func(ctx context.Context, request ai.GenerationRequest, emit func(string) error) error {
 				providerCalls++
+				// Real SQL-backed generation gate. This is still a model double,
+				// not a claim that external BYOK was exercised.
+				raw, _ := json.Marshal(request)
+				digest := sha256.Sum256(append([]byte("serverfleet.ai.generation.v1\x00"), raw...))
+				op := auth.CredentialOperation{SubjectID:request.SubjectID,CredentialID:request.Profile.CredentialRef,Module:"ai",Source:"ai",OperationID:request.OperationID,PlanDigest:hex.EncodeToString(digest[:]),Action:"use",ExpectedRevision:1}
+				if err := result.CheckCredentialOperation(ctx,op);err != nil { return err }
+				if err := result.CheckCredentialOperation(context.Background(),op);err != ai.ErrToolDenied { return errors.New("unobserved provider call admitted") }
 				return emit("fixture text only")
 			},
 		})
-		if err != nil {
-			t.Fatal(err)
+		if createErr != nil {
+			t.Fatal(createErr)
 		}
 		return result
 	}

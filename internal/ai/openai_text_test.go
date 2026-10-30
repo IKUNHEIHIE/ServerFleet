@@ -17,7 +17,7 @@ import (
 
 const testBYOK = "synthetic-local-model-key"
 
-func providerFixture(t *testing.T, handler http.HandlerFunc) (*OpenAITextProvider, GenerationRequest, *auth.CredentialService, *sessionTestStore) {
+func providerFixture(t *testing.T, handler http.HandlerFunc, extraGate ...func(context.Context, auth.CredentialOperation) error) (*OpenAITextProvider, GenerationRequest, *auth.CredentialService, *sessionTestStore) {
 	t.Helper()
 	ctx := context.Background()
 	store := &sessionTestStore{}
@@ -41,6 +41,9 @@ func providerFixture(t *testing.T, handler http.HandlerFunc) (*OpenAITextProvide
 		current, err := identity.Authenticate(ctx, login.Secret, "", false)
 		if err != nil || current.SubjectID != op.SubjectID {
 			return auth.ErrDenied
+		}
+		if len(extraGate) > 0 {
+			return extraGate[0](ctx, op)
 		}
 		return nil
 	}, nil)
@@ -205,9 +208,12 @@ func TestOpenAITextWrongBindingDoesNotContactProvider(t *testing.T) {
 }
 
 func TestOpenAITextConversationUsesActualCredentialFenceAndTLS(t *testing.T) {
+	var chat *ConversationService
 	p, request, _, _ := providerFixture(t, func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, providerResponse("provider answer; this does not create a fleet task"))
+	}, func(ctx context.Context, op auth.CredentialOperation) error {
+		return chat.CheckCredentialOperation(ctx, op)
 	})
 	s, _, actor, current, _ := sessionFixture(t)
 	actor.SubjectID = request.SubjectID
@@ -217,7 +223,7 @@ func TestOpenAITextConversationUsesActualCredentialFenceAndTLS(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	chat, err := NewConversationService(s, ConversationConfig{
+	chat, err = NewConversationService(s, ConversationConfig{
 		Profile: func(context.Context, string) (ModelProfile, error) { return request.Profile, nil },
 		Filter: func(_ context.Context, _ SessionView, _ string, text string) (string, error) {
 			return strings.ReplaceAll(text, "synthetic-secret", "[redacted]"), nil

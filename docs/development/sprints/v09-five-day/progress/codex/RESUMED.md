@@ -228,6 +228,14 @@ R20—24全量check五套PASS（2026-10-30T08:15:41Z，Web179项），check:secu
 
 ## R25 BYOK原生文本适配及实际本机TLS
 
+提交 `655219740775499efb69430f82d763f40c414eed`。
+
 新增可选OpenAITextProvider/严格有界Response解析、完整生成计划摘要与真实CredentialService借用。固定HTTPS、无默认模型/key/代理/跳转/SDK重试，tools关闭，store=false，当前凭据及审计后才交付最终文本；模型文本不执行操作。缺Resolver/当前配置或准入关闭。具体接线/隐私局限AI-BYOK-TEXT.md，不宣称真实外部模型已验证。
 
 AI/architecture PASS 8.132s/1.410s，修正HTTP Redirect静态常量后staticcheck PASS。实际本机TLS+合成Key+auth真实加密/使用fence与Conversation串联通过；错误/UNKNOWN重复请求、跳转、请求中真实撤销、密钥回显等负向通过。模型/来源策略及聚合存储为明确double。首次取消fixture只等未读请求的server ctx，60秒测试超时FAIL，改为有界300ms等待后通过；未放宽生产取消/重试策略。R25全量另验，继续包内独立项。
+
+## R26 凭据绑定当前持久推理及封闭观察
+
+新增ConversationService.CheckCredentialOperation/私有生成观察，精确接线AI-GENERATION-ADMISSION.md；完整op绑定、当前身份/scope交集/Profile与持久generating复查，回调返回立即关闭，WithoutCancel不能续权。R25实际凭据/TLS串联改用真实闸，未用默认放行注册生产。
+
+AI/architecture PASS12.699s/1.406s、staticcheck PASS；各字段篡改/无观察/撤权/范围/Profile变化/会话关闭/unknown/晚到上下文负向通过。固定DS源SQLite十二项PASS8.850s，含持久generating当前闸与Background伪观察拒绝。没有新增共享依赖/API/Proto/迁移。全量R25—26随后复验，包仍ACTIVE且未完整交付。

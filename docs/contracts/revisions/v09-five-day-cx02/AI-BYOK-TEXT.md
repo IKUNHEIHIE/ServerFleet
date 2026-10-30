@@ -4,6 +4,8 @@
 
 Generate冻结Subject/Session/Message/Operation/scopeRevision/Profile及成对脱敏历史，域分离SHA256计划摘要；Resolver收到隔离副本，须核对当前enabled owner配置及持久generating记录。返回CredentialOperation必须精确同subject/credentialRef/operation/digest、Module=ai、Source=ai、Action=use、当前credential revision。auth的独立gate还须核同一次推理与授权，不能把Resolver返回当授权。UseForService先同Tx落永久使用fence与审计，再借用ai_api_key；结束核当前凭据revision/撤销/期限及gate，失败不重放。不能将任意HTTP/model请求构造成通用解密入口。
 
+R26已提供上述AI专用当前闸`ConversationService.CheckCredentialOperation`，必须组合进真实凭据gate；私有、回调后关闭的观察绑定当前持久generating请求，详见[AI-GENERATION-ADMISSION.md](AI-GENERATION-ADMISSION.md)。真实本机串联测试已使用它。独立HTTP协议负向测试仍使用明确测试gate，以分清失败层次。
+
 唯一目标固定 `https://api.openai.com/v1/responses`；客户端TLS≥1.3、系统证书校验、无环境代理、禁止跳转、新HTTP/1连接、30秒总期限/5秒连接与TLS/15秒响应头、头32KiB；不设置Idempotency-Key、不用SDK重试，不对429/5xx/超时重试。请求只含明确model、已脱敏user/assistant历史、tools=[]/tool_choice=none、store=false、stream=false、background=false、truncation=disabled及8192输出token上限。之前保存的回答作为final_answer历史，无system/developer/tool输入、任意URL、附件、远端conversation或previous_response_id。秘密只入认证头，不入请求JSON/日志/模型上下文。请求后删除认证头及尽力清借用/请求/原始响应byte缓冲；Go string/运行时副本不能保证彻底擦除内存，不作此承诺。
 
 最多1MiB JSON响应、深度16/100k节点/64 output items、每消息64内容片段、文本128000字节/32000字符。重复/大小写别名、非JSON/截断/非completed/存储开启/模型不符/error/incomplete_details拒绝；只接受completed assistant output_text最终回答，不支持的refusal/工具调用等关闭失败。reasoning项不输出。API密钥回显拒绝。文本先留在受控回调内，auth最终gate/凭据/审计都完成后只emit一次，ConversationService再做当前scope/Profile/Filter核对及回答同Tx落盘；不能从模型文本生成权威taskIds或执行Shell。网络调用已发出后撤权无法“撤回请求”，只会扣留输出并保留UNKNOWN、禁止自动重试。

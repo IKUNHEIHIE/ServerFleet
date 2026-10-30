@@ -501,10 +501,15 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	if check() != nil {
 		return Message{}, ErrGenerationUnknown
 	}
+	providerContext, closeObservation, err := observeGeneration(bounded, request, view.AllowedNodeIDs)
+	if err != nil {
+		return Message{}, ErrGenerationUnknown
+	}
+	defer closeObservation()
 	var emitMu sync.Mutex
 	finished, emitFailed, chunks := false, false, 0
 	defer func() { emitMu.Lock(); finished = true; emitMu.Unlock() }()
-	providerErr := c.config.Generate(bounded, request, func(chunk string) error {
+	providerErr := c.config.Generate(providerContext, request, func(chunk string) error {
 		emitMu.Lock()
 		defer emitMu.Unlock()
 		chunks++
@@ -518,6 +523,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		_, err := output.WriteString(chunk)
 		return err
 	})
+	closeObservation()
 	emitMu.Lock()
 	finished = true
 	outputText := output.String()
