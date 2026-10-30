@@ -19,7 +19,7 @@
 
 已提交R33 `60e67e583670894232ddca0787a74e31d35ba165`（事务内身份/实际Linux注册），R32 a9f1069、R31 c680e37、R30 7d0d8d1。R34密文历史/一次性源已完成实际SQLite及Ubuntu plugins11/SQLite13顶层验证，精确证据LINUX-PLUGIN-HISTORY-EVIDENCE.json；正式Host/统一审计与真实部署未验收。全量check最近五套PASS（10:04:17Z，R33），R34模块/architecture与staticcheck PASS，security新PASS（10:18:13Z）；外部Xray FAIL另列。继续包内独立实现。
 
-以上R33—34检查时间为历史；接替后R37提交`7f05242`，R38最新实现/原生与Windows检查以RESUMED.md和本次codex-03交接为准。R37原生auth67/SQLite15 PASS；R38原生可选包17 PASS/3已阻断二进制SKIP、SQLite15 PASS。中央材料v2禁止直接降级旧auth，用户pending/unknown不冒充部署成功；AC-23仍NOT_ACCEPTED，完整包ACTIVE，未宣称所有子项完成或不存在其他独立工作。
+以上R33—34检查时间为历史；接替后R37提交`7f05242`，R38提交`4ef7e53`。最新实现/原生与Windows检查以RESUMED.md和[本次codex-03交接](TAKEOVER-codex-03.md)为准。R37原生auth67/SQLite15 PASS；R38原生可选包17 PASS/3已阻断二进制SKIP、SQLite15 PASS。最终全量check五组PASS17:38:25.159Z/security PASS17:38:15.568Z（上海2026-10-31）；源码逐一吻合最终原生证据，保护文件零差异。中央材料v2禁止直接降级旧auth，用户pending/unknown不冒充部署成功；AC-23仍NOT_ACCEPTED，完整包ACTIVE，未宣称所有子项完成或不存在其他独立工作。
 
 **新增实际Linux组件证据**：本机已有Ubuntu24.04 WSL2、UID1000、amd64；12包212顶层测试运行PASS（含Agent重复）/3实际Xray二进制SKIP。真实WSS/Agent副作用与重连、SQLite旧快照外部隔离、私有文件/Sync分支均已执行。Agent/恢复旧fixture的0700准备及错误检查问题修正，未放宽生产门槛；首轮FAIL归档。逐项见LINUX-NATIVE-EVIDENCE.json和LOCAL-LINUX-VALIDATION.md。不是物理VPS/安装/arm64/1C1G或完整统一任务验收。
 

@@ -1,0 +1,96 @@
+{
+  "task": "V09-5D-CX",
+  "session": "codex-03",
+  "inheritedSession": "codex-02",
+  "sourceThread": "01a188b2-b181-7230-94a7-136c5356739b",
+  "status": "ACTIVE_NOT_FULLY_DELIVERED",
+  "reviewer": "codex-review-01 + security/contracts/module owners",
+  "branch": "feature/v09-platform-cx02",
+  "workspace": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--v09-platform-cx02",
+  "baseline": "8a7dd4707d2d7e142e137d098296788d2c80eddd",
+  "takeoverHead": "ecb7cd405a0630d814580d1a6123d3e9a56c3e97",
+  "commits": {
+    "centralMaterials": "7f052425d0fd53964e07dbce12f711c408dac33b",
+    "managedUsers": "4ef7e53da01fbfa0a3c555aa3c273667abc98665"
+  },
+  "sourceMatchesFinalNativeEvidence": true,
+  "protectedFileChanges": [],
+  "checks": {
+    "executedAt": "2026-10-30T17:38:25.159Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      },
+      {
+        "name": "contracts",
+        "status": "PASS"
+      },
+      {
+        "name": "go",
+        "status": "PASS"
+      },
+      {
+        "name": "web",
+        "status": "PASS"
+      },
+      {
+        "name": "git",
+        "status": "PASS"
+      }
+    ]
+  },
+  "security": {
+    "executedAt": "2026-10-30T17:38:15.568Z",
+    "results": [
+      {
+        "name": "security",
+        "status": "PASS"
+      }
+    ]
+  },
+  "nativeEvidence": "LINUX-XRAY-USERS-EVIDENCE.json",
+  "nativeRunId": "2026-10-30T173704552Z-9f6ed604",
+  "nativeResults": [
+    {
+      "name": "native-xray-pure",
+      "status": "PASS",
+      "exitCode": 0,
+      "elapsedMS": 203,
+      "log": "reports/_review/v09-platform/linux-native/2026-10-30T173704552Z-9f6ed604/native-xray-pure.log",
+      "logSHA256": "af55ae3f79650ebc8a773df5e1690af8047395139ee3198cf178874f08b9431d",
+      "package": "xray-pure",
+      "binarySHA256": "383bcb2b83a472c5ef7be7f934ff4b6d15315ef3c9fdfcb311064dd2b2181b22",
+      "buildLog": "reports/_review/v09-platform/linux-native/2026-10-30T173704552Z-9f6ed604/build-xray-pure.log",
+      "passed": 17,
+      "skipped": 3
+    },
+    {
+      "name": "native-sqlite",
+      "status": "PASS",
+      "exitCode": 0,
+      "elapsedMS": 3781,
+      "log": "reports/_review/v09-platform/linux-native/2026-10-30T173704552Z-9f6ed604/native-sqlite.log",
+      "logSHA256": "287ce4a6fb44ece90c0be048e3d512dfff3700c99fdd7668e07ea831a7e88323",
+      "package": "sqlite",
+      "binarySHA256": "6e77a610e9208e4d8ad7e9e6def7493b1b39a00b82decd6bf2cd57e6fea5e9d9",
+      "buildLog": "reports/_review/v09-platform/linux-native/2026-10-30T173704552Z-9f6ed604/build-sqlite.log",
+      "passed": 15,
+      "skipped": 0
+    }
+  ],
+  "npmCi": "PASS: 127 packages, takeover-npm-ci.log",
+  "toolsInstall": "PASS: takeover-tools-install.log",
+  "windowsSQL": "PASS: SQLite 15 top-level / Agent 21; Linux-only registration explicitly skipped; users-r38-release-sql.log",
+  "outstanding": [
+    "Shared interfaces/Host/typed audit schema/migrations not accepted by coordinator",
+    "Real sole-task/config deployment/health/plugin profile adapter and corresponding UI not integrated",
+    "Known external Xray release artifact security failures remain blocking for those artifacts; three binary tests skipped",
+    "QR, real Xray disable/disconnect/install/adoption/recovery, arm64 and complete v0.9 acceptance remain incomplete"
+  ],
+  "nextWork": [
+    "Use S05/S06 and exact candidate signatures for coordinator integration review",
+    "Continue platform work within CX-01 through CX-08 authorization; do not relabel entire package blocked or complete",
+    "Keep applied configuration evidence, default denial, central secrets and sole-task boundaries in further work"
+  ]
+}
