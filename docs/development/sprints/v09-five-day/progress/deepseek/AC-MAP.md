@@ -16,13 +16,23 @@
 
 ## POC-07 本机数据（2026-10-30）
 
+Windows 开发机（全量测试环境）：
+
 | 代理数 | 写入/秒 | DB | WAL（checkpoint 后） | heap |
 |---|---|---|---|---|
 | 10 | 9370.9 | 196 KB | 0 | 2252 KB |
 | 30 | 5680.9 | 368 KB | 0 | 1317 KB |
 | 100 | 5298.8 | 980 KB | 0 | 2628 KB |
 
-SSE 读取 3 事件 <1ms。报告：`reports/_review/v09-services/poc07-report.json`（忽略目录）。环境：Windows amd64，非 1C1G；不作为 POC-07 通过证据。
+隔离 Linux VM（Debian 13 x86_64，2 vCPU/464MB RAM + 4GB swap；POC 用 `taskset -c 0 GOMAXPROCS=1`）：
+
+| 代理数 | 写入/秒 | DB | WAL（checkpoint 后） | heap |
+|---|---|---|---|---|
+| 10 | 8535.3 | 196 KB | 0 | 1379 KB |
+| 30 | 7615.4 | 372 KB | 0 | 1471 KB |
+| 100 | 7487.6 | 1016 KB | 0 | 2486 KB |
+
+SSE 读取 3 事件 <1ms。Linux 内存低于 1GB（464MB），单 CPU 运行；仍非标准 1C1G 主机验收。报告：`reports/_review/v09-services/poc07-report.json`（Windows 忽略目录）。
 
 ## 未完成/缺口
 
@@ -30,6 +40,7 @@ SSE 读取 3 事件 <1ms。报告：`reports/_review/v09-services/poc07-report.j
 - DS-06 已知限制：监控先持久状态再发通知，通知失败不会在下一轮重发；SSRF 校验不做 DNS 解析，需可信 Prober 复核解析地址；quota `RecordUsage` 是可信内部入口，禁止直接暴露给未认证适配器。
 - certificates HTTP、gateway/publishing HTTP 未注册：契约语义与实现模型存在差异，需契约 owner 决策（见 `INTEGRATION.md`）。
 - monitoring/quota HTTP 未注册：g2-merged 候选无相应路径。
-- 真实 Cloudflare/ACME/QQ/SMTP/Nginx、Debian/Ubuntu 双架构、1C1G、mTLS Agent 全部 UNTESTED/BLOCKED；publishing 只有注入端口，无真实供应商端到端。
+- 已在隔离 Debian 13 VM 验证：Linux amd64 全量 Go 测试通过；Cloudflare Token 真实 TXT 创建/读取/删除并清理（`xihuani.com`）；ACME Let's Encrypt staging DNS-01 dry-run 成功并清理挑战记录；QQ Bot 取得 access_token；Nginx 1.26.3 运行/HTTP 200。
+- 仍未验证：真实 mTLS Agent/WSS 端到端、Nginx 受控接管 POC-05、QQ 实际消息投递（缺 targetId）、SMTP、arm64、严格 1C1G 主机；publishing 只有注入端口。
 - `go.mod/go.sum`、迁移编号、HTTP 契约仍待总控接收。
 - `npm run check` 的 g2r03 契约检查 FAIL：候选 provenance 固定了 `internal/nodes/node.go` 的旧哈希，DS-02 的合法字段扩展使其变化；需总控重基线，不通过删除测试/改候选规避。

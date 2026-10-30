@@ -103,3 +103,14 @@
 7. CX 仍需实现 tasks.ReadGate、audit ReadGate、notifications ReadGate、ApprovalConsumer、Dispatcher、NodeLookup、GroupResolver/ClassResolver 等组合端口；Controller 入口未接线。
 8. `go.mod/go.sum`、迁移编号、HTTP/SSE 契约仍未获总控接收/冻结。
 9. 监控告警失败不自动重发；SSRF 需 Prober 复核 DNS 解析地址；quota 可信采集入口不得直接暴露。
+
+## 真实环境验证（隔离 VM，用户授权）
+
+- 环境：Debian GNU/Linux 13 (trixie) x86_64；2 vCPU；464MB RAM（低于 1C1G）+ 4GB swap；20GB 盘；root 仅用于隔离测试；出口香港机房（非代理）。
+- Linux amd64：`go test -count=1 ./...` EXIT=0（含 architecture/contracts/integration/POC）。
+- POC-07（`taskset -c 0` + `GOMAXPROCS=1`）：10/30/100 代理 8535.3/7615.4/7487.6 writes/s；DB ≤1016KB；checkpoint 后 WAL 0；heap ≤2.5MB；SSE 3 事件 <1ms。
+- Cloudflare：Token verify active；`xihuani.com` Zone 可读；用 `tests/poc/v09/services/cloudflare` 真实创建 TXT `sf-it-*`、读回、删除，清理核验 remaining=0。
+- ACME：`certbot --dns-cloudflare --dry-run`（Let's Encrypt staging，DNS-01，`sf-stage.xihuani.com`）成功；挑战 TXT 清理 remaining=0。
+- QQ：`getAppAccessToken` HTTP 200，取得 access_token（expires_in=7200）；未提供 targetId，未发送消息。
+- Nginx：1.26.3 安装并 active，`http://127.0.0.1/` 200；POC-05 受控接管仍缺 Agent/Controller 接线，未验收。
+- 凭据仅存于本机/VM 临时 0600 文件，未入仓库/Git/日志；测试后应轮换 VM 密码、Cloudflare Token、QQ AppSecret。
