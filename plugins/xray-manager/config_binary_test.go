@@ -171,6 +171,19 @@ func TestCustomActualTargetValidationAndProxyCannotReachAPI(t *testing.T) {
 			t.Fatal("real target rejected reviewed custom JSON", err)
 		}
 	}
+	unsafeRedirect := bytes.Replace(directAPICustom(), []byte(`"tag":"direct","protocol":"freedom"`), []byte(`"tag":"direct","protocol":"freedom","settings":{"redirect":"127.0.0.1:18500"}`), 1)
+	if _, err := ReviewCustomJSON(unsafeRedirect, customPolicy()); err != ErrConfigurationRejected {
+		t.Fatal("post-routing API redirect passed safety review", err)
+	}
+	unsafeFile := filepath.Join(t.TempDir(), "unsafe-valid-syntax.json")
+	if err := os.WriteFile(unsafeFile, unsafeRedirect, 0600); err != nil {
+		t.Fatal(err)
+	}
+	// This dangerous config is valid to Xray's schema. Do not START it; a
+	// successful target syntax test does not replace Server Fleet admission.
+	if err := exec.CommandContext(ctx, binary, "run", "-test", "-config", unsafeFile).Run(); err != nil {
+		t.Fatal("regression fixture was not target-valid", err)
+	}
 	invalid := bytes.Replace(basicCustom(), []byte(`"protocol":"socks"`), []byte(`"protocol":"not-a-real-xray-protocol"`), 1)
 	if _, err := ReviewCustomJSON(invalid, customPolicy()); err != nil {
 		t.Fatal("minimum review should not pretend to implement the target's schema", err)

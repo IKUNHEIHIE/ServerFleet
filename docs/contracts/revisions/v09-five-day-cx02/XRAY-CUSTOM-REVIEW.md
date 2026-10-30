@@ -6,6 +6,8 @@ CustomPolicy必须来自当前受控预检和文件授权，不能直接取浏�
 
 管理API支持两种受限布局：直接回环IP:port，或一个严格的回环dokodemo-door入站及首条专用路由。只允许StatsService/HandlerService。所有普通代理流向在自定义规则之前必须有管理端口到blackhole的拒绝规则，不允许再由其他规则/出站/tag/loopback/balancer绕回API。主控实际部署还须满足本机执行器/Host的独立准入，不能把这个检查当作任意root配置执行许可。
 
+后续R20补严出站在routing之后覆盖目标的情况：例如freedom.redirect可把一个原本不匹配管理端口的请求改送本机API。审查还会拒绝出站端点/redirect/URL引用管理端口（含DNS别名、前导零及结构化address+port）；不靠DNS解析猜测安全，不静默重写。其他redirect/finalRules产生明确EGRESS_POLICY_OVERRIDE_REQUIRES_REVIEW风险码。依据固定26.6.1上游[Freedom配置](https://github.com/XTLS/Xray-core/blob/v26.6.1/infra/conf/freedom.go)及[出站处理](https://github.com/XTLS/Xray-core/blob/v26.6.1/proxy/freedom/freedom.go)。实际二进制-test接受该危险redirect语法，而本安全审查拒绝；测试没有启动危险配置。这是输入准入负向，不是已部署生产漏洞或完整OS隔离证明。
+
 两套标准模板同时补入`sf-block`，专用本机API入站先路由，再拒绝所有普通代理目标管理端口及回环目标。只绑定127.0.0.1不足以隔离能访问本机网络的代理客户端。阻断该管理端口也影响代理访问远端相同端口，这是模板的明确安全限制；自定义配置不得悄悄移除保护。没有修改用户提交的custom-json。
 
 固定warning包括自定义管理员审查、目标版本实际-test和流量可用性未证实；REALITY转发、allowInsecure、debug日志、TUN系统网络变化额外提示。唯一任务提交必须绑定原始摘要、全部明确风险确认、当前actor/node/plugin/revision与受控文件资料，并在目标机器用目标二进制实际-test。Review成功不等于配置有效/已发布/已启动/权限通过；未输出fake jobId或成功健康状态。

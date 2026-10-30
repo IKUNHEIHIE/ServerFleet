@@ -8,6 +8,7 @@ import (
 	"io"
 	"net"
 	"net/netip"
+	"net/url"
 	"path"
 	"slices"
 	"strconv"
@@ -130,6 +131,53 @@ func containsString(v any, expected string) bool {
 	return false
 }
 
+// An outbound can replace its destination AFTER routing (e.g. freedom.redirect).
+// Blocking only the original requested API port is therefore insufficient.
+func endpointUsesPort(v any, expected string) bool {
+	portNumber, _ := strconv.Atoi(expected)
+	portMatches := func(value any) bool {
+		switch n := value.(type) {
+		case string:
+			parsed, err := strconv.Atoi(n)
+			return err == nil && parsed == portNumber
+		case json.Number:
+			parsed, err := strconv.ParseFloat(string(n), 64)
+			return err == nil && parsed == float64(portNumber)
+		}
+		return false
+	}
+	switch value := v.(type) {
+	case string:
+		_, port, err := net.SplitHostPort(value)
+		if err == nil && portMatches(port) {
+			return true
+		}
+		if parsed, err := url.Parse(value); err == nil && parsed.Host != "" && portMatches(parsed.Port()) {
+			return true
+		}
+	case []any:
+		for _, child := range value {
+			if endpointUsesPort(child, expected) {
+				return true
+			}
+		}
+	case map[string]any:
+		if portMatches(value["port"]) {
+			for _, field := range []string{"address", "host", "server", "target", "dest"} {
+				if _, exists := value[field]; exists {
+					return true
+				}
+			}
+		}
+		for _, child := range value {
+			if endpointUsesPort(child, expected) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func reviewCustomAPI(root map[string]any, inbounds []any, outbounds []any) error {
 	api, exists := root["api"]
 	if !exists {
@@ -194,7 +242,7 @@ func reviewCustomAPI(root map[string]any, inbounds []any, outbounds []any) error
 	blocked := false
 	for _, item := range outbounds {
 		ob := object(item)
-		if ob["protocol"] == "loopback" || containsString(ob, tag) || localTag != "" && containsString(ob, localTag) {
+		if ob["protocol"] == "loopback" || containsString(ob, tag) || localTag != "" && containsString(ob, localTag) || endpointUsesPort(ob, port) {
 			return ErrConfigurationRejected
 		}
 		if ob["tag"] == denyTag && ob["protocol"] == "blackhole" {
@@ -267,6 +315,9 @@ func reviewCustomTree(v any, policy CustomPolicy, warnings map[string]bool) erro
 			}
 			if key == "realitysettings" {
 				warnings["REALITY_FALLBACK_REQUIRES_REVIEW"] = true
+			}
+			if key == "redirect" || key == "finalrules" {
+				warnings["EGRESS_POLICY_OVERRIDE_REQUIRES_REVIEW"] = true
 			}
 			if key == "protocol" && value == "tun" {
 				warnings["SYSTEM_NETWORK_CHANGE_REQUIRES_REVIEW"] = true

@@ -180,6 +180,14 @@ executeObserved增加claim持久后ack、started marker持久后start、最后ct
 
 ## R19 Agent日志落盘前脱敏与生产游标
 
+提交 `1dcfcf2d5c4ab6445d8b2dd252e7eec1ff6d94a2`。
+
 新增FilterOutput（缺失/失败即扣留）、绑定脱敏终态哈希的不可覆盖output manifest、最多64帧的既有TaskOutput发送及StateSync生产序号。作用结果/源端截断/接收缺口明确分离，重放不重新产生作用或日志。精确语义和DS缺的execution/streamSequence/日志补读接缝见AGENT-OUTPUT-WIRING.md；未改公开Proto/根锁。
 
 `go test ./apps/agent -count=1` PASS 5.046s/staticcheck PASS。固定WSS/WASM/Controller+Agent隔离实验PASS，Agent包9.323s；真实WSS脱敏日志、游标重开、实际首帧+第二帧前注入故障、重连缺口/同offer不再执行已测。过滤器缺失/错误/异常不持久合成secret；篡改终态、分块重解释、64片段截断负向通过。不是Controller持久日志ACK、正式能力、Linux/实际root执行证明。继续包内工作，本轮全量复验随后记录。
+
+R17—R19全量复验：npm run check五套PASS（2026-10-30T07:23:09Z），check:security PASS（07:23:18Z，npm audit0、govulncheck无漏洞）；隔离WSS/WASM/Agent含测试依赖govulncheck PASS；Controller/Agent Linux amd64/arm64四个交叉编译PASS，入口仍未启用真实profile，不当完整发行物。受保护go.mod/go.sum/npm manifests/锁/dependencies/API/Proto/gen/CI/AGENTS相对基线零差异，main仍8a7dd470。
+
+## R20 自定义Xray出站覆盖目标的API隔离补严
+
+复核固定上游Freedom源码发现，routing后的redirect/出站端点可改写实际目的地，仅检查原始端口/路由tag不足。增加出站endpoint/URL/structured address+port到管理端口的拒绝，含DNS别名与非规范前导零；redirect/finalRules追加明确风险码。只修自己候选审查，不接生产或修改原始需求/契约。根模块/实际版本测试随后记录；首次run-xray复验PASS 3.343s，新增危险配置“实际-test语法通过、安全审查拒绝”回归，不启动该配置。

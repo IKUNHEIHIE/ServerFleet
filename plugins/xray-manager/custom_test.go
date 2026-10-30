@@ -79,6 +79,18 @@ func TestCustomReviewRejectsPublicOrIndirectManagementAPI(t *testing.T) {
 			object(m["routing"])["balancers"] = []any{map[string]any{"tag": "any", "selector": []string{"private"}}}
 		},
 		"extra-metrics-listener": func(m map[string]any) { m["metrics"] = map[string]any{"listen": "127.0.0.1:19000"} },
+		"redirect-after-routing": func(m map[string]any) {
+			array(m["outbounds"])[0].(map[string]any)["settings"] = map[string]any{"redirect": "127.0.0.1:18500"}
+		},
+		"redirect-via-dns-alias": func(m map[string]any) {
+			array(m["outbounds"])[0].(map[string]any)["settings"] = map[string]any{"redirect": "alias.invalid:018500"}
+		},
+		"proxy-endpoint-after-routing": func(m map[string]any) {
+			array(m["outbounds"])[0].(map[string]any)["settings"] = map[string]any{"servers": []any{map[string]any{"address": "127.0.0.1", "port": json.Number("18500")}}}
+		},
+		"endpoint-url-after-routing": func(m map[string]any) {
+			array(m["outbounds"])[0].(map[string]any)["settings"] = map[string]any{"address": "https://localhost:18500/path"}
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			var config map[string]any
