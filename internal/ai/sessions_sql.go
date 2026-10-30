@@ -14,10 +14,19 @@ type SessionAuditEvent struct {
 	At                           time.Time
 	NodeIDs                      []string
 }
+
+type ModelSettingsAuditEvent struct {
+	SubjectID, ProfileID, Action string
+	Revision                     uint64
+	At                           time.Time
+}
 type SessionSQLStatements struct {
 	Read        func(context.Context, string, ...any) ([]byte, error)
 	Exec        func(context.Context, string, ...any) (int64, error)
 	AppendAudit func(context.Context, []SessionAuditEvent) error
+	// Separate admission avoids an old session audit adapter silently dropping
+	// profile/revision fields. Nil retains model events in the durable outbox.
+	AppendModelAudit func(context.Context, []ModelSettingsAuditEvent) error
 }
 type SessionSQLBackend struct {
 	Read func(context.Context, string, ...any) ([]byte, error)
@@ -79,19 +88,40 @@ func (s *SQLSessionStore) Update(ctx context.Context, fn func([]byte) ([]byte, e
 		}
 		// A nil audit sink preserves the durable outbox, never drops it or claims it
 		// reached the audit domain. Reviewed composition must bind SAME DS Tx.
-		if tx.AppendAudit != nil && len(st.Outbox) > 0 {
+		if len(st.Outbox) > 0 {
 			events := make([]SessionAuditEvent, 0, len(st.Outbox))
+			models := []ModelSettingsAuditEvent{}
+			remaining := []sessionAudit{}
 			for _, event := range st.Outbox {
+				if event.ProfileID != "" {
+					if tx.AppendModelAudit == nil {
+						remaining = append(remaining, event)
+					} else {
+						models = append(models, ModelSettingsAuditEvent{event.SubjectID, event.ProfileID, event.Action, event.ModelRevision, event.At})
+					}
+					continue
+				}
+				if tx.AppendAudit == nil {
+					remaining = append(remaining, event)
+					continue
+				}
 				result := event.Result
 				if result == "" {
 					result = "success" // Version-1 scope-only outbox compatibility.
 				}
 				events = append(events, SessionAuditEvent{SubjectID: event.SubjectID, Action: event.Action, SessionID: event.SessionID, MessageID: event.MessageID, Result: result, ScopeRevision: event.ScopeRevision, At: event.At, NodeIDs: append([]string{}, event.NodeIDs...)})
 			}
-			if err = tx.AppendAudit(ctx, events); err != nil {
-				return err
+			if len(events) > 0 {
+				if err = tx.AppendAudit(ctx, events); err != nil {
+					return err
+				}
 			}
-			st.Outbox = nil
+			if len(models) > 0 {
+				if err = tx.AppendModelAudit(ctx, models); err != nil {
+					return err
+				}
+			}
+			st.Outbox = remaining
 			next, err = json.Marshal(st)
 			if err != nil || len(next) > 8<<20 {
 				return ErrSessionUnavailable

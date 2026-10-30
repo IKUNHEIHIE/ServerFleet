@@ -61,12 +61,13 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	validator, err := audit.NewValidator([]string{"ai.sessions.create", "ai.sessions.grant", "ai.sessions.revoke", "ai.sessions.policy", "ai.sessions.close", "ai.messages.create", "ai.messages.generate", "ai.messages.completed", "ai.messages.unknown"}, audit.DefaultLimits())
+	validator, err := audit.NewValidator([]string{"ai.sessions.create", "ai.sessions.grant", "ai.sessions.revoke", "ai.sessions.policy", "ai.sessions.close", "ai.messages.create", "ai.messages.generate", "ai.messages.completed", "ai.messages.unknown","ai.models.update"}, audit.DefaultLimits())
 	if err != nil {
 		t.Fatal(err)
 	}
 	fail := false
 	failMessageCommit, failCompletedCommit := false, false
+	failModelCommit:=false
 	service := func(db *ds.DB) *ai.SessionService {
 		recorder, err := audit.NewSQLRecorder(db, validator, time.Now)
 		if err != nil {
@@ -81,7 +82,7 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 		}
 		store, err := ai.NewSQLSessionStore(ai.SessionSQLBackend{Read: read(db), InTx: func(ctx context.Context, fn func(ai.SessionSQLStatements) error) error {
 			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
-				messageMutation, completedMutation := false, false
+				messageMutation, completedMutation, modelMutation := false, false, false
 				ops := ai.SessionSQLStatements{Read: read(tx), Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
 					r, err := tx.Exec(ctx, sql, args...)
 					if err != nil {
@@ -105,11 +106,17 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 						}
 					}
 					return nil
+				},AppendModelAudit:func(ctx context.Context,events []ai.ModelSettingsAuditEvent)error{
+					for _,e:=range events{
+						modelMutation=true
+						if e.ProfileID==""||e.Revision==0{return errors.New("ambiguous model audit binding")}
+						if err:=recorder.AppendTx(ctx,tx,audit.Event{SubjectID:e.SubjectID,Action:e.Action,Result:"success",RequestID:"model-"+e.ProfileID+"-r"+strconv.FormatUint(e.Revision,10),Source:audit.SourceWeb,At:e.At});err!=nil{return err}
+					};return nil
 				}}
 				if err := fn(ops); err != nil {
 					return err
 				}
-				if fail || failMessageCommit && messageMutation || failCompletedCommit && completedMutation {
+				if fail || failMessageCommit && messageMutation || failCompletedCommit && completedMutation || failModelCommit && modelMutation {
 					return errors.New("injected before commit")
 				}
 				return nil
@@ -163,11 +170,28 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// Fresh metadata is an explicit authorized-reference fixture here; model
+	// settings/audit persistence below uses actual SQLite and real rollback.
+	modelSettings:=func()*ai.ModelSettingsService{
+		settings,err:=ai.NewModelSettingsService(aiService,func(_ context.Context,owner,ref string)(auth.CredentialMetadata,error){
+			if owner!=login.Identity.SubjectID||ref!="fixture-ref"{return auth.CredentialMetadata{},ai.ErrToolDenied}
+			return auth.CredentialMetadata{ID:ref,Kind:"ai_api_key",Status:"unverified",UsageScope:[]string{"ai"},Revision:1},nil
+		});if err!=nil{t.Fatal(err)};return settings
+	}
+	inputSettings:=ai.ModelSettingsInput{Enabled:true,Provider:"openai-responses",Model:"test-model",CredentialRef:"fixture-ref",CredentialRevision:1}
+	failModelCommit=true
+	if _,err=modelSettings().Set(ctx,0,inputSettings);err!=ai.ErrSessionUnavailable{t.Fatal("failed model audit committed configuration",err)}
+	failModelCommit=false
+	if cfg,err:=modelSettings().Get(ctx);err!=nil||cfg.Revision!=0||cfg.Enabled{t.Fatal("model config rollback failed",err)}
+	var modelAuditCount int
+	if err=db.QueryRow(ctx,"SELECT COUNT(*) FROM audit_events WHERE action='ai.models.update'").Scan(&modelAuditCount);err!=nil||modelAuditCount!=0{t.Fatal("model audit survived failed transaction",err)}
+	savedModel,err:=modelSettings().Set(ctx,0,inputSettings);if err!=nil{t.Fatal(err)}
 	_ = db.Close()
 	db = newDB(t, path, false)
 	defer db.Close()
 	identity, _ = auth.NewIdentityServiceWithResources(identityStore(t, db), func(_ context.Context, kind, id string) ([]string, error) { return []string{id}, nil }, nil)
 	aiService = service(db)
+	if cfg,err:=modelSettings().Get(ctx);err!=nil||cfg.ID!=savedModel.ID||cfg.Revision!=1{t.Fatal("restart lost model configuration",err)}
 	call := ai.ToolCall{ToolID: "nodes.read", NodeIDs: []string{"node-a"}, Parameters: []byte(`{}`), ScopeRevision: session.ScopeRevision}
 	if assessed, err := aiService.AssessTool(ctx, session.ID, call); err != nil || assessed.RequiresApproval {
 		t.Fatal("persisted scope not enforced", assessed, err)
@@ -177,8 +201,8 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 		var result *ai.ConversationService
 		var createErr error
 		result, createErr = ai.NewConversationService(aiService, ai.ConversationConfig{
-			Profile: func(context.Context, string) (ai.ModelProfile, error) {
-				return ai.ModelProfile{ID: "fixture", Model: "test-model", CredentialRef: "fixture-ref", Revision: 1}, nil
+			Profile: func(ctx context.Context, owner string) (ai.ModelProfile, error) {
+				return modelSettings().Profile(ctx,owner)
 			},
 			Filter: func(_ context.Context, _ ai.SessionView, _ string, text string) (string, error) {
 				return strings.ReplaceAll(text, "synthetic-secret", "[redacted]"), nil

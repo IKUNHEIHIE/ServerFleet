@@ -35,6 +35,12 @@ func TestGenerationCredentialGateRequiresPrivateLiveObservationAndFullBinding(t 
 		if err := chat.CheckCredentialOperation(context.Background(), op); err != ErrToolDenied {
 			t.Fatal("request fields supplied authority", err)
 		}
+		if _, err := s.AddGrant(ctx, v.ID, v.ScopeRevision, ResourceGrantInput{"node", "node-a", []string{"nodes.read"}}); err != ErrToolDenied {
+			t.Fatal("inference context expanded human grants", err)
+		}
+		if _, err := s.SetPolicy(ctx, v.ID, v.ScopeRevision, FullAccess, 15); err != ErrToolDenied {
+			t.Fatal("inference context elevated approval mode", err)
+		}
 		for _, change := range []func(*auth.CredentialOperation){
 			func(o *auth.CredentialOperation) { o.SubjectID = "other" }, func(o *auth.CredentialOperation) { o.CredentialID = "other" }, func(o *auth.CredentialOperation) { o.OperationID = "other" }, func(o *auth.CredentialOperation) { o.PlanDigest = strings.Repeat("f", 64) }, func(o *auth.CredentialOperation) { o.Module = "dns" }, func(o *auth.CredentialOperation) { o.Source = "system" }, func(o *auth.CredentialOperation) { o.Action = "revoke" }, func(o *auth.CredentialOperation) { o.ChangeID = "forged" }, func(o *auth.CredentialOperation) { o.ExpectedRevision = 0 },
 		} {
@@ -75,6 +81,7 @@ func TestGenerationCredentialGateRejectsCurrentRevocationAndUnknown(t *testing.T
 			}
 			var chat *ConversationService
 			var enabled *bool
+			humanContext := ctx
 			chat, enabled = conversationFixture(t, s, func(ctx context.Context, r GenerationRequest, _ func(string) error) error {
 				op := generationCredentialOperation(t, r)
 				if err := chat.CheckCredentialOperation(ctx, op); err != nil {
@@ -88,9 +95,9 @@ func TestGenerationCredentialGateRejectsCurrentRevocationAndUnknown(t *testing.T
 				case "resources":
 					current.AllowedNodes = []string{}
 				case "scope":
-					_, err = s.SetPolicy(ctx, v.ID, v.ScopeRevision, LowRisk, 0)
+					_, err = s.SetPolicy(humanContext, v.ID, v.ScopeRevision, LowRisk, 0)
 				case "closed":
-					_, err = s.Close(ctx, v.ID, v.ScopeRevision)
+					_, err = s.Close(humanContext, v.ID, v.ScopeRevision)
 				case "unknown":
 					chat.markUnknown(ctx, v.ID, r.MessageID)
 				}

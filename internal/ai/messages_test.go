@@ -123,6 +123,7 @@ func TestMessagesPersistIdempotencyOrderEventsAndTextOnlyResponses(t *testing.T)
 
 func TestGenerationFailureRevocationDisableAndCommitAreNeverRetried(t *testing.T) {
 	ctx := context.Background()
+	humanContext := ctx
 	for _, mode := range []string{"provider-error", "panic", "revoked", "disabled", "scope-change", "secret-output", "oversized-output", "ignored-emit-error", "commit-error"} {
 		t.Run(mode, func(t *testing.T) {
 			s, store, actor, _, _ := sessionFixture(t)
@@ -144,7 +145,7 @@ func TestGenerationFailureRevocationDisableAndCommitAreNeverRetried(t *testing.T
 				case "disabled":
 					*enabled = false
 				case "scope-change":
-					if _, err := s.SetPolicy(ctx, view.ID, view.ScopeRevision, LowRisk, 0); err != nil {
+					if _, err := s.SetPolicy(humanContext, view.ID, view.ScopeRevision, LowRisk, 0); err != nil {
 						t.Fatal(err)
 					}
 				case "secret-output":

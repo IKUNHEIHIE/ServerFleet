@@ -254,6 +254,14 @@ Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；
 
 ## R28 真实本机Ubuntu WSL/Linux amd64组件执行
 
+提交 `ffc43cc293dc92bc696aaf1fa7df5b7cf40ab19b`。
+
 既有Ubuntu24.04 WSL2、UID1000、x86_64。新增run-linux-wsl.mjs交叉编译+原生执行及完整源/二进制哈希证据。2026-10-30T09:04:02Z十二包PASS，212顶层运行（含Agent重复）/3真实Xray二进制SKIP；逐包及精确局限见LOCAL-LINUX-VALIDATION.md和LINUX-NATIVE-EVIDENCE.json。实际WSS/mTLS/Proto/Agent副作用与重连、SQLite事务/旧快照外部隔离、Linux文件Sync分支已实跑，仍不称完整安装/ARM/1C1G/正式任务链。
 
 初次Linux只读编译FAIL缺uuid平台校验和，按原libc固定1.6.0补本任务隔离锁，Go mod verify PASS/未改根依赖。接着Agent/恢复测试遇t.TempDir子目录非0700而正确拒绝，两个忽略setup错误的旧测试甚至panic；只修fixture显式0700/错误检查，新增宽松目录拒绝负向，未放宽生产检查/删除测试。各FAIL原始证据另存。Linux两隔离模块含测试govulncheck均PASS。全量根check五套PASS09:04:10Z/security PASS09:02:48Z，Root受保护文件零差异；本轮已通过npm ci/tools:install且根依赖未变。继续模型配置等包内独立实现，不停止等待。
+
+## R29 持久模型配置/明确停用/凭据版本与独立审计
+
+新增ModelSettingsService，复用AI可选聚合字段，默认关闭/按owner/CAS修订、当前引用元数据验证、轮换需真人重新绑定；直接供Conversation.Profile及BYOK Resolver，不默认模型/Key/URL。旧queued不自动换模型，运行中变化UNKNOWN；推理ctx不可调用人类配置/授权/提权动作。新增AppendModelAudit专用同Tx sink，旧sink不静默吞模型字段，nil保留持久出箱；精确候选AI-MODEL-SETTINGS.md，未挂载新设置路径/改共享合同。
+
+首次测试局部err作用域导致编译FAIL，修正后AI/architecture PASS12.916s/1.458s、staticcheck PASS；SQLite十二项PASS8.396s，模型配置+审计故障回滚/成功重开/实际消息Profile使用持久设置。Ubuntu WSL UID1000仅重跑变化AI/SQLite：30+12顶层PASS，09:27:52Z；LINUX-MODEL-SETTINGS-EVIDENCE.json为精确新增/已跟踪源快照，不误写全12包复跑。metadata/模型/过滤/部分角色仍fixture，实际外部模型/设置页面及角色/源政策接收未完成。runner现使用逐次独立证据目录，subset不会覆盖旧完整证据。继续其他包内项，R29全量check/security随后复验。

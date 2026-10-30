@@ -71,6 +71,8 @@ type sessionRecord struct {
 }
 type sessionAudit struct {
 	SubjectID, Action, SessionID string
+	ProfileID                    string `json:",omitempty"`
+	ModelRevision                uint64 `json:",omitempty"`
 	MessageID, Result            string `json:",omitempty"`
 	At                           time.Time
 	ScopeRevision                uint64
@@ -80,6 +82,7 @@ type sessionState struct {
 	Version    int
 	ClockFloor time.Time
 	Sessions   map[string]sessionRecord
+	Models     map[string]ModelSettings `json:",omitempty"`
 	Outbox     []sessionAudit
 }
 type SessionService struct {
@@ -120,8 +123,29 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 	if st.Sessions == nil {
 		st.Sessions = map[string]sessionRecord{}
 	}
+	if st.Models == nil {
+		st.Models = map[string]ModelSettings{}
+	}
+	if len(st.Models) > 1000 {
+		return nil, ErrSessionUnavailable
+	}
+	modelIDs := map[string]bool{}
+	for owner, cfg := range st.Models {
+		if !exactID(owner) || cfg.OwnerID != owner || !exactID(cfg.ID) || modelIDs[cfg.ID] || cfg.Revision == 0 || cfg.UpdatedAt.IsZero() || !validModelSettingsInput(cfg.ModelSettingsInput) {
+			return nil, ErrSessionUnavailable
+		}
+		modelIDs[cfg.ID] = true
+	}
 	if len(st.Sessions) > 1000 || len(st.Outbox) > 10000 {
 		return nil, ErrSessionUnavailable
+	}
+	for _, event := range st.Outbox {
+		if event.ProfileID != "" || event.ModelRevision > 0 {
+			cfg, exists := st.Models[event.SubjectID]
+			if !exists || cfg.ID != event.ProfileID || event.ModelRevision == 0 || event.ModelRevision > cfg.Revision || event.Action != "ai.models.update" || event.Result != "success" || event.At.IsZero() || event.SessionID != "" || event.MessageID != "" || event.ScopeRevision != 0 || len(event.NodeIDs) != 0 {
+				return nil, ErrSessionUnavailable
+			}
+		}
 	}
 	for id, record := range st.Sessions {
 		scope := record.Scope
@@ -156,6 +180,11 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 func (s *SessionService) actor(ctx context.Context, action, id string, human bool) (SessionActor, error) {
 	if s == nil || ctx == nil || ctx.Err() != nil {
 		return SessionActor{}, ErrSessionUnavailable
+	}
+	if human {
+		if _, fromGeneration := ctx.Value(generationObservationKey{}).(*generationObservation); fromGeneration {
+			return SessionActor{}, ErrToolDenied
+		}
 	}
 	actor, err := s.access(ctx, action, id)
 	if errors.Is(err, ErrToolDenied) {
@@ -202,7 +231,7 @@ func (s *SessionService) change(ctx context.Context, fn func(*sessionState, time
 		}
 		return out, nil
 	})
-	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired, ErrGenerationUnknown, ErrModelUnavailable} {
+	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired, ErrGenerationUnknown, ErrModelUnavailable, ErrModelRevisionConflict} {
 		if errors.Is(err, kind) {
 			return kind
 		}
