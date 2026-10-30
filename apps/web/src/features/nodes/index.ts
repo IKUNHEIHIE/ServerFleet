@@ -43,6 +43,15 @@ export type {
 } from "./candidate-adapter";
 export { describeMetric } from "./view-model";
 export type { MetricPresentation } from "./view-model";
+export {
+  LEGACY_FORMAT_ERROR,
+} from "./legacy-types";
+export type { LegacyAdaptResult, LegacyMetric, LegacyNodeRow } from "./legacy-types";
+export { adaptLegacyNodes, adaptMetric } from "./legacy-adapter";
+export { LegacyNodeList, filterLegacyRows, normaliseLegacyQuery } from "./legacy-node-list";
+export type { LegacyNodeListProps } from "./legacy-node-list";
+export { toRichNodes } from "./rich-adapter";
+export { NodesPage } from "./nodes-page";
 export type {
   FreshnessPolicy,
   MetricQuality,
