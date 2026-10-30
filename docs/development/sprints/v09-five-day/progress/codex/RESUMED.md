@@ -264,4 +264,10 @@ Agent/transport/architecture首轮PASS7.529s/2.700s/1.488s，staticcheck PASS；
 
 新增ModelSettingsService，复用AI可选聚合字段，默认关闭/按owner/CAS修订、当前引用元数据验证、轮换需真人重新绑定；直接供Conversation.Profile及BYOK Resolver，不默认模型/Key/URL。旧queued不自动换模型，运行中变化UNKNOWN；推理ctx不可调用人类配置/授权/提权动作。新增AppendModelAudit专用同Tx sink，旧sink不静默吞模型字段，nil保留持久出箱；精确候选AI-MODEL-SETTINGS.md，未挂载新设置路径/改共享合同。
 
-首次测试局部err作用域导致编译FAIL，修正后AI/architecture PASS12.916s/1.458s、staticcheck PASS；SQLite十二项PASS8.396s，模型配置+审计故障回滚/成功重开/实际消息Profile使用持久设置。Ubuntu WSL UID1000仅重跑变化AI/SQLite：30+12顶层PASS，09:27:52Z；LINUX-MODEL-SETTINGS-EVIDENCE.json为精确新增/已跟踪源快照，不误写全12包复跑。metadata/模型/过滤/部分角色仍fixture，实际外部模型/设置页面及角色/源政策接收未完成。runner现使用逐次独立证据目录，subset不会覆盖旧完整证据。继续其他包内项，R29全量check/security随后复验。
+首次测试局部err作用域导致编译FAIL，修正后AI/architecture PASS12.916s/1.458s、staticcheck PASS；SQLite十二项PASS8.396s，模型配置+审计故障回滚/成功重开/实际消息Profile使用持久设置。Ubuntu WSL UID1000仅重跑变化AI/SQLite：30+12顶层PASS，09:27:52Z；LINUX-MODEL-SETTINGS-EVIDENCE.json为精确新增/已跟踪源快照，不误写全12包复跑。metadata/模型/过滤/部分角色仍fixture，实际外部模型/设置页面及角色/源政策接收未完成。runner现使用逐次独立证据目录，subset不会覆盖旧完整证据。提交27eb181117b34a1cc1f847c1a26023f22ec02bd8。全量check五套PASS09:33:50Z/security PASS09:32:36Z；继续其他包内项。
+
+## R30 初始Agent注册HTTP与独立契约差异
+
+新增未挂载EnrollmentHTTP，复用真实服务令牌/审批与持久签发逻辑；精确Host/SNI/TLS1.3、拒绝浏览器/双来源、严格有界JSON与读取期限、当前PKI/隔离前后门、固定分钟IP/全局/并发预算和强制拒绝审计回调。内部approved/rejected转换既有issued/denied，leaf/chain分离。新增agent-enrollment.patch.json和ENROLLMENT-HTTP.md供总控独立审查，未修改公共YAML/生成代码/Proto/根依赖。
+
+本机真实TLS pending→审批提交失败无证书→明确决定后issued，来源/重复键/null/预算/隔离/输出前失效负向PASS。`go test ./internal/transport ./tests/architecture -count=1` PASS5.544s/1.440s，staticcheck PASS；`node --test tests/integration/v09/platform/auth-candidate.test.mjs`三项PASS，验证185操作/状态/保护字节及重复应用拒绝。`node tests/poc/v09/platform/run-linux-wsl.mjs --targets=transport`本地Ubuntu非root原生48顶层PASS/无skip；精确源/二进制/日志哈希见LINUX-ENROLLMENT-HTTP-EVIDENCE.json。审批Gate/拒绝审计/内存仓储明确fixture，非正式admin/Node持久链验收；匿名拒绝审计聚合/限流部署与监听器profile仍待审，详见候选。继续Agent网络端，不停包。

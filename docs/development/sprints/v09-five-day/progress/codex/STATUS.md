@@ -10,12 +10,12 @@
 | CX-02 | 持久初始化/口令/限速/Cookie/CSRF/Origin/epoch/Tgate；未挂载真实HTTP handler含用户/角色/grants；同Tx审计；凭据密文/暂存/服务使用永久防重放；只读受限opaque Bearer；持久审批与完整任务消费绑定。实际SQLite/HTTPS、重启撤权/回滚测试 | 正式迁移/安全决策/唯一任务实际消费尚未接收；MFA政策与实现未完成（要求MFA即拒绝启用）；凭据轮换/撤销任务与页面、scope/approval实际接线未完成 |
 | CX-03 | TLS1.3+mTLS当前指纹/吊销、ControllerLinks/Agent连接循环、接入审批/签发/重装撤销持久化；新增本地私钥/CSR/证书持久材料。真实WSS/Proto/Ping/重启/撤销组件已在Ubuntu WSL amd64原生运行 | WSS生产依赖、PKI profile/轮换/信任包/Node同Tx接线未接收；无完整安装器与Agent运行profile，独立Linux安装/arm64/1C1G未验收 |
 | CX-04 | Agent副作用前claim/start持久化、去重/TTL/取消/live对账/UNKNOWN；输出落盘前强制注册过滤、持久生产序号/有界日志；实际WSS→临时文件→脱敏日志→重连/部分丢帧实验。审批外层rollback/重放负向 | DS Command缺完整Offer字段、ApprovalConsumer缺source/AI session等完整绑定、SubmitTx及日志序号/补读/ACK未接收；root/Shell/插件准入未获批，真实Linux统一链未交付 |
-| CX-05 | 持久AI零资源/逐动作grant/组快照/三级模式；消息幂等/fence/UNKNOWN；未挂载POST/list有界分页及真实Cookie HTTPS SSE；新增BYOK文本HTTPS适配、凭据借用与当前持久推理闸，本机TLS+合成Key实测；工作流冻结顺序任务/停用/UNKNOWN暂停；Eino隔离PoC | 模型设置持久管理/正式外发政策/生产内容过滤器、公开路由与页面组合、统一任务/审批/通知接线未完成；实际外部模型/BYOK未验收，配置/过滤/模型部分仍明确double，Eino未定生产框架 |
+| CX-05 | 持久AI零资源/逐动作grant/组快照/三级模式；消息幂等/fence/UNKNOWN；未挂载POST/list有界分页及真实Cookie HTTPS SSE；BYOK文本HTTPS适配、当前持久推理闸；新增默认停用的持久模型设置/版本绑定/同Tx独立审计与重启使用；工作流冻结顺序任务/停用/UNKNOWN暂停；Eino隔离PoC | 正式外发政策/生产内容过滤器、设置公开路由与页面组合、统一任务/审批/通知接线未完成；实际外部模型/BYOK未验收，元数据/角色/过滤/模型部分仍明确double，Eino未定生产框架 |
 | CX-06 | 签名源/清单/声明UI/私有工件/持久生命周期，默认disabled/实例隔离/禁用先封Host/UNKNOWN；WASM PoC。可选Xray两模板/custom最小审查/管理API隔离；历史26.6.1真实TLS/Vision与精确Stats读取/非复位/重启计数段验证 | 两份官方外部发布物安全FAIL，不得安装/发布；WASM/Host/来源/密钥未准入。Xray Linux双架构安装/接管/配置历史/用户导出/typed遥测与持久采样业务未完成；最小审查不代替目标-test，核心未编入Xray |
 | CX-07 | 更新签名/序列/平台/哈希、同FD暂存一次借用；新增真实文件备份/切换/持久阶段与回执，UNKNOWN永久锁、明确健康失败+兼容性核验才精确恢复本次备份；恢复连续Root/撤销并集/数据库外hold闸，SQLite旧快照不清隔离 | UPDATE/PKI新决策/离线解密/旧主控隔离/实际恢复事务未接收；服务/health/审计提交适配仍明确double，Linux真实更新/迁移/回退/灾备未验收。无默认放行verifier |
 | CX-08 | Controller/Agent骨架及四个Linux交叉编译脚本，构建/组合/恢复接缝说明 | main尚无新模块接收SHA，未在入口组装未接收业务；正式中间件/路由组合、Agent安装与完整发行物尚未完成 |
 
-最新检查点 `ffc43cc293dc92bc696aaf1fa7df5b7cf40ab19b`（R28 Linux原生验证），R27身份材料d61e7a0；此前R26 bc97a05、R23更新c3d6eae、R24消息HTTP d61e563、R25 BYOK 6552197。全量check五套PASS（09:04:10Z）/security PASS（09:02:48Z），两份Linux隔离模块含测试govulncheck PASS；外部Xray FAIL另列。精确命令/结果/阻塞见RESUMED，继续包内下一项。
+已提交R29 `27eb181117b34a1cc1f847c1a26023f22ec02bd8`（持久模型设置），R28 ffc43cc；R30注册HTTP已完成本机和Ubuntu48项组件验证，精确候选与阻塞见RESUMED/ENROLLMENT-HTTP.md。全量check五套PASS（09:33:50Z）/security PASS（09:32:36Z），两份Linux隔离模块含测试govulncheck PASS；外部Xray FAIL另列。继续Agent注册网络端。
 
 **新增实际Linux组件证据**：本机已有Ubuntu24.04 WSL2、UID1000、amd64；12包212顶层测试运行PASS（含Agent重复）/3实际Xray二进制SKIP。真实WSS/Agent副作用与重连、SQLite旧快照外部隔离、私有文件/Sync分支均已执行。Agent/恢复旧fixture的0700准备及错误检查问题修正，未放宽生产门槛；首轮FAIL归档。逐项见LINUX-NATIVE-EVIDENCE.json和LOCAL-LINUX-VALIDATION.md。不是物理VPS/安装/arm64/1C1G或完整统一任务验收。
 

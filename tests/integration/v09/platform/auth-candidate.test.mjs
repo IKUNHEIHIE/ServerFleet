@@ -51,3 +51,19 @@ test("CX02 refuses applying migration to a stale or already migrated input",()=>
   assert.throws(()=>apply(stale,operations));
   assert.throws(()=>apply(apply(source,operations),operations));
 });
+
+test("CX02 enrollment metadata remains an independent candidate without changing protected bytes or states",()=>{
+  const patch=JSON.parse(readFileSync(new URL("../../../../docs/contracts/revisions/v09-five-day-cx02/agent-enrollment.patch.json",import.meta.url),"utf8"));
+  const candidate=apply(source,patch);
+  assert.deepEqual(validateContract(JSON.stringify(candidate)),{paths:147,operations:185});
+  const request=candidate.components.schemas.AgentEnrollRequest;
+  const result=candidate.components.schemas.AgentEnrollResult;
+  assert.ok(request.required.includes("platform"));
+  assert.ok(result.required.includes("expiresAt"));
+  assert.deepEqual(result.properties.state.enum,["pending","issued","denied"]);
+  assert.deepEqual(result.allOf[0].then.required,["nodeId","certificatePem","intermediateChainPem","trustGeneration"]);
+  assert.equal(result.additionalProperties,false);
+  assert.deepEqual(candidate.paths,source.paths);
+  assert.throws(()=>apply(candidate,patch));
+  assert.deepEqual(readFileSync(sourceURL),original);
+});
