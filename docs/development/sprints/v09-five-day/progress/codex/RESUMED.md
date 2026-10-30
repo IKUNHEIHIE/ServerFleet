@@ -164,6 +164,14 @@ R15—R16新一轮全量npm run check五套全部PASS（reports/check-all.json 2
 
 ## R17 Agent持久开始阶段及重连快照
 
+提交 `62f3e7d75fb3933b69629bad1c6b0d7ab5126781`。
+
 executeObserved增加claim持久后ack、started marker持久后start、最后ctx/TTL复查后Run；通知失败不执行并保留UNKNOWN防重放。增加Run异常UNKNOWN、重放终态enum/输出验证、既有StateSyncReply有界私有ledger对账。精确行为/旧记录兼容/截断及容量局限见AGENT-EXECUTION-SYNC.md，不启用生产运行配置。
 
 首次新增测试编译FAIL（误用不存在的validOffer fixture名称），改为现有testOffer，未调整生产准入或删除测试。随后`go test ./apps/agent ./tests/architecture -count=1` PASS 3.223s/1.847s，staticcheck PASS。实际私有文件阶段/失败重启/不重复副作用/异常与损坏记录/截断/取消已测；不是Linux/WSS完整执行链。继续主动连接/事件循环等独立项。
+
+## R18 Agent连接应用循环与真实WSS执行实验
+
+新增私有runAgentSession：Root pin/真实TLS来源/当前信任与本地Admit无默认放行、有界Hello/能力/帧协商、Proto绑定/序列、真实Probe心跳、持久Ack→Started→Result、在途去重/并发限额/取消/live对账覆盖、断线UNKNOWN与合作worker等待。未接main/根WSS锁/生产profile，日志暂未转发并明确truncated。精确边界AGENT-SESSION-WIRING.md。
+
+首次staticcheck报未被调用的私有循环（U1000），补入有意义的原循环测试和隔离实际WSS调用，不加抑制。根Agent测试PASS 3.626s/staticcheck PASS。run.mjs原样复制应用源码与测试到隔离agentapp，记录逐文件hash；真实WSS测试PASS 2.10s，Agent应用测试包PASS 5.285s，原WSS/WASM/controller实验也PASS。真实临时文件副作用、重连相同Offer只一次、持久终态对账、真实Ping/Pong和吊销断线在途UNKNOWN均已测；业务授权/审批/审计是明确fixture，不声称Linux/正式任务/完整v0.9。继续日志等独立项。

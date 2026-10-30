@@ -11,7 +11,7 @@
 
 | 实验 | 实际证明 | 仍未证明 |
 |---|---|---|
-| WSS | 本机真实主动WSS+mTLS、binary Protobuf往返；拒绝文本/超限/节点替换/连接建立后吊销/外部Origin | 完整Hello/序列/去重组合、注册签发/轮换/重装、节点仓储/回调/SSE、Linux网络故障/重连风暴 |
+| WSS | 本机真实主动WSS+mTLS、binary Protobuf；生产ControllerLinks及原样复制的Agent应用循环/executor，Hello/真实Ping/一次临时文件副作用/重连新序列/持久去重/StateSync/撤销取消UNKNOWN；拒绝文本/超限/节点替换/外部Origin | DS当前授权/审批/节点任务审计接线、生产注册能力/安装器/轮换/重装、Linux网络故障/重连风暴；业务gate为明确fixture |
 | WASM | wazero解释器每内存128KiB上限、未注册env Host拒绝、无限循环50ms超时关闭、后续正常模块返回42 | 全Host内存/RSS/CPU、WASI/实际插件、并发实例/持久生命周期、Linux/1C1G、完整逃逸验收或runtime最终选型 |
 | Eino | 真实ToolsNode调用通过Server Fleet策略组件，合成toolcall不能绕过零范围/撤权/root人工审批/伪造approved/未注册工具 | ChatModel/BYOK、持久scope与审批消费/调度、SSE/真实Agent；这是组件集成模拟层，不是POC-06 E2E |
 

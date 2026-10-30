@@ -1,0 +1,242 @@
+package main
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
+	"serverfleet.local/serverfleet/internal/transport"
+)
+
+type actualAgentWSS struct{ c *websocket.Conn }
+
+func (s actualAgentWSS) Read(ctx context.Context) (bool, []byte, error) {
+	kind, raw, err := s.c.Read(ctx)
+	return kind == websocket.MessageBinary, raw, err
+}
+func (s actualAgentWSS) Write(ctx context.Context, raw []byte) error {
+	return s.c.Write(ctx, websocket.MessageBinary, raw)
+}
+func (s actualAgentWSS) Close() error { return s.c.CloseNow() }
+
+// Actual application session/executor + production ControllerLinks + real
+// WSS/mTLS/Protobuf/file effects. Domain task admission remains an explicit
+// fixture; no DS authorization/approval/Linux/installation claim is made.
+func TestActualAgentApplicationWSSExecutionReconnectAndRevocation(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	serverCert, agentCert, roots, pin := sessionPKI(t)
+	fingerprint := sha256.Sum256(agentCert.Certificate[0])
+	var revoked atomic.Bool
+	verifier, err := transport.NewPeerVerifier(func(context.Context, string) (transport.AgentIdentity, error) {
+		return transport.AgentIdentity{NodeID: "node-a", FingerprintSHA256: hex.EncodeToString(fingerprint[:]), Serial: "3", Enabled: true, Revoked: revoked.Load(), TrustGeneration: 1}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	semantic, frames := sessionLimits()
+	events := make(chan *agentv1.Envelope, 64)
+	offline := make(chan string, 8)
+	hub, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{ProtocolMajor: 1, Semantic: semantic, Frames: frames, HeartbeatInterval: time.Second, MaxConnections: 1, Handshake: func(context.Context, transport.LinkObservation, *agentv1.AgentHello) ([]string, error) {
+		return []string{"test.write-marker"}, nil
+	}, Admit: func(context.Context, transport.LinkObservation, *agentv1.Envelope) error { return nil }, Event: func(ctx context.Context, _ transport.LinkObservation, e *agentv1.Envelope) error {
+		select {
+		case events <- e:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}, Disconnected: func(_ context.Context, o transport.LinkObservation) error { offline <- o.ConnectionID; return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || len(r.Header.Values("Origin")) != 0 || len(r.Header.Values("Cookie")) != 0 || len(r.Header.Values("Authorization")) != 0 {
+			http.Error(w, "rejected", 403)
+			return
+		}
+		if _, err := verifier.Verify(r.Context(), *r.TLS, ""); err != nil {
+			http.Error(w, "rejected", 403)
+			return
+		}
+		id, err := transport.NewConnectionID()
+		if err != nil {
+			http.Error(w, "unavailable", 503)
+			return
+		}
+		w.Header().Set("X-SF-Connection-ID", id)
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
+		if err != nil {
+			return
+		}
+		conn.SetReadLimit(int64(frames.MaxFrameBytes))
+		_ = hub.Serve(ctx, actualAgentWSS{conn}, *r.TLS, id)
+	}))
+	server.TLS, err = verifier.ControllerTLSConfig(serverCert, roots)
+	if err != nil {
+		t.Fatal(err)
+	}
+	server.StartTLS()
+	defer server.Close()
+	clientTLS, err := transport.AgentTLSConfig(agentCert, roots, "fleet.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Transport: &http.Transport{TLSClientConfig: clientTLS}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect rejected") }}
+	defer client.CloseIdleConnections()
+	ledger := t.TempDir()
+	marker := filepath.Join(t.TempDir(), "effect")
+	var calls, probes atomic.Int32
+	executor, err := newAgentExecutor(ledger, testActions(func(ctx context.Context, _ []byte) executionResult {
+		n := calls.Add(1)
+		if n > 1 {
+			<-ctx.Done()
+			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED}
+		}
+		if err := os.WriteFile(marker, []byte("one real WSS-triggered file effect"), 0600); err != nil {
+			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
+		}
+		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer executor.Close()
+	wait := func(match func(*agentv1.Envelope) bool) *agentv1.Envelope {
+		for {
+			select {
+			case e := <-events:
+				if match(e) {
+					return e
+				}
+			case <-ctx.Done():
+				t.Fatal("actual WSS event missing")
+				return nil
+			}
+		}
+	}
+	connect := func() (*websocket.Conn, string, <-chan error) {
+		conn, response, err := websocket.Dial(ctx, "wss"+strings.TrimPrefix(server.URL, "https"), &websocket.DialOptions{HTTPClient: client, CompressionMode: websocket.CompressionDisabled})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.TLS == nil || len(response.Header.Values("X-SF-Connection-ID")) != 1 {
+			t.Fatal("missing verified handshake binding")
+		}
+		conn.SetReadLimit(int64(frames.MaxFrameBytes))
+		id := response.Header.Get("X-SF-Connection-ID")
+		cfg := sessionConfig(pin)
+		cfg.Probe = func(ctx context.Context) error {
+			if err := conn.Ping(ctx); err != nil {
+				return err
+			}
+			probes.Add(1)
+			return nil
+		}
+		done := make(chan error, 1)
+		go func() { done <- runAgentSession(ctx, actualAgentWSS{conn}, *response.TLS, id, cfg, executor) }()
+		wait(func(e *agentv1.Envelope) bool { return e.GetAgentHello() != nil && e.ConnectionId == id })
+		return conn, id, done
+	}
+	send := func(e *agentv1.Envelope) {
+		if err := hub.Send(ctx, "node-a", e); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first, id, done := connect()
+	offer := testOffer()
+	send(&agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: offer}})
+	if ack := wait(func(e *agentv1.Envelope) bool { return e.GetTaskAck() != nil }).GetTaskAck(); !ack.Accepted || ack.PreviouslySeen {
+		t.Fatal(ack)
+	}
+	wait(func(e *agentv1.Envelope) bool { return e.GetTaskStarted() != nil })
+	if finished := wait(func(e *agentv1.Envelope) bool { return e.GetTaskFinished() != nil }).GetTaskFinished(); finished.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED || calls.Load() != 1 {
+		t.Fatal(finished, calls.Load())
+	}
+	if b, err := os.ReadFile(marker); err != nil || string(b) != "one real WSS-triggered file effect" {
+		t.Fatal(err)
+	}
+	wait(func(e *agentv1.Envelope) bool { return e.GetHeartbeat() != nil })
+	if probes.Load() == 0 {
+		t.Fatal("heartbeat did not perform a real WSS ping/pong")
+	}
+	_ = first.CloseNow()
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("closed Agent did not stop")
+	}
+	select {
+	case old := <-offline:
+		if old != id {
+			t.Fatal(old)
+		}
+	case <-ctx.Done():
+		t.Fatal("old Controller link remained active")
+	}
+	second, newID, newDone := connect()
+	defer second.CloseNow()
+	if id == newID {
+		t.Fatal("reconnection reused connection sequence namespace")
+	}
+	send(&agentv1.Envelope{Message: &agentv1.Envelope_StateSyncRequest{StateSyncRequest: &agentv1.StateSyncRequest{SyncId: "sync-reconnect", MaxExecutions: 8}}})
+	reply := wait(func(e *agentv1.Envelope) bool { return e.GetStateSyncReply() != nil }).GetStateSyncReply()
+	if len(reply.Executions) != 1 || reply.Executions[0].Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED {
+		t.Fatal(reply)
+	}
+	send(&agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: offer}})
+	if ack := wait(func(e *agentv1.Envelope) bool { return e.GetTaskAck() != nil }).GetTaskAck(); !ack.Accepted || !ack.PreviouslySeen {
+		t.Fatal(ack)
+	}
+	for {
+		event := wait(func(e *agentv1.Envelope) bool { return e.GetTaskStarted() != nil || e.GetTaskFinished() != nil })
+		if event.GetTaskStarted() != nil {
+			t.Fatal("reconnect repeated start/effect")
+		}
+		break
+	}
+	if calls.Load() != 1 {
+		t.Fatal("reconnect repeated file effect", calls.Load())
+	}
+	offer = testOffer()
+	offer.ExecutionId = "execution-revoked"
+	offer.TaskId = "task-revoked"
+	send(&agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: offer}})
+	wait(func(e *agentv1.Envelope) bool { return e.GetTaskStarted() != nil })
+	revoked.Store(true)
+	select {
+	case <-newDone:
+	case <-ctx.Done():
+		t.Fatal("revoked live WSS remained active")
+	}
+	if calls.Load() != 2 {
+		t.Fatal(calls.Load())
+	}
+	reply, err = executor.snapshots(ctx, &agentv1.StateSyncRequest{SyncId: "sync-offline", MaxExecutions: 8})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, snapshot := range reply.Executions {
+		if snapshot.ExecutionId == offer.ExecutionId {
+			found = true
+			if snapshot.Result != agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN {
+				t.Fatal("disconnect invented success", snapshot)
+			}
+		}
+	}
+	if !found {
+		t.Fatal(reply)
+	}
+}

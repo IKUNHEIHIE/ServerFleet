@@ -1,6 +1,6 @@
 // Isolated dependencies live ONLY in the task's ignored reports directory.
 // Source snapshots use .go.txt so root tidy/checks don't acquire a runtime.
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import path from "node:path";
 import { root, go, run } from "../../../../scripts/lib.mjs";
@@ -29,8 +29,20 @@ writeFileSync(path.join(work,"go.sum"),readFileSync(new URL("dependency-sums.txt
 for (const name of ["wss_test", "wasm_test", "controller_link_test"]) {
   writeFileSync(path.join(work, `${name}.go`), readFileSync(new URL(`${name}.go.txt`, import.meta.url)));
 }
+// Compile the ACTUAL current Agent application sources in an isolated module;
+// only this module imports the unadopted WSS dependency. No hand-translated
+// executor/session implementation is substituted for the production source.
+const agentWork=path.join(work,"agentapp");mkdirSync(agentWork,{recursive:true});
+const agentFiles=readdirSync(path.join(root,"apps/agent")).filter(name=>name.endsWith(".go"));
+for(const name of readdirSync(agentWork).filter(name=>name.endsWith(".go")&&!agentFiles.includes(name)&&name!=="actual_wss_test.go")){
+ const target=path.resolve(agentWork,name);if(path.dirname(target)!==path.resolve(agentWork))throw new Error("Invalid stale source path");unlinkSync(target);
+}
+const sources={};
+for(const name of agentFiles){const source=readFileSync(path.join(root,"apps/agent",name));writeFileSync(path.join(agentWork,name),source);sources[`apps/agent/${name}`]=createHash("sha256").update(source).digest("hex");}
+writeFileSync(path.join(agentWork,"actual_wss_test.go"),readFileSync(new URL("agent_session_test.go.txt",import.meta.url)));
+writeFileSync(path.join(work,"agent-source-hashes.json"),JSON.stringify(sources,null,2)+"\n");
 try {
-  run(go, ["test", "-mod=readonly", "-count=1", "-v", "-timeout=45s", "."], { cwd: work, name: "v09-isolated-platform-poc" });
+  run(go, ["test", "-mod=readonly", "-count=1", "-v", "-timeout=45s", ".", "./agentapp"], { cwd: work, name: "v09-isolated-platform-poc" });
 } finally {
   if (shared.some((file, i) => digest(file) !== before[i])) throw new Error("Root dependency files changed during isolated PoC");
 }
