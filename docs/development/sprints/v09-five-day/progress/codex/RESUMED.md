@@ -154,6 +154,16 @@ R14完成后结果：recovery/architecture复验PASS 2.390s/2.080s，staticcheck
 
 ## R16 AI持久消息、生成未知防重放及真实SSE
 
+提交 `68233b86b63a51efb7846492360ee065b4648265`。
+
 新增ConversationService/消息和生成状态/持久事件、未挂载MessageEventsHTTP，复用scope聚合和审计同Tx，无自动执行器。消息脱敏与模型配置/Provider无默认实现，BYOK仍须受控凭据桥；文本输出不能声明真实taskId。精确行为/容量/共享字段候选见AI-MESSAGES-WIRING.md。补入乱序排队历史成对组合，生成前持久fence，出错/停用/撤权/超限/提交失败UNKNOWN不重放，忽略emit错误也不能将部分结果标成功。
 
 初轮AI测试PASS 2.075s/staticcheck PASS；新增SSE与修订后AI/auth/architecture PASS 2.875s/27.588s/1.556s。继续加固后AI复验PASS 2.924s/staticcheck PASS。固定锁SQLite首次FAIL：领域unknown到DS审计的原因码大写不被允许，终态保持generating、未误报成功；改用明确小写ai_generation_unknown映射（领域仍unknown，未改DS枚举）。随后十二项实际SQLite组合PASS 8.869s，含消息+审计提交前故障、回答+审计回滚、重启后保留unknown防重放、真实HTTPS Cookie SSE/游标续读/撤销关闭。模型/过滤器为明确double，没有实际模型或真实秘密。继续包内实施，R15—16后的全量检查另记。
+
+R15—R16新一轮全量npm run check五套全部PASS（reports/check-all.json 2026-10-30T06:55:32Z），check:security PASS（06:55:37Z，npm audit0、govulncheck无漏洞）。未重新安装或改动未变的依赖，沿用本轮已PASS的npm ci/tools:install。main仍8a7dd470，未接收共享差异；DS自己分支新增隔离VM/供应商证据，仅只读核对文档，不把它当成本会话已获准连接VPS或已验证CX链路，未读取凭据/接入该VM。
+
+## R17 Agent持久开始阶段及重连快照
+
+executeObserved增加claim持久后ack、started marker持久后start、最后ctx/TTL复查后Run；通知失败不执行并保留UNKNOWN防重放。增加Run异常UNKNOWN、重放终态enum/输出验证、既有StateSyncReply有界私有ledger对账。精确行为/旧记录兼容/截断及容量局限见AGENT-EXECUTION-SYNC.md，不启用生产运行配置。
+
+首次新增测试编译FAIL（误用不存在的validOffer fixture名称），改为现有testOffer，未调整生产准入或删除测试。随后`go test ./apps/agent ./tests/architecture -count=1` PASS 3.223s/1.847s，staticcheck PASS。实际私有文件阶段/失败重启/不重复副作用/异常与损坏记录/截断/取消已测；不是Linux/WSS完整执行链。继续主动连接/事件循环等独立项。

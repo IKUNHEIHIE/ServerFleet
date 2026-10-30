@@ -79,6 +79,13 @@ func offerDigest(offer *agentv1.TaskOffer) string {
 }
 
 func (e *agentExecutor) execute(ctx context.Context, offer *agentv1.TaskOffer) (executionResult, bool, error) {
+	return e.executeObserved(ctx, offer, nil)
+}
+
+// observe is a program-owned event adapter, not an authorization replacement.
+// accepted follows durable reservation; started follows its own durable marker.
+// A failed notification prevents NEW effects but never removes the reservation.
+func (e *agentExecutor) executeObserved(ctx context.Context, offer *agentv1.TaskOffer, observe func(stage string, previouslySeen bool) error) (executionResult, bool, error) {
 	unknown := executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
 	if ctx == nil || ctx.Err() != nil || e == nil || e.ledger == nil || e.now == nil || offer == nil {
 		return unknown, false, errExecutionRejected
@@ -110,12 +117,15 @@ func (e *agentExecutor) execute(ctx context.Context, offer *agentv1.TaskOffer) (
 		if readErr != nil || json.Unmarshal(data, &prior) != nil || prior != claim {
 			return unknown, true, errExecutionRejected
 		}
+		if observe != nil && observe("accepted", true) != nil {
+			return unknown, true, errExecutionRejected
+		}
 		data, readErr = e.readRecord(name+"/result.json", 128<<10)
 		if readErr != nil {
 			return unknown, true, nil
 		}
 		var result executionResult
-		if json.Unmarshal(data, &result) != nil {
+		if json.Unmarshal(data, &result) != nil || !validExecutionResult(result) {
 			return unknown, true, errExecutionRejected
 		}
 		return result, true, nil
@@ -132,15 +142,27 @@ func (e *agentExecutor) execute(ctx context.Context, offer *agentv1.TaskOffer) (
 	if err = e.syncDirectory("."); err != nil {
 		return unknown, false, errExecutionRejected
 	}
+	if observe != nil && observe("accepted", false) != nil {
+		return unknown, false, errExecutionRejected
+	}
 	if ctx.Err() != nil {
 		return unknown, false, ctx.Err()
 	}
 	if e.now().UnixMilli() >= offer.ExpiresAtUnixMs {
 		return unknown, false, errExecutionRejected
 	}
+	if err = e.writeRecord(name+"/started.json", executionStarted{At: e.now().UTC()}); err != nil || e.syncDirectory(name) != nil {
+		return unknown, false, errExecutionRejected
+	}
+	if observe != nil && observe("started", false) != nil {
+		return unknown, false, errExecutionRejected
+	}
+	if ctx.Err() != nil || e.now().UnixMilli() >= offer.ExpiresAtUnixMs {
+		return unknown, false, errExecutionRejected
+	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(offer.TimeoutSeconds)*time.Second)
 	defer cancel()
-	result := action.Run(runCtx, append([]byte(nil), offer.CanonicalParametersJson...))
+	result := runRegisteredAction(runCtx, action, append([]byte(nil), offer.CanonicalParametersJson...))
 	if result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_FAILED && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_CANCELED && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_TIMED_OUT && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN {
 		result = unknown
 	}
