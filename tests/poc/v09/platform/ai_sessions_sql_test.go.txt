@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -236,25 +237,52 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 		t.Fatal(err)
 	}
 	type observedKey struct{}
-	sse, err := ai.NewMessageEventsHTTP(chat, func(r *http.Request) (context.Context, error) {
+	authenticateMessage := func(r *http.Request) (context.Context, error) {
 		current, err := authHTTP.AuthenticateRequest(r)
 		if err != nil {
 			return nil, err
 		}
 		return context.WithValue(r.Context(), observedKey{}, current), nil
-	}, func(ctx context.Context) error {
+	}
+	commitMessage := func(ctx context.Context) error {
 		current, ok := ctx.Value(observedKey{}).(auth.Identity)
 		if !ok {
 			return auth.ErrCredential
 		}
 		return identity.CommitGate(ctx, login.Secret, current)
-	})
+	}
+	sse, err := ai.NewMessageEventsHTTP(chat, authenticateMessage, commitMessage)
 	if err != nil {
 		t.Fatal(err)
 	}
-	server.Config.Handler = sse
+	messagesHTTP, err := ai.NewMessagesHTTP(chat, authenticateMessage, commitMessage)
+	if err != nil { t.Fatal(err) }
+	mux := http.NewServeMux()
+	mux.Handle("/api/v1/ai/sessions/{sessionId}/events", sse)
+	mux.Handle("/api/v1/ai/sessions/{sessionId}/messages", messagesHTTP)
+	server.Config.Handler = mux
 	server.StartTLS()
 	defer server.Close()
+	requestMessages := func(method, suffix string, input *ai.MessageInput, csrf bool) (int, []byte) {
+		var body []byte
+		if input != nil { body, _ = json.Marshal(input) }
+		request, err := http.NewRequestWithContext(ctx,method,origin+"/api/v1/ai/sessions/"+session.ID+"/messages"+suffix,strings.NewReader(string(body)))
+		if err != nil { t.Fatal(err) }
+		request.AddCookie(&http.Cookie{Name:auth.SessionCookieName,Value:login.Secret})
+		request.Header.Set("Origin",origin)
+		if method == http.MethodPost {
+			request.Header.Set("Content-Type","application/json")
+			request.Header.Set("Idempotency-Key","request-two")
+			if csrf { request.Header.Set("X-CSRF-Token",login.CSRF) }
+		}
+		response,err := server.Client().Do(request)
+		if err != nil { t.Fatal(err) }
+		defer response.Body.Close()
+		data,err := io.ReadAll(response.Body)
+		if err != nil { t.Fatal(err) }
+		if strings.Contains(string(data),"synthetic-secret") { t.Fatal("HTTP disclosed raw test secret") }
+		return response.StatusCode,data
+	}
 	open := func(cursor string) *http.Response {
 		request, err := http.NewRequestWithContext(ctx, http.MethodGet, origin+"/api/v1/ai/sessions/"+session.ID+"/events", nil)
 		if err != nil {
@@ -302,9 +330,21 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 	resumed := open(session.ID + "." + strconv.FormatUint(last, 10))
 	defer resumed.Body.Close()
 	input.ClientMessageID = "client-two"
-	if _, err = chat.Submit(ctx, session.ID, "request-two", input); err != nil {
-		t.Fatal(err)
-	}
+	if code,_ := requestMessages(http.MethodPost,"",&input,false);code != 403 { t.Fatal("missing real CSRF accepted",code) }
+	failMessageCommit = true
+	if code,_ := requestMessages(http.MethodPost,"",&input,true);code != 503 { t.Fatal("failed SQL commit became HTTP success",code) }
+	failMessageCommit = false
+	code,body := requestMessages(http.MethodPost,"",&input,true)
+	var secondMessage ai.Message
+	if code != 200 || json.Unmarshal(body,&secondMessage) != nil || secondMessage.Role != "user" || secondMessage.RedactedContent != "question [redacted]" || providerCalls != 1 { t.Fatal("real message submission failed or invoked provider",code) }
+	code,replayedBody := requestMessages(http.MethodPost,"",&input,true)
+	if code != 200 || string(replayedBody) != string(body) { t.Fatal("real HTTP replay changed persisted message",code) }
+	var page struct { Items []ai.Message `json:"items"`;Page struct { NextCursor string `json:"nextCursor"`;HasMore bool `json:"hasMore"` } `json:"page"` }
+	code,body = requestMessages(http.MethodGet,"?limit=1",nil,false)
+	if code != 200 || json.Unmarshal(body,&page) != nil || len(page.Items) != 1 || page.Items[0].MessageID != message.MessageID || !page.Page.HasMore { t.Fatal("real first page failed",code) }
+	cursor := page.Page.NextCursor
+	code,body = requestMessages(http.MethodGet,"?limit=1&cursor="+url.QueryEscape(cursor),nil,false)
+	if code != 200 || json.Unmarshal(body,&page) != nil || len(page.Items) != 1 || page.Items[0].MessageID != secondMessage.MessageID || page.Page.HasMore { t.Fatal("real cursor page failed",code) }
 	reader = bufio.NewReader(resumed.Body)
 	if e := readEvent(reader); e.Sequence != last+1 {
 		t.Fatal("SSE replayed old events", e)
@@ -312,6 +352,7 @@ func TestAIScopeRealSQLiteCurrentIdentityRestartAndRevoke(t *testing.T) {
 	if err = identity.RevokeSession(ctx, login.Secret, login.CSRF, observed.SessionID); err != nil {
 		t.Fatal(err)
 	}
+	if code,_ := requestMessages(http.MethodGet,"",nil,false);code != 401 { t.Fatal("revoked real Cookie read messages",code) }
 	if tail, err := io.ReadAll(reader); err != nil || strings.Contains(string(tail), "redactedContent") {
 		t.Fatal("revoked SSE did not close or leaked content", err)
 	}

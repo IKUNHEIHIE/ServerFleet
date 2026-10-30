@@ -210,6 +210,14 @@ R17—R19全量复验：npm run check五套PASS（2026-10-30T07:23:09Z），chec
 
 ## R23 更新私有文件切换、健康证据及精确备份回退
 
+提交 `c3d6eae2b9306dcca5acdfffc6db556ebcc80522`。
+
 新增updates.SlotInstaller/InstallHooks/持久阶段与历史回执，详见UPDATE-INSTALL.md。实际文件使用签名暂存、当前provenance/哈希、永久executionId/跨实例锁、备份/替换、哈希复验；缺当前任务/服务/health/审计适配拒绝。任何模糊结果永久锁并UNKNOWN不重试；明确健康失败且原任务授权+当前兼容性核查才恢复本次精确备份。回退是更新失败后的已确认恢复，不降序列高水位，不对不兼容迁移盲目启动旧程序。未改共享接口/锁/迁移或启用生产profile。
 
 首轮Windows只读属性使Rename失败（未误报成功），改为所有者0700文件；首次time.Time内存单调时钟比较导致序列化回执测试误报，修为完整JSON比较；并发fixture改独立暂存对象以免自身对象锁串行。随后updates/architecture PASS 3.471s/1.961s，staticcheck PASS；真实文件/重开/并发/阶段撤权/损坏/回退负向已测，服务/审计/健康来源/兼容性回调为明确double。Linux断电、实际监管进程/systemd、事务接线及双架构安装仍未验收，继续包内下一项。
+
+## R24 AI消息HTTP提交与有界分页
+
+新增未挂载MessagesHTTP，复用既有GET/POST消息路径与AIMessage/PageOfAIMessage；强制实际Authenticate/CommitGate，无默认身份/模型/任务执行器。严格有界JSON与幂等，当前修订/owner/资源脱敏复核，按条目与字节有界分页及会话/修订游标，提交后撤权扣留响应而不重复消息。精确候选行为及接线见AI-MESSAGES-HTTP.md。
+
+AI/updates/architecture复验PASS 2.929s/2.757s/1.484s，staticcheck PASS；固定DS源实际SQLite十二项PASS 8.893s，AI项目1.32s，含真实HTTPS Cookie+CSRF、数据库提交故障503、幂等POST、分页/SSE、撤销Cookie后401。Provider调用次数未增加，模型/Profile/Filter和部分动作权限桥仍明确fixture，未称实际BYOK/生产内容过滤/页面或完整v0.9。全量check/security正在覆盖R20—24，不用R19旧绿覆盖。

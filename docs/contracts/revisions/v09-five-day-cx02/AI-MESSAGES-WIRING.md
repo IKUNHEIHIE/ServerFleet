@@ -15,7 +15,7 @@
 
 30秒推理ctx、≤1024次串行化输出回调、≤128000输出字节/32000字符；每次输入上下文≤64消息/256000字节，不静默截断。每会话≤256轮/512消息/1024元数据事件，聚合总8MiB，满时失败关闭，当前没有自动删除防重放或秘密明文归档。回调必须遵守取消；普通Go函数接口不能强杀不合作provider。无1核1GB性能或无限会话/消息承诺。
 
-`Messages`和`Events`逐次查当前owner/action，读内容再经Filter和当前范围核对。关闭会话不重新开授权；未来scope资料不入旧资源快照。内部分页按序号，只是组合端口；公开Cursor/PageMeta精确适配和POST/list消息Handler尚需契约接收，不另造平行公开路径。
+`Messages`和`Events`逐次查当前owner/action，读内容再经Filter和当前范围核对。关闭会话不重新开授权；未来scope资料不入旧资源快照。内部分页按序号。R24已补未挂载的POST/list消息Handler与Cursor/PageMeta适配，详见[AI-MESSAGES-HTTP.md](AI-MESSAGES-HTTP.md)；仍待契约/组合接收，不另造平行公开路径。
 
 ## SSE
 
