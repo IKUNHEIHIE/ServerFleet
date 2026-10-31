@@ -466,15 +466,15 @@ func classifyTLSFailure(probeCtx context.Context, err error) error {
 // from the probe's own timeout.
 func classifyContextFailure(ctx context.Context, err error) error {
 	if errors.Is(ctx.Err(), context.Canceled) {
-		return ctx.Err()
+		return context.Canceled
 	}
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+	if errors.Is(ctx.Err(), context.DeadlineExceeded) || timeoutError(err) {
 		return probeTimeout(err)
 	}
-	if timeoutError(err) {
-		return probeTimeout(err)
+	if err == nil {
+		err = errors.New("probe failed")
 	}
-	return ctx.Err()
+	return &ProbeError{Code: ProbeCodeRequestFailed, Summary: "probe failed", Cause: err}
 }
 
 func probeTimeout(cause error) error {
