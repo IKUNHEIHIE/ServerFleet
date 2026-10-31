@@ -116,3 +116,34 @@
 - arm64：`GOOS=linux GOARCH=arm64` 交叉构建 controller/agent 成功，ELF machine=183（AArch64）；未在 arm64 真机运行。
 - 真实监控：本地回环 HTTP 探针 up→down→up，持久状态与两条迁移告警正确；Windows/Linux 均 PASS（`tests/poc/v09/services/monitoring`）。
 - 凭据仅存于本机/VM 临时 0600 文件，未入仓库/Git/日志；测试后应轮换 VM 密码、Cloudflare Token、QQ AppSecret。
+
+## 检查点 C10 · V09-5D-DS Wave 3（业务域 HTTP 补齐与 SQLite WAL 端到端）
+
+- 分支 `feature/v09-services-ds02`；起始基线 `98f39e04e73ee3150b9f6146d92102c59e5358c3`（Wave 1/2 已合入 main）。
+- 代码检查点（按域）：
+  - `abcfb30` `feat(monitoring): add availability monitor and traffic risk http handlers`
+  - `3ce4073` `feat(quota): add node traffic quota http handlers and risk listing`
+  - `d9f5e1e` `feat(certificates): add internal distribution http handlers and listing`
+  - `c6715f7` `feat(publishing): add preview and publication http handlers`
+  - `83a86de` `feat(gateway): add checks and dispatch http operations`
+  - `0dcd9f1` `feat(nodes): add lifecycle identity capabilities and diagnostics http`
+  - `bca1a70` `feat(tasks): add resume http operation and revision in job dto`
+  - `a7e0852` `test(services): cover wave3 http endpoints with sqlite wal`
+- 实现范围：
+  - `internal/monitoring/http.go`：`GET/POST /api/v1/monitoring/availability-monitors`、`PATCH .../{monitorId}`（`state`/`paused` 切换）、`GET /api/v1/monitoring/traffic-risks`，`AuditActions()`；同时注册候选契约/前端的无前缀别名。
+  - `internal/quota/http.go`：`GET/PUT /api/v1/nodes/{nodeId}/traffic-quota`，`AuditActions()`；`quota.Service.ListTrafficRisks`/`LatestUsage` 供 traffic-risks 与配额视图使用。
+  - `internal/certificates/http.go`：`GET/POST /api/v1/certificates/internal/distributions`、`POST .../{distributionId}/revoke`，`AuditActions()`；`ListDetails` 读模型；响应/审计不含 keyRef 或私钥材料。
+  - `internal/publishing/http.go`：`POST /api/v1/publishing/preview`、`GET/POST /api/v1/publishing/publications`、`GET .../{publicationId}` 及无前缀别名；服务层新增 `Preview`/`ListDetails`。
+  - `internal/gateway/http.go`：`GET /api/v1/gateways/{gatewayId}/checks`（只返回聚合标志，`recorded:false` 表示无记录）、`PATCH .../dispatch`（`{state}` 与 `{enabled, expectedRevision}`）。
+  - `internal/nodes/http.go`：`POST .../suspend|revoke`、`GET .../identity|capabilities|diagnostics`；suspended 不被 agent 心跳覆盖，revoke 终态；identity/capabilities 明确 `recorded:false`，不伪造。
+  - `internal/tasks/http.go`：`POST /api/v1/tasks/{jobId}/resume`（仅 queued 未开始任务，重新鉴权+审批有效后延长期限并 revision+1）；GET/创建响应补充 `revision`/`planDigest`。
+- 实际验证（代码 HEAD `a7e0852`，固定 Go 1.27.3 / Node 24.22.1）：
+  - `go test ./internal/... ./tests/...` → 全部 PASS；新增 `tests/integration/v09/services/wave3_http_test.go` 在真实文件 SQLite WAL 上覆盖 7 个域、越权（401/403）、并发配额写、证书 issuer 失败回滚、审计落盘。
+  - `npm run check` → `reports/check-all.json`：`policy` PASS、`contracts` PASS、`go` PASS、`web` PASS、`git` PASS（34 测试文件/283 项 web 单测 PASS，Vite build PASS）。
+  - `npm run check:security` → `npm audit` 0 漏洞；`govulncheck ./...` 无漏洞。
+- 边界与剩余风险：
+  - 未修改 `apps/controller/**`、`apps/web/**`、公共配置/锁/契约；未新增迁移（保持 Wave 2 集成测试固定的 19 项迁移）。总控接线清单见 [HANDOFF-WAVE3.md](HANDOFF-WAVE3.md)。
+  - Wave 2 未构造 monitoring/quota/certificates/publishing 服务；总控需按交接文档构造并注入端口，否则相关路由不可达。
+  - certificates 的 Issuer/TaskSubmitter、publishing 的三个 publisher、monitoring 真实 Prober 与真实 notifications 适配均无生产实现；未接线前保持失败关闭，真实网络/CA/DNS/Nginx/Agent 验收 UNTESTED。
+  - `tasks.resume` 只处理 queued 未开始任务（后端无 paused 状态）；`GET /api/v1/nodes/{nodeId}` 详情不在 Wave 3 DS 清单内，仍未提供。
+  - Node 无持久 revision，suspend/revoke 拒绝非 0 `expectedRevision`；revoke 不负责关闭活动 WSS 或吊销节点证书（属 transport/CX）。
