@@ -105,9 +105,15 @@ $ go test ./tests/integration/v09/platform -run TestWave4ControllerCLILocalPKIEn
 ```
 $ go test ./... -count=1 -timeout 20m
 （所有包 ok，0 FAIL；含 tests/architecture、tests/contracts、tests/integration/v09/*、tests/poc/v09/*）
+
+$ npm run check
+policy/contracts/go/web/git = PASS（reports/check-all.json，2026-10-31T13:24:41.313Z；Web 36/36 文件、306/306 测试）
+
+$ npm run check:security
+PASS（reports/check-security.json，2026-10-31T13:25:20.338Z；npm audit 0 漏洞，govulncheck: No vulnerabilities found.）
 ```
 
-`npm run check` / `npm run check:security` 结果见 `STATUS.md` Wave 4 小节与最终 HEAD。
+首次 `npm run check` 在 Web `node-add-page.test.tsx` 出现一次高负载异步渲染竞态失败；单文件复跑与第二次完整门禁均 PASS，已如实登记于 `STATUS.md`。
 
 ---
 
