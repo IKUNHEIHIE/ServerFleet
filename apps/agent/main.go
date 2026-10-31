@@ -1,6 +1,6 @@
 // Agent is an offline M0-P1 bootstrap entry. Without arguments it keeps the
-// historical scaffold output; explicit flags run a local status self-check or one
-// enrollment attempt through apps/agent/runtime.
+// historical scaffold output; explicit flags run a local status self-check, one
+// enrollment attempt or one controlled WSS+mTLS connection.
 package main
 
 import (
@@ -17,7 +17,7 @@ func main() {
 }
 
 func agentRuntimeDeps() agentruntime.Deps {
-	return agentruntime.Deps{Status: agentStatus, Enroll: agentEnrollOnce}
+	return agentruntime.Deps{Status: agentStatus, Enroll: agentEnrollOnce, Connect: agentConnectOnce}
 }
 
 func agentStatus(ctx context.Context, stateDir, rootPin string) (agentruntime.Status, error) {

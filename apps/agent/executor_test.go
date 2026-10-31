@@ -118,7 +118,7 @@ func TestAgentExecutorRejectsUnsafeOffersBeforeSideEffect(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer e.Close()
-	for _, change := range []func(*agentv1.TaskOffer){func(o *agentv1.TaskOffer) { o.Privilege = agentv1.Privilege_PRIVILEGE_ROOT }, func(o *agentv1.TaskOffer) { o.ActionId = "shell" }, func(o *agentv1.TaskOffer) { o.ExecutionId = "../escape" }, func(o *agentv1.TaskOffer) { o.ExpiresAtUnixMs = time.Now().UnixMilli() }, func(o *agentv1.TaskOffer) { o.ScopeRevision = 0 }, func(o *agentv1.TaskOffer) { o.PluginId = "xray-manager" }, func(o *agentv1.TaskOffer) { o.CanonicalParametersJson = []byte(`{"command":"root"}`) }} {
+	for _, change := range []func(*agentv1.TaskOffer){func(o *agentv1.TaskOffer) { o.Privilege = agentv1.Privilege_PRIVILEGE_ROOT }, func(o *agentv1.TaskOffer) { o.ActionId = "shell" }, func(o *agentv1.TaskOffer) { o.ExecutionId = "../escape" }, func(o *agentv1.TaskOffer) { o.ExpiresAtUnixMs = time.Now().UnixMilli() }, func(o *agentv1.TaskOffer) { o.PluginId = "xray-manager" }, func(o *agentv1.TaskOffer) { o.CanonicalParametersJson = []byte(`{"command":"root"}`) }} {
 		offer := testOffer()
 		change(offer)
 		if _, _, err := e.execute(context.Background(), offer); err == nil {
@@ -127,6 +127,25 @@ func TestAgentExecutorRejectsUnsafeOffersBeforeSideEffect(t *testing.T) {
 	}
 	if count != 0 {
 		t.Fatal(count)
+	}
+}
+
+func TestAgentExecutorAcceptsUnscopedStandardOffer(t *testing.T) {
+	var count int
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
+		count++
+		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	offer := testOffer()
+	offer.ExecutionId = "exec-unscoped"
+	offer.ScopeRevision = 0
+	result, duplicate, err := e.execute(context.Background(), offer)
+	if err != nil || duplicate || result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED || count != 1 {
+		t.Fatalf("unscoped offer result = %+v duplicate=%t err=%v count=%d", result, duplicate, err, count)
 	}
 }
 

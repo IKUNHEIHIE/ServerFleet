@@ -22,14 +22,18 @@ import (
 )
 
 type fakeDeps struct {
-	statusCalls int
-	enrollCalls int
-	lastPin     string
-	lastRequest EnrollRequest
-	status      Status
-	statusErr   error
-	enroll      EnrollResult
-	enrollErr   error
+	statusCalls  int
+	enrollCalls  int
+	connectCalls int
+	lastPin      string
+	lastRequest  EnrollRequest
+	lastConnect  ConnectRequest
+	status       Status
+	statusErr    error
+	enroll       EnrollResult
+	enrollErr    error
+	connect      ConnectResult
+	connectErr   error
 }
 
 func (d *fakeDeps) deps() Deps {
@@ -45,6 +49,13 @@ func (d *fakeDeps) deps() Deps {
 			d.enrollCalls++
 			d.lastRequest = request
 			return d.enroll, d.enrollErr
+		},
+		Connect: func(_ context.Context, request ConnectRequest) (ConnectResult, error) {
+			d.connectCalls++
+			d.lastConnect = request
+			result := d.connect
+			result.StateDir = request.StateDir
+			return result, d.connectErr
 		},
 	}
 }
@@ -140,6 +151,69 @@ func TestRunEnrollRequiresExplicitInputs(t *testing.T) {
 	}
 	if code := Run(context.Background(), []string{"-unknown"}, deps.deps(), &stdout, &stderr); code != 2 {
 		t.Fatalf("unknown flag code = %d", code)
+	}
+}
+
+func TestRunConnectOnceValidatesInputs(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, _ := runtimeCA(t)
+	deps := &fakeDeps{}
+	var stdout, stderr bytes.Buffer
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"missing root certificate", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-pin", testPin()}},
+		{"missing controller url", []string{"-connect-once", "-state-dir", dir, "-root-cert", rootCert}},
+		{"relative state dir", []string{"-connect-once", "-state-dir", "relative", "-controller-url", "https://controller.local", "-root-cert", rootCert}},
+		{"ip literal", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://127.0.0.1:8443", "-root-cert", rootCert}},
+		{"path in url", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local/api", "-root-cert", rootCert}},
+		{"negative wait", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert, "-wait-task-ms", "-1"}},
+		{"excessive wait", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert, "-wait-task-ms", "600001"}},
+		{"control chars in name", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert, "-node-name", "bad\nname"}},
+		{"status and connect", []string{"-status", "-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert}},
+		{"enroll and connect", []string{"-enroll-token", "token", "-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert}},
+	}
+	for _, tc := range cases {
+		if code := Run(context.Background(), tc.args, deps.deps(), &stdout, &stderr); code != 2 {
+			t.Fatalf("%s: code = %d, stderr = %s", tc.name, code, stderr.String())
+		}
+	}
+	if deps.connectCalls != 0 {
+		t.Fatal("connection was attempted with invalid input")
+	}
+}
+
+func TestRunConnectOnceNormalizesOriginAndPrintsResult(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, pin := runtimeCA(t)
+	deps := &fakeDeps{connect: ConnectResult{NodeID: "node-1", ConnectionID: "connection-1", HeartbeatSent: true, MetricsSent: true, TasksExecuted: 1}}
+	var stdout, stderr bytes.Buffer
+	code := Run(context.Background(), []string{
+		"-connect-once", "-state-dir", dir, "-controller-url", "wss://controller.local:8443",
+		"-root-cert", rootCert, "-node-name", "local node", "-wait-task-ms", "1500",
+	}, deps.deps(), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code = %d: %s", code, stderr.String())
+	}
+	if deps.connectCalls != 1 || deps.lastConnect.ControllerURL != "https://controller.local:8443" ||
+		deps.lastConnect.RootPin != pin || deps.lastConnect.NodeName != "local node" ||
+		deps.lastConnect.WaitTaskMillis != 1500 || deps.lastConnect.StateDir != dir ||
+		deps.lastConnect.AgentVersion != DefaultVersion {
+		t.Fatalf("unexpected connect request: %+v", deps.lastConnect)
+	}
+	var result ConnectResult
+	if err := json.Unmarshal(stdout.Bytes(), &result); err != nil || result.NodeID != "node-1" || result.TasksExecuted != 1 || result.StateDir != dir {
+		t.Fatalf("connect result = %v %+v", err, result)
+	}
+
+	stdout.Reset()
+	deps.connectErr = errors.New("unreachable details")
+	if code := Run(context.Background(), []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert}, deps.deps(), &stdout, &stderr); code != 1 {
+		t.Fatalf("failing connect code = %d", code)
+	}
+	if strings.Contains(stderr.String(), "unreachable details") || !strings.Contains(stderr.String(), "no automatic retry") {
+		t.Fatalf("connect error leaked or lacked guidance: %s", stderr.String())
 	}
 }
 

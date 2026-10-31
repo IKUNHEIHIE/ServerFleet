@@ -86,6 +86,62 @@ func TestWebSocketBinaryEchoAndLimits(t *testing.T) {
 	}
 }
 
+func TestWebSocketPingPongProbe(t *testing.T) {
+	address, _ := startEchoWebSocket(t, WebSocketConfig{MaxFrameBytes: 1024})
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := ClientWebSocket(ctx, conn, address, "/ws", WebSocketConfig{MaxFrameBytes: 1024})
+	if err != nil {
+		t.Fatalf("ClientWebSocket: %v", err)
+	}
+	defer ws.Close()
+	readDone := make(chan struct{})
+	go func() {
+		defer close(readDone)
+		for {
+			if _, _, err := ws.Read(ctx); err != nil {
+				return
+			}
+		}
+	}()
+	if err := ws.Ping(ctx); err != nil {
+		t.Fatalf("Ping: %v", err)
+	}
+	if err := ws.Ping(ctx); err != nil {
+		t.Fatalf("second Ping: %v", err)
+	}
+	_ = ws.Close()
+	select {
+	case <-readDone:
+	case <-time.After(2 * time.Second):
+		t.Fatal("reader did not stop after close")
+	}
+}
+
+func TestWebSocketPingIsBoundedWithoutReader(t *testing.T) {
+	address, _ := startEchoWebSocket(t, WebSocketConfig{MaxFrameBytes: 1024})
+	conn, err := net.Dial("tcp", address)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	ws, _, err := ClientWebSocket(ctx, conn, address, "/ws", WebSocketConfig{MaxFrameBytes: 1024})
+	if err != nil {
+		t.Fatalf("ClientWebSocket: %v", err)
+	}
+	defer ws.Close()
+	probeCtx, probeCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+	defer probeCancel()
+	if err := ws.Ping(probeCtx); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("unbounded Ping = %v, want context deadline", err)
+	}
+}
+
 func rawUpgrade(t *testing.T, address string) (net.Conn, *bufio.Reader) {
 	t.Helper()
 	conn, err := net.Dial("tcp", address)

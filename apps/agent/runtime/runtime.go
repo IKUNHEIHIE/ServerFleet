@@ -1,6 +1,6 @@
-// Package runtime owns the optional Agent CLI presentation for status self-check
-// and one explicit enrollment attempt. It never loops, retries, executes tasks or
-// replaces an existing identity.
+// Package runtime owns the optional Agent CLI presentation for status self-check,
+// one explicit enrollment attempt and one controlled WSS+mTLS connection. It
+// never loops, retries or replaces an existing identity.
 package runtime
 
 import (
@@ -15,10 +15,13 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // Scaffold is the unchanged M0-P1 no-argument output.
@@ -56,10 +59,35 @@ type EnrollResult struct {
 	ExpiresAt time.Time `json:"expiresAt"`
 }
 
-// Deps binds the reviewed local identity store and enrollment client.
+// ConnectRequest is one controlled single-shot link attempt with resolved inputs.
+type ConnectRequest struct {
+	ControllerURL   string
+	StateDir        string
+	RootPin         string
+	RootCertificate string
+	NodeName        string
+	WaitTaskMillis  int
+	AgentVersion    string
+}
+
+// ConnectResult is the observed single-shot connection outcome.
+type ConnectResult struct {
+	StateDir       string `json:"stateDir"`
+	NodeName       string `json:"nodeName,omitempty"`
+	NodeID         string `json:"nodeId"`
+	ConnectionID   string `json:"connectionId"`
+	HeartbeatSent  bool   `json:"heartbeatSent"`
+	MetricsSent    bool   `json:"metricsSent"`
+	WaitTaskMillis int    `json:"waitTaskMillis"`
+	TasksExecuted  int    `json:"tasksExecuted"`
+}
+
+// Deps binds the reviewed local identity store, enrollment client and one-shot
+// connection loop.
 type Deps struct {
-	Status func(ctx context.Context, stateDir, rootPin string) (Status, error)
-	Enroll func(ctx context.Context, request EnrollRequest) (EnrollResult, error)
+	Status  func(ctx context.Context, stateDir, rootPin string) (Status, error)
+	Enroll  func(ctx context.Context, request EnrollRequest) (EnrollResult, error)
+	Connect func(ctx context.Context, request ConnectRequest) (ConnectResult, error)
 }
 
 // Run executes the Agent CLI. No arguments keep the historical scaffold output.
@@ -74,9 +102,12 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	stateDir := flags.String("state-dir", "", "local Agent identity directory (absolute)")
 	rootPin := flags.String("root-pin", "", "trusted local Agent root SPKI SHA-256 (64 hex)")
 	rootCert := flags.String("root-cert", "", "local Agent root certificate PEM path (also derives -root-pin)")
-	controllerURL := flags.String("controller-url", "", "Controller https origin, e.g. https://controller.example")
+	controllerURL := flags.String("controller-url", "", "Controller https or wss origin, e.g. https://controller.example")
 	enrollToken := flags.String("enroll-token", "", "one-time enrollment token")
-	agentVersion := flags.String("agent-version", DefaultVersion, "Agent version reported during enrollment")
+	connectOnce := flags.Bool("connect-once", false, "open one controlled WSS+mTLS connection, sample once and exit")
+	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
+	waitTaskMS := flags.Int("wait-task-ms", 0, "one-shot wait window for one TaskOffer after sampling (0..600000)")
+	agentVersion := flags.String("agent-version", DefaultVersion, "Agent version reported during enrollment and connection")
 	if err := flags.Parse(args); err != nil {
 		return 2
 	}
@@ -102,11 +133,23 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "agent: -state-dir must be an absolute path")
 		return 2
 	}
+	if *connectOnce && strings.TrimSpace(*rootCert) == "" {
+		fmt.Fprintln(stderr, "agent: -connect-once requires -root-cert")
+		return 2
+	}
+
+	modes := 0
+	for _, active := range []bool{*statusFlag, *enrollToken != "", *connectOnce} {
+		if active {
+			modes++
+		}
+	}
+	if modes > 1 {
+		fmt.Fprintln(stderr, "agent: -status, -enroll-token and -connect-once are mutually exclusive")
+		return 2
+	}
 
 	switch {
-	case *statusFlag && *enrollToken != "":
-		fmt.Fprintln(stderr, "agent: -status and -enroll-token are mutually exclusive")
-		return 2
 	case *statusFlag:
 		if deps.Status == nil {
 			fmt.Fprintln(stderr, "agent: status self-check is unavailable")
@@ -146,10 +189,71 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: enrollment is pending administrator approval; re-run after approval")
 		}
 		return 0
+	case *connectOnce:
+		if deps.Connect == nil {
+			fmt.Fprintln(stderr, "agent: one-shot connection is unavailable")
+			return 1
+		}
+		origin, ok := normalizeControllerURL(*controllerURL)
+		if !ok {
+			fmt.Fprintln(stderr, "agent: -connect-once requires -controller-url https://... or wss://...")
+			return 2
+		}
+		label := strings.TrimSpace(*nodeName)
+		if !validNodeName(label) {
+			fmt.Fprintln(stderr, "agent: -node-name must be a bounded UTF-8 label without control characters")
+			return 2
+		}
+		if *waitTaskMS < 0 || *waitTaskMS > 600000 {
+			fmt.Fprintln(stderr, "agent: -wait-task-ms must be between 0 and 600000")
+			return 2
+		}
+		result, err := deps.Connect(ctx, ConnectRequest{
+			ControllerURL:   origin,
+			StateDir:        *stateDir,
+			RootPin:         resolvedPin,
+			RootCertificate: *rootCert,
+			NodeName:        label,
+			WaitTaskMillis:  *waitTaskMS,
+			AgentVersion:    *agentVersion,
+		})
+		if err != nil {
+			fmt.Fprintln(stderr, "agent: one-shot connection failed; no automatic retry")
+			return 1
+		}
+		writeJSON(stdout, result)
+		return 0
 	default:
-		fmt.Fprintln(stderr, "agent: specify -status or -enroll-token (see -h)")
+		fmt.Fprintln(stderr, "agent: specify -status, -enroll-token or -connect-once (see -h)")
 		return 2
 	}
+}
+
+// normalizeControllerURL accepts only an https/wss origin with a DNS hostname;
+// the reviewed Agent client never trusts IP literals, credentials or paths.
+func normalizeControllerURL(raw string) (string, bool) {
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" && u.Scheme != "wss" || u.User != nil || u.Host == "" || u.Hostname() == "" ||
+		u.Path != "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" || u.Opaque != "" || u.RawPath != "" ||
+		net.ParseIP(u.Hostname()) != nil || strings.ToLower(u.Hostname()) != u.Hostname() {
+		return "", false
+	}
+	return "https://" + u.Host, true
+}
+
+func validNodeName(name string) bool {
+	if name == "" {
+		return true
+	}
+	if len(name) > 128 || !utf8.ValidString(name) {
+		return false
+	}
+	for _, r := range name {
+		if r < 0x20 || r == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 
 func writeJSON(w io.Writer, value any) {

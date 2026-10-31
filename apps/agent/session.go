@@ -35,6 +35,14 @@ type agentSessionConfig struct {
 	Admit func(context.Context, *agentv1.TaskOffer) error
 	// Probe must be an authenticated WSS ping/pong with bounded cancellation.
 	Probe func(context.Context) error
+	// InitialSample is an optional one-shot telemetry sample. When set, the
+	// session writes one Heartbeat and the Metrics batch immediately after the
+	// handshake; nil keeps the ticker-only behavior of the long-lived profile.
+	InitialSample func(context.Context) (*agentv1.MetricsBatch, error)
+	// Established and ExecutionFinished are program-owned notifications for the
+	// one-shot CLI. They must not block; they never replace transport delivery.
+	Established       func()
+	ExecutionFinished func(taskID, executionID string)
 }
 type activeAgentExecution struct {
 	taskID, digest    string
@@ -46,6 +54,16 @@ type activeAgentExecution struct {
 // runAgentSession owns ONE verified Agent-initiated connection. The reviewed
 // dialer supplies socket/TLS/header-derived connectionID; no URL/TLS bypass or
 // retry loop is provided here, and main does not enable an unaccepted profile.
+func callSessionNotification(fn func()) (err error) {
+	defer func() {
+		if recover() != nil {
+			err = errAgentSession
+		}
+	}()
+	fn()
+	return nil
+}
+
 func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tls.ConnectionState, connectionID string, cfg agentSessionConfig, executor *agentExecutor) (result error) {
 	if socket != nil {
 		defer socket.Close()
@@ -209,6 +227,27 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 			result = errAgentWorkersUnknown
 		}
 	}()
+	if cfg.InitialSample != nil {
+		sampleCtx, stop := context.WithTimeout(bounded, 5*time.Second)
+		batch, sampleErr := cfg.InitialSample(sampleCtx)
+		sampleExpired := sampleCtx.Err()
+		stop()
+		if sampleErr != nil || sampleExpired != nil || batch == nil {
+			return errAgentSession
+		}
+		beat := &agentv1.Heartbeat{UptimeSeconds: uint64(time.Since(agentProcessStartedAt) / time.Second), RunningExecutions: 0, ConnectivityStatus: "connected"}
+		if write(&agentv1.Envelope{Message: &agentv1.Envelope_Heartbeat{Heartbeat: beat}}, transport.Established) != nil {
+			return errAgentSession
+		}
+		if write(&agentv1.Envelope{Message: &agentv1.Envelope_Metrics{Metrics: batch}}, transport.Established) != nil {
+			return errAgentSession
+		}
+		if cfg.Established != nil {
+			if err := callSessionNotification(cfg.Established); err != nil {
+				return errAgentSession
+			}
+		}
+	}
 	workers.Add(1)
 	go func() {
 		defer workers.Done()
@@ -381,6 +420,12 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 				finished := &agentv1.TaskFinished{TaskId: offer.TaskId, ExecutionId: offer.ExecutionId, Result: outcome.Result, ExitCode: outcome.ExitCode, FinishedAtUnixMs: time.Now().UnixMilli(), OutputTruncated: outputTruncated}
 				if write(&agentv1.Envelope{Message: &agentv1.Envelope_TaskFinished{TaskFinished: finished}}, transport.Established) != nil {
 					fail(transport.ErrDeliveryUnknown)
+					return
+				}
+				if cfg.ExecutionFinished != nil {
+					if err := callSessionNotification(func() { cfg.ExecutionFinished(offer.TaskId, offer.ExecutionId) }); err != nil {
+						fail(errAgentSession)
+					}
 				}
 			}()
 		case envelope.GetTaskCancel() != nil:

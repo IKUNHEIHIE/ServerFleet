@@ -276,6 +276,83 @@ func TestAgentSessionProductionLoopDedupeCancelSyncAndRevocation(t *testing.T) {
 	}
 }
 
+func TestAgentSessionInitialHeartbeatMetricsAndEstablishedHook(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	clientState, serverState, pin := sessionTLSStates(t)
+	fp := sha256.Sum256(serverState.PeerCertificates[0].Raw)
+	verifier, _ := transport.NewPeerVerifier(func(context.Context, string) (transport.AgentIdentity, error) {
+		return transport.AgentIdentity{NodeID: "node-a", FingerprintSHA256: hex.EncodeToString(fp[:]), Serial: "3", Enabled: true, TrustGeneration: 1}, nil
+	})
+	events := make(chan *agentv1.Envelope, 16)
+	semantic, frames := sessionLimits()
+	hub, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{ProtocolMajor: 1, Semantic: semantic, Frames: frames, HeartbeatInterval: time.Second, MaxConnections: 1, Handshake: func(context.Context, transport.LinkObservation, *agentv1.AgentHello) ([]string, error) {
+		return []string{"test.write-marker"}, nil
+	}, Admit: func(context.Context, transport.LinkObservation, *agentv1.Envelope) error { return nil }, Event: func(_ context.Context, _ transport.LinkObservation, e *agentv1.Envelope) error {
+		events <- e
+		return nil
+	}, Disconnected: func(context.Context, transport.LinkObservation) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
+		t.Error("one-shot telemetry session executed an unexpected task")
+		return executionResult{}
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer e.Close()
+	cfg := sessionConfig(pin)
+	cfg.InitialSample = func(context.Context) (*agentv1.MetricsBatch, error) {
+		now := time.Now().UnixMilli()
+		return &agentv1.MetricsBatch{BatchId: "batch-one", Points: []*agentv1.MetricPoint{
+			{Name: "cpu", Value: 12.5, Unit: "percent", ObservedAtUnixMs: now},
+			{Name: "memory", Value: 34.5, Unit: "percent", ObservedAtUnixMs: now},
+		}}, nil
+	}
+	established := make(chan struct{})
+	cfg.Established = func() { close(established) }
+	a, b := sessionFramePair()
+	agentDone := make(chan error, 1)
+	go func() { _ = hub.Serve(ctx, b, serverState, "connection-a") }()
+	go func() { agentDone <- runAgentSession(ctx, a, clientState, "connection-a", cfg, e) }()
+	seen := map[string]bool{}
+	for !seen["heartbeat"] || !seen["metrics"] {
+		select {
+		case event := <-events:
+			switch {
+			case event.GetAgentHello() != nil:
+				seen["hello"] = true
+			case event.GetHeartbeat() != nil:
+				if event.GetHeartbeat().GetConnectivityStatus() != "connected" {
+					t.Fatalf("heartbeat = %v", event.GetHeartbeat())
+				}
+				seen["heartbeat"] = true
+			case event.GetMetrics() != nil:
+				points := event.GetMetrics().GetPoints()
+				if len(points) != 2 || points[0].GetName() != "cpu" || points[1].GetName() != "memory" || event.GetMetrics().GetBatchId() != "batch-one" {
+					t.Fatalf("metrics = %v", event.GetMetrics())
+				}
+				seen["metrics"] = true
+			}
+		case <-ctx.Done():
+			t.Fatal("initial telemetry was not delivered")
+		}
+	}
+	select {
+	case <-established:
+	case <-ctx.Done():
+		t.Fatal("established hook was not called")
+	}
+	cancel()
+	select {
+	case <-agentDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("session did not stop")
+	}
+}
+
 func TestAgentSessionMissingAdmissionOrWrongRootNeverSendsHello(t *testing.T) {
 	state, _, pin := sessionTLSStates(t)
 	e, err := newAgentExecutor(privateAgentDirectory(t), testActions(func(context.Context, []byte) executionResult {
