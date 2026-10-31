@@ -333,7 +333,22 @@ func waveSubject(r *http.Request) (string, string, bool) {
 	return subject, "req-wave3", true
 }
 
+// waveEnvOptions override the default fakes, letting a test compose the real
+// NetProber and LocalStagingTransport without duplicating the whole fixture.
+type waveEnvOptions struct {
+	Prober       monitoring.Prober
+	AllowedHosts []string
+	Uploads      files.UploadTransport
+	Downloads    files.DownloadTransport
+	StagingDir   string
+}
+
 func newWaveEnv(t *testing.T) *waveEnv {
+	t.Helper()
+	return newWaveEnvWith(t, waveEnvOptions{})
+}
+
+func newWaveEnvWith(t *testing.T, options waveEnvOptions) *waveEnv {
 	t.Helper()
 	ctx := context.Background()
 	db := testkit.NewDBAt(t, filepath.Join(t.TempDir(), "wave3.db"), v09Migrations()...)
@@ -404,9 +419,13 @@ func newWaveEnv(t *testing.T) *waveEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	prober := options.Prober
+	if prober == nil {
+		prober = waveProber{}
+	}
 	monitorSvc, err := monitoring.NewService(monitoring.Options{
 		DB: db, Repo: monitorRepo, Audit: recorder, Authorizer: waveAuthorizer{},
-		Prober: waveProber{}, Notifier: &waveNotifier{},
+		Prober: prober, Notifier: &waveNotifier{}, AllowedHosts: options.AllowedHosts,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -467,10 +486,19 @@ func newWaveEnv(t *testing.T) *waveEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
-	uploadTransport := &waveUploadTransport{}
+	var stubUploads *waveUploadTransport
+	uploads := options.Uploads
+	if uploads == nil {
+		stubUploads = &waveUploadTransport{}
+		uploads = stubUploads
+	}
+	stagingDir := options.StagingDir
+	if stagingDir == "" {
+		stagingDir = filepath.Join(t.TempDir(), "staging")
+	}
 	fileSvc, err := files.NewService(files.Options{
 		DB: db, Repo: filesRepo, Audit: recorder, Authorizer: waveAuthorizer{},
-		Uploads: uploadTransport, StagingDir: filepath.Join(t.TempDir(), "staging"),
+		Uploads: uploads, Downloads: options.Downloads, StagingDir: stagingDir,
 		MaxUploadBytes: 1 << 20,
 	})
 	if err != nil {
@@ -556,7 +584,7 @@ func newWaveEnv(t *testing.T) *waveEnv {
 		db: db, recorder: recorder, nodeRepo: nodeRepo, groupRepo: groupRepo,
 		nodeSvc: nodeSvc, taskSvc: taskSvc, taskRepo: taskRepo, monitorSvc: monitorSvc,
 		quotaSvc: quotaSvc, certSvc: certSvc, pubSvc: pubSvc, gwSvc: gwSvc,
-		fileSvc: fileSvc, upload: uploadTransport,
+		fileSvc: fileSvc, upload: stubUploads,
 		pubDNS: dnsStage, pubCert: certStage, pubGateway: gatewayStage, callLog: stageLog,
 		issuer: issuer, server: server,
 	}

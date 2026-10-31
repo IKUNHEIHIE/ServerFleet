@@ -6,7 +6,12 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"serverfleet.local/serverfleet/internal/audit"
@@ -330,6 +335,182 @@ func TestWave4ServiceHTTPEndToEnd(t *testing.T) {
 			if page.Total == 0 {
 				t.Fatalf("audit action %s has no events", action)
 			}
+		}
+	})
+}
+
+// TestWave5RealProberAndLocalStagingTransport wires the real stdlib NetProber
+// and the real local staging transport into the HTTP stack. Probes reach a local
+// httptest server and uploads land in a private temporary directory; nothing is
+// stubbed.
+func TestWave5RealProberAndLocalStagingTransport(t *testing.T) {
+	const probeBody = "wave5-probe-response-body"
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/health" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(probeBody))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("missing-path-secret"))
+	}))
+	defer backend.Close()
+	backendHost, backendPort, err := net.SplitHostPort(strings.TrimPrefix(backend.URL, "http://"))
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	prober, err := monitoring.NewNetProber(monitoring.NetProberConfig{AllowedHosts: []string{backendHost}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stagingRoot := filepath.Join(t.TempDir(), "node-staging")
+	transport, err := files.NewLocalStagingTransport(stagingRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	env := newWaveEnvWith(t, waveEnvOptions{
+		Prober: prober, AllowedHosts: []string{backendHost},
+		Uploads: transport, Downloads: transport,
+		StagingDir: filepath.Join(t.TempDir(), "staging"),
+	})
+	base := env.server.URL
+
+	t.Run("real http probe persists history", func(t *testing.T) {
+		created := waveDo(t, base+"/api/v1/monitoring/availability-monitors", http.MethodPost, map[string]any{
+			"name": "Wave 5 real probe", "type": "http",
+			"target":          "http://" + backendHost + ":" + backendPort + "/health",
+			"intervalSeconds": 60, "timeoutSeconds": 5,
+		}, "admin")
+		waveExpect(t, created, http.StatusCreated)
+		var monitor struct {
+			ID string `json:"id"`
+		}
+		waveDecode(t, created, &monitor)
+
+		probe := waveDo(t, base+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/probe", http.MethodPost, nil, "admin")
+		waveExpect(t, probe, http.StatusOK)
+		if bytes.Contains(probe.Body, []byte(probeBody)) {
+			t.Fatalf("probe response echoed the target body: %s", probe.Body)
+		}
+		var probeBodyDTO struct {
+			MonitorID  string   `json:"monitorId"`
+			Status     string   `json:"status"`
+			State      string   `json:"state"`
+			StatusCode *int     `json:"statusCode"`
+			LatencyMs  *float64 `json:"latencyMs"`
+			Error      string   `json:"error"`
+			CheckedAt  string   `json:"checkedAt"`
+		}
+		waveDecode(t, probe, &probeBodyDTO)
+		if probeBodyDTO.MonitorID != monitor.ID || probeBodyDTO.Status != "up" || probeBodyDTO.State != "up" ||
+			probeBodyDTO.StatusCode == nil || *probeBodyDTO.StatusCode != http.StatusOK ||
+			probeBodyDTO.LatencyMs == nil || *probeBodyDTO.LatencyMs < 0 ||
+			probeBodyDTO.Error != "" || probeBodyDTO.CheckedAt == "" {
+			t.Fatalf("probe = %+v", probeBodyDTO)
+		}
+
+		history := waveDo(t, base+"/api/v1/availability-monitors/"+monitor.ID+"/history?limit=5", http.MethodGet, nil, "admin")
+		waveExpect(t, history, http.StatusOK)
+		var page struct {
+			Items []struct {
+				Status     string   `json:"status"`
+				StatusCode *int     `json:"statusCode"`
+				LatencyMs  *float64 `json:"latencyMs"`
+				Error      string   `json:"error"`
+			} `json:"items"`
+		}
+		waveDecode(t, history, &page)
+		if len(page.Items) != 1 || page.Items[0].Status != "up" ||
+			page.Items[0].StatusCode == nil || *page.Items[0].StatusCode != http.StatusOK ||
+			page.Items[0].LatencyMs == nil || page.Items[0].Error != "" {
+			t.Fatalf("history = %+v", page)
+		}
+
+		failing := waveDo(t, base+"/api/v1/monitoring/availability-monitors", http.MethodPost, map[string]any{
+			"name": "Wave 5 failing probe", "type": "http",
+			"target":          "http://" + backendHost + ":" + backendPort + "/missing",
+			"intervalSeconds": 60, "timeoutSeconds": 5,
+		}, "admin")
+		waveExpect(t, failing, http.StatusCreated)
+		var failingMonitor struct {
+			ID string `json:"id"`
+		}
+		waveDecode(t, failing, &failingMonitor)
+		failed := waveDo(t, base+"/api/v1/monitoring/availability-monitors/"+failingMonitor.ID+"/probe", http.MethodPost, nil, "admin")
+		waveExpect(t, failed, http.StatusOK)
+		var failedBody struct {
+			Status     string `json:"status"`
+			StatusCode *int   `json:"statusCode"`
+			Error      string `json:"error"`
+		}
+		waveDecode(t, failed, &failedBody)
+		if failedBody.Status != "down" || failedBody.StatusCode == nil ||
+			*failedBody.StatusCode != http.StatusNotFound || failedBody.Error != "http_status_404" {
+			t.Fatalf("failed probe = %+v body=%s", failedBody, failed.Body)
+		}
+		if bytes.Contains(failed.Body, []byte("missing-path-secret")) {
+			t.Fatalf("failed probe echoed the target body: %s", failed.Body)
+		}
+	})
+
+	t.Run("real local staging upload and download", func(t *testing.T) {
+		content := []byte("wave5-real-staging-transport-content")
+		digest := waveDigest(content)
+		created := waveDo(t, base+"/api/v1/nodes/n1/files/uploads", http.MethodPost, map[string]any{
+			"destinationDir": "/srv/app",
+			"files":          []map[string]any{{"name": "wave5.bin", "sizeBytes": len(content), "sha256": digest}},
+		}, "admin")
+		waveExpect(t, created, http.StatusCreated)
+		var session struct {
+			UploadID string `json:"uploadId"`
+		}
+		waveDecode(t, created, &session)
+
+		progress := waveUploadBytes(t, base+"/api/v1/nodes/n1/files/uploads/"+session.UploadID+"/content", "admin", content)
+		waveExpect(t, progress, http.StatusOK)
+		var progressBody struct {
+			BytesReceived int64 `json:"bytesReceived"`
+		}
+		waveDecode(t, progress, &progressBody)
+		if progressBody.BytesReceived != int64(len(content)) {
+			t.Fatalf("progress = %+v", progressBody)
+		}
+
+		complete := waveDo(t, base+"/api/v1/nodes/n1/files/uploads/"+session.UploadID+"/complete", http.MethodPost, nil, "admin")
+		waveExpect(t, complete, http.StatusOK)
+		var completed struct {
+			Status string `json:"status"`
+			Files  []struct {
+				SizeBytes int64  `json:"sizeBytes"`
+				Version   string `json:"version"`
+			} `json:"files"`
+		}
+		waveDecode(t, complete, &completed)
+		if completed.Status != "completed" || len(completed.Files) != 1 ||
+			completed.Files[0].SizeBytes != int64(len(content)) || completed.Files[0].Version != digest {
+			t.Fatalf("complete = %+v", completed)
+		}
+
+		onDisk, err := os.ReadFile(filepath.Join(stagingRoot, "n1", "srv", "app", "wave5.bin"))
+		if err != nil {
+			t.Fatalf("read staged file: %v", err)
+		}
+		if !bytes.Equal(onDisk, content) {
+			t.Fatalf("staged file = %q", onDisk)
+		}
+
+		var downloaded bytes.Buffer
+		written, err := env.fileSvc.Download(context.Background(), "admin", "req-wave5", "n1", "/srv/app/wave5.bin", &downloaded)
+		if err != nil {
+			t.Fatalf("download: %v", err)
+		}
+		if written != int64(len(content)) || !bytes.Equal(downloaded.Bytes(), content) {
+			t.Fatalf("downloaded written=%d content=%q", written, downloaded.Bytes())
+		}
+
+		if _, err := env.fileSvc.Download(context.Background(), "admin", "req-wave5b", "n1", "/srv/app/never-staged.bin", &bytes.Buffer{}); err == nil {
+			t.Fatal("download of a file that was never staged succeeded")
 		}
 	})
 }
