@@ -16,8 +16,8 @@
 - **集成修正（真实闭环暴露）**：普通 Web/工作流任务没有 AI 会话 scope，`TaskOffer.scope_revision` 合法为 `0`。Executor 原先把 `0` 当结构拒绝条件，使真实 Web 任务无法执行；现将 `0` 解释为“非 AI 作用域”，仍要求 normal privilege、空 plugin、合法 schema/参数，Controller 仍是唯一授权源。新增 `TestAgentExecutorAcceptsUnscopedStandardOffer` 固定该行为，AI 任务仍携带非零 scope。
 - **本机验证（2026-10-31，Windows）**：
   - `go test ./apps/... ./internal/transport/... ./internal/workflows/... ./tests/integration/v09/platform/... -count=1`：全部包 `ok`（Wave 5 集成为 SKIP，原因如上）。
-  - `npm run check`（`reports/check-all.json`，`2026-10-31T14:59:35.597Z`）**PASS**：policy/contracts/go/web/git 五套全过；Web 36/36 文件、316/316 测试；`tsc --noEmit`、Vite 构建、gofmt、go mod verify/tidy、controller+agent 构建、全量 Go 测试、vet、staticcheck 均通过。
-  - `npm run check:security`（`reports/check-security.json`，`2026-10-31T14:59:58.789Z`）**PASS**：`npm audit --audit-level=high` 0 漏洞，`govulncheck ./...` "No vulnerabilities found."。
+  - `npm run check`（最终 HEAD 重跑，`reports/check-all.json`，`2026-10-31T15:04:57.500Z`）**PASS**：policy/contracts/go/web/git 五套全过；Web 36/36 文件、316/316 测试；`tsc --noEmit`、Vite 构建、gofmt、go mod verify/tidy、controller+agent 构建、全量 Go 测试、vet、staticcheck 均通过。
+  - `npm run check:security`（最终 HEAD 重跑，`reports/check-security.json`，`2026-10-31T15:05:19.971Z`）**PASS**：`npm audit --audit-level=high` 0 漏洞，`govulncheck ./...` "No vulnerabilities found."。
 - **Linux 原生闭环证据（WSL Ubuntu 24.04 amd64，Go 1.27.3）**：
   ```
   go test ./tests/integration/v09/platform -run TestWave5ControllerAndAgentCLIFullLoopWSSAndTask -count=1 -v -timeout 5m
@@ -27,7 +27,7 @@
   go test ./apps/agent/... ./apps/controller/... ./internal/transport/... ./tests/integration/v09/platform/... -count=1 -timeout 10m
   全部 ok；platform 7.618s
   ```
-  Windows 全量 Go 测试中该用例为 SKIP；Linux 同源测试重复 3 次均 PASS，无抖动。
+  Windows 全量 Go 测试中该用例为 SKIP；Linux 同源测试重复 3 次均 PASS，无抖动；`go test -race ./apps/agent/... ./internal/transport/...` 亦 PASS。
 - **本 Wave 提交**：`0cd0ecd`（Agent `-connect-once`、传输 Ping、指标采样与单测）、`3e9dd49`（真实 controller+agent 双进程集成测试）；文档提交见本分支最新提交。工作区干净、未推送、未合并 `main`。
 - **剩余风险 / 未覆盖**：
   1. Agent 入网与 Hello 仍仅接纳 Linux；Windows 本机只验证 SKIP 与单元层，真实安装包、自启动、arm64/1C1G 与物理 VPS 未验收。
