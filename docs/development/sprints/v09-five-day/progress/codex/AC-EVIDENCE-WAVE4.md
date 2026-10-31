@@ -9,6 +9,23 @@
 
 ---
 
+## 0. Wave 5 增量（2026-10-31，codex-05）
+
+- **提交**：`0cd0ecd`（`feat(agent): add controlled single-shot WSS+mTLS connect-once mode`）、`3e9dd49`（`test(platform): drive real controller and agent CLI full WSS task loop`）；文档提交见本分支最新提交。基线 `3adf891f3155b6452f06f25df53fd20f553742ae`，未推送、未合并 `main`。
+- **新增实现**：
+  - `apps/agent/runtime/runtime.go`：`-connect-once` / `-node-name` / `-wait-task-ms`，严格 https/wss origin、互斥模式与失败关闭；无参仍为原 M0-P1 骨架。
+  - `apps/agent/connect.go`：固定根证书 → 已签发身份 → TLS1.3 mTLS → `/api/v1/agent/link` WSS → Hello/Heartbeat/Metrics → 至多一次受控 `tasks.command` 自检动作 → 干净关闭；无重试、无任意 Shell。
+  - `apps/agent/metrics.go`：真实 Linux `/proc/stat` + `/proc/meminfo` 采样（100ms 差分，CPU/内存百分比，非 Linux 失败关闭）。
+  - `apps/agent/session.go`：可选 `InitialSample`/`Established`/`ExecutionFinished` 一次性钩子；`internal/transport/websocket.go`：有界 `Ping`（并发读循环协作）与 hijack 后清除 HTTP deadline。
+  - `apps/agent/executor.go`：`ScopeRevision=0` 作为普通 Web/工作流任务的合法“非 AI 作用域”值；normal/空 plugin/schema/参数约束不变，Controller 仍是唯一授权源。
+- **新增测试**：
+  - `TestWave5ControllerAndAgentCLIFullLoopWSSAndTask`（`tests/integration/v09/platform/controller_cli_pki_test.go`）：真实编译 controller 与 agent 二进制、真实 SQLite WAL/本地 PKI/HTTPS/mTLS WSS、token→pending→批准→issued、`-status`、`nodes.read/tasks.command` 授权、在线心跳/指标、`tasks.command` 任务完成、`tasks.submit`/`enrollment.approved`/`nodes.agent_update` 审计、断开后离线。Windows 按 Linux-only 入网/Hello 策略明确 SKIP；WSL Ubuntu 24.04 amd64/Go 1.27.3 实跑 PASS（单次 4.25s，`-count=3` 11.507s；同源 platform+agent+transport 包 7.618s 全 PASS）。
+  - `TestControlledCommandActionIsBounded`、`TestAdmitControlledOfferRejectsForeignShapes`、`TestParseAgentLinkEndpointRejectsUnsafeOrigins`、`TestAgentConnectOnceFailsClosedWithoutIssuedIdentity`、`TestParseProcCPUStatAggregateLine`、`TestParseProcMemInfo`、`TestSampleAgentMetricsFailsClosedOffLinux`、`TestAgentSessionInitialHeartbeatMetricsAndEstablishedHook`、`TestWebSocketPingPongProbe`、`TestWebSocketPingIsBoundedWithoutReader`、`TestAgentExecutorAcceptsUnscopedStandardOffer`。
+- **门禁**：Windows `go test ./apps/... ./internal/transport/... ./internal/workflows/... ./tests/integration/v09/platform/... -count=1` 全 ok（Linux-only 用例 SKIP）；`npm run check` PASS（最终 HEAD，`reports/check-all.json`，`2026-10-31T15:04:57.500Z`；Web 316/316）；`npm run check:security` PASS（最终 HEAD，`reports/check-security.json`，`2026-10-31T15:05:19.971Z`，0 漏洞 / govulncheck 无发现）。WSL Linux `go test -race ./apps/agent/... ./internal/transport/...` 亦 PASS。
+- **边界**：仍是 Linux-only、非物理 VPS/arm64/1C1G、单次连接无守护/重连/轮换；本地 CA 同时签发管理端证书仅为自包含测试布局，不代表 PKI-OPS/生产分离方案；受控执行不是任意命令或 root Shell，不代表 PRIV/沙箱准入。
+
+---
+
 ## 1. Wave 4 新增实现与验证
 
 ### 1.1 CX-W4-01 工作流 HTTP 管理与受控执行
@@ -123,7 +140,7 @@ PASS（reports/check-security.json，2026-10-31T13:25:20.338Z；npm audit 0 漏�
 
 | AC | 名称 | 实现文件 | 自动化测试 | 状态 | 真实边界 |
 |---|---|---|---|---|---|
-| AC-01 | 节点接入、身份与生命周期 | `internal/transport/{enrollment,enrollment_http,enrollment_management_http,peer_identity,controller_link,agent_link_http,websocket,connection_guard}.go`；`apps/controller/server/{enrollment,agent_links}.go`；`apps/controller/{localpki,bootstrap,main.go}`；`apps/agent/{identity_store,enrollment_client,session}.go` | `TestEnrollmentOneTimeCSRApprovalReinstallAndLiveRevocation`、`TestEnrollmentExpiryPinSignatureAndAdminGate`、`TestPeerRealLocalTLSAndLiveRevocation`、`TestPeerWrongCANameAndMissingClientCertificate`、`TestWave3ControllerAgentEnrollmentWSSAndTaskExecution`、`TestWave4ControllerCLILocalPKIEnrollment`、`TestEnsureCreatesAndReloadsStableLocalCA`、`TestEnsureRejectsPartialAndCorruptState`、`TestComposeInitializesLocalAgentPKI`、`TestAgentStatusReportsFreshDirectoryAsNotEnrolled` | IMPLEMENTED_PARTIAL | 真实 Linux 安装/自启动、物理节点心跳/重连/轮换、arm64/1C1G、正式 PKI profile 未验收 |
+| AC-01 | 节点接入、身份与生命周期 | `internal/transport/{enrollment,enrollment_http,enrollment_management_http,peer_identity,controller_link,agent_link_http,websocket,connection_guard}.go`；`apps/controller/server/{enrollment,agent_links}.go`；`apps/controller/{localpki,bootstrap,main.go}`；`apps/agent/{identity_store,enrollment_client,session,connect,metrics}.go` | `TestEnrollmentOneTimeCSRApprovalReinstallAndLiveRevocation`、`TestEnrollmentExpiryPinSignatureAndAdminGate`、`TestPeerRealLocalTLSAndLiveRevocation`、`TestPeerWrongCANameAndMissingClientCertificate`、`TestWave3ControllerAgentEnrollmentWSSAndTaskExecution`、`TestWave4ControllerCLILocalPKIEnrollment`、`TestWave5ControllerAndAgentCLIFullLoopWSSAndTask`、`TestEnsureCreatesAndReloadsStableLocalCA`、`TestEnsureRejectsPartialAndCorruptState`、`TestComposeInitializesLocalAgentPKI`、`TestAgentStatusReportsFreshDirectoryAsNotEnrolled` | IMPLEMENTED_PARTIAL | 真实 Linux 安装/自启动、物理节点心跳/重连/轮换、arm64/1C1G、正式 PKI profile 未验收；Wave 5 双进程闭环在 Windows 按 Linux-only 策略 SKIP、WSL Ubuntu 实跑 PASS |
 | AC-08 | 公网证书与内部 TLS | `internal/transport/certificate_issuer.go`；`apps/controller/localpki/localpki.go`；内部证书分发为 DS `internal/certificates`（本会话不修改） | `TestPeerRealLocalTLSAndLiveRevocation`、`TestPeerWrongCANameAndMissingClientCertificate`、`TestWave4ControllerCLILocalPKIEnrollment`；DS 侧 `TestHTTPCertificateDistributionLifecycle`、`TestRotateChangesKeyReferenceWithoutLeaking`、`TestRevokeUpdatesCertificateAndDistributions`、`TestNoKeyMaterialInViewsOrAudit` | IMPLEMENTED_PARTIAL | ACME/公网供应商、真实节点证书分发与吊销传播、PKI-OPS 决策未执行 |
 | AC-10 | AI 会话资源授权 | `internal/ai/{sessions,scope,context,management_http,execution_ports}.go`；`apps/controller/server/ai.go` | `TestPersistentAIScopePerActionGroupSnapshotAndRevocation`、`TestAIScopePolicyExpiryRevisionFailureAndRootApproval`、`TestToolScopeZeroSnapshotRemovalAndCurrentRBAC`、`TestWave3AIManagementScopeApprovalsAndRootShellGate` | IMPLEMENTED_PARTIAL | 真实外部模型/BYOK 未接；插件/批量间接越权仅单测层 |
 | AC-11 | AI 三级审批 | `internal/ai/{approvals,tool_policy,management_http,execution_ports}.go` | `TestToolRootRequiresRealAdminApprovalInFullAccess`、`TestToolFullExpiryPluginDisableAndSecretExport`、`TestPersistentAIScope...`、`TestWave3AIManagementScopeApprovalsAndRootShellGate` | IMPLEMENTED_PARTIAL | 真实两名管理员运维、外部模型工具链、root 真实执行未验收 |

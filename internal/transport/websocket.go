@@ -2,6 +2,7 @@ package transport
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha1"
@@ -52,6 +53,7 @@ type WebSocketConn struct {
 
 	closeOnce sync.Once
 	closed    chan struct{}
+	pong      chan []byte
 }
 
 // AcceptWebSocket validates the strict upgrade profile, hijacks the connection,
@@ -97,6 +99,12 @@ func AcceptWebSocket(w http.ResponseWriter, r *http.Request, cfg WebSocketConfig
 	if err != nil {
 		return nil, "", false, ErrWebSocketRejected
 	}
+	// A hijacked connection must not inherit the http.Server request deadlines;
+	// long-lived WSS sessions manage their own bounded frame deadlines.
+	if err := conn.SetDeadline(time.Time{}); err != nil {
+		_ = conn.Close()
+		return nil, "", true, ErrWebSocketRejected
+	}
 	acceptHash := sha1.Sum([]byte(keys[0] + webSocketGUID))
 	response := "HTTP/1.1 101 Switching Protocols\r\n" +
 		"Upgrade: websocket\r\n" +
@@ -110,7 +118,7 @@ func AcceptWebSocket(w http.ResponseWriter, r *http.Request, cfg WebSocketConfig
 		_ = conn.Close()
 		return nil, "", true, ErrWebSocketRejected
 	}
-	return &WebSocketConn{conn: conn, reader: buffered.Reader, client: false, max: cfg.MaxFrameBytes, closed: make(chan struct{})}, connectionID, true, nil
+	return &WebSocketConn{conn: conn, reader: buffered.Reader, client: false, max: cfg.MaxFrameBytes, closed: make(chan struct{}), pong: make(chan []byte, 1)}, connectionID, true, nil
 }
 
 // ClientWebSocket performs the Agent side of the same strict profile over an
@@ -152,7 +160,7 @@ func ClientWebSocket(ctx context.Context, conn net.Conn, host, path string, cfg 
 	if ctx.Err() != nil {
 		return nil, "", ctx.Err()
 	}
-	return &WebSocketConn{conn: conn, reader: reader, client: true, max: cfg.MaxFrameBytes, closed: make(chan struct{})}, connectionID, nil
+	return &WebSocketConn{conn: conn, reader: reader, client: true, max: cfg.MaxFrameBytes, closed: make(chan struct{}), pong: make(chan []byte, 1)}, connectionID, nil
 }
 
 func singleHeader(header http.Header, name string) string {
@@ -210,6 +218,10 @@ func (c *WebSocketConn) Read(ctx context.Context) (bool, []byte, error) {
 				return false, nil, err
 			}
 		case 0xa:
+			select {
+			case c.pong <- append([]byte(nil), payload...):
+			default:
+			}
 			continue
 		default:
 			return false, nil, ErrWebSocketRejected
@@ -300,6 +312,38 @@ func (c *WebSocketConn) Write(ctx context.Context, payload []byte) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	return c.writeFrame(ctx, 0x2, payload)
+}
+
+// Ping sends one RFC 6455 ping and waits for the matching pong. A concurrent
+// Read loop is required: it owns frame decoding and reports pongs here. The
+// round trip is bounded by ctx so a dead peer cannot stall the caller.
+func (c *WebSocketConn) Ping(ctx context.Context) error {
+	if c == nil || ctx == nil || c.pong == nil {
+		return ErrWebSocketRejected
+	}
+	select {
+	case <-c.pong:
+	default:
+	}
+	var nonce [8]byte
+	if _, err := rand.Read(nonce[:]); err != nil {
+		return ErrWebSocketRejected
+	}
+	if err := c.writeControl(ctx, 0x9, nonce[:]); err != nil {
+		return err
+	}
+	for {
+		select {
+		case payload := <-c.pong:
+			if bytes.Equal(payload, nonce[:]) {
+				return nil
+			}
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-c.closed:
+			return io.EOF
+		}
+	}
 }
 
 func (c *WebSocketConn) writeControl(ctx context.Context, opcode byte, payload []byte) error {

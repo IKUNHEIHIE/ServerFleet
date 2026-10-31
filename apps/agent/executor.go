@@ -95,7 +95,10 @@ func (e *agentExecutor) executeObserved(ctx context.Context, offer *agentv1.Task
 	}
 	// Root/Shell capabilities are deliberately absent until the PRIV admission
 	// contract and sandbox evidence exist. A privilege claim is not approval.
-	if !executionIDPattern.MatchString(offer.ExecutionId) || !executionIDPattern.MatchString(offer.TaskId) || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.PluginId != "" || offer.ScopeRevision == 0 || offer.ActionSchemaVersion == "" || offer.TimeoutSeconds == 0 || offer.TimeoutSeconds > 3600 || len(offer.CanonicalParametersJson) > 64<<10 {
+	// ScopeRevision identifies an AI session scope; web and workflow tasks are
+	// unscoped and legitimately carry 0. It is recorded in the offer digest but is
+	// never an Agent-side authorization substitute for the Controller.
+	if !executionIDPattern.MatchString(offer.ExecutionId) || !executionIDPattern.MatchString(offer.TaskId) || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.PluginId != "" || offer.ActionSchemaVersion == "" || offer.TimeoutSeconds == 0 || offer.TimeoutSeconds > 3600 || len(offer.CanonicalParametersJson) > 64<<10 {
 		return unknown, false, errExecutionRejected
 	}
 	if digest, err := hex.DecodeString(offer.PlanDigestSha256); err != nil || len(digest) != 32 {

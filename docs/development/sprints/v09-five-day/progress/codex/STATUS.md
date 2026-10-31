@@ -1,4 +1,42 @@
-# V09-5D-CX / codex-04（接续 codex-03）
+# V09-5D-CX / codex-05（接续 codex-04）
+
+## V09-5D-CX Wave 5（codex-05，2026-10-31）
+
+- 任务 `V09-5D-CX`（Wave 5）；唯一会话 `codex-05`；分支 `feature/v09-platform-cx02`；工作目录 `D:\admin\desktop\codex\myproject\ks\.worktrees\feature--v09-platform-cx02`；起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`。本轮本地提交，未推送、未合并 `main`。
+- **CX-W5-01（Agent CLI 受控单次 WSS+mTLS 连接）**：
+  - `apps/agent/runtime/runtime.go` 新增 `-connect-once`、`-node-name`（可选标签）、`-wait-task-ms`（0–600000）；与 `-status`/`-enroll-token` 互斥；只接受 `https://`/`wss://` 的 DNS 主机名 origin（拒绝 IP 字面量、用户信息、路径/查询/片段），无参数启动仍输出原 M0-P1 骨架。
+  - `apps/agent/connect.go` 从 `-state-dir` 加载已签发身份，固定 `-root-cert` 校验 TLS1.3 链根 SPKI、`/api/v1/agent/link` WSS 升级、`AgentHello`/`ControllerHello`、一次 `Heartbeat`+`Metrics` 真实 `/proc` 采样、至多一次受控 `tasks.command` 执行（`TaskAck`/`TaskStarted`/`TaskOutput`/`TaskFinished`），随后干净关闭；无自动重试/重入网，缺证书或未入网失败关闭。执行器 `apps/agent/executor.go` 的本地动作仅接受空参数自我检查（不提供任意 Shell），输出经固定过滤器。
+  - `apps/agent/session.go` 增加可选 `InitialSample`/`Established`/`ExecutionFinished` 钩子（nil 时保持既有长连接行为）；`internal/transport/websocket.go` 新增有界 `Ping`（与并发读循环配合）并在 hijack 后清除 HTTP 请求遗留 deadline，避免 `http.Server` 10 秒超时杀掉长连接。
+  - 测试：`apps/agent/{connect,metrics}_test.go`、`apps/agent/session_test.go`、`apps/agent/runtime/runtime_test.go`、`internal/transport/websocket_test.go`；Windows 本机全 PASS。
+- **CX-W5-02（真实 controller + agent CLI 双进程闭环）**：`tests/integration/v09/platform/controller_cli_pki_test.go` 新增 `TestWave5ControllerAndAgentCLIFullLoopWSSAndTask`：
+  - 先用 `bootstrap.Compose` 初始化同一 `-db`/本地 PKI 并取得一次 setup token，再启动**真实编译的 controller 二进制**（`-db/-origin/-tls-cert/-tls-key`）；管理 TLS 证书由同一本地 Agent CA 签发（Agent CLI 单一 `-root-cert` 同时信任管理端与入网根）。
+  - 真实编译的 `agent` 二进制执行 `-enroll-token` → `pending` → 管理员 `POST /api/v1/enrollments/{id}/decision` 批准 → 再执行 `-enroll-token` → `issued`，`-status` 验证 `enrolled=true`。
+  - 管理员授予 `nodes.read`/`tasks.submit`/`tasks.command`/`tasks.read` 后，提交一条面向新节点的 `tasks.command` 任务；`-connect-once -wait-task-ms 60000` 建立 mTLS WSS，节点在 `GET /api/v1/nodes` 显示 `online=true` 且 `cpuPercent`/`memoryPercent` 已更新；任务经 WSS 执行完成（`completed`/target `succeeded`），`tasks.submit`、`enrollment.approved` 与 `nodes.agent_update` 审计落盘；连接关闭后节点回到离线。
+  - 该用例在 Windows 明确 SKIP：Controller 入网与 Agent Hello 仅接纳 `platform=linux`（既有安全策略，本包未放宽）；WSL Ubuntu 24.04 amd64 上实跑 PASS。
+- **集成修正（真实闭环暴露）**：普通 Web/工作流任务没有 AI 会话 scope，`TaskOffer.scope_revision` 合法为 `0`。Executor 原先把 `0` 当结构拒绝条件，使真实 Web 任务无法执行；现将 `0` 解释为“非 AI 作用域”，仍要求 normal privilege、空 plugin、合法 schema/参数，Controller 仍是唯一授权源。新增 `TestAgentExecutorAcceptsUnscopedStandardOffer` 固定该行为，AI 任务仍携带非零 scope。
+- **本机验证（2026-10-31，Windows）**：
+  - `go test ./apps/... ./internal/transport/... ./internal/workflows/... ./tests/integration/v09/platform/... -count=1`：全部包 `ok`（Wave 5 集成为 SKIP，原因如上）。
+  - `npm run check`（最终 HEAD 重跑，`reports/check-all.json`，`2026-10-31T15:04:57.500Z`）**PASS**：policy/contracts/go/web/git 五套全过；Web 36/36 文件、316/316 测试；`tsc --noEmit`、Vite 构建、gofmt、go mod verify/tidy、controller+agent 构建、全量 Go 测试、vet、staticcheck 均通过。
+  - `npm run check:security`（最终 HEAD 重跑，`reports/check-security.json`，`2026-10-31T15:05:19.971Z`）**PASS**：`npm audit --audit-level=high` 0 漏洞，`govulncheck ./...` "No vulnerabilities found."。
+- **Linux 原生闭环证据（WSL Ubuntu 24.04 amd64，Go 1.27.3）**：
+  ```
+  go test ./tests/integration/v09/platform -run TestWave5ControllerAndAgentCLIFullLoopWSSAndTask -count=1 -v -timeout 5m
+  --- PASS: TestWave5ControllerAndAgentCLIFullLoopWSSAndTask (4.25s)
+  go test ./tests/integration/v09/platform -run TestWave5ControllerAndAgentCLIFullLoopWSSAndTask -count=3 -timeout 5m
+  ok  ... 11.507s
+  go test ./apps/agent/... ./apps/controller/... ./internal/transport/... ./tests/integration/v09/platform/... -count=1 -timeout 10m
+  全部 ok；platform 7.618s
+  ```
+  Windows 全量 Go 测试中该用例为 SKIP；Linux 同源测试重复 3 次均 PASS，无抖动；`go test -race ./apps/agent/... ./internal/transport/...` 亦 PASS。
+- **本 Wave 提交**：`0cd0ecd`（Agent `-connect-once`、传输 Ping、指标采样与单测）、`3e9dd49`（真实 controller+agent 双进程集成测试）；文档提交见本分支最新提交。工作区干净、未推送、未合并 `main`。
+- **剩余风险 / 未覆盖**：
+  1. Agent 入网与 Hello 仍仅接纳 Linux；Windows 本机只验证 SKIP 与单元层，真实安装包、自启动、arm64/1C1G 与物理 VPS 未验收。
+  2. `-connect-once` 是受控一次连接，无守护/重连/轮换；`-wait-task-ms` 到期即干净退出，不构成常驻 Agent 运行时。
+  3. 本地 CLI 的单一 `-root-cert` 同时承担 HTTPS 管理端信任与 Agent CA pin，测试用同一本地 CA 签发管理证书；生产 PKI 分离（PKI-OPS）仍未决策。
+  4. 受控执行仅 `tasks.command` 的空参数自我检查动作；未提供任意命令/root Shell，也不代表 PRIV/沙箱准入已获批准。
+  5. 集成测试在测试内用 Go 工具链编译两个二进制（`-buildvcs=false`），需要 Go 环境；不是发行包安装验收。G2、D01–D07、P1-C10 未冻结。
+
+---
 
 ## V09-5D-CX Wave 4（codex-04，2026-10-31）
 
