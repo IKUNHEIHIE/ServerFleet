@@ -312,6 +312,26 @@ func TestNetProberTLSProbeVerifiesCertificate(t *testing.T) {
 	}
 }
 
+func TestNetProberHTTPSUsesVerifiedTLS(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	pool := x509.NewCertPool()
+	pool.AddCert(server.Certificate())
+
+	prober := mustProber(t, monitoring.NetProberConfig{AllowedHosts: []string{"127.0.0.1"}, RootCAs: pool})
+	result, err := prober.HTTP(context.Background(), monitoring.TargetSpec{
+		Kind: monitoring.KindHTTP, Target: server.URL + "/secure", Timeout: 3 * time.Second,
+	})
+	if err != nil {
+		t.Fatalf("https probe: %v", err)
+	}
+	if !result.Healthy || result.StatusCode == nil || *result.StatusCode != http.StatusNoContent {
+		t.Fatalf("result = %+v", result)
+	}
+}
+
 func TestNetProberHTTPRespectsTimeout(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		select {
