@@ -183,6 +183,10 @@ func (r *Repo) ApplyAgentUpdate(ctx context.Context, q storage.Queryer, update A
 	if update.Status != "" {
 		merged.Status = update.Status
 	}
+	if current.Status == StatusSuspended && update.Status != StatusRevoked {
+		// An operator suspension is not overridden by an agent heartbeat.
+		merged.Status = StatusSuspended
+	}
 	if update.ObservedAt.After(current.LastSeenAt) {
 		merged.LastSeenAt = update.ObservedAt
 	}
@@ -227,6 +231,49 @@ func (r *Repo) ApplyAgentUpdate(ctx context.Context, q storage.Queryer, update A
 	}
 	merged.eventSeq = update.Sequence
 	return merged, true, nil
+}
+
+// UpdateStatus applies an operator-controlled lifecycle status inside the caller
+// transaction. Revocation is terminal; an already-revoked node rejects any other
+// transition.
+func (r *Repo) UpdateStatus(ctx context.Context, q storage.Queryer, nodeID string, status Status, now time.Time) (Node, error) {
+	if r == nil || q == nil {
+		return Node{}, errors.New("nodes: repository is not configured")
+	}
+	if err := validateNodeID(nodeID); err != nil {
+		return Node{}, err
+	}
+	if !status.Valid() {
+		return Node{}, fmt.Errorf("%w: status", ErrInvalidNode)
+	}
+	current, err := scanNode(q.QueryRow(ctx, nodeSelect+" WHERE id = ?", nodeID))
+	if storage.IsNotFound(err) {
+		return Node{}, ErrNodeNotFound
+	}
+	if err != nil {
+		return Node{}, err
+	}
+	if current.Status == status {
+		return current, nil
+	}
+	if current.Status == StatusRevoked {
+		return Node{}, ErrNodeRevoked
+	}
+	outcome, err := q.Exec(ctx, "UPDATE nodes SET status = ?, updated_at = ? WHERE id = ?",
+		string(status), encodeTime(now.UTC()), nodeID)
+	if err != nil {
+		return Node{}, err
+	}
+	affected, err := outcome.RowsAffected()
+	if err != nil {
+		return Node{}, err
+	}
+	if affected != 1 {
+		return Node{}, ErrNodeNotFound
+	}
+	current.Status = status
+	current.UpdatedAt = now.UTC()
+	return current, nil
 }
 
 func (r *Repo) Count(ctx context.Context) (int, error) {
