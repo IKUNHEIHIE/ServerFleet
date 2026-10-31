@@ -118,6 +118,9 @@ type Server struct {
 	UpdatesHTTP  *updates.HTTP
 	RecoveryHTTP *recovery.HTTP
 
+	Workflows     *workflows.Engine
+	workflowState *workflowRuntime
+
 	agentBridge *agentLinkBridge
 	mux         *http.ServeMux
 	now         func() time.Time
@@ -254,6 +257,14 @@ func AuditActions() []string {
 		"plugins.history.save",
 		"plugins.history.list",
 		"plugins.history.restore-source",
+		"workflows.save",
+		"workflows.trigger",
+		"workflows.dispatch",
+		"workflows.task.submit",
+		"workflows.invalidated",
+		"workflows.paused_unknown",
+		"workflows.failed",
+		"workflows.complete",
 	}
 	for _, list := range [][]string{
 		nodes.ServiceActions(),
@@ -335,6 +346,8 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: notifications.ActionTest, Description: "Send test notification", ResourceType: "node"},
 		{Key: notifications.ActionSend, Description: "Dispatch notification events", ResourceType: "node"},
 		{Key: notifications.ActionRetry, Description: "Retry failed notification deliveries", ResourceType: "node"},
+		{Key: workflows.ActionRead, Description: "Read own automation workflows", ResourceType: "node", ReadOnly: true},
+		{Key: workflows.ActionWrite, Description: "Create, update and run automation workflows", ResourceType: "node"},
 	}
 }
 
@@ -582,6 +595,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if agentBridge != nil {
 		agentBridge.tasks = tasksService
 	}
+	if err := s.setupWorkflows(); err != nil {
+		return cleanup(err)
+	}
 	if err := s.setupAI(); err != nil {
 		return cleanup(err)
 	}
@@ -765,7 +781,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) registerRoutes() error {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave3"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave4"})
 	})
 
 	for _, pattern := range []string{
@@ -894,6 +910,9 @@ func (s *Server) registerRoutes() error {
 		sub, reqID, err := s.authenticate(r)
 		return publishing.Principal{SubjectID: sub, RequestID: reqID}, err
 	}); err != nil {
+		return err
+	}
+	if err := s.registerWorkflowRoutes(); err != nil {
 		return err
 	}
 	return nil
