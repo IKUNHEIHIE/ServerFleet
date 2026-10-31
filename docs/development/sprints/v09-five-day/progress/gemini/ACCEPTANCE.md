@@ -142,3 +142,41 @@ node apps/web/acceptance/cdp-driver.mjs shot <file.png> [w h]     # 截图（可
 - 组合运行时未注入的适配器按服务端语义诚实失败：更新源/计划器 503、插件目录源 501、发布器缺失（计划停留 queued）、网关 Checker 缺失（路由 503、网关不可调度）、AI 模型生成 503、Agent 派发器缺失（审批后停留 queued）。
 - AI 会话 approval-events / 推荐 decision 路由未在 `server.go` 挂载（CX Wave 4 集成范围），界面显示诚实 404。
 - 真实供应商（Cloudflare）、真实 Nginx/Xray 实机、真实 Agent 入网与心跳、公网证书 ACME：UNTESTED。
+
+---
+
+# GM-W5-01/02 · Wave 4 新接口前后端打通 + 70 步真实 Controller 验收（gemini-05 · Wave 5）
+
+- 验收对象：`apps/web` 生产构建 + `go build ./apps/controller`（基线 `3adf891`，含 Wave 4 复审合入的工作流 HTTP、监控 history/probe、文件字节通道、发布 run/rollback）。
+- 脚本：`tests/browser/v09/run-live-controller-acceptance.mjs`（58 → **70 步**；自动构建 → 真实 Controller → 同源 TLS 托管 dist → Headless Edge 全链路）。
+- 复现：`node tests/browser/v09/run-live-controller-acceptance.mjs [--out <目录>] [--skip-build] [--keep]`
+- 结果：**70/70 步 PASS**（第一轮 69/70，唯一失败是脚本在页面 `change` 处理器同步清空 file input 之后才读取注入长度；修正读取时机后复跑全绿。前 58 步与 Wave 4 行为一致，回归无退化）。
+
+## 步骤 57–68（本轮新增，截图 `evidence/live/live-33..38-*.png`）
+
+| 步骤 | 模块 | 真实后端交互 | 断言要点 |
+|---|---|---|---|
+| 57 | 工作流控制台 | `GET /api/v1/workflows` | 授权后列表可读（`workflows.read`）；BLOCKED 占位已移除 |
+| 58 | 创建工作流 | `POST /api/v1/workflows` → 201 | UI 表单（manual 触发、`tasks.command`、node-alpha、`command=uptime` 参数）；服务端列表可见 revision=1 enabled=true |
+| 59 | 启停切换 | `PATCH /api/v1/workflows/{id}` ×2 → 200 | `expectedRevision` 乐观锁；停用/启用后服务端 enabled 状态与 revision 2/3 一致 |
+| 60 | 手动触发运行 | `POST /api/v1/workflows/{id}/runs` → 202 | `matched=true`；页面显示服务端生成的 `tsk_` 任务 ID；运行与步骤快照以服务端为准 |
+| 61 | 工作流详情 | `GET /api/v1/workflows/{id}` → 200 | 弹窗渲染工作流定义 + 运行记录（含关联任务 ID） |
+| 62 | 统一任务中心 | `#/tasks/{taskId}` | 工作流提交的任务经唯一任务服务可查，无绕行执行通道 |
+| 63 | 检查历史 | `GET /api/v1/availability-monitors/{id}/history` → 200 | 服务端持久化采样列表；未探测时诚实显示「暂无检查记录」 |
+| 64 | 立即探测 | `POST /api/v1/availability-monitors/{id}/probe` | 未注入 NetProber → 503 `prober_unavailable` 诚实展示（HTTP 状态 + 错误码） |
+| 65 | 文件字节流上传 | `POST …/files/uploads` → 201；`PUT …/content?offset=0` → 200；`POST …/complete` | DataTransfer 注入 29 B 真实文件；服务端 `bytesReceived` 与文件字节数一致、SHA-256 校验通过；传输通道未注入 → 503 `unavailable`，界面诚实区分「校验通过（29 B）」与「未送达远端」 |
+| 66 | 发布执行 | `POST /api/v1/publications/{id}/run` | 未注入发布器 → 502 `stage_failed`；dns 阶段持久化为 failed、计划 partially_completed（服务端核验） |
+| 67 | 阶段回滚 | `POST /api/v1/publications/{id}/rollback {stage:"dns"}` | 无补偿端口 → 502 `rollback_failed`；阶段状态刷新以服务端为准 |
+| 68 | Wave 5 审计闭环 | `GET /api/v1/audit/events` | `workflows.save/trigger/task.submit`、`files.upload_create`、`publishing.stage/run/rollback` 全部落盘 |
+
+## Wave 5 修复的既有测试问题（均在 `apps/web` 内）
+
+1. `node-add-page.test.tsx`：「批准」按钮位于接入列表异步面板内，负载下 `getByRole` 先于渲染执行（既有竞态，与本轮改动无关）→ 改为 `findByRole` 等待出现后再断言禁用；断言语义不变。
+2. `plugins-page.test.tsx` 中断言旧「BLOCKED：无工作流接口」占位的用例 → 按任务要求改为断言：无工作流接口时页面显示真实加载失败，且静态 BLOCKED 页不再存在。
+
+## 仍然不能声称的部分（Wave 5 后依旧）
+
+- 立即探测 503 `prober_unavailable`、上传 complete 503 `unavailable`、发布 run 502 `stage_failed`、回滚 502 `rollback_failed`：`NetProber`/`LocalStagingTransport`/DNS·证书·网关发布器均未在组合运行时注入（DS Wave 5 实现 + 总控接线范围）；界面与验收断言诚实错误，不伪造成功。
+- 文件「下载」端点仍无契约；上传成功（transport 注入后）的端到端落盘读回需等总控接线后另行验收。
+- `humanApproval: true` 的工作流步骤进入任务审批流的分支由任务域验收覆盖，本轮未重复断言。
+- 真实供应商、实机 Nginx/Xray、真实 Agent：UNTESTED（同 Wave 4）。

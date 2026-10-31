@@ -483,6 +483,17 @@ export const routes = {
   "PATCH /api/v1/nodes/{nodeId}/files/rename": ctx => ({ name: ctx.body?.newName, path: `${ctx.body?.path?.replace(/[^/]+$/, "")}${ctx.body?.newName}`, type: "file", sizeBytes: 5120, modifiedAt: NOW }),
   "DELETE /api/v1/nodes/{nodeId}/files": () => http(204, undefined),
   "POST /api/v1/nodes/{nodeId}/files/uploads": ctx => http(201, { uploadId: id("up"), status: "awaiting_data", expiresAt: "2026-10-30T03:00:00Z", files: ctx.body?.files }),
+  // GM-W5-01：字节通道与完成校验的契约兼容（真实行为见 run-live-controller-acceptance）。
+  "PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content": ctx => {
+    const received = typeof ctx.body === "string" ? ctx.body.length : 0;
+    state.uploadBytes = received;
+    return { uploadId: ctx.params.uploadId, status: "awaiting_data", bytesReceived: received, expectedSize: received };
+  },
+  "POST /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete": ctx => http(200, {
+    uploadId: ctx.params.uploadId,
+    status: "completed",
+    files: [{ name: "fixture.bin", path: "/fixture.bin", type: "file", sizeBytes: state.uploadBytes ?? 0, version: "stub" }],
+  }),
   "GET /api/v1/transfers": () => ({ items: state.transfers }),
   "POST /api/v1/transfers": ctx => {
     const transfer = { id: id("tr"), ...ctx.body, status: "queued", progressPercent: 0, copiedBytes: 0, createdAt: NOW };
@@ -502,7 +513,24 @@ export const routes = {
   "POST /api/v1/availability-monitors": ctx => http(201, { id: id("mon"), ...ctx.body, state: "pending", failureCount: 0, recoveryCount: 0 }),
   "PATCH /api/v1/availability-monitors/{monitorId}": ctx => ({ ...state.monitors[0], ...ctx.body, id: ctx.params.monitorId }),
   "DELETE /api/v1/availability-monitors/{monitorId}": () => ({ ok: true }),
-  "GET /api/v1/availability-monitors/{monitorId}/checks": () => ({ ok: true }),
+  // GM-W5-01c：真实检查历史与立即探测的契约兼容（Wave 4 已在真实 Controller 合入同名路由）。
+  "GET /api/v1/availability-monitors/{monitorId}/history": ctx => ({
+    monitorId: ctx.params.monitorId,
+    limit: Number(ctx.query.get("limit") ?? 20),
+    items: [
+      { id: 2, monitorId: ctx.params.monitorId, status: "up", latencyMs: 41.2, statusCode: 200, checkedAt: "2026-10-30T01:59:00Z" },
+      { id: 1, monitorId: ctx.params.monitorId, status: "down", error: "connection refused", checkedAt: "2026-10-30T01:58:00Z" },
+    ],
+  }),
+  "POST /api/v1/availability-monitors/{monitorId}/probe": ctx => ({
+    monitorId: ctx.params.monitorId,
+    status: "up",
+    state: "healthy",
+    latencyMs: 37.8,
+    statusCode: 200,
+    checkedAt: NOW,
+    consecutiveFailures: 0,
+  }),
   "GET /api/v1/notifications/channels": () => ({ items: state.channels }),
   "PUT /api/v1/notifications/channels/{channel}": ctx => {
     const channel = state.channels.find(item => item.channel === ctx.params.channel);
@@ -630,6 +658,68 @@ export const routes = {
   }),
   "POST /api/v1/publications": () => http(202, { id: id("pub"), status: "queued", createdAt: NOW, stages: [{ name: "dns", status: "queued" }, { name: "gateway", status: "queued" }], auditId: "aud-pub-new" }),
   "GET /api/v1/publications/{publicationId}": ctx => state.publications.find(item => item.id === ctx.params.publicationId) ?? { id: ctx.params.publicationId, status: "running", createdAt: NOW, stages: [{ name: "dns", status: "succeeded" }, { name: "gateway", status: "running" }] },
+  // GM-W5-01d：执行与回滚的契约兼容；桩把第一个未完成阶段推进/回滚便于观察状态变化。
+  "POST /api/v1/publications/{publicationId}/run": ctx => {
+    const publication = state.publications.find(item => item.id === ctx.params.publicationId)
+      ?? { id: ctx.params.publicationId, status: "queued", createdAt: NOW, stages: [{ name: "dns", status: "queued" }, { name: "certificate", status: "queued" }, { name: "gateway", status: "queued" }] };
+    const pending = publication.stages.find(stage => stage.status === "queued");
+    if (pending) {
+      pending.status = "succeeded";
+      publication.status = publication.stages.every(stage => stage.status === "succeeded") ? "succeeded" : "running";
+    }
+    return publication;
+  },
+  "POST /api/v1/publications/{publicationId}/rollback": ctx => {
+    const stage = ctx.body?.stage;
+    if (!stage) return http(400, { error: { code: "invalid_request", message: "stage is required" } });
+    const publication = state.publications.find(item => item.id === ctx.params.publicationId)
+      ?? { id: ctx.params.publicationId, status: "running", createdAt: NOW, stages: [{ name: "dns", status: "succeeded" }, { name: "certificate", status: "queued" }, { name: "gateway", status: "queued" }] };
+    const target = publication.stages.find(item => item.name === stage);
+    if (target) target.status = "rolled_back";
+    publication.status = "partially_completed";
+    return publication;
+  },
+
+  // ---------- 自动化工作流（GM-W5-01a 契约兼容） ----------
+  "GET /api/v1/workflows": () => ({ items: state.workflows ?? [] }),
+  "POST /api/v1/workflows": ctx => {
+    const workflow = {
+      id: id("wf"),
+      revision: 1,
+      enabled: ctx.body?.enabled ?? true,
+      trigger: ctx.body?.trigger,
+      match: ctx.body?.match ?? {},
+      steps: ctx.body?.steps ?? [],
+    };
+    state.workflows ??= [];
+    state.workflows.unshift(workflow);
+    return http(201, workflow);
+  },
+  "GET /api/v1/workflows/{workflowId}": ctx => ({
+    workflow: (state.workflows ?? []).find(item => item.id === ctx.params.workflowId) ?? { id: ctx.params.workflowId, revision: 1, enabled: true, trigger: "manual", match: {}, steps: [] },
+    runs: state.workflowRuns?.[ctx.params.workflowId] ?? [],
+  }),
+  "PATCH /api/v1/workflows/{workflowId}": ctx => {
+    const workflow = (state.workflows ?? []).find(item => item.id === ctx.params.workflowId) ?? { id: ctx.params.workflowId, trigger: "manual", match: {}, steps: [] };
+    Object.assign(workflow, ctx.body, { revision: (workflow.revision ?? 1) + 1 });
+    return workflow;
+  },
+  "POST /api/v1/workflows/{workflowId}/runs": ctx => {
+    const runId = id("run");
+    const taskId = id("task");
+    state.workflowRuns ??= {};
+    state.workflowRuns[ctx.params.workflowId] ??= [];
+    state.workflowRuns[ctx.params.workflowId].unshift({
+      runId,
+      workflowId: ctx.params.workflowId,
+      workflowRevision: 1,
+      eventId: ctx.body?.eventId ?? "evt",
+      state: "running",
+      steps: [{ taskId, state: "queued" }],
+      createdAt: NOW,
+    });
+    return http(202, { matched: true, run: state.workflowRuns[ctx.params.workflowId][0] });
+  },
 
   // ---------- AI ----------
   "GET /api/v1/ai/security-policy": () => ({ defaultDeny: true, serverSideEnforced: true, groupGrantMemberPolicy: "frozen_snapshot_intersection", allowUnscopedDiscovery: false, scopeRevisionRequired: true, lateralMovementRestricted: true, approvalPolicyServerEnforced: true, noScopeExpansionFromApprovalMode: true }),

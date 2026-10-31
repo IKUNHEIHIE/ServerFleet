@@ -21,6 +21,14 @@ describe("hasPermission", () => {
     expect(hasPermission(["dns.record.delete"], "dns.record.manage")).toBe(true);
     expect(hasPermission(["notifications.channel"], "notify.channel.manage")).toBe(true);
     expect(hasPermission(["audit.read"], "audit.read")).toBe(true);
+    // GM-W5-01a：工作流后端权限键（internal/workflows/http.go ActionRead/ActionWrite）。
+    expect(hasPermission(["workflows.read"], "workflow.read")).toBe(true);
+    expect(hasPermission(["workflows.write"], "workflow.write")).toBe(true);
+  });
+
+  it("keeps workflow write out of read and vice versa", () => {
+    expect(hasPermission(["workflows.read"], "workflow.write")).toBe(false);
+    expect(hasPermission(["workflows.write"], "workflow.read")).toBe(false);
   });
 
   it("never grants task.manage without at least one real task mutation key", () => {

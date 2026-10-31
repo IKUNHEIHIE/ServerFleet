@@ -66,7 +66,8 @@ describe("add-node page", () => {
     );
     expect(await screen.findByText("操作入口已锁定")).toBeVisible();
     expect(screen.getByRole("button", { name: "生成一次性凭证" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "批准" })).toBeDisabled();
+    // 批准按钮在“待审批接入请求”面板内，随接入列表异步加载；等待其出现后再断言禁用。
+    expect(await screen.findByRole("button", { name: "批准" })).toBeDisabled();
   });
 
   it("allows removing the one-time token from the page", async () => {

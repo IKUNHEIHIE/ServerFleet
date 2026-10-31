@@ -1,7 +1,8 @@
-import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { jsonResponse, type FetchRoutes } from "@/test/http";
 import { renderAuthenticated } from "@/test/app";
+import type { AsyncOperation } from "@/lib/api/dto";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -29,17 +30,44 @@ const GATEWAY = {
   schedulingEligible: true,
 };
 
+const SEEDED_PUBLICATION: AsyncOperation = {
+  id: "pub-seed",
+  status: "queued",
+  createdAt: "2026-10-30T01:00:00Z",
+  stages: [
+    { name: "dns", status: "queued" },
+    { name: "certificate", status: "queued" },
+    { name: "gateway", status: "queued" },
+  ],
+};
+
 function publishRoutes(): FetchRoutes {
   return {
     "GET /api/v1/service-groups": () => jsonResponse({ items: [GROUP] }),
     "GET /api/v1/gateways": () => jsonResponse({ items: [GATEWAY] }),
     "GET /api/v1/dns/accounts": () => jsonResponse({ items: [{ id: "a-1", providerCode: "cloudflare", displayName: "Main", enabled: true, isDefault: true, credentialStatus: "valid" }] }),
     "GET /api/v1/dns/accounts/a-1/zones": () => jsonResponse({ items: [{ id: "z-1", accountId: "a-1", name: "example.com" }] }),
-    "GET /api/v1/publications": () => jsonResponse([]),
+    "GET /api/v1/publications": () => jsonResponse([SEEDED_PUBLICATION]),
     "POST /api/v1/publications/preview": () =>
       jsonResponse({ eligible: true, targetNodeIdsSnapshot: ["n-1"], checks: [{ name: "gateway", passed: true }], warnings: ["DNS TTL 延迟"] }),
     "POST /api/v1/publications": () =>
       jsonResponse({ id: "pub-1", status: "queued", createdAt: "2026-10-30T02:00:00Z", stages: [{ name: "precheck", status: "queued" }] }, 202),
+    "POST /api/v1/publications/pub-seed/run": () =>
+      jsonResponse({
+        id: "pub-seed",
+        status: "partially_completed",
+        createdAt: SEEDED_PUBLICATION.createdAt,
+        stages: [{ name: "dns", status: "failed", message: "stage_failed" }, { name: "certificate", status: "queued" }, { name: "gateway", status: "queued" }],
+      }),
+    "POST /api/v1/publications/pub-seed/rollback": (_init, url) => {
+      void url;
+      return jsonResponse({
+        id: "pub-seed",
+        status: "partially_completed",
+        createdAt: SEEDED_PUBLICATION.createdAt,
+        stages: [{ name: "dns", status: "rolled_back" }, { name: "certificate", status: "queued" }, { name: "gateway", status: "queued" }],
+      });
+    },
     "GET /api/v1/gateways/gw-1": () => jsonResponse(GATEWAY),
     "GET /api/v1/gateways/gw-1/checks": () =>
       jsonResponse({ nginxInstalled: true, serviceRunning: true, configValid: true, healthProbePassed: true }),
@@ -68,6 +96,58 @@ describe("publishing wizard", () => {
       expect(body).toMatchObject({ serviceGroupId: "sg-1", gatewayIds: ["gw-1"], domain: "app.example.com", https: true });
     });
     expect(await screen.findByText(/发布作业 pub-1 已创建/)).toBeVisible();
+  });
+  it("runs and rolls back a staged publication through the real endpoints", async () => {
+    const { calls } = await renderAuthenticated("/publishing", publishRoutes());
+    expect(await screen.findByText("pub-seed")).toBeVisible();
+
+    fireEvent.click(screen.getByRole("button", { name: "执行发布" }));
+    await waitFor(() => {
+      const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/publications/pub-seed/run");
+      expect(call).toBeDefined();
+    });
+    expect(await screen.findByText(/执行已受理：状态 partially_completed/)).toBeVisible();
+    // 刷新完成后表格重新挂载，再打开阶段详情。
+    await screen.findByText("pub-seed");
+    fireEvent.click(screen.getAllByRole("button", { name: "阶段详情" })[0]);
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getAllByRole("button", { name: "回滚此阶段" })[0]);
+    await waitFor(() => {
+      const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/publications/pub-seed/rollback");
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.init?.body))).toEqual({ stage: "dns" });
+    });
+    expect(await screen.findByText(/阶段 dns 回滚已受理/)).toBeVisible();
+    expect(within(dialog).getByText(/rolled_back · dns/)).toBeVisible();
+  });
+
+  it("surfaces the honest 502 stage failure and refreshes stage state from the server", async () => {
+    // 列表路由带可变状态：run 失败后服务端列表返回失败阶段（与真实 Controller 一致）。
+    let stored: AsyncOperation = SEEDED_PUBLICATION;
+    const { calls } = await renderAuthenticated("/publishing", {
+      ...publishRoutes(),
+      "GET /api/v1/publications": () => jsonResponse([stored]),
+      "POST /api/v1/publications/pub-seed/run": () => {
+        stored = {
+          ...SEEDED_PUBLICATION,
+          status: "partially_completed",
+          stages: [{ name: "dns", status: "failed", message: "stage_failed" }, { name: "certificate", status: "queued" }, { name: "gateway", status: "queued" }],
+        };
+        return jsonResponse(
+          { ...stored, error: { code: "stage_failed", message: "publication operation failed" } },
+          502,
+        );
+      },
+    });
+    await screen.findByText("pub-seed");
+    const listCallsBefore = calls.filter(call => call.method === "GET" && call.url === "/api/v1/publications").length;
+    fireEvent.click(screen.getByRole("button", { name: "执行发布" }));
+    expect(await screen.findByText(/HTTP 502 · 错误码 stage_failed/)).toBeVisible();
+    await waitFor(() => {
+      expect(calls.filter(call => call.method === "GET" && call.url === "/api/v1/publications").length).toBeGreaterThan(listCallsBefore);
+    });
+    fireEvent.click(screen.getAllByRole("button", { name: "阶段详情" })[0]);
+    expect(await screen.findByText(/failed · dns：stage_failed/)).toBeVisible();
   });
 });
 

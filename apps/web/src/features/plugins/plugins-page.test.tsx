@@ -163,11 +163,12 @@ describe("xray declarative plugin page", () => {
   });
 });
 
-describe("workflows contract gap", () => {
-  it("reports the missing workflow endpoints instead of offering a rule editor", async () => {
+describe("workflows console (GM-W5-01a)", () => {
+  it("reads the real workflows contract; without workflows.read it fails honestly instead of showing a blocked placeholder", async () => {
+    // 无任何路由桩：GET /api/v1/workflows 404 → 页面显示加载失败，不再有静态 BLOCKED 页。
     await renderAuthenticated("/workflows", {});
     expect(await screen.findByRole("heading", { level: 1, name: "自动化工作流" })).toBeVisible();
-    expect(screen.getByText("BLOCKED：无工作流接口")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /新建规则|新建工作流/ })).not.toBeInTheDocument();
+    expect(screen.getByText("工作流列表加载失败")).toBeVisible();
+    expect(screen.queryByText("BLOCKED：无工作流接口")).not.toBeInTheDocument();
   });
 });
