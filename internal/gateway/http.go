@@ -34,6 +34,8 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("POST /api/v1/gateways", api.createGateway)
 	mux.HandleFunc("GET /api/v1/gateways/{gatewayId}", api.getGateway)
 	mux.HandleFunc("PATCH /api/v1/gateways/{gatewayId}", api.updateGateway)
+	mux.HandleFunc("GET /api/v1/gateways/{gatewayId}/checks", api.getChecks)
+	mux.HandleFunc("PATCH /api/v1/gateways/{gatewayId}/dispatch", api.updateDispatch)
 	mux.HandleFunc("POST /api/v1/gateways/{gatewayId}/provision", api.provision)
 	mux.HandleFunc("GET /api/v1/gateway-provisions/{jobId}", api.getProvision)
 	mux.HandleFunc("GET /api/v1/gateway-routes", api.listRoutes)
@@ -183,6 +185,97 @@ func (api *httpAPI) updateGateway(w http.ResponseWriter, r *http.Request) {
 	}
 	updated, err := api.service.UpdateGateway(r.Context(), principal.SubjectID, principal.RequestID, current.ID, current.Revision, UpdateGatewayInput{
 		Name: current.Name, Region: current.Region, CountryCode: current.CountryCode, Enabled: body.Enabled,
+	})
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	view, err := api.view(r.Context(), principal.SubjectID, updated)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, view)
+}
+
+type checksDTO struct {
+	GatewayID      string `json:"gatewayId"`
+	Recorded       bool   `json:"recorded"`
+	NginxInstalled bool   `json:"nginxInstalled"`
+	ChecksPassed   bool   `json:"checksPassed"`
+	NginxVersion   string `json:"nginxVersion,omitempty"`
+	LastError      string `json:"lastError,omitempty"`
+	Revision       uint64 `json:"revision"`
+	UpdatedAt      string `json:"updatedAt,omitempty"`
+	Message        string `json:"message,omitempty"`
+}
+
+func (api *httpAPI) getChecks(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	record, err := api.service.GetGateway(r.Context(), principal.SubjectID, r.PathValue("gatewayId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	// Only aggregate flags are persisted. Per-check history is never invented.
+	dto := checksDTO{
+		GatewayID: record.ID, NginxInstalled: record.NginxInstalled,
+		ChecksPassed: record.ChecksPassed, NginxVersion: record.NginxVersion,
+		LastError: record.LastError, Revision: record.Revision,
+		UpdatedAt: record.UpdatedAt.UTC().Format(time.RFC3339),
+	}
+	dto.Recorded = record.NginxInstalled || record.ChecksPassed || record.LastError != ""
+	if !dto.Recorded {
+		dto.Message = "no check has been recorded; per-check history is not stored"
+	}
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func (api *httpAPI) updateDispatch(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		State            *string `json:"state"`
+		Enabled          *bool   `json:"enabled"`
+		ExpectedRevision *uint64 `json:"expectedRevision"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	enabled := false
+	switch {
+	case body.State != nil:
+		switch *body.State {
+		case "enabled":
+			enabled = true
+		case "paused":
+			enabled = false
+		default:
+			writeFixed(w, http.StatusBadRequest, "invalid_request", "state must be enabled or paused")
+			return
+		}
+	case body.Enabled != nil:
+		enabled = *body.Enabled
+	default:
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "state or enabled is required")
+		return
+	}
+	current, err := api.service.GetGateway(r.Context(), principal.SubjectID, r.PathValue("gatewayId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	revision := current.Revision
+	if body.ExpectedRevision != nil {
+		revision = *body.ExpectedRevision
+	}
+	updated, err := api.service.UpdateGateway(r.Context(), principal.SubjectID, principal.RequestID, current.ID, revision, UpdateGatewayInput{
+		Name: current.Name, Region: current.Region, CountryCode: current.CountryCode, Enabled: enabled,
 	})
 	if err != nil {
 		writeError(w, err)
