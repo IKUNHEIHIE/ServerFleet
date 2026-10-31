@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -29,10 +30,12 @@ import (
 	"serverfleet.local/serverfleet/internal/plugins"
 	"serverfleet.local/serverfleet/internal/publishing"
 	"serverfleet.local/serverfleet/internal/quota"
+	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/servicegroups"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
+	"serverfleet.local/serverfleet/internal/updates"
 	"serverfleet.local/serverfleet/internal/workflows"
 )
 
@@ -45,6 +48,21 @@ type Config struct {
 	DNSProvider    dns.Provider
 	GatewayChecker gateway.Checker
 	Now            func() time.Time
+
+	// Agent transport composition. Enrollment and the Agent WSS link stay
+	// unmounted unless the local PKI issuer and exact authority are supplied.
+	AgentAuthority   string
+	AgentServerName  string
+	EnrollmentIssuer *transport.CertificateIssuer
+	AgentFrameBytes  int
+
+	// Optional signed plugin package trust. Empty maps keep installation closed.
+	PluginTrustKeys         map[string]ed25519.PublicKey
+	PluginTrustSources      map[string]bool
+	PluginTrustCapabilities map[string]bool
+
+	// BackupDir defaults to a private directory beside the SQLite database.
+	BackupDir string
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
@@ -67,8 +85,36 @@ type Server struct {
 	Notifications     *notifications.Service
 	Gateway           *gateway.Service
 
-	mux *http.ServeMux
-	now func() time.Time
+	Enrollment           *transport.EnrollmentService
+	EnrollmentHTTP       *transport.EnrollmentHTTP
+	EnrollmentManagement *transport.EnrollmentManagementHTTP
+	Links                *transport.ControllerLinks
+	AgentLinkHTTP        *transport.AgentLinkHTTP
+
+	AI             *ai.SessionService
+	AIConversation *ai.ConversationService
+	AIManagement   *ai.ManagementHTTP
+	AIMessagesHTTP *ai.MessagesHTTP
+	AIEventsHTTP   *ai.MessageEventsHTTP
+
+	Plugins          *plugins.LifecycleManager
+	PluginRepository plugins.RepositoryStore
+	PluginOperations plugins.OperationStore
+	PluginVault      *plugins.PackageVault
+	PluginHTTP       *plugins.ManagementHTTP
+	XrayHTTP         *plugins.XrayDeclarativeHTTP
+
+	UpdatesHTTP  *updates.HTTP
+	RecoveryHTTP *recovery.HTTP
+
+	agentBridge *agentLinkBridge
+	mux         *http.ServeMux
+	now         func() time.Time
+	stagingDir  string
+	backupDir   string
+
+	runCancel context.CancelFunc
+	runDone   chan struct{}
 }
 
 type requestIDContextKey struct{}
@@ -155,6 +201,48 @@ func AuditActions() []string {
 		"host.root",
 		"files.transfer",
 		"gateway.provision",
+		"enrollment.issue",
+		"enrollment.token.issue",
+		"enrollment.request",
+		"enrollment.approved",
+		"enrollment.rejected",
+		"enrollment.decide",
+		"enrollment.list",
+		"agent.revoke",
+		"ai.sessions.create",
+		"ai.sessions.read",
+		"ai.sessions.grant",
+		"ai.sessions.revoke",
+		"ai.sessions.policy",
+		"ai.sessions.close",
+		"ai.messages.create",
+		"ai.messages.read",
+		"ai.messages.generate",
+		"ai.messages.completed",
+		"ai.messages.unknown",
+		"ai.events.read",
+		"ai.tools.assess",
+		"ai.tools.execute",
+		"ai.approvals.create",
+		"ai.approvals.approve",
+		"ai.approvals.deny",
+		"ai.approvals.consume",
+		"ai.models.read",
+		"ai.models.update",
+		"plugins.install",
+		"plugins.install.intent",
+		"plugins.upgrade",
+		"plugins.upgrade.intent",
+		"plugins.enable",
+		"plugins.enable.intent",
+		"plugins.disable",
+		"plugins.disable.intent",
+		"plugins.uninstall",
+		"plugins.uninstall.intent",
+		"plugins.invoke",
+		"plugins.history.save",
+		"plugins.history.list",
+		"plugins.history.restore-source",
 	}
 	for _, list := range [][]string{
 		nodes.ServiceActions(),
@@ -369,6 +457,20 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	s := &Server{
+		DB:                db,
+		Audit:             auditRecorder,
+		IdentityStore:     identityStore,
+		Identity:          identityService,
+		Credentials:       credentialsService,
+		IdentityHTTP:      identityHTTP,
+		NodesRepo:         nodesRepo,
+		GroupsRepo:        groupsRepo,
+		ServiceGroupsRepo: serviceGroupsRepo,
+		now:               now,
+		stagingDir:        stagingDir,
+	}
+
 	authorizer := &composedAuthorizer{identity: identityService}
 	readPolicy := identityService.NodeReadPolicySnapshot
 
@@ -381,6 +483,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		ReadPolicy: readPolicy,
 		Now:        now,
 	})
+	if err != nil {
+		return cleanup(err)
+	}
+	s.Nodes = nodesService
+	agentBridge, err := s.setupAgentTransport(cfg, nodesService, tasksRepo)
 	if err != nil {
 		return cleanup(err)
 	}
@@ -403,16 +510,34 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	nodeLookup := &composedNodeLookup{nodes: nodesRepo, now: now}
+	dispatcher := cfg.Dispatcher
+	if dispatcher == nil && agentBridge != nil {
+		dispatcher = agentBridge
+	}
 	tasksService, err := tasks.NewService(tasks.Options{
 		DB:         db,
 		Repo:       tasksRepo,
 		Audit:      auditRecorder,
 		Authorizer: authorizer,
-		Dispatcher: cfg.Dispatcher,
+		Dispatcher: dispatcher,
 		Nodes:      nodeLookup,
 		Now:        now,
 	})
 	if err != nil {
+		return cleanup(err)
+	}
+	s.TasksRepo = tasksRepo
+	s.Tasks = tasksService
+	if agentBridge != nil {
+		agentBridge.tasks = tasksService
+	}
+	if err := s.setupAI(); err != nil {
+		return cleanup(err)
+	}
+	if err := s.setupPlugins(cfg); err != nil {
+		return cleanup(err)
+	}
+	if err := s.setupUpdatesRecovery(cfg); err != nil {
 		return cleanup(err)
 	}
 
@@ -469,36 +594,48 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
-	s := &Server{
-		DB:                db,
-		Audit:             auditRecorder,
-		IdentityStore:     identityStore,
-		Identity:          identityService,
-		Credentials:       credentialsService,
-		IdentityHTTP:      identityHTTP,
-		NodesRepo:         nodesRepo,
-		GroupsRepo:        groupsRepo,
-		ServiceGroupsRepo: serviceGroupsRepo,
-		Nodes:             nodesService,
-		ServiceGroups:     serviceGroupsService,
-		TasksRepo:         tasksRepo,
-		Tasks:             tasksService,
-		Files:             filesService,
-		DNS:               dnsService,
-		Notifications:     notificationsService,
-		Gateway:           gatewayService,
-		mux:               http.NewServeMux(),
-		now:               now,
-	}
+	s.ServiceGroups = serviceGroupsService
+	s.Files = filesService
+	s.DNS = dnsService
+	s.Notifications = notificationsService
+	s.Gateway = gatewayService
+	s.mux = http.NewServeMux()
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
 	}
+	s.startTaskScheduler()
 	return s, nil
 }
 
-// Close closes the underlying SQLite database handle.
+func (s *Server) startTaskScheduler() {
+	ctx, cancel := context.WithCancel(context.Background())
+	s.runCancel = cancel
+	s.runDone = make(chan struct{})
+	go func() {
+		defer close(s.runDone)
+		_ = s.Tasks.Run(ctx)
+	}()
+}
+
+// Close stops the task scheduler loop before closing the database handle.
 func (s *Server) Close() error {
-	if s == nil || s.DB == nil {
+	if s == nil {
+		return nil
+	}
+	if s.runCancel != nil {
+		s.runCancel()
+		select {
+		case <-s.runDone:
+		case <-time.After(10 * time.Second):
+			return errors.New("controller: task scheduler did not stop")
+		}
+		s.runCancel = nil
+	}
+	if s.PluginVault != nil {
+		_ = s.PluginVault.Close()
+		s.PluginVault = nil
+	}
+	if s.DB == nil {
 		return nil
 	}
 	return s.DB.Close()
@@ -517,7 +654,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) registerRoutes() error {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave2"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave3"})
 	})
 
 	for _, pattern := range []string{
@@ -532,6 +669,21 @@ func (s *Server) registerRoutes() error {
 		"/api/v1/credentials/",
 	} {
 		s.mux.Handle(pattern, s.IdentityHTTP)
+	}
+
+	s.registerEnrollmentRoutes()
+	s.registerAIRoutes()
+	s.registerPluginRoutes()
+	s.registerUpdateRecoveryRoutes()
+	if s.AgentLinkHTTP != nil {
+		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
+	} else {
+		s.mux.HandleFunc("/api/v1/agent/link", agentTransportUnavailable)
+	}
+	if s.EnrollmentHTTP != nil {
+		s.mux.Handle("/api/v1/agent/enroll", s.EnrollmentHTTP)
+	} else {
+		s.mux.HandleFunc("/api/v1/agent/enroll", agentTransportUnavailable)
 	}
 
 	if err := nodes.RegisterHTTP(s.mux, s.Nodes, func(r *http.Request) (nodes.Principal, error) {
@@ -603,15 +755,106 @@ func (s *Server) registerRoutes() error {
 }
 
 func (s *Server) authenticate(r *http.Request) (string, string, error) {
-	id, err := s.IdentityHTTP.AuthenticateRequest(r)
+	identity, requestID, err := s.authenticateIdentity(r)
 	if err != nil {
 		return "", "", err
+	}
+	return identity.SubjectID, requestID, nil
+}
+
+func (s *Server) authenticateIdentity(r *http.Request) (auth.Identity, string, error) {
+	identity, err := s.IdentityHTTP.AuthenticateRequest(r)
+	if err != nil {
+		return auth.Identity{}, "", err
 	}
 	reqID, _ := r.Context().Value(requestIDContextKey{}).(string)
 	if reqID == "" {
 		reqID = newRequestID()
 	}
-	return id.SubjectID, reqID, nil
+	return identity, reqID, nil
+}
+
+func (s *Server) registerEnrollmentRoutes() {
+	patterns := []string{
+		"/api/v1/enrollment-tokens",
+		"/api/v1/node-enrollment-tokens",
+		"/api/v1/enrollments",
+		"/api/v1/enrollments/",
+		"/api/v1/node-enrollments",
+		"/api/v1/node-enrollments/",
+	}
+	for _, pattern := range patterns {
+		if s.EnrollmentManagement != nil {
+			s.mux.Handle(pattern, s.EnrollmentManagement)
+			continue
+		}
+		s.mux.HandleFunc(pattern, agentTransportUnavailable)
+	}
+}
+
+func (s *Server) registerAIRoutes() {
+	if s.AIManagement != nil {
+		for _, pattern := range []string{
+			"GET /api/v1/ai/security-policy",
+			"POST /api/v1/ai/sessions",
+			"GET /api/v1/ai/sessions/{sessionId}",
+			"GET /api/v1/ai/sessions/{sessionId}/approval-policy",
+			"PATCH /api/v1/ai/sessions/{sessionId}/approval-policy",
+			"POST /api/v1/ai/sessions/{sessionId}/grants",
+			"DELETE /api/v1/ai/sessions/{sessionId}/grants/{grantId}",
+			"POST /api/v1/ai/sessions/{sessionId}/approvals",
+			"POST /api/v1/ai/sessions/{sessionId}/approvals/{approvalId}/decision",
+			"POST /api/v1/ai/tools/execute",
+			"POST /api/v1/ai/sessions/{sessionId}/resource-recommendations",
+		} {
+			s.mux.Handle(pattern, s.AIManagement)
+		}
+	}
+	if s.AIMessagesHTTP != nil {
+		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+	}
+	if s.AIEventsHTTP != nil {
+		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/events", s.AIEventsHTTP)
+	}
+}
+
+func (s *Server) registerPluginRoutes() {
+	if s.PluginHTTP != nil {
+		for _, pattern := range []string{
+			"GET /api/v1/plugins",
+			"GET /api/v1/plugins/repository",
+			"PUT /api/v1/plugins/repository",
+			"GET /api/v1/plugins/catalog",
+			"POST /api/v1/plugins/catalog/refresh",
+			"POST /api/v1/plugins/{pluginId}/install",
+			"PATCH /api/v1/plugins/{pluginId}/activation",
+			"PUT /api/v1/plugins/{pluginId}/activation",
+			"POST /api/v1/plugins/{pluginId}/update",
+			"DELETE /api/v1/plugins/{pluginId}",
+			"GET /api/v1/plugins/{pluginId}",
+			"GET /api/v1/plugin-operations/{operationId}",
+		} {
+			s.mux.Handle(pattern, s.PluginHTTP)
+		}
+	}
+	if s.XrayHTTP != nil {
+		for _, pattern := range s.XrayHTTP.Patterns() {
+			s.mux.Handle(pattern, s.XrayHTTP)
+		}
+	}
+}
+
+func agentTransportUnavailable(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusServiceUnavailable)
+	_ = json.NewEncoder(w).Encode(map[string]any{
+		"type": "about:blank", "title": http.StatusText(http.StatusServiceUnavailable),
+		"status": http.StatusServiceUnavailable, "code": "AGENT_TRANSPORT_UNAVAILABLE",
+		"requestId": newRequestID(),
+	})
 }
 
 func newRequestID() string {

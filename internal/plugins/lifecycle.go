@@ -261,6 +261,8 @@ func (m *LifecycleManager) Install(ctx context.Context, op LifecycleOperation, r
 	}
 	return out, nil
 }
+func (m *LifecycleManager) HasRuntime() bool { return m != nil && m.runtime != nil }
+
 func (m *LifecycleManager) Get(ctx context.Context) (Installation, error) {
 	var out Installation
 	if m == nil || m.store == nil || ctx == nil {

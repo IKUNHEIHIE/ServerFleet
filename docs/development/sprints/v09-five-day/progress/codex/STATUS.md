@@ -1,5 +1,37 @@
 # V09-5D-CX / codex-03（接续codex-02）
 
+## V09-5D-CX Wave 3（codex-03，2026-10-31）
+
+- 任务 `V09-5D-CX`（Wave 3）；唯一会话 `codex-03`；分支 `feature/v09-platform-cx02`；工作目录 `D:\admin\desktop\codex\myproject\ks\.worktrees\feature--v09-platform-cx02`；起始基线 `98f39e04e73ee3150b9f6146d92102c59e5358c3`（Wave 1+2 已合入 main）。
+- **最新代码/验证 SHA `9ef6a3b9c2041c69bbac0ab990ba3c5c912e7913`**；状态文档提交 `22ccdb8e53cf19053c26463cdbd14754456085aa`（仅文档）。本轮本地提交（未推送、未合并 main）：`8a2cb68`（agent enrollment/WSS）、`b381361`（AI 管理面）、`32ca09b`（插件中心/Xray 声明式门控）、`529a8d8`（更新/恢复 HTTP）、`9ef6a3b`（审计结果/审批复用/回滚校验修正）。
+- **CX-W3-01**：新增 `internal/transport/websocket.go`（标准库严格 RFC6455：单二进制帧、客户端掩码、RSV/分片/超长拒绝、ping/pong/close）、`agent_link_http.go`、`enrollment_management_http.go`；`server.go` 组合 `/api/v1/enrollment-tokens*`、`/api/v1/enrollments*`（兼容 `/api/v1/node-*` 别名）、`/api/v1/agent/enroll` 与 `/api/v1/agent/link`；`ControllerLinks` 的 handshake/admit/event/disconnected 接通心跳/指标→`nodes.Service.ApplyAgentUpdate`，`agentLinkBridge` 将 TaskOffer 经 `tasks.Dispatcher` 发出并把 TaskAck/Started/Output/Finished 回写 `tasks.Service.RecordResult`；后台 `Tasks.Run` 启动、`Close` 停止。`TestWave3ControllerAgentEnrollmentWSSAndTaskExecution` 覆盖本地 CA、一次性 token、pending→人工批准→重取 issued、mTLS WSS、hello/heartbeat、提交+第二管理员审批+派发+回写，任务 `completed`；无客户端证书 WSS 403、错误 token 403。`TestWave2ControllerEndToEndHTTPSComposition` 保持通过。
+- **CX-W3-02**：`internal/ai` 新增 `context.go`、`approvals.go`、`execution_ports.go`、`management_http.go`；挂载 security-policy、sessions、approval-policy GET/PATCH、grants POST/DELETE、approvals POST/decision、tools/execute、resource-recommendations，并复用 `MessagesHTTP`/`MessageEventsHTTP` 的 messages/events SSE。会话默认零资源授权，组授权保留成员快照；AI 审批要求已认证管理员（HumanWeb+Administrator），root Shell 的 AI 审批仍把任务提交进唯一 tasks 管线，任务级第二管理员审批/自批 409 兜底。`TestWave3AIManagementScopeApprovalsAndRootShellGate` 覆盖零授权、授权、审批一次性消费、重放 409、full_access 不绕过 root、非管理员审批 403、未配置模型时 messages 503。
+- **CX-W3-03**：`internal/plugins` 新增 `repository.go`、`operations.go`、`http.go`、`xray_http.go`；挂载 plugins 列表/单查、repository GET/PUT、catalog GET/refresh、install/update/activation/uninstall、plugin-operations；声明式 xray-manager status/capabilities/nodes/instance/templates/users/traffic/configurations/jobs 在未安装/未启用时 403、运行时操作 501。核心 `internal/plugins` 不 import `plugins/xray-manager`，architecture 检查 PASS。`TestWave3PluginCenterRoutesAndXrayGate` 覆盖门控与诚实不可用。
+- **CX-W3-04**：`internal/updates/http.go`、`internal/recovery/http.go` 挂载 updates check/plan/apply/jobs/job/rollback 与 backups/{id}/verify、disaster-recovery preview/jobs/job；无 release feed/installer/executor 时明确 503/501；backup verify 使用 `storage.VerifyFile` 真实 quick_check+迁移账本，junk/缺失分别返回 false/404；DR preview 不把客户端 fencing 布尔当证据，eligible=false、job 501。`TestWave3UpdatesAndRecoveryRoutes` 覆盖。
+
+### 验证（2026-10-31 Asia/Shanghai）
+
+- `git rev-parse HEAD` = `9ef6a3b9c2041c69bbac0ab990ba3c5c912e7913`。
+- `gofmt -l apps internal plugins tests` 无输出；`go vet ./...` PASS；`staticcheck ./...` PASS。
+- `go test ./... -count=1 -timeout 20m`：全部包 `ok`（含 `tests/contracts`、`tests/architecture`、`tests/integration/v09`、`tests/poc/v09/services`），0 FAIL；新增 4 个 platform 集成测试及 `internal/transport` WebSocket 负向测试均通过。
+- `npm run check`：**PASS（exit 0）**。在短路径完整副本 `C:\kscheck` 上执行：`go-format`/`go-mod-verify`/`go-mod-tidy`/controller+agent build/`go-tests`/`go-vet`/`staticcheck`、source-integrity、契约与 g2r02/g2r03、architecture、git-diff/staged 全部通过；Web 34 个测试文件/283 项全部 PASS，`tsc --noEmit` 与 Vite 生产构建 PASS。
+  - 原始长路径直接执行同一命令时，`go-format` 因脚本一次传入 310 个绝对路径（约 33.6k 字符）触发 Windows CreateProcess 32,767 上限 `ENAMETOOLONG`；源码未变，短路径副本由 robocopy 生成并仅重定位，验证后已删除。长路径曾出现 1 次两个 Web 测试偶发失败（node-add/plugins），单文件重跑及短路径全量均为 283/283 PASS。
+- `npm run check:security`：**PASS（exit 0）**；`npm audit --audit-level=high` 0 漏洞；`govulncheck ./...` 输出 "No vulnerabilities found."（同样在源码一致的短路径副本执行）。
+- 未修改 DS 所属 `internal/{storage,nodes,tasks,audit,files,monitoring,notifications,quota,dns,certificates,gateway,servicegroups,publishing}/**`、`apps/web/**`、根配置/锁/公共契约；候选 OpenAPI 保持字节不变。
+
+### 剩余风险 / 明确未交付
+
+1. `apps/controller/main.go` 尚未加载 Agent PKI/监听器参数；默认运行存在路由但 enrollment/WSS 返回 503 `AGENT_TRANSPORT_UNAVAILABLE`。生产 mTLS listener 需配置 ClientCAs 与 `VerifyClientCertIfGiven`/`RequireAndVerifyClientCert`；e2e 使用测试内 CA 与 httptest TLS。
+2. Agent Hello 仅接受 `platform=linux`（本机 Windows e2e 用协议客户端模拟 linux）；真实 Agent 安装器、arm64、1C1G 未验收。
+3. AI 模型/BYOK 未配置：messages POST 503 `AI_SOURCE_UNAVAILABLE`，模型设置公开路由与实际外部模型调用未交付。AI 审批要求真人管理员，但单管理员可自批 AI 审批；root 执行仍提交为 `awaiting_approval`，由 tasks 的第二管理员审批兜底（自批 409）。
+4. 插件 install/update/activate 无包源/WASM 运行时，明确 501；repository 为私有文件持久化；plugin-operations 只记录可执行/空操作；xray-manager 仅声明式门控，真实 Xray 运行时、用户、流量、导出未交付。
+5. updates 无 release feed/planner/installer：check/plan 503、apply 501、jobs 为空；DR preview 无法在 HTTP 层验证 target controller identity 与 fencing，eligible 恒 false、job 501；backup verify 真实，但备份创建/列表/保留策略端点仍缺失。
+6. 未访问云/VPS/生产/真实凭据，未推送远程、未合并 main、未启动其他 Agent；G2 契约、D01–D07/P1-C10、WASM/Eino 均未冻结。完整 v0.9 仍未完成，本包只交付 Wave 3 CX 范围。
+
+---
+
+> 以下为 Wave 1/2 及更早历史记录，保持原文。
+
 2026-10-31用户明确授权本会话接替“完成 V09-5D-CX 开发包”（01a188b2-b181-7230-94a7-136c5356739b）。新唯一会话标识codex-03；沿用本包分支、允许目录、审查人与停止条件。接手HEAD为`ecb7cd405a0630d814580d1a6123d3e9a56c3e97`，原会话已中断；保留并核验其7项未提交文件，无重置/清理或他人目录写入。公共任务板/所有权登记仍由总控单写，本行记录本次用户授权的接替关系。
 
 **ACTIVE，完整v0.9尚未完成。** 用户要求持续完成CX-01—08；先前b61ad15“无独立工作”的停止判断已撤回。这里是当前状态，逐增量SHA/实际验证/历史失败见[RESUMED.md](RESUMED.md)；早期HANDOFF/EVIDENCE/COMMITS为历史快照，不能覆盖这里的新实现或当作最新全量检查。
