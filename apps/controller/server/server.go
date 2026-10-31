@@ -80,6 +80,12 @@ type Server struct {
 	Links                *transport.ControllerLinks
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
+	AI             *ai.SessionService
+	AIConversation *ai.ConversationService
+	AIManagement   *ai.ManagementHTTP
+	AIMessagesHTTP *ai.MessagesHTTP
+	AIEventsHTTP   *ai.MessageEventsHTTP
+
 	agentBridge *agentLinkBridge
 	mux         *http.ServeMux
 	now         func() time.Time
@@ -180,6 +186,26 @@ func AuditActions() []string {
 		"enrollment.decide",
 		"enrollment.list",
 		"agent.revoke",
+		"ai.sessions.create",
+		"ai.sessions.read",
+		"ai.sessions.grant",
+		"ai.sessions.revoke",
+		"ai.sessions.policy",
+		"ai.sessions.close",
+		"ai.messages.create",
+		"ai.messages.read",
+		"ai.messages.generate",
+		"ai.messages.completed",
+		"ai.messages.unknown",
+		"ai.events.read",
+		"ai.tools.assess",
+		"ai.tools.execute",
+		"ai.approvals.create",
+		"ai.approvals.approve",
+		"ai.approvals.deny",
+		"ai.approvals.consume",
+		"ai.models.read",
+		"ai.models.update",
 	}
 	for _, list := range [][]string{
 		nodes.ServiceActions(),
@@ -467,6 +493,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if agentBridge != nil {
 		agentBridge.tasks = tasksService
 	}
+	if err := s.setupAI(); err != nil {
+		return cleanup(err)
+	}
 
 	taskBridge := &composedTaskBridge{tasks: tasksService}
 	filesService, err := files.NewService(files.Options{
@@ -595,6 +624,7 @@ func (s *Server) registerRoutes() error {
 	}
 
 	s.registerEnrollmentRoutes()
+	s.registerAIRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {
@@ -709,6 +739,33 @@ func (s *Server) registerEnrollmentRoutes() {
 			continue
 		}
 		s.mux.HandleFunc(pattern, agentTransportUnavailable)
+	}
+}
+
+func (s *Server) registerAIRoutes() {
+	if s.AIManagement != nil {
+		for _, pattern := range []string{
+			"GET /api/v1/ai/security-policy",
+			"POST /api/v1/ai/sessions",
+			"GET /api/v1/ai/sessions/{sessionId}",
+			"GET /api/v1/ai/sessions/{sessionId}/approval-policy",
+			"PATCH /api/v1/ai/sessions/{sessionId}/approval-policy",
+			"POST /api/v1/ai/sessions/{sessionId}/grants",
+			"DELETE /api/v1/ai/sessions/{sessionId}/grants/{grantId}",
+			"POST /api/v1/ai/sessions/{sessionId}/approvals",
+			"POST /api/v1/ai/sessions/{sessionId}/approvals/{approvalId}/decision",
+			"POST /api/v1/ai/tools/execute",
+			"POST /api/v1/ai/sessions/{sessionId}/resource-recommendations",
+		} {
+			s.mux.Handle(pattern, s.AIManagement)
+		}
+	}
+	if s.AIMessagesHTTP != nil {
+		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+	}
+	if s.AIEventsHTTP != nil {
+		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/events", s.AIEventsHTTP)
 	}
 }
 

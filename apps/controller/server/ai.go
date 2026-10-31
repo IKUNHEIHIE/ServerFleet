@@ -1,0 +1,286 @@
+package server
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"strings"
+
+	"serverfleet.local/serverfleet/internal/ai"
+	"serverfleet.local/serverfleet/internal/audit"
+	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/storage"
+	"serverfleet.local/serverfleet/internal/tasks"
+)
+
+func (s *Server) setupAI() error {
+	store, err := newAISessionStore(s.DB, s.Audit)
+	if err != nil {
+		return err
+	}
+	tools := []ai.RegisteredTool{
+		{Definition: ai.ToolDefinition{ID: "host.root", RootShell: true, RequiresHuman: true}, Canonicalize: canonicalToolParameters},
+		{Definition: ai.ToolDefinition{ID: "host.patch"}, Canonicalize: canonicalToolParameters},
+		{Definition: ai.ToolDefinition{ID: "tasks.command"}, Canonicalize: canonicalToolParameters},
+	}
+	sessions, err := ai.NewSessionService(store, s.aiSessionAccess, s.aiAuthority, tools)
+	if err != nil {
+		return err
+	}
+	conversation, err := ai.NewConversationService(sessions, ai.ConversationConfig{
+		Profile: func(context.Context, string) (ai.ModelProfile, error) {
+			return ai.ModelProfile{}, ai.ErrModelUnavailable
+		},
+		Filter: s.aiContentFilter,
+		Generate: func(context.Context, ai.GenerationRequest, func(string) error) error {
+			return ai.ErrModelUnavailable
+		},
+	})
+	if err != nil {
+		return err
+	}
+	messages, err := ai.NewMessagesHTTP(conversation, s.aiActorContext, s.aiCommitGate)
+	if err != nil {
+		return err
+	}
+	events, err := ai.NewMessageEventsHTTP(conversation, s.aiActorContext, s.aiCommitGate)
+	if err != nil {
+		return err
+	}
+	management, err := ai.NewManagementHTTP(sessions, s.aiAuthenticate, s.aiExecuteTool)
+	if err != nil {
+		return err
+	}
+	s.AI = sessions
+	s.AIConversation = conversation
+	s.AIMessagesHTTP = messages
+	s.AIEventsHTTP = events
+	s.AIManagement = management
+	return nil
+}
+
+func newAISessionStore(db *storage.DB, recorder *audit.SQLRecorder) (*ai.SQLSessionStore, error) {
+	read := func(ctx context.Context, queryer storage.Queryer, query string, args ...any) ([]byte, error) {
+		var payload []byte
+		err := queryer.QueryRow(ctx, query, args...).Scan(&payload)
+		return payload, err
+	}
+	backend := ai.SessionSQLBackend{
+		Read: func(ctx context.Context, query string, args ...any) ([]byte, error) {
+			return read(ctx, db, query, args...)
+		},
+		InTx: func(ctx context.Context, fn func(ai.SessionSQLStatements) error) error {
+			return db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+				statements := ai.SessionSQLStatements{
+					Read: func(readCtx context.Context, query string, args ...any) ([]byte, error) {
+						return read(readCtx, tx, query, args...)
+					},
+					Exec: func(execCtx context.Context, query string, args ...any) (int64, error) {
+						result, err := tx.Exec(execCtx, query, args...)
+						if err != nil {
+							return 0, err
+						}
+						return result.RowsAffected()
+					},
+					AppendAudit: func(auditCtx context.Context, events []ai.SessionAuditEvent) error {
+						for _, event := range events {
+							result := event.Result
+							if result == "" {
+								result = "success"
+							}
+							if err := recorder.AppendTx(auditCtx, tx, audit.Event{
+								SubjectID: event.SubjectID,
+								Action:    event.Action,
+								Result:    result,
+								RequestID: newRequestID(),
+								NodeIDs:   append([]string{}, event.NodeIDs...),
+								Source:    audit.SourceAI,
+								At:        event.At.UTC(),
+							}); err != nil {
+								return err
+							}
+						}
+						return nil
+					},
+				}
+				return fn(statements)
+			})
+		},
+	}
+	return ai.NewSQLSessionStore(backend)
+}
+
+func (s *Server) aiSessionAccess(ctx context.Context, _ string, _ string) (ai.SessionActor, error) {
+	actor, recheck, ok := ai.ActorFromContext(ctx)
+	if !ok || actor.SubjectID == "" || !actor.HumanWeb {
+		return ai.SessionActor{}, ai.ErrToolDenied
+	}
+	if recheck != nil {
+		if err := recheck(ctx); err != nil {
+			return ai.SessionActor{}, ai.ErrToolDenied
+		}
+	}
+	return actor, nil
+}
+
+func (s *Server) aiAuthority(ctx context.Context, subject, action string) (ai.CurrentAuthority, error) {
+	current := ai.CurrentAuthority{SubjectID: subject, GroupMembers: map[string][]string{}}
+	if err := s.Identity.AuthorizeSubjectAction(ctx, subject, action); err == nil {
+		current.AllowedTools = []string{action}
+	}
+	list, err := s.NodesRepo.List(ctx)
+	if err != nil {
+		return ai.CurrentAuthority{}, err
+	}
+	for _, node := range list {
+		if err := s.Identity.Authorize(ctx, auth.Check{SubjectID: subject, Action: action, NodeIDs: []string{node.ID}}); err == nil {
+			current.AllowedNodes = append(current.AllowedNodes, node.ID)
+		}
+	}
+	groups, err := s.ServiceGroupsRepo.List(ctx)
+	if err != nil {
+		return ai.CurrentAuthority{}, err
+	}
+	for _, group := range groups {
+		members := make([]string, 0, len(group.Members))
+		for _, member := range group.Members {
+			members = append(members, member.NodeID)
+		}
+		current.GroupMembers[group.ID] = members
+	}
+	return current, nil
+}
+
+func (s *Server) aiAuthenticate(r *http.Request) (ai.Principal, error) {
+	identity, requestID, err := s.authenticateIdentity(r)
+	if err != nil {
+		return ai.Principal{}, err
+	}
+	secret, err := auth.SessionCredential(r)
+	if err != nil {
+		return ai.Principal{}, err
+	}
+	principal := ai.Principal{SubjectID: identity.SubjectID, RequestID: requestID, Administrator: identity.Administrator}
+	// Read-only observation avoids a nested writer while the AI session store
+	// already holds its DS transaction.
+	principal.Recheck = func(ctx context.Context) error {
+		return s.Identity.CheckObservationReadOnly(ctx, secret, identity)
+	}
+	return principal, nil
+}
+
+func (s *Server) aiActorContext(r *http.Request) (context.Context, error) {
+	principal, err := s.aiAuthenticate(r)
+	if err != nil {
+		return nil, err
+	}
+	actor := ai.SessionActor{SubjectID: principal.SubjectID, HumanWeb: true, CanFullAccess: principal.Administrator, Administrator: principal.Administrator}
+	return ai.WithActor(r.Context(), actor, principal.Recheck), nil
+}
+
+func (s *Server) aiCommitGate(ctx context.Context) error {
+	_, recheck, ok := ai.ActorFromContext(ctx)
+	if !ok || recheck == nil {
+		return auth.ErrDenied
+	}
+	return recheck(ctx)
+}
+
+func (s *Server) aiExecuteTool(ctx context.Context, request ai.ToolExecutionRequest) (ai.ToolExecutionResult, error) {
+	actor, _, ok := ai.ActorFromContext(ctx)
+	if !ok || actor.SubjectID == "" {
+		return ai.ToolExecutionResult{}, ai.ErrToolDenied
+	}
+	class := tasks.OperationClassModifying
+	switch {
+	case request.RootShell:
+		class = tasks.OperationClassRoot
+	case request.ToolID == "tasks.command":
+		class = tasks.OperationClassStandard
+	}
+	task, err := s.Tasks.Submit(ctx, tasks.SubmitRequest{
+		SubjectID:       actor.SubjectID,
+		RequestID:       newRequestID(),
+		Name:            "ai " + request.ToolID,
+		ActionID:        request.ToolID,
+		OperationClass:  class,
+		TargetType:      "node_ids",
+		TargetNodeIDs:   append([]string{}, request.NodeIDs...),
+		CanonicalParams: append([]byte(nil), request.Parameters...),
+		ScopeRevision:   request.ScopeRevision,
+		Source:          audit.SourceAI,
+	})
+	if err != nil {
+		if errors.Is(err, auth.ErrDenied) || errors.Is(err, tasks.ErrInvalidTask) {
+			return ai.ToolExecutionResult{}, ai.ErrToolDenied
+		}
+		return ai.ToolExecutionResult{}, ai.ErrExecutionUnavailable
+	}
+	return ai.ToolExecutionResult{TaskID: task.ID, State: "queued"}, nil
+}
+
+// canonicalToolParameters enforces the flat string map used by the sole task
+// service. AI-supplied nested or numeric parameters are rejected, not coerced.
+func canonicalToolParameters(raw json.RawMessage) (json.RawMessage, error) {
+	if len(raw) == 0 || len(raw) > 64<<10 {
+		return nil, ai.ErrToolDenied
+	}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.UseNumber()
+	var value any
+	if err := decoder.Decode(&value); err != nil {
+		return nil, ai.ErrToolDenied
+	}
+	if _, err := decoder.Token(); err != io.EOF {
+		return nil, ai.ErrToolDenied
+	}
+	object, ok := value.(map[string]any)
+	if !ok || len(object) == 0 {
+		return nil, ai.ErrToolDenied
+	}
+	flat := make(map[string]string, len(object))
+	for key, item := range object {
+		text, ok := item.(string)
+		if !ok {
+			return nil, ai.ErrToolDenied
+		}
+		flat[key] = text
+	}
+	canonical, err := json.Marshal(flat)
+	if err != nil {
+		return nil, ai.ErrToolDenied
+	}
+	return canonical, nil
+}
+
+func (s *Server) aiContentFilter(_ context.Context, _ ai.SessionView, _ string, text string) (string, error) {
+	if strings.Contains(text, "-----BEGIN") && strings.Contains(text, "PRIVATE KEY-----") {
+		return "", ai.ErrToolDenied
+	}
+	text = redactAISecrets(text)
+	return text, nil
+}
+
+func redactAISecrets(text string) string {
+	lines := strings.Split(text, "\n")
+	out := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		lower := strings.ToLower(trimmed)
+		if strings.HasPrefix(lower, "authorization:") || strings.HasPrefix(lower, "cookie:") || strings.HasPrefix(lower, "set-cookie:") {
+			out = append(out, "[redacted credential header]")
+			continue
+		}
+		if index := strings.Index(trimmed, "Bearer "); index >= 0 {
+			line = line[:index] + "Bearer [redacted]"
+		}
+		if index := strings.Index(line, "sk-"); index >= 0 {
+			line = line[:index] + "sk-[redacted]"
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}

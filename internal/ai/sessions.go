@@ -18,6 +18,7 @@ var ErrScopeConflict = errors.New("ai: scope revision conflict")
 type SessionActor struct {
 	SubjectID               string
 	HumanWeb, CanFullAccess bool
+	Administrator           bool
 }
 type SessionAccess func(context.Context, string, string) (SessionActor, error)
 type SessionAuthorityReader func(context.Context, string, string) (CurrentAuthority, error)
@@ -65,6 +66,7 @@ type SessionView struct {
 type sessionRecord struct {
 	Scope        Scope
 	Grants       map[string]ResourceGrant
+	Approvals    map[string]approvalRecord `json:",omitempty"`
 	Created      time.Time
 	Closed       bool
 	Conversation *conversationRecord `json:",omitempty"`
@@ -174,6 +176,13 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 			record.Grants = map[string]ResourceGrant{}
 			st.Sessions[id] = record
 		}
+		if record.Approvals == nil {
+			record.Approvals = map[string]approvalRecord{}
+			st.Sessions[id] = record
+		}
+		if err := validateApprovals(record); err != nil {
+			return nil, err
+		}
 	}
 	return st, nil
 }
@@ -231,7 +240,7 @@ func (s *SessionService) change(ctx context.Context, fn func(*sessionState, time
 		}
 		return out, nil
 	})
-	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired, ErrGenerationUnknown, ErrModelUnavailable, ErrModelRevisionConflict} {
+	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired, ErrApprovalExpired, ErrGenerationUnknown, ErrModelUnavailable, ErrModelRevisionConflict} {
 		if errors.Is(err, kind) {
 			return kind
 		}
@@ -383,7 +392,7 @@ func (s *SessionService) Create(ctx context.Context) (SessionView, error) {
 			return err
 		}
 		scope, _ := NewScope(id, actor.SubjectID)
-		record := sessionRecord{Scope: scope, Grants: map[string]ResourceGrant{}, Created: now}
+		record := sessionRecord{Scope: scope, Grants: map[string]ResourceGrant{}, Approvals: map[string]approvalRecord{}, Created: now}
 		st.Sessions[id] = record
 		result, err = s.view(ctx, record, now)
 		if err != nil {
