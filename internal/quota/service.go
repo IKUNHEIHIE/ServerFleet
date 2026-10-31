@@ -152,6 +152,25 @@ func (s *Service) GetUsage(ctx context.Context, subjectID, nodeID string, period
 	return usage, true, nil
 }
 
+// LatestUsage returns the most recent stored period for one node. found=false
+// means no sample exists and must never be rendered as zero usage.
+func (s *Service) LatestUsage(ctx context.Context, subjectID, nodeID string) (Usage, bool, error) {
+	if !validToken(nodeID, 128) {
+		return Usage{}, false, ErrInvalidUsage
+	}
+	if err := s.authorizeRead(ctx, subjectID, nodeID, "usage_latest"); err != nil {
+		return Usage{}, false, err
+	}
+	usage, err := s.repo.LatestUsage(ctx, nodeID)
+	if errors.Is(err, ErrUsageNotFound) {
+		return Usage{}, false, nil
+	}
+	if err != nil {
+		return Usage{}, false, err
+	}
+	return usage, true, nil
+}
+
 func (s *Service) GetPolicy(ctx context.Context, subjectID, nodeID string) (Policy, bool, error) {
 	if !validToken(nodeID, 128) {
 		return Policy{}, false, ErrInvalidPolicy
