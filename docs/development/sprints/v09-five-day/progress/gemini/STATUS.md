@@ -2,6 +2,8 @@
 
 分支 `feature/v09-console-gm02`；目录 `D:\admin\desktop\codex\myproject\ks\.worktrees\feature--v09-console-gm02`；基线 `8a7dd4707d2d7e142e137d098296788d2c80eddd`。
 
+> **Wave 4（gemini-04）**：起始基线 `0f9a75e416a82a9589a29d4d9cf8a52bf0266066`（main，总控已挂载 Wave 3 全部路由）。本轮交付见文末「Wave 4 检查点（gemini-04）」一节。
+
 ## 检查点
 
 | 检查点 | SHA | 范围 | 页面/接口 | 测试 | 阻塞 |
@@ -121,3 +123,24 @@ GM-01—GM-09 全部检查点已提交。最终 HEAD 与未完成清单见 `ACCE
 - 监控可用性探测（`/api/v1/availability-monitors`）与任务 `resume` 在当前 `main` 基线尚未挂载（DS-W3/CX-W3 范围），界面显示诚实错误分类；不阻塞本轮验收。
 
 Wave 3 全部工作收束于基线 `98f39e0` 之上的单一提交 `feat(web): adapt console to real controller contract and add live browser acceptance`（分支 feature/v09-console-gm02 HEAD，本文件与该提交同时落盘，故不写自身 SHA）；工作树干净，未修改任何 Go 源码、`package.json`、`vite.config.ts` 或公共契约文件。
+
+## Wave 4 检查点（gemini-04 · 起始基线 `0f9a75e`）
+
+| 任务 | 内容 | 结果 |
+|---|---|---|
+| GM-W4-01 | 扩展 `tests/browser/v09/run-live-controller-acceptance.mjs`（32→58 步）：在真实 Go Controller + SQLite WAL + HTTPS 上实测 Wave 3 新增接线模块——31/32/33 节点详情（身份/能力/诊断）与流量配额 PUT/GET、34/35/36 监控与流量风险（创建/暂停/风险源）、37 证书分发列表、38/39/40 发布向导（调度资格诚实门控 + preview eligible + 三阶段发布计划与列表）、41–46 AI（安全策略、零授权会话、node-alpha 会话授权、审批策略切换、一次性审批创建+决策、受控执行 202）、47/48 插件中心（repository/catalog/已安装 + 刷新目录诚实 501）、49 Xray 门控、50–52 更新中心（503 诚实 + 作业空态）、53–55 备份校验（VACUUM INTO 真实备份夹具）与恢复预演 fail-closed、56 新域审计动作落盘；管理员授权新增 `monitoring.*`/`quota.*`/`certificates.read`/`publishing.*`/`tasks.command`/`host.patch` | **58/58 PASS**；截图 `evidence/live/live-16..32-*.png` |
+| GM-W4-02 | 真后端联调发现的契约差异在 `apps/web` 对齐（详见 SHARED-CHANGES §13）：节点详情 404 → 子资源独立加载 + 列表摘要回退；生命周期请求去除 `expectedRevision`（真实后端 400 `revision_not_supported`）；监控 POST/PATCH 白名单请求体（真实后端 `DisallowUnknownFields`）；`compat.normalizeInstalledPlugin/normalizePluginList`（真实 `phase` → `status` 归一）；客户端兼容嵌套 `error.code`；`TrafficQuota` 重置日/时区/来源改可选并诚实显示「未返回」；`NodeCapabilities` 协议版本改可选；目录刷新失败补错误提示；备份校验文案去除硬编码 202 | Vitest 36 文件 / **316 项 PASS**（新增 10 项）；typecheck PASS |
+| GM-W4-03 | 新增 `AC-EVIDENCE-WAVE4.md` 逐条登记 AC-01~24 的页面、Vitest、Stub/Live 步骤与截图；更新 `STATUS.md`/`SHARED-CHANGES.md`/`ACCEPTANCE.md` | 完成 |
+
+### Wave 4 验证结果
+
+- `node tests/browser/v09/run-acceptance.mjs` → **16/16 PASS**（Stub 契约与退化场景回归）。
+- `node tests/browser/v09/run-live-controller-acceptance.mjs` → **58/58 PASS**（真实 Controller + SQLite WAL + HTTPS）。
+- `npm run check` / `npm run check:security` → PASS（本轮收尾门禁，输出见提交说明）。
+
+### Wave 4 边界说明
+
+- 组合运行时未注入的适配器按服务端语义诚实失败并断言：更新源/计划器 503、插件目录源 501、网关 Checker 缺失 503、恢复预演 `target_identity_not_observed`/`fencing_evidence_unavailable` 未通过且恢复作业保持禁用。
+- 监控创建使用公网样式目标：服务端 SSRF 策略（`internal/monitoring/ssrf.go`）拒绝 `.internal` 等内网后缀，第一轮联调以 `invalid_request` 实证后调整，前端可见具体错误码。
+- AI 消息生成未接模型（`ErrModelUnavailable`）；AI 会话的 approval-events 与 recommendation decision 路由在当前 `server.go` 未注册，界面显示诚实加载失败（登记 SHARED-CHANGES §13.3）。
+- 未修改任何 Go 文件、公共契约、`package.json`/锁文件或 CI 配置；`apps/web/dist` 为构建产物不入库。

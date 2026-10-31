@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, TextArea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { CodeBlock, DefinitionList } from "@/components/ui/table";
+import { DefinitionList } from "@/components/ui/table";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi } from "@/lib/api/endpoints";
@@ -54,12 +54,16 @@ function IdentityBody({ identity }: { readonly identity: NodeIdentity }) {
 }
 
 function CapabilitiesBody({ capabilities }: { readonly capabilities: NodeCapabilities }) {
+  const protocol = capabilities.protocolMajor === undefined || capabilities.protocolMinor === undefined
+    ? "未返回（当前 Controller 不记录协议版本）"
+    : `${capabilities.protocolMajor}.${capabilities.protocolMinor}`;
   return (
     <div className="space-y-3 px-5 py-4 text-sm">
       <p>
-        协议版本：{capabilities.protocolMajor}.{capabilities.protocolMinor}
+        协议版本：{protocol}
         {capabilities.observedAt ? ` · 观察于 ${capabilities.observedAt}` : ""}
       </p>
+      {capabilities.message ? <p className="text-xs text-muted-foreground">{capabilities.message}</p> : null}
       {capabilities.capabilities.length === 0 ? (
         <p className="text-muted-foreground">服务端未返回任何能力项。</p>
       ) : (
@@ -121,7 +125,10 @@ function DiagnosticBody({ diagnostic }: { readonly diagnostic: NodeDiagnostic })
 }
 
 function QuotaBody({ quota }: { readonly quota: TrafficQuota }) {
-  const sourceText = quota.source === "agent_estimate" ? "Agent 估算（非云账单）" : "供应商账单";
+  // 真实 Controller 只持久化限额/预警/到期/方向；重置日、时区与来源可能不回传（GM-W4-02）。
+  const sourceText = quota.source === "agent_estimate"
+    ? "Agent 估算（非云账单）"
+    : quota.source === "provider_billing" ? "供应商账单" : "未返回";
   return (
     <div className="space-y-3 px-5 py-4 text-sm">
       <DefinitionList
@@ -129,7 +136,12 @@ function QuotaBody({ quota }: { readonly quota: TrafficQuota }) {
         items={[
           { term: "配额 (GB)", value: quota.quotaGb },
           { term: "已用 (GB)", value: quota.usedGb === undefined ? "缺失（离线或未采集）" : quota.usedGb },
-          { term: "周期重置日", value: `每月 ${quota.cycleResetDay} 日 · ${quota.timezone}` },
+          {
+            term: "周期重置日",
+            value: quota.cycleResetDay === undefined
+              ? "未返回（当前 Controller 不持久化重置日/时区）"
+              : `每月 ${quota.cycleResetDay} 日 · ${quota.timezone ?? "未返回"}`,
+          },
           { term: "方向", value: quota.direction },
           { term: "来源", value: sourceText },
           { term: "数据完整", value: quota.dataComplete === undefined ? "未知" : quota.dataComplete ? "是" : "否（存在缺口）" },
@@ -161,40 +173,40 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
   const detail = useResource(`node:detail:${session.viewEpoch}:${nodeId}`, signal =>
     nodesApi.detail(nodeId, signal).then(result => result.data),
   );
-  const ready = detail.state.status === "ready";
+  // 真实 Controller 只暴露 identity/capabilities/diagnostics 子资源，没有
+  // `GET /api/v1/nodes/{id}` 详情路由（GM-W4-02）：子资源不再门控在详情 ready 之后，
+  // 独立加载、独立展示错误；详情 404 时元数据面板回退为节点列表中的真实摘要，不编造字段。
+  const detailMissing = detail.state.status === "error" && detail.state.error.status === 404;
   const identity = useResource(
     `node:identity:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.identity(nodeId, signal).then(result => result.data),
-    { enabled: ready },
   );
   const capabilities = useResource(
     `node:capabilities:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.capabilities(nodeId, signal).then(result => result.data),
-    { enabled: ready },
   );
   const diagnostic = useResource(
     `node:diagnostics:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.diagnostics(nodeId, signal).then(result => result.data),
-    { enabled: ready },
   );
   const quota = useResource(
     `node:quota:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.trafficQuota(nodeId, signal).then(result => result.data),
-    { enabled: ready },
   );
-  const suspendAction = useAction((body: { reason: string; expectedRevision?: number }) =>
-    nodesApi.suspend(nodeId, body),
-  );
-  const revokeAction = useAction((body: { reason: string; expectedRevision?: number }) => nodesApi.revoke(nodeId, body));
+  // 真实 Controller 在节点未配置配额时返回 404 quota_not_found；这是“尚未配置”而非加载失败，
+  // 据此展示诚实空态并允许首次创建（GM-W4-02）。其余错误仍按失败展示。
+  const quotaMissing = quota.state.status === "error" && quota.state.error.status === 404;
+  const quotaEditable = quota.state.status === "ready" || quotaMissing;
+  // 真实后端拒绝节点生命周期请求携带 expectedRevision（节点清单无持久化 revision，
+  // 返回 `revision_not_supported`），因此只提交 reason，不伪造乐观锁（GM-W4-02）。
+  const suspendAction = useAction((body: { reason: string }) => nodesApi.suspend(nodeId, body));
+  const revokeAction = useAction((body: { reason: string }) => nodesApi.revoke(nodeId, body));
   const actionPending = suspendAction.pending || revokeAction.pending;
   const actionError = suspendAction.error ?? revokeAction.error;
 
   async function submitAction() {
-    if (!actionKind || detail.state.status !== "ready") return;
-    const body = {
-      reason: reason.trim(),
-      expectedRevision: detail.state.data.revision,
-    };
+    if (!actionKind) return;
+    const body = { reason: reason.trim() };
     const result = actionKind === "revoke" ? await revokeAction.run(body) : await suspendAction.run(body);
     if (result.ok) {
       setOutcome(actionKind === "revoke" ? "节点身份已吊销（服务端结果）。" : "已提交暂停请求（服务端结果）。");
@@ -206,6 +218,13 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
       diagnostic.reload();
     }
   }
+
+  // 详情端点未提供时的诚实回退：只展示节点列表返回的真实摘要字段。
+  const summary = useResource(
+    `node:summary:${session.viewEpoch}:${nodeId}`,
+    signal => nodesApi.list({ signal }).then(result => result.data.items.find(item => item.id === nodeId) ?? null),
+    { enabled: detailMissing },
+  );
 
   return (
     <div className="space-y-5">
@@ -255,15 +274,47 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
       ) : null}
 
       <Panel title="节点元数据" description="GET /api/v1/nodes/{nodeId}">
-        <AsyncPanel
-          state={detail.state}
-          onRetry={detail.reload}
-          errorTitle="节点详情加载失败"
-          empty={<p className="px-6 py-8 text-sm text-muted-foreground">未找到该节点。</p>}
-          isEmpty={() => false}
-        >
-          {data => <DetailBody detail={data} />}
-        </AsyncPanel>
+        {detailMissing ? (
+          <>
+            <Notice tone="info" title="详情端点未提供">
+              当前 Controller 未实现 GET /api/v1/nodes/&#123;nodeId&#125;；以下字段来自节点列表返回的真实摘要，
+              不展示候选契约中的 revision/platform/agentVersion。
+            </Notice>
+            <AsyncPanel
+              state={summary.state}
+              onRetry={summary.reload}
+              errorTitle="节点摘要加载失败"
+              empty={<p className="px-6 py-8 text-sm text-muted-foreground">节点列表中没有该节点（可能未授权或已删除）。</p>}
+              isEmpty={data => data === null}
+            >
+              {data =>
+              data === null ? null : (
+                <DefinitionList
+                  items={[
+                    { term: "显示名称", value: data.name.trim() || data.id },
+                    { term: "节点 ID", value: <span className="font-mono text-xs">{data.id}</span> },
+                    { term: "在线状态", value: data.online ? "在线" : "离线" },
+                    { term: "区域", value: data.region ?? "未返回" },
+                    { term: "供应商", value: data.provider ?? "未返回" },
+                    { term: "IP", value: data.ip ?? "未返回" },
+                    { term: "标签", value: data.tags?.join("、") || "未设置" },
+                  ]}
+                />
+              )
+            }
+            </AsyncPanel>
+          </>
+        ) : (
+          <AsyncPanel
+            state={detail.state}
+            onRetry={detail.reload}
+            errorTitle="节点详情加载失败"
+            empty={<p className="px-6 py-8 text-sm text-muted-foreground">未找到该节点。</p>}
+            isEmpty={() => false}
+          >
+            {data => <DetailBody detail={data} />}
+          </AsyncPanel>
+        )}
       </Panel>
 
       <div className="grid gap-5 xl:grid-cols-2">
@@ -289,16 +340,22 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
             <Button
               type="button"
               size="sm"
-              disabled={!canManageQuota || session.writesLocked || quota.state.status !== "ready"}
+              disabled={!canManageQuota || session.writesLocked || !quotaEditable}
               onClick={() => setQuotaOpen(true)}
             >
               编辑配额
             </Button>
           }
         >
-          <AsyncPanel state={quota.state} onRetry={quota.reload} errorTitle="流量配额加载失败">
-            {data => <QuotaBody quota={data} />}
-          </AsyncPanel>
+          {quotaMissing ? (
+            <p className="px-5 py-8 text-sm text-muted-foreground">
+              服务端尚未配置该节点的流量配额（404 quota_not_found）；点击“编辑配额”创建，提交前不预填任何服务端数值。
+            </p>
+          ) : (
+            <AsyncPanel state={quota.state} onRetry={quota.reload} errorTitle="流量配额加载失败">
+              {data => <QuotaBody quota={data} />}
+            </AsyncPanel>
+          )}
         </Panel>
       </div>
 
@@ -371,9 +428,10 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
               我理解吊销身份不可恢复，且不会自动回滚在途任务。
             </label>
           ) : null}
-          <CodeBlock label="当前 revision">
-            {detail.state.status === "ready" ? String(detail.state.data.revision) : "未加载"}
-          </CodeBlock>
+          <p className="text-xs text-muted-foreground">
+            当前 Controller 的节点生命周期操作不接受 expectedRevision（节点清单无持久化版本号）；
+            暂停/吊销以服务端审计与权限校验为准。
+          </p>
         </div>
       </Modal>
     </div>

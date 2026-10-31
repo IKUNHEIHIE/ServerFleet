@@ -103,3 +103,42 @@ node apps/web/acceptance/cdp-driver.mjs shot <file.png> [w h]     # 截图（可
 5. **桩 SSE 与任务快照不同步**（见第 3 节），仅影响验收观感，不影响前端投影规则。
 
 截图位于 `progress/gemini/evidence/`，共 22 张；均由 headless Chrome 在 127.0.0.1 上对上述构建拍摄。
+
+---
+
+# GM-W4-01 · 真实 Controller + SQLite WAL + HTTPS 端到端验收（gemini-04 · Wave 4）
+
+- 验收对象：`apps/web/dist` 生产构建 + `go build ./apps/controller`（基线 `0f9a75e`，含 Wave 3 全部接线模块）。
+- 脚本：`tests/browser/v09/run-live-controller-acceptance.mjs`（自动构建 → 启动真实 Controller（`-db 临时 SQLite WAL` + 自签 TLS + 同源托管 dist 并转发 `/api/*`）→ 本机安装器写入 setup token/播种节点/生成 VACUUM INTO 备份 → Headless Edge 全链路）。
+- 复现：`node tests/browser/v09/run-live-controller-acceptance.mjs [--out <目录>] [--skip-build] [--keep]`
+- 结果：**58/58 步 PASS**（第一轮 49/58，暴露 9 项契约差异，全部在 `apps/web` 内修复后复跑全绿；见 `SHARED-CHANGES.md` §13）。
+
+## 步骤 31–56（本轮新增，截图 `evidence/live/live-16..32-*.png`）
+
+| 步骤 | 模块 | 真实后端交互 | 断言要点 |
+|---|---|---|---|
+| 31–33 | 节点详情/流量配额 | `GET nodes/{id}/{identity,capabilities,diagnostics}`、`PUT/GET nodes/{id}/traffic-quota` | 身份/能力/诊断渲染；未配置配额显示诚实空态（404 quota_not_found）；配置 500GB 后 PUT/GET 一致 |
+| 34–36 | 监控与流量风险 | `GET/POST/PATCH /api/v1/monitoring/availability-monitors`、`GET …/traffic-risks` | 授权节点行 + 风险源读取；创建 201；暂停后列表显示“已暂停”（白名单 PATCH 体） |
+| 37 | 证书 | `GET /api/v1/certificates/internal/distributions` | 诚实空态 |
+| 38–40 | 服务发布 | `POST /api/v1/publishing/preview`、`POST /api/v1/publishing/publications` | 向导按服务端调度资格诚实门控；同源 fetch 实测 preview eligible=true（目标快照含 node-alpha）、创建 202 queued 三阶段计划并出现在发布记录 |
+| 41–46 | AI | `GET /ai/security-policy`、`POST /ai/sessions`、`POST …/grants`、`PATCH …/approval-policy`、`POST …/approvals(+decision)`、`POST /api/v1/ai/tools/execute` | 默认拒绝策略声明；零授权会话；授权 node-alpha（注册工具 tasks.command）；模式切换往返；一次性审批创建→批准（canonicalArgumentsHash）→受控执行 202 queued |
+| 47–49 | 插件/Xray | `GET/PUT /api/v1/plugins{,/repository,/catalog}`、`POST …/catalog/refresh`、`GET /api/v1/plugins/xray-manager` | 来源 official、目录/已安装诚实空态；刷新目录 501 错误码可见；未启用时 Xray 控制台被门控拦截 |
+| 50–52 | 更新中心 | `POST /api/v1/system/updates/{check,plan}`、`GET …/jobs` | 503 UPDATE_SOURCE_UNAVAILABLE / UPDATE_PLANNER_UNAVAILABLE 诚实展示；作业空态 |
+| 53–55 | 备份恢复 | `POST /api/v1/backups/{id}/verify`、`POST /api/v1/disaster-recovery/preview` | VACUUM INTO 真实备份通过 backup_integrity；勾选 fenced 后预演仍返回 target_identity_not_observed / fencing_evidence_unavailable 未通过；创建恢复作业保持禁用（fail-closed） |
+| 56 | 审计 | `GET /api/v1/audit/events` | monitoring.update / quota.policy / publishing.plan_create / ai.sessions.create / ai.sessions.grant 全部落盘 |
+
+## 与候选契约的差异处理（全部在 `apps/web` 消化，详见 SHARED-CHANGES §13）
+
+1. 无 `GET /api/v1/nodes/{id}` 详情路由 → 子资源独立加载 + 列表摘要诚实回退。
+2. 节点生命周期拒绝 `expectedRevision` → 前端只提交 `{reason}`。
+3. 监控 POST/PATCH `DisallowUnknownFields` → 白名单请求体。
+4. 插件 `phase`→`status` 归一（compat 单测覆盖）。
+5. 嵌套 `error.code` 提取，UI 显示具体错误码。
+6. 流量配额精简响应字段诚实显示「未返回」。
+7. 监控目标 SSRF 策略拒绝内网后缀（实证 `invalid_request`），验收改用公网样式目标。
+
+## 仍然不能声称的部分（Wave 4 后依旧）
+
+- 组合运行时未注入的适配器按服务端语义诚实失败：更新源/计划器 503、插件目录源 501、发布器缺失（计划停留 queued）、网关 Checker 缺失（路由 503、网关不可调度）、AI 模型生成 503、Agent 派发器缺失（审批后停留 queued）。
+- AI 会话 approval-events / 推荐 decision 路由未在 `server.go` 挂载（CX Wave 4 集成范围），界面显示诚实 404。
+- 真实供应商（Cloudflare）、真实 Nginx/Xray 实机、真实 Agent 入网与心跳、公网证书 ACME：UNTESTED。

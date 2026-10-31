@@ -40,10 +40,12 @@ export function NodeQuotaEditor({
   useEffect(() => {
     if (!open || !quota) return;
     setQuotaGb(String(quota.quotaGb));
-    setCycleResetDay(String(quota.cycleResetDay));
-    setTimezone(quota.timezone);
+    // 真实 Controller 不回传重置日/时区/来源（接受但不持久化）；缺失时回退本编辑器默认值，
+    // 不伪造服务端数值（GM-W4-02）。
+    setCycleResetDay(quota.cycleResetDay === undefined ? "1" : String(quota.cycleResetDay));
+    setTimezone(quota.timezone ?? "UTC");
     setDirection(quota.direction);
-    setSource(quota.source);
+    setSource(quota.source ?? "agent_estimate");
     setThresholds(quota.thresholdsPct?.join(",") ?? "70,85,95");
     setExpiryType(quota.expiryType ?? "");
     setExpiresAt(quota.expiresAt ? quota.expiresAt.slice(0, 16) : "");
@@ -130,7 +132,7 @@ export function NodeQuotaEditor({
           <Field label="到期时间（可选）">{ids => <TextInput id={ids.inputId} type="datetime-local" value={expiresAt} onChange={event => setExpiresAt(event.target.value)} />}</Field>
           <Field label="提醒天数（逗号分隔）">{ids => <TextInput id={ids.inputId} value={remindDays} onChange={event => setRemindDays(event.target.value)} />}</Field>
         </div>
-        <p className="text-xs text-muted-foreground">默认仅提醒；数据缺失不按 0 处理。修改后仍需服务端按当前权限与周期重新计算风险。</p>
+        <p className="text-xs text-muted-foreground">默认仅提醒；数据缺失不按 0 处理。当前 Controller 只持久化限额/预警/到期/方向；重置日、时区、到期类型与提醒天数仅为兼容字段，服务端可能不回传。</p>
       </div>
     </Modal>
   );

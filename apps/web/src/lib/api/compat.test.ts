@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { ApiError } from "./errors";
 import {
   normalizeDnsProviders,
+  normalizeInstalledPlugin,
   normalizeListPage,
+  normalizePluginList,
   normalizeTaskExecutions,
   normalizeTransferItem,
   normalizeZoneSync,
@@ -151,5 +153,66 @@ describe("normalizeTransferItem", () => {
   it("drops invalid bytes and rejects non-object entries", () => {
     expect(normalizeTransferItem({ sourcePath: "/a", status: "copied", bytesCopied: "many" }, "t")).toEqual({ path: "/a", state: "copied" });
     expect(() => normalizeTransferItem("nope", "t")).toThrow(ApiError);
+  });
+});
+
+describe("normalizeInstalledPlugin", () => {
+  it("maps the real controller lifecycle phase onto an honest status", () => {
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "1.0.0", installed: true, enabled: false, phase: "installed_disabled", revision: 3 },
+      "plugin",
+    )).toMatchObject({ id: "xray-manager", version: "1.0.0", status: "installed_disabled", enabled: false, revision: 3 });
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "1.0.0", installed: true, enabled: false, phase: "disabled" },
+      "plugin",
+    )).toMatchObject({ status: "installed_disabled" });
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "1.0.0", installed: true, enabled: true, phase: "enabled", source: "github.com/serverfleet/xray-plugin" },
+      "plugin",
+    )).toMatchObject({ status: "enabled", enabled: true, source: "github.com/serverfleet/xray-plugin" });
+  });
+
+  it("keeps the candidate status enum untouched", () => {
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "2.0.0", status: "enabled", enabled: true, sourceCommit: "abc123" },
+      "plugin",
+    )).toEqual({ id: "xray-manager", version: "2.0.0", status: "enabled", enabled: true, source: "abc123" });
+  });
+
+  it("carries transitional and unknown runtime phases verbatim", () => {
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "1.0.0", enabled: true, phase: "stopping" }, "plugin",
+    ).status).toBe("stopping");
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "1.0.0", enabled: true, phase: "runtime_unknown" }, "plugin",
+    ).status).toBe("runtime_unknown");
+    expect(normalizeInstalledPlugin(
+      { id: "xray-manager", version: "1.0.0", enabled: false, phase: "stop_unknown" }, "plugin",
+    ).status).toBe("stop_unknown");
+  });
+
+  it("rejects unknown shapes instead of inventing a status", () => {
+    expect(() => normalizeInstalledPlugin({ id: "x", version: "1", enabled: true, phase: "warp_drive" }, "plugin")).toThrow(ApiError);
+    expect(() => normalizeInstalledPlugin({ id: "x", version: "1", enabled: true }, "plugin")).toThrow(ApiError);
+    expect(() => normalizeInstalledPlugin({ id: "x", enabled: true, phase: "enabled" }, "plugin")).toThrow(ApiError);
+    expect(() => normalizeInstalledPlugin({ id: "x", version: "1", phase: "enabled" }, "plugin")).toThrow(ApiError);
+    expect(() => normalizeInstalledPlugin(null, "plugin")).toThrow(ApiError);
+  });
+});
+
+describe("normalizePluginList", () => {
+  it("normalizes each installed entry", () => {
+    const result = normalizePluginList(
+      { items: [{ id: "xray-manager", version: "1", enabled: false, phase: "installed_disabled" }] },
+      "installed plugins",
+    );
+    expect(result.items).toHaveLength(1);
+    expect(result.items[0].status).toBe("installed_disabled");
+  });
+
+  it("rejects a list with any invalid entry", () => {
+    expect(() => normalizePluginList({ items: [{ id: "x", version: "1", enabled: true }] }, "installed plugins")).toThrow(ApiError);
+    expect(() => normalizePluginList({ items: "all" }, "installed plugins")).toThrow(ApiError);
+    expect(() => normalizePluginList(null, "installed plugins")).toThrow(ApiError);
   });
 });

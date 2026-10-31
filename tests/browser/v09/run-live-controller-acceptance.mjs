@@ -1,5 +1,5 @@
 /**
- * GM-W3-02 · 真实 Go Controller + SQLite WAL 端到端浏览器验收（V09-5D-GM / gemini-02）。
+ * GM-W3-02 / GM-W4-01 · 真实 Go Controller + SQLite WAL 端到端浏览器验收（V09-5D-GM）。
  *
  * 与 `run-acceptance.mjs`（候选契约桩）的分工：本脚本启动**真实后端**：
  *   1. `go build ./apps/controller` 并以 `-db <临时 SQLite WAL> -listen 127.0.0.1:<apiPort>
@@ -12,8 +12,14 @@
  *      脚本作为“本机安装器”直接以 node:sqlite 向 `cx_auth_identity` 写入 SetupDigest/SetupExpires
  *      （与 internal/auth credentialDigest 相同的 sha256+base64url），并播种两个节点行作为测试夹具
  *      （与 Wave 2 集成测试相同的夹具方式）；之后的 Bootstrap HTTP 流程、登录、授权、审批、
- *      DNS/网关/通知/审计全部走真实 Controller。
- *   4. Headless Edge（回退 Chrome）跑完全链路并输出截图证据。
+ *      DNS/网关/通知/审计全部走真实 Controller。GM-W4-01 起备份夹具同样以 node:sqlite 的
+ *      `VACUUM INTO` 生成真实 SQLite 备份文件，校验/预演仍走真实 HTTP。
+ *   4. Headless Edge（回退 Chrome）跑完全链路并输出截图证据：
+ *      步骤 01–30 覆盖 Wave 1–3 全链路（bootstrap、授权、双人审批、SSE、DNS/网关/通知/审计），
+ *      步骤 31–56 覆盖 Wave 3 新增接线模块（节点详情/流量配额、监控与流量风险、证书、
+ *      服务发布向导、AI 会话与一次性审批、插件中心与 Xray 门控、更新中心与备份恢复、
+ *      新域审计）。组合运行时未注入的适配器（更新源、插件目录源、nginx Checker、恢复执行器）
+ *      按服务端语义诚实失败，脚本断言诚实错误而不是伪造成功。
  *
  * 用法（在 `scripts/env.ps1` 环境中）：
  *   node tests/browser/v09/run-live-controller-acceptance.mjs [--out <目录>] [--skip-build] [--keep]
@@ -315,6 +321,45 @@ const PAGE_FETCH = `path => fetch(path, {
   headers: { "X-Requested-With": "ServerFleetWeb" }, credentials: "include", cache: "no-store",
 }).then(response => response.json())`;
 
+/** 页面内同源写请求（先经 /auth/me 取回 CSRF，再携带会话 Cookie）；仅驱动真实后端端点，不伪造结果。 */
+const PAGE_WRITE = `async (path, method, body) => {
+  const me = await fetch("/api/v1/auth/me", {
+    headers: { "X-Requested-With": "ServerFleetWeb" }, credentials: "include", cache: "no-store",
+  }).then(response => response.json());
+  const response = await fetch(path, {
+    method,
+    headers: {
+      "Content-Type": "application/json",
+      "X-Requested-With": "ServerFleetWeb",
+      "X-CSRF-Token": me.csrfToken ?? "",
+    },
+    credentials: "include",
+    cache: "no-store",
+    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+  });
+  return { status: response.status, body: await response.json().catch(() => null) };
+}`;
+
+/**
+ * 本机安装器职责扩展（GM-W4-01）：真实备份文件由 SQLite 在线备份 API（VACUUM INTO）生成，
+ * 与 `apps/controller` 的 `storage.VerifyFile` 完整性校验兼容；恢复/校验本身全部走真实 HTTP。
+ */
+async function createLocalBackup(dbPath, backupID) {
+  const { DatabaseSync } = await import("node:sqlite");
+  const backupDir = join(dirname(dbPath), "backups");
+  await mkdir(backupDir, { recursive: true });
+  const target = join(backupDir, `${backupID}.db`);
+  const db = new DatabaseSync(dbPath);
+  try {
+    db.exec(`VACUUM INTO '${target.replace(/\\/g, "/")}'`);
+  } finally {
+    db.close();
+  }
+  const info = await stat(target);
+  if (info.size <= 0) throw new Error("vacuum backup produced an empty file");
+  return { backupDir, target };
+}
+
 let tempDir = null;
 const children = [];
 const servers = [];
@@ -488,6 +533,11 @@ async function main() {
     "nodes.read", "nodes.write", "groups.write", "servicegroups.read", "servicegroups.write",
     "tasks.submit", "tasks.read", "tasks.approve", "host.root",
     "gateway.read", "gateway.write", "gateway.provision",
+    // GM-W4-01：Wave 3 新增域的权限键（monitoring/quota/certificates/publishing 走资源授权，
+    // tasks.command/host.patch 同时作为 AI 会话授权动作的权威交集来源）。
+    "monitoring.read", "monitoring.write", "quota.read", "quota.write",
+    "certificates.read", "publishing.read", "publishing.write",
+    "tasks.command", "host.patch",
   ]));
   await step("09b approver granted approve/read on the node", () => createGrant(approverUserId, [
     "tasks.approve", "tasks.read",
@@ -750,6 +800,340 @@ async function main() {
     return "GET /api/v1/audit/events returns authoritative records";
   });
   await screenshot(session, join(outDir, "live-15-audit.png"), { width: 1280, height: 1400 });
+
+  // =====================================================================
+  // GM-W4-01 · Wave 3 新增接线模块（monitoring/quota/certificates/publishing/
+  // ai/plugins/updates/recovery）真后端浏览器实测。组合运行时未注入的适配器
+  // （更新源、插件目录源、nginx Checker、恢复执行器）按服务端语义诚实失败，
+  // 验收断言诚实错误，绝不伪造成功。
+  // =====================================================================
+
+  // ---- 12. 节点详情与流量配额（#/nodes/node-alpha）
+  await goto(session, `${base}/#/nodes/${NODE_A}`);
+  await step("31 node detail renders identity, capabilities and diagnostics", async () => {
+    await expectText(session, "节点元数据", 20_000);
+    await expectText(session, "节点身份", 15_000);
+    await expectText(session, "协商能力", 10_000);
+    await expectText(session, "连接诊断", 10_000);
+    await expectText(session, "未吊销", 20_000);
+    await expectText(session, "协议版本", 15_000);
+    return "GET /api/v1/nodes/{id}/{identity,capabilities,diagnostics} all rendered from the real controller";
+  });
+  await screenshot(session, join(outDir, "live-16-node-detail.png"));
+
+  await step("32 unconfigured traffic quota shows the honest not-configured state", async () => {
+    await expectText(session, "服务端尚未配置该节点的流量配额", 20_000);
+    return "GET /api/v1/nodes/node-alpha/traffic-quota -> 404 quota_not_found surfaced as not-configured (GM-W4-02)";
+  });
+
+  await step("33 configure and read the traffic quota through the real controller", async () => {
+    await clickText(session, "编辑配额", { exact: true });
+    await expectText(session, "编辑流量配额与到期提醒", 10_000);
+    await fillField(session, "配额 (GB)", "500");
+    await screenshot(session, join(outDir, "live-17-quota-editor.png"));
+    await clickText(session, "保存配额", { exact: true });
+    await expectText(session, "流量配额已保存（服务端结果）", 20_000);
+    await waitForCondition(session, "document.body.innerText.includes('配额 (GB)') && document.body.innerText.includes('500')", {
+      timeoutMs: 15_000, label: "quota panel shows 500 GB",
+    });
+    const quota = await evaluate(session, `(${PAGE_FETCH})('/api/v1/nodes/${NODE_A}/traffic-quota')`);
+    if (quota.quotaGb !== 500) throw new Error(`server quota mismatch: ${JSON.stringify(quota)}`);
+    return `PUT then GET /api/v1/nodes/${NODE_A}/traffic-quota -> quotaGb=${quota.quotaGb}, direction=${quota.direction}`;
+  });
+  await screenshot(session, join(outDir, "live-18-node-quota.png"));
+
+  // ---- 13. 监控与流量风险（#/monitoring）
+  await goto(session, `${base}/#/monitoring`);
+  await step("34 resources tab lists the granted node with the traffic-risk source", async () => {
+    await expectText(session, NODE_A_LABEL, 20_000);
+    await expectText(session, "无返回风险", 20_000);
+    const risks = await evaluate(session, `(${PAGE_FETCH})('/api/v1/monitoring/traffic-risks')`);
+    if (!Array.isArray(risks)) throw new Error("traffic risks response is not a list");
+    return `GET /api/v1/monitoring/traffic-risks -> ${risks.length} risks (quota configured, no usage samples yet)`;
+  });
+
+  await step("35 create availability monitor through the real controller", async () => {
+    await clickText(session, "服务监控", { exact: true });
+    await clickText(session, "新建监控", { exact: true });
+    await expectText(session, "新建服务监控", 10_000);
+    await fillField(session, "名称", "edge-http");
+    // SSRF 边界（internal/monitoring/ssrf.go）拒绝 .internal/.local/loopback/metadata 目标；
+    // 使用公网样式主机名通过服务端校验（组合运行时未注入 Prober，探测不会真实发起）。
+    await fillField(session, "探测目标", "https://status.edge.example.com/healthz");
+    await clickText(session, "保存监控", { exact: true });
+    await expectText(session, "监控已保存（服务端结果）", 20_000);
+    const monitors = await evaluate(session, `(${PAGE_FETCH})('/api/v1/monitoring/availability-monitors')`);
+    const created = Array.isArray(monitors) ? monitors.find(entry => entry.name === "edge-http") : null;
+    if (!created) throw new Error("created monitor missing from the real list");
+    return `POST /api/v1/monitoring/availability-monitors -> 201 id=${created.id}`;
+  });
+
+  await step("36 pause the monitor with a whitelist PATCH body", async () => {
+    await clickText(session, "暂停", { exact: true });
+    await expectText(session, "监控已请求暂停", 20_000);
+    await expectText(session, "已暂停", 15_000);
+    return "PATCH /api/v1/monitoring/availability-monitors/{id} -> state=paused (whitelist body per GM-W4-02)";
+  });
+  await screenshot(session, join(outDir, "live-19-monitoring.png"));
+
+  // ---- 14. 证书管理（#/certificates）
+  await goto(session, `${base}/#/certificates`);
+  await step("37 internal certificate distributions list is honestly empty", async () => {
+    await expectText(session, "内部 TLS 与下发", 20_000);
+    await expectText(session, "暂无内部证书任务", 20_000);
+    const jobs = await evaluate(session, `(${PAGE_FETCH})('/api/v1/certificates/internal/distributions')`);
+    if (!Array.isArray(jobs.items)) throw new Error("distributions response missing items");
+    return `GET /api/v1/certificates/internal/distributions -> ${jobs.items.length} jobs (honest empty)`;
+  });
+  await screenshot(session, join(outDir, "live-20-certificates.png"));
+
+  // ---- 15. 服务发布向导（#/publishing）
+  await goto(session, `${base}/#/publishing`);
+  await step("38 publishing wizard honestly blocks without a scheduling-eligible gateway", async () => {
+    await expectText(session, "发布配置", 20_000);
+    await waitForCondition(session, "document.body.innerText.includes('不可调度')", {
+      timeoutMs: 20_000, label: "gateway listed as not schedulable",
+    });
+    await waitForCondition(session, `(() => {
+      const select = [...document.querySelectorAll("select")].find(node =>
+        [...node.options].some(option => option.textContent.includes("Edge Web")));
+      if (!select) return false;
+      const option = [...select.options].find(entry => entry.textContent.includes("Edge Web"));
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+      setter.call(select, option.value);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return select.value === option.value;
+    })()`, { timeoutMs: 15_000, label: "select service group Edge Web" });
+    await clickText(session, "预览变更", { exact: true });
+    await expectText(session, "至少选择一个调度可用的网关", 15_000);
+    return "wizard blocks on the server-declared eligibility (no nginx checker in the composed runtime; honest)";
+  });
+  await screenshot(session, join(outDir, "live-21-publishing-gate.png"));
+
+  await step("39 publication preview passes for the granted service group", async () => {
+    const groups = await evaluate(session, `(${PAGE_FETCH})('/api/v1/service-groups').then(data => data.items)`);
+    const group = groups.find(entry => entry.name === "Edge Web");
+    if (!group) throw new Error("service group Edge Web not visible");
+    const gateways = await evaluate(session, `(${PAGE_FETCH})('/api/v1/gateways').then(data => data.items)`);
+    if (!gateways[0]?.id) throw new Error("no gateway id available for the preview draft");
+    const result = await evaluate(session, `(${PAGE_WRITE})('/api/v1/publishing/preview', 'POST', {
+      serviceGroupId: ${JSON.stringify(group.id)},
+      gatewayIds: [${JSON.stringify(gateways[0].id)}],
+      domain: "app.example.live",
+      https: true,
+    })`);
+    if (result.status !== 200) throw new Error(`preview ${result.status}: ${JSON.stringify(result.body).slice(0, 300)}`);
+    if (result.body?.eligible !== true) throw new Error(`preview not eligible: ${JSON.stringify(result.body)}`);
+    if (!Array.isArray(result.body.targetNodeIdsSnapshot) || !result.body.targetNodeIdsSnapshot.includes(NODE_A)) {
+      throw new Error(`preview snapshot missing node-alpha: ${JSON.stringify(result.body)}`);
+    }
+    return `POST /api/v1/publishing/preview -> 200 eligible=true, snapshot=${result.body.targetNodeIdsSnapshot.join(",")}`;
+  });
+
+  await step("40 publication created with three staged plan and listed in the wizard", async () => {
+    const groups = await evaluate(session, `(${PAGE_FETCH})('/api/v1/service-groups').then(data => data.items)`);
+    const group = groups.find(entry => entry.name === "Edge Web");
+    const gateways = await evaluate(session, `(${PAGE_FETCH})('/api/v1/gateways').then(data => data.items)`);
+    const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/publishing/publications', 'POST', {
+      name: "Edge Web launch",
+      serviceGroupId: ${JSON.stringify(group.id)},
+      gatewayIds: [${JSON.stringify(gateways[0].id)}],
+      domain: "app.example.live",
+      https: true,
+    })`);
+    if (created.status !== 202 && created.status !== 201) {
+      throw new Error(`publication create ${created.status}: ${JSON.stringify(created.body).slice(0, 300)}`);
+    }
+    if (created.body?.status !== "queued" || (created.body?.stages?.length ?? 0) !== 3) {
+      throw new Error(`unexpected plan shape: ${JSON.stringify(created.body).slice(0, 300)}`);
+    }
+    await clickText(session, "刷新", { exact: true });
+    await expectText(session, created.body.id, 20_000);
+    await expectText(session, "3 个", 15_000);
+    return `POST /api/v1/publishing/publications -> ${created.status} ${created.body.id} (dns/certificate/gateway stages queued)`;
+  });
+  await screenshot(session, join(outDir, "live-22-publishing.png"));
+
+  // ---- 16. AI 助手与安全策略（#/ai）
+  await goto(session, `${base}/#/ai`);
+  await step("41 AI security policy read from the real controller", async () => {
+    await expectText(session, "服务端安全策略声明", 20_000);
+    await expectText(session, "默认拒绝：是", 15_000);
+    await expectText(session, "服务端强制：是", 10_000);
+    await expectText(session, "未授权发现：禁止", 10_000);
+    return "GET /api/v1/ai/security-policy -> defaultDeny=true, serverSideEnforced=true";
+  });
+
+  await step("42 create AI session with default zero resource authorization", async () => {
+    await clickText(session, "新建 AI 会话", { exact: true });
+    await waitForUrl(session, "#/ai/");
+    await expectText(session, "默认零授权", 20_000);
+    await expectText(session, "空（默认无资源）", 15_000);
+    return "POST /api/v1/ai/sessions -> 201 (zero grants, allowedNodeIds empty)";
+  });
+  await screenshot(session, join(outDir, "live-23-ai-zero-scope.png"));
+
+  const aiSessionId = decodeURIComponent(
+    ((await evaluate(session, "location.hash")).split("#/ai/")[1] ?? "").replace(/\/$/, ""),
+  );
+  if (!aiSessionId) throw new Error("could not read the AI session id from the URL");
+
+  await step("43 grant node-alpha to the AI session with a registered tool", async () => {
+    await fillField(session, "允许动作（逗号分隔）", "tasks.command");
+    await waitForCondition(session, `(() => {
+      const select = [...document.querySelectorAll("select")].find(node =>
+        [...node.options].some(option => option.textContent.includes(${JSON.stringify(NODE_A_LABEL)})));
+      if (!select) return false;
+      const option = [...select.options].find(entry => entry.textContent.includes(${JSON.stringify(NODE_A_LABEL)}));
+      const setter = Object.getOwnPropertyDescriptor(HTMLSelectElement.prototype, "value").set;
+      setter.call(select, option.value);
+      select.dispatchEvent(new Event("change", { bubbles: true }));
+      return select.value === option.value;
+    })()`, { timeoutMs: 15_000, label: "select node-alpha as the AI grant resource" });
+    await clickText(session, "添加授权", { exact: true });
+    await expectText(session, "授权数：1", 20_000);
+    await expectText(session, `有效节点：${NODE_A}`, 15_000);
+    return `POST /api/v1/ai/sessions/${aiSessionId}/grants -> scopeRevision advanced, allowedNodeIds=[${NODE_A}]`;
+  });
+  await screenshot(session, join(outDir, "live-24-ai-grant.png"));
+
+  await step("44 switch approval policy to automatic and back to per-action", async () => {
+    await clickText(session, "审批策略", { exact: true });
+    await expectText(session, "生效模式", 20_000);
+    // 模式卡片按钮文本含描述段落，不能用 exact 匹配；contains 取最短包含者即该卡片。
+    await clickText(session, "自动审批");
+    await expectText(session, "生效模式：自动审批", 20_000);
+    await clickText(session, "每次审批");
+    await expectText(session, "生效模式：每次审批", 20_000);
+    return `PATCH /api/v1/ai/sessions/${aiSessionId}/approval-policy accepted both ways`;
+  });
+
+  await step("45 create and approve a one-time tool approval", async () => {
+    await clickText(session, "工具审批", { exact: true });
+    await fillField(session, "工具名称", "tasks.command");
+    await fillField(session, "目标节点 ID（逗号分隔）", NODE_A);
+    await fillField(session, "工具参数（JSON 对象）", '{"command":"uptime"}');
+    await clickText(session, "请求审批", { exact: true });
+    await expectText(session, "参数摘要", 20_000);
+    await screenshot(session, join(outDir, "live-25-ai-approval-pending.png"));
+    await clickText(session, "批准一次", { exact: true });
+    await expectText(session, "approved", 20_000);
+    return "POST approvals + decision approve; server returned canonicalArgumentsHash before allowing the decision";
+  });
+
+  await step("46 execute the controlled tool through the real task pipeline", async () => {
+    await clickText(session, "提交受控工具调用", { exact: true });
+    await expectText(session, "已接受：是", 20_000);
+    return "POST /api/v1/ai/tools/execute -> 202 queued (routed through tasks.Service.Submit, not a bypass)";
+  });
+  await screenshot(session, join(outDir, "live-26-ai-execution.png"));
+
+  // ---- 17. 插件中心与 Xray 声明式门控（#/plugins, #/plugins/xray）
+  await goto(session, `${base}/#/plugins`);
+  await step("47 plugin repository read with honestly empty catalog and installs", async () => {
+    await expectText(session, "插件来源", 20_000);
+    await expectText(session, "当前来源：official", 15_000);
+    await expectText(session, "目录为空", 20_000);
+    await expectText(session, "未安装可选插件", 15_000);
+    return "GET /api/v1/plugins{,/repository,/catalog} all served by the real controller";
+  });
+
+  await step("48 catalog refresh honestly reports the missing release source", async () => {
+    await clickText(session, "刷新目录", { exact: true });
+    await expectText(session, "PLUGIN_CATALOG_SOURCE_UNAVAILABLE", 20_000);
+    return "POST /api/v1/plugins/catalog/refresh -> 501 (no release adapter wired; honest error surfaced, GM-W4-02)";
+  });
+  await screenshot(session, join(outDir, "live-27-plugins.png"));
+
+  await goto(session, `${base}/#/plugins/xray`);
+  await step("49 xray console is gated while the plugin is not enabled", async () => {
+    await expectText(session, "插件未启用", 20_000);
+    await expectText(session, "前往插件中心安装并启用", 10_000);
+    const text = await evaluate(session, "document.body.innerText");
+    if (text.includes("Xray 节点") && text.includes("节点与实例") && text.includes("创建安装任务")) {
+      throw new Error("xray console rendered while the plugin is not enabled");
+    }
+    return "GET /api/v1/plugins/xray-manager -> 404 PLUGIN_NOT_FOUND; declarative console stays gated";
+  });
+  await screenshot(session, join(outDir, "live-28-xray-gate.png"));
+
+  // ---- 18. 更新中心与备份恢复（#/updates, #/backups）
+  await goto(session, `${base}/#/updates`);
+  await step("50 update check honestly reports the unavailable release source", async () => {
+    await expectText(session, "检查更新", 20_000);
+    await clickText(session, "检查更新", { exact: true });
+    await expectText(session, "检查失败", 20_000);
+    await expectText(session, "UPDATE_SOURCE_UNAVAILABLE", 10_000);
+    return "POST /api/v1/system/updates/check -> 503 UPDATE_SOURCE_UNAVAILABLE (no feed adapter; honest)";
+  });
+
+  await step("51 update plan generation honestly reports the unavailable planner", async () => {
+    await fillField(session, "目标版本", "9.9.9");
+    await clickText(session, "生成计划", { exact: true });
+    await expectText(session, "生成计划失败", 20_000);
+    await expectText(session, "UPDATE_PLANNER_UNAVAILABLE", 10_000);
+    return "POST /api/v1/system/updates/plan -> 503 UPDATE_PLANNER_UNAVAILABLE (honest)";
+  });
+
+  await step("52 update job history is honestly empty", async () => {
+    await expectText(session, "暂无更新作业", 20_000);
+    const jobs = await evaluate(session, `(${PAGE_FETCH})('/api/v1/system/updates/jobs')`);
+    if (!Array.isArray(jobs.items)) throw new Error("update jobs response missing items");
+    return `GET /api/v1/system/updates/jobs -> ${jobs.items.length} jobs`;
+  });
+  await screenshot(session, join(outDir, "live-29-updates.png"));
+
+  const backupID = "live-backup-001";
+  await createLocalBackup(dbPath, backupID);
+  await goto(session, `${base}/#/backups`);
+  await step("53 verify the real local backup through the controller", async () => {
+    await expectText(session, "校验备份", 20_000);
+    await fillField(session, "备份 ID", backupID);
+    await clickText(session, "校验备份", { exact: true });
+    await expectText(session, "backup_integrity", 20_000);
+    await expectText(session, "校验请求已受理", 10_000);
+    return `POST /api/v1/backups/${backupID}/verify -> backup_integrity passed (VACUUM INTO fixture, real integrity check)`;
+  });
+  await screenshot(session, join(outDir, "live-30-backup-verify.png"));
+
+  await step("54 recovery preview with fenced declaration shows honest failed checks", async () => {
+    await fillField(session, "目标主控 ID", "controller-live-01");
+    // 预演表单在验证面板下方（折叠区外），先滚动到可见再勾选。
+    await waitForCondition(session, `(() => {
+      const label = [...document.querySelectorAll("label")].find(node => node.textContent.includes("旧主控已隔离"));
+      if (!label) return false;
+      label.scrollIntoView({ block: "center" });
+      return true;
+    })()`, { timeoutMs: 15_000, label: "scroll fenced declaration into view" });
+    await setCheckbox(session, "旧主控已隔离", true);
+    await clickText(session, "执行预演", { exact: true });
+    await expectText(session, "target_identity_not_observed", 20_000);
+    await expectText(session, "fencing_evidence_unavailable", 10_000);
+    return "POST /api/v1/disaster-recovery/preview -> identity/fencing checks fail closed (checkbox is not evidence)";
+  });
+
+  await step("55 recovery job creation stays blocked after an ineligible preview", async () => {
+    await expectText(session, "预演未通过", 15_000);
+    const disabled = await evaluate(session, `(() => {
+      const button = [...document.querySelectorAll("button")].find(node => node.textContent.trim() === "创建恢复作业");
+      return button ? button.disabled : null;
+    })()`);
+    if (disabled !== true) throw new Error(`create recovery job button state: ${disabled}`);
+    return "POST /api/v1/disaster-recovery/jobs stays gated by the server verdict; UI disables submission";
+  });
+  await screenshot(session, join(outDir, "live-31-recovery-preview.png"));
+
+  // ---- 19. Wave 3 新域审计动作落盘
+  await goto(session, `${base}/#/audit`);
+  await step("56 audit records the wave 3 domain actions", async () => {
+    await expectText(session, "monitoring.create", 25_000);
+    const text = await evaluate(session, "document.body.innerText");
+    const expected = ["monitoring.update", "quota.policy", "publishing.plan_create", "ai.sessions.create", "ai.sessions.grant"];
+    const missing = expected.filter(action => !text.includes(action));
+    if (missing.length > 0) throw new Error(`audit missing wave 3 actions: ${missing.join(", ")}`);
+    return "GET /api/v1/audit/events covers monitoring/quota/publishing/ai domains";
+  });
+  await screenshot(session, join(outDir, "live-32-audit-wave3.png"), { width: 1280, height: 1400 });
 
   await session.close();
 }

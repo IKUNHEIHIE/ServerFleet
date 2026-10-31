@@ -83,6 +83,8 @@ interface ErrorPayload {
   detail?: unknown;
   requestId?: unknown;
   fieldErrors?: unknown;
+  /** 真实 Controller 部分域（quota/publishing/certificates/monitoring）把错误码嵌套在 `error.code`。 */
+  error?: unknown;
 }
 
 function boundedString(value: unknown, max = 200): string | null {
@@ -107,7 +109,14 @@ function errorInitFromPayload(status: number, payload: ErrorPayload | null, retr
   fieldErrors: FieldIssue[];
   retryAfterSeconds: number | null;
 } {
-  const code = boundedString(payload?.code, 100) ?? boundedString(payload?.title, 100);
+  // GM-W4-02：真实 Controller 的 writeFixed 返回 `{error:{code,message}}`（嵌套），
+  // 而问题 JSON 返回顶层 `{code,title}`；两种已知形状都接受，其余形状不推断。
+  const nested = typeof payload?.error === "object" && payload.error !== null
+    ? (payload.error as Record<string, unknown>)
+    : null;
+  const code = boundedString(payload?.code, 100)
+    ?? boundedString(nested?.code, 100)
+    ?? boundedString(payload?.title, 100);
   const requestId = boundedString(payload?.requestId, 200);
   return {
     kind: classify(status),

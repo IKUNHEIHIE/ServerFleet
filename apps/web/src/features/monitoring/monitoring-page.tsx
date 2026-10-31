@@ -86,8 +86,10 @@ function MonitorEditor({
     if (Number(intervalSeconds) < 15) return setLocalError("检查间隔至少 15 秒。");
     if (Number(timeoutSeconds) < 1) return setLocalError("超时至少 1 秒。");
     setLocalError(null);
+    // 真实 Controller 的 PATCH/POST 使用 DisallowUnknownFields：只回传契约字段，
+    // 不把列表响应中的只读字段（consecutiveFailures/createdAt/lastError…）原样回传（GM-W4-02）。
     const body: AvailabilityMonitor = {
-      ...(monitor ?? {}),
+      ...(monitor?.id ? { id: monitor.id } : {}),
       name: name.trim(),
       type,
       target: target.trim(),
@@ -97,7 +99,7 @@ function MonitorEditor({
       failureCount: Number(failureCount),
       recoveryCount: Number(recoveryCount),
       notifyChannels: [...channels],
-      state: monitor?.state ?? "pending",
+      ...(monitor?.id ? {} : { state: "pending" as const }),
     };
     const result = await action.run(body);
     if (result.ok && result.data) onSaved(result.data.data);
@@ -199,8 +201,17 @@ export function MonitoringPage() {
   const channelItems: readonly NotificationChannel[] = channels.state.status === "ready" ? channels.state.data.items : [];
   const deliveryItems = deliveries.state.status === "ready" ? deliveries.state.data.items : [];
 
+  // 真实 Controller 的 PATCH 拒绝未知字段：暂停/恢复只回传白名单契约字段（GM-W4-02）。
   const pauseAction = useAction((monitor: AvailabilityMonitor, paused: boolean) =>
-    monitoringApi.update(monitor.id ?? "", { ...monitor, state: paused ? "paused" : "pending" }),
+    monitoringApi.update(monitor.id ?? "", {
+      id: monitor.id,
+      name: monitor.name,
+      type: monitor.type,
+      target: monitor.target,
+      intervalSeconds: monitor.intervalSeconds,
+      timeoutSeconds: monitor.timeoutSeconds,
+      state: paused ? "paused" : "pending",
+    }),
   );
   const deleteAction = useAction((monitorId: string) => monitoringApi.remove(monitorId));
   const checksAction = useAction((monitor: AvailabilityMonitor) => monitoringApi.checks(monitor.id ?? ""));

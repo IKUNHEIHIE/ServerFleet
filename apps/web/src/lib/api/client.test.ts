@@ -110,6 +110,20 @@ describe("ApiClient", () => {
     await expect(timeout).rejects.toMatchObject({ kind: "network" });
   });
 
+  it("surfaces nested error.code from the real controller fixed-error shape (GM-W4-02)", async () => {
+    const fetchImpl = vi.fn(async () =>
+      new Response(JSON.stringify({ error: { code: "quota_not_found", message: "no traffic quota is configured" } }), {
+        status: 404,
+        headers: { "Content-Type": "application/json" },
+      }),
+    ) as unknown as typeof fetch;
+    await expect(client(fetchImpl).request("/api/v1/nodes/node-alpha/traffic-quota")).rejects.toMatchObject({
+      kind: "not-found",
+      status: 404,
+      code: "quota_not_found",
+    });
+  });
+
   it("returns undefined for 204 and preserves Retry-After", async () => {
     const noContent = vi.fn(async () => new Response(null, { status: 204 })) as unknown as typeof fetch;
     await expect(client(noContent).request<void>("/x")).resolves.toEqual({ data: undefined, status: 204 });
