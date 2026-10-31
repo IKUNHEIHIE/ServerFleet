@@ -30,10 +30,12 @@ import (
 	"serverfleet.local/serverfleet/internal/plugins"
 	"serverfleet.local/serverfleet/internal/publishing"
 	"serverfleet.local/serverfleet/internal/quota"
+	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/servicegroups"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
+	"serverfleet.local/serverfleet/internal/updates"
 	"serverfleet.local/serverfleet/internal/workflows"
 )
 
@@ -58,6 +60,9 @@ type Config struct {
 	PluginTrustKeys         map[string]ed25519.PublicKey
 	PluginTrustSources      map[string]bool
 	PluginTrustCapabilities map[string]bool
+
+	// BackupDir defaults to a private directory beside the SQLite database.
+	BackupDir string
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
@@ -99,10 +104,14 @@ type Server struct {
 	PluginHTTP       *plugins.ManagementHTTP
 	XrayHTTP         *plugins.XrayDeclarativeHTTP
 
+	UpdatesHTTP  *updates.HTTP
+	RecoveryHTTP *recovery.HTTP
+
 	agentBridge *agentLinkBridge
 	mux         *http.ServeMux
 	now         func() time.Time
 	stagingDir  string
+	backupDir   string
 
 	runCancel context.CancelFunc
 	runDone   chan struct{}
@@ -528,6 +537,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err := s.setupPlugins(cfg); err != nil {
 		return cleanup(err)
 	}
+	if err := s.setupUpdatesRecovery(cfg); err != nil {
+		return cleanup(err)
+	}
 
 	taskBridge := &composedTaskBridge{tasks: tasksService}
 	filesService, err := files.NewService(files.Options{
@@ -662,6 +674,7 @@ func (s *Server) registerRoutes() error {
 	s.registerEnrollmentRoutes()
 	s.registerAIRoutes()
 	s.registerPluginRoutes()
+	s.registerUpdateRecoveryRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {
