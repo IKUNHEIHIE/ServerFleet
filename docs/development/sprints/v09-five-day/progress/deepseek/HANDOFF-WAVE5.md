@@ -2,7 +2,7 @@
 
 - 任务：`V09-5D-DS` Wave 5（`DS-W5-01`—`DS-W5-03`）
 - 会话：`deepseek-05`；分支 `feature/v09-services-ds02`；起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`
-- 代码提交：`d475c8a`（monitoring NetProber）、`f2f7b9e`（files LocalStagingTransport）、`506c977`（真实实现 HTTP 集成测试）、`25939d8`（探测失败归类防御）
+- 代码提交：`d475c8a`（monitoring NetProber）、`f2f7b9e`（files LocalStagingTransport）、`506c977`（真实实现 HTTP 集成测试）、`25939d8`（探测失败归类防御）、`be70f9d`（HTTPS 探测测试）
 - 未修改 `apps/controller/**`、`apps/agent/**`、`apps/web/**`、公共契约/Proto/生成代码/根锁文件；未新增迁移（保持 19 项基线）。`RegisterHTTP` 签名未变，无新路由。
 
 ## 1. 新增实现与构造签名

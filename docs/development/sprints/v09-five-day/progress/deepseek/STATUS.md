@@ -179,7 +179,7 @@
 ## 检查点 C12 · V09-5D-DS Wave 5（deepseek-05：真实 NetProber 与本地暂存传输）
 
 - 分支 `feature/v09-services-ds02`；起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`（Wave 4 已合入 main）。
-- 会话：`deepseek-05`；代码提交：`d475c8a`（monitoring）、`f2f7b9e`（files）、`506c977`（集成测试）、`25939d8`（失败归类防御）；交接 [HANDOFF-WAVE5.md](HANDOFF-WAVE5.md)、证据 [AC-EVIDENCE-WAVE4.md](AC-EVIDENCE-WAVE4.md) 第 4 节。
+- 会话：`deepseek-05`；代码提交：`d475c8a`（monitoring）、`f2f7b9e`（files）、`506c977`（集成测试）、`25939d8`（失败归类防御）、`be70f9d`（HTTPS 测试）；交接 [HANDOFF-WAVE5.md](HANDOFF-WAVE5.md)、证据 [AC-EVIDENCE-WAVE4.md](AC-EVIDENCE-WAVE4.md) 第 4 节。
 - **DS-W5-01 真实标准库 NetProber**（`internal/monitoring/prober.go`）：
   - `NewNetProber(NetProberConfig{AllowedHosts, Resolver, RootCAs})` 实现 `monitoring.Prober`；HTTP/HTTPS 走显式禁用代理的 `http.Transport`，TCP 完成握手，TLS 完成经证书链校验的握手（最低 TLS 1.2）。
   - 防 DNS Rebinding：自定义 `DialContext` 对每个底层连接先解析、对解析出的每个 IP 重新执行 SSRF 地址校验，再按字面 IP 连接；任一地址被拒绝即失败关闭。元数据地址/主机名始终拒绝；回环/私网等仅由显式白名单放行（字面 IP 需 IP/CIDR 条目，主机名需精确主机名条目）；重定向每一跳复用同一校验。

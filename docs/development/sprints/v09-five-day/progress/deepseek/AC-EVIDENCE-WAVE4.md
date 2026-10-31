@@ -2,7 +2,7 @@
 
 - 任务：`V09-5D-DS` Wave 4；会话 `deepseek-04`；分支 `feature/v09-services-ds02`；基线 `0f9a75e`
 - 代码提交：`bfe3b93`、`238ef81`、`fcc7390`、`22fe183`
-- Wave 5 增量（会话 `deepseek-05`，基线 `3adf891`，代码提交 `d475c8a`/`f2f7b9e`/`506c977`/`25939d8`）见第 4 节。
+- Wave 5 增量（会话 `deepseek-05`，基线 `3adf891`，代码提交 `d475c8a`/`f2f7b9e`/`506c977`/`25939d8`/`be70f9d`）见第 4 节。
 - 口径：本表只登记 **DS（数据与核心业务服务）侧** 的代码、自动化测试与可复现命令。`docs/development/sprints/v09-five-day/ACCEPTANCE.json` 中的条目仍为 `NOT_ACCEPTED`；下表状态表示 DS 侧证据成熟度，不等于完整 v0.9 验收通过。
 - 状态图例：`LOCAL-PASS` 本机真实 SQLite 文件库/HTTP 自动化通过；`PARTIAL` 另有隔离 VM/真实第三方只读证据但缺关键闭环；`BLOCKED` 需未授权的真实节点/供应商环境；`UNTESTED` 未执行。
 - 统一命令（本分支，固定 Go 1.27.3 / Node 24.22.1）：
@@ -53,13 +53,13 @@
 ## 4. Wave 5 增量证据（DS-W5-01/02，会话 deepseek-05）
 
 - 分支 `feature/v09-services-ds02`；起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`
-- 代码提交：`d475c8a`（`feat(monitoring): add ssrf-revalidating net prober`）、`f2f7b9e`（`feat(files): add local staging upload and download transport`）、`506c977`（`test(services): exercise real prober and local staging transport over http`）、`25939d8`（`fix(monitoring): keep probe failures classified when context is intact`）
+- 代码提交：`d475c8a`（`feat(monitoring): add ssrf-revalidating net prober`）、`f2f7b9e`（`feat(files): add local staging upload and download transport`）、`506c977`（`test(services): exercise real prober and local staging transport over http`）、`25939d8`（`fix(monitoring): keep probe failures classified when context is intact`）、`be70f9d`（`test(monitoring): cover https probe with verified tls`）
 - 未新增迁移；未修改 `apps/**`、公共契约/Proto/生成代码/根锁文件；HTTP 路由与 `RegisterHTTP` 签名未变。
 
 | AC | Wave 5 子项 | 代码（本包） | 自动化测试（代表性） | 本轮证据 | 状态 | 未覆盖的外部边界 |
 |---|---|---|---|---|---|---|
 | AC-03 | 文件互传（受控本地暂存通道） | `internal/files/local_transport.go`：`NewLocalStagingTransport(rootDir)` 实现 `UploadTransport`+`DownloadTransport`；原子写入、字节数/SHA-256 核对、符号链接与路径逃逸拒绝 | `TestLocalStagingPushPullRoundTrip`、`TestLocalStagingRejectsInvalidInputs`、`TestLocalStagingRejectsSymlinkedDirectories`、`TestLocalStagingRejectsSymlinkedTargetFile`、`TestLocalStagingPullRejections`、`TestLocalStagingHonorsCancellation`、`TestNewLocalStagingTransportRejectsBadRoot`、`TestLocalStagingWindowsReservedNames`；`TestWave5RealProberAndLocalStagingTransport/real_local_staging_upload_and_download` | 真实 `t.TempDir()` 磁盘：HTTP 创建上传 → PUT 字节 → complete（真实 SHA-256）→ 磁盘文件一致 → `Download` 读回一致；逃逸/符号链接/大小/摘要负向全部拒绝 | LOCAL-PASS（受控本地目录闭环）；真实节点字节 BLOCKED | 两个真实 Linux 节点间复制、节点掉线/部分失败、节点端权限与磁盘配额仍依赖 CX Agent 通道；本实现仅作本地闭环，不得冒充生产 Agent |
-| AC-16 | 服务可用性监控（真实探测器） | `internal/monitoring/prober.go`：`NewNetProber` 实现 HTTP/TCP/TLS；自定义 `DialContext` 对每个解析 IP 二次 SSRF 校验；代理禁用、重定向逐跳复检；稳定错误码 + 固定摘要 | `TestNetProberHTTPHealthyUsesRealTransport`、`TestNetProberHTTPStatusFailureDoesNotEchoBody`、`TestNetProberRejectsDNSRebindingToLoopback`、`TestNetProberRejectsMixedPublicAndPrivateAnswers`、`TestNetProberLoopbackAllowedOnlyForExplicitHost`、`TestNetProberRejectsMetadataAndLocalhostNames`、`TestNetProberTCPProbe`、`TestNetProberTLSProbeVerifiesCertificate`、`TestNetProberHTTPRespectsTimeout`、`TestNetProberDNSFailureIsClassified`；`TestWave5RealProberAndLocalStagingTransport/real_http_probe_persists_history` | 真实 `httptest.Server` HTTP 探测 → `/probe` 200/up/latency/statusCode 落库 → `/history` 读回；404 目标 → down + `http_status_404` 且响应体不回显；TLS 正向使用注入 RootCAs，未信任与明文端口均失败关闭 | LOCAL-PASS（真实本地网络 + 注入解析器）；公网目标 UNTESTED | 真实公网 HTTP/TCP/TLS、IPv6-only、证书异常主机、真实 DNS TTL 切换（DNS Rebinding 仅用注入 `HostResolver` 验证解析后拦截）；健康口径固定 2xx/3xx |
+| AC-16 | 服务可用性监控（真实探测器） | `internal/monitoring/prober.go`：`NewNetProber` 实现 HTTP/TCP/TLS；自定义 `DialContext` 对每个解析 IP 二次 SSRF 校验；代理禁用、重定向逐跳复检；稳定错误码 + 固定摘要 | `TestNetProberHTTPHealthyUsesRealTransport`、`TestNetProberHTTPSUsesVerifiedTLS`、`TestNetProberHTTPStatusFailureDoesNotEchoBody`、`TestNetProberRejectsDNSRebindingToLoopback`、`TestNetProberRejectsMixedPublicAndPrivateAnswers`、`TestNetProberLoopbackAllowedOnlyForExplicitHost`、`TestNetProberRejectsMetadataAndLocalhostNames`、`TestNetProberTCPProbe`、`TestNetProberTLSProbeVerifiesCertificate`、`TestNetProberHTTPRespectsTimeout`、`TestNetProberDNSFailureIsClassified`；`TestWave5RealProberAndLocalStagingTransport/real_http_probe_persists_history` | 真实 `httptest.Server` HTTP 探测 → `/probe` 200/up/latency/statusCode 落库 → `/history` 读回；404 目标 → down + `http_status_404` 且响应体不回显；TLS 正向使用注入 RootCAs，未信任与明文端口均失败关闭 | LOCAL-PASS（真实本地网络 + 注入解析器）；公网目标 UNTESTED | 真实公网 HTTP/TCP/TLS、IPv6-only、证书异常主机、真实 DNS TTL 切换（DNS Rebinding 仅用注入 `HostResolver` 验证解析后拦截）；健康口径固定 2xx/3xx |
 
 ### 4.1 统一验证（本分支）
 
