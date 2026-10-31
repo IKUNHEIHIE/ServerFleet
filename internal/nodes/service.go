@@ -23,6 +23,8 @@ const (
 	ActionGroupRename  = "groups.rename"
 	ActionGroupMembers = "groups.members"
 	ActionGroupDelete  = "groups.delete"
+	ActionNodesSuspend = "nodes.suspend"
+	ActionNodesRevoke  = "nodes.revoke"
 )
 
 // ServiceActions returns the audit action catalog this domain emits. Composition
@@ -31,7 +33,7 @@ func ServiceActions() []string {
 	return []string{
 		ActionAgentUpdate, ActionGroupCreate, ActionGroupDelete, ActionGroupMembers,
 		ActionGroupRename, ActionGroupsWrite, ActionNodeCreate, ActionNodesRead,
-		ActionNodesWrite,
+		ActionNodesRevoke, ActionNodesSuspend, ActionNodesWrite,
 	}
 }
 
@@ -342,6 +344,63 @@ func (s *Service) ApplyAgentUpdate(ctx context.Context, agentSubject, requestID 
 		return nil
 	})
 	return node, err
+}
+
+// Suspend marks a node administratively unavailable. Agent samples no longer
+// override the suspended status. Repeating the suspension is an idempotent no-op
+// and does not emit a second audit event.
+func (s *Service) Suspend(ctx context.Context, subjectID, requestID, nodeID, reason string) (Node, error) {
+	return s.changeLifecycle(ctx, subjectID, requestID, nodeID, StatusSuspended, ActionNodesSuspend, "node_suspend", reason)
+}
+
+// Revoke marks a node identity as revoked. Revocation is terminal for agent
+// updates; repeating it is an idempotent no-op.
+func (s *Service) Revoke(ctx context.Context, subjectID, requestID, nodeID, reason string) (Node, error) {
+	return s.changeLifecycle(ctx, subjectID, requestID, nodeID, StatusRevoked, ActionNodesRevoke, "node_revoke", reason)
+}
+
+func (s *Service) changeLifecycle(ctx context.Context, subjectID, requestID, nodeID string, status Status, action, reasonCode, reason string) (Node, error) {
+	if err := s.requireRequest(requestID); err != nil {
+		return Node{}, err
+	}
+	if !validText(reason, 300) {
+		return Node{}, fmt.Errorf("%w: reason", ErrInvalidNode)
+	}
+	if !validToken(nodeID, 128) {
+		return Node{}, fmt.Errorf("%w: id", ErrInvalidNode)
+	}
+	if err := s.authorize(ctx, subjectID, action, requestID, []string{nodeID}, reasonCode); err != nil {
+		return Node{}, err
+	}
+	current, err := s.nodes.Get(ctx, nodeID)
+	if err != nil {
+		return Node{}, err
+	}
+	if current.Status == status {
+		return current, nil
+	}
+	if current.Status == StatusRevoked {
+		return Node{}, ErrNodeRevoked
+	}
+	if reasonCode != "" && validToken(reason, audit.DefaultLimits().MaxReasonCodeBytes) {
+		reasonCode = reason
+	}
+	var updated Node
+	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		record, err := s.nodes.UpdateStatus(txCtx, tx, nodeID, status, s.now())
+		if err != nil {
+			return err
+		}
+		if err := s.audit.AppendTx(txCtx, tx, s.event(subjectID, action, "success", requestID, []string{nodeID}, reasonCode)); err != nil {
+			return err
+		}
+		updated = record
+		return nil
+	})
+	if err != nil {
+		return Node{}, err
+	}
+	return updated, nil
 }
 
 func (s *Service) requireRequest(requestID string) error {

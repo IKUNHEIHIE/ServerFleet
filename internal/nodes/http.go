@@ -41,6 +41,11 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	}
 	api := &httpAPI{service: service, authenticator: authenticator, now: service.now}
 	mux.HandleFunc("GET /api/v1/nodes", api.listNodes)
+	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/suspend", api.suspendNode)
+	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/revoke", api.revokeNode)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/identity", api.nodeIdentity)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/capabilities", api.nodeCapabilities)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/diagnostics", api.nodeDiagnostics)
 	mux.HandleFunc("GET /api/v1/groups", api.listGroups)
 	mux.HandleFunc("POST /api/v1/groups", api.createGroup)
 	mux.HandleFunc("GET /api/v1/groups/classifications", api.classifications)
@@ -103,6 +108,177 @@ func (api *httpAPI) listNodes(w http.ResponseWriter, r *http.Request) {
 		items = append(items, summary)
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
+type nodeStateDTO struct {
+	NodeID      string `json:"nodeId"`
+	DisplayName string `json:"displayName"`
+	Status      string `json:"status"`
+	Online      bool   `json:"online"`
+	LastSeenAt  string `json:"lastSeenAt,omitempty"`
+	Region      string `json:"region,omitempty"`
+	Provider    string `json:"provider,omitempty"`
+	CountryCode string `json:"countryCode,omitempty"`
+}
+
+type nodeIdentityDTO struct {
+	NodeID   string `json:"nodeId"`
+	Status   string `json:"status"`
+	Revoked  bool   `json:"revoked"`
+	Recorded bool   `json:"recorded"`
+	Message  string `json:"message,omitempty"`
+}
+
+type nodeCapabilitiesDTO struct {
+	NodeID       string   `json:"nodeId"`
+	Capabilities []string `json:"capabilities"`
+	Recorded     bool     `json:"recorded"`
+	Message      string   `json:"message,omitempty"`
+}
+
+type nodeDiagnosticsDTO struct {
+	NodeID            string   `json:"nodeId"`
+	Status            string   `json:"status"`
+	ConnectionState   string   `json:"connectionState"`
+	LastHeartbeatAt   string   `json:"lastHeartbeatAt,omitempty"`
+	DiagnosticNotes   []string `json:"diagnosticNotes"`
+	PendingTasksKnown bool     `json:"pendingTasksKnown"`
+}
+
+type lifecycleBody struct {
+	Reason           string  `json:"reason"`
+	ExpectedRevision *uint64 `json:"expectedRevision"`
+}
+
+func (api *httpAPI) suspendNode(w http.ResponseWriter, r *http.Request) {
+	api.changeNodeLifecycle(w, r, false)
+}
+
+func (api *httpAPI) revokeNode(w http.ResponseWriter, r *http.Request) {
+	api.changeNodeLifecycle(w, r, true)
+}
+
+func (api *httpAPI) changeNodeLifecycle(w http.ResponseWriter, r *http.Request, revoke bool) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body lifecycleBody
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if body.Reason == "" {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "reason is required")
+		return
+	}
+	if body.ExpectedRevision != nil && *body.ExpectedRevision != 0 {
+		// Node inventory has no persisted revision; accepting a stale expected
+		// revision would silently drop optimistic concurrency.
+		writeFixed(w, http.StatusBadRequest, "revision_not_supported", "node lifecycle changes do not support expectedRevision")
+		return
+	}
+	nodeID := r.PathValue("nodeId")
+	var (
+		node Node
+		err  error
+	)
+	if revoke {
+		node, err = api.service.Revoke(r.Context(), principal.SubjectID, principal.RequestID, nodeID, body.Reason)
+	} else {
+		node, err = api.service.Suspend(r.Context(), principal.SubjectID, principal.RequestID, nodeID, body.Reason)
+	}
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if revoke {
+		writeJSON(w, http.StatusOK, nodeIdentityFromRecord(node))
+		return
+	}
+	writeJSON(w, http.StatusOK, nodeStateFromRecord(node))
+}
+
+func (api *httpAPI) nodeIdentity(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	node, err := api.service.GetVisible(r.Context(), principal.SubjectID, r.PathValue("nodeId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nodeIdentityFromRecord(node))
+}
+
+func (api *httpAPI) nodeCapabilities(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	node, err := api.service.GetVisible(r.Context(), principal.SubjectID, r.PathValue("nodeId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, nodeCapabilitiesDTO{
+		NodeID: node.ID, Capabilities: []string{}, Recorded: false,
+		Message: "agent protocol capabilities are not recorded by the nodes module",
+	})
+}
+
+func (api *httpAPI) nodeDiagnostics(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	node, err := api.service.GetVisible(r.Context(), principal.SubjectID, r.PathValue("nodeId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	notes := []string{"agent version, capabilities and per-check history are not recorded by the nodes module"}
+	connectionState := "unknown"
+	switch node.Status {
+	case StatusOnline:
+		connectionState = "online"
+	case StatusOffline:
+		connectionState = "unreachable"
+	case StatusRevoked:
+		connectionState = "identity_rejected"
+		notes = append(notes, "node identity is revoked")
+	case StatusSuspended:
+		notes = append(notes, "node is administratively suspended")
+	}
+	writeJSON(w, http.StatusOK, nodeDiagnosticsDTO{
+		NodeID: node.ID, Status: string(node.Status), ConnectionState: connectionState,
+		LastHeartbeatAt: formatNodeTime(node.LastSeenAt), DiagnosticNotes: notes,
+		PendingTasksKnown: false,
+	})
+}
+
+func nodeStateFromRecord(node Node) nodeStateDTO {
+	return nodeStateDTO{
+		NodeID: node.ID, DisplayName: node.Name, Status: string(node.Status),
+		Online: node.Status == StatusOnline, LastSeenAt: formatNodeTime(node.LastSeenAt),
+		Region: node.Region, Provider: node.Provider, CountryCode: node.CountryCode,
+	}
+}
+
+func nodeIdentityFromRecord(node Node) nodeIdentityDTO {
+	revoked := node.Status == StatusRevoked
+	dto := nodeIdentityDTO{
+		NodeID: node.ID, Status: string(node.Status), Revoked: revoked,
+		Message: "certificate identity is owned by the transport layer and is not recorded here",
+	}
+	return dto
+}
+
+func formatNodeTime(value time.Time) string {
+	if value.IsZero() {
+		return ""
+	}
+	return value.UTC().Format(time.RFC3339)
 }
 
 func (api *httpAPI) listGroups(w http.ResponseWriter, r *http.Request) {
@@ -322,7 +498,8 @@ func writeError(w http.ResponseWriter, err error) {
 		writeFixed(w, http.StatusNotFound, "not_found", "resource was not found")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
-	case errors.Is(err, ErrRevisionConflict), errors.Is(err, ErrGroupNameTaken), errors.Is(err, ErrNodeExists):
+	case errors.Is(err, ErrRevisionConflict), errors.Is(err, ErrGroupNameTaken), errors.Is(err, ErrNodeExists),
+		errors.Is(err, ErrNodeRevoked):
 		writeFixed(w, http.StatusConflict, "conflict", "resource state changed")
 	case errors.Is(err, ErrInvalidNode), errors.Is(err, ErrInvalidSample), errors.Is(err, ErrUnknownNode),
 		errors.Is(err, ErrGroupIDRequired), errors.Is(err, ErrGroupNameRequired), errors.Is(err, ErrInvalidRevision),

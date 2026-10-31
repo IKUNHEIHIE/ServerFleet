@@ -220,3 +220,25 @@ func (s *Service) Get(ctx context.Context, subjectID, certificateID string) (Cer
 	}
 	return CertificateDetail{Certificate: record.view(), Distributions: distributions}, nil
 }
+
+// ListDetails returns every certificate the subject may read together with its
+// distribution rows. Visibility is decided once by List; management metadata
+// never includes key references.
+func (s *Service) ListDetails(ctx context.Context, subjectID string) ([]CertificateDetail, error) {
+	views, err := s.List(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	details := make([]CertificateDetail, 0, len(views))
+	for _, view := range views {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		distributions, err := s.repo.listDistributions(ctx, s.db, view.ID)
+		if err != nil {
+			return nil, err
+		}
+		details = append(details, CertificateDetail{Certificate: view, Distributions: distributions})
+	}
+	return details, nil
+}

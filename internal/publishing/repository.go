@@ -67,6 +67,28 @@ func (r *Repo) Create(ctx context.Context, q storage.Queryer, plan Plan, stages 
 	return nil
 }
 
+// List returns every plan ordered newest first. Callers still authorize each
+// plan against its service group.
+func (r *Repo) List(ctx context.Context) ([]Plan, error) {
+	if r == nil || r.db == nil {
+		return nil, errors.New("publishing: repository is not configured")
+	}
+	rows, err := r.db.Query(ctx, planSelect+" ORDER BY created_at DESC, id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	plans := make([]Plan, 0)
+	for rows.Next() {
+		plan, err := scanPlan(rows)
+		if err != nil {
+			return nil, err
+		}
+		plans = append(plans, plan)
+	}
+	return plans, rows.Err()
+}
+
 func (r *Repo) Get(ctx context.Context, planID string) (Plan, []Stage, error) {
 	if r == nil || r.db == nil {
 		return Plan{}, nil, errors.New("publishing: repository is not configured")

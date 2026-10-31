@@ -167,6 +167,91 @@ func (s *Service) Get(ctx context.Context, subjectID, planID string) (Plan, []St
 	return plan, stages, nil
 }
 
+// Preview evaluates the local preconditions a publication draft can verify:
+// group existence, member snapshot and revision match. Provider health and a
+// configuration diff are not fabricated here.
+func (s *Service) Preview(ctx context.Context, subjectID string, input PreviewInput) (Preview, error) {
+	if !validID(input.ServiceGroupID) {
+		return Preview{}, ErrServiceGroupNotFound
+	}
+	if _, err := normalizeDomain(input.Domain); err != nil {
+		return Preview{}, err
+	}
+	for _, gatewayID := range input.GatewayIDs {
+		if !validID(gatewayID) {
+			return Preview{}, fmt.Errorf("%w: gateway id", ErrInvalidPlan)
+		}
+	}
+	group, err := s.lookupGroup(ctx, input.ServiceGroupID)
+	if err != nil {
+		return Preview{}, err
+	}
+	if err := s.authorize(ctx, subjectID, ActionRead, "", group.NodeIDs, "publishing_preview"); err != nil {
+		return Preview{}, err
+	}
+	membersPresent := len(group.NodeIDs) > 0
+	checks := []PreviewCheck{
+		{Name: "service_group_exists", Passed: true},
+		{Name: "members_present", Passed: membersPresent},
+	}
+	eligible := membersPresent
+	warnings := []string{"DNS, certificate and gateway provider health is not evaluated by this preview"}
+	if input.ExpectedGroupRevision > 0 {
+		matched := group.Revision == input.ExpectedGroupRevision
+		check := PreviewCheck{Name: "revision_matches", Passed: matched}
+		if !matched {
+			check.Reason = "service group revision changed"
+		}
+		checks = append(checks, check)
+		eligible = eligible && matched
+	}
+	return Preview{
+		Eligible: eligible, GroupRevision: group.Revision,
+		TargetNodeIDs: append([]string(nil), group.NodeIDs...), Checks: checks, Warnings: warnings,
+	}, nil
+}
+
+// ListDetails returns plans the subject may read with their stage rows. A pure
+// per-plan denial is filtered; any other authorization or lookup failure aborts
+// the list instead of returning partial data.
+func (s *Service) ListDetails(ctx context.Context, subjectID string) ([]PlanDetail, error) {
+	plans, err := s.repo.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(plans) == 0 {
+		if err := s.authorize(ctx, subjectID, ActionRead, "", nil, "publishing_read"); err != nil {
+			return nil, err
+		}
+		return []PlanDetail{}, nil
+	}
+	details := make([]PlanDetail, 0, len(plans))
+	for _, plan := range plans {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		group, err := s.lookupGroup(ctx, plan.ServiceGroupID)
+		if err != nil {
+			if errors.Is(err, ErrServiceGroupNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if err := s.authorize(ctx, subjectID, ActionRead, "", group.NodeIDs, "publishing_read"); err != nil {
+			if isPureDenial(err) {
+				continue
+			}
+			return nil, err
+		}
+		stages, err := s.repo.stages(ctx, plan.ID)
+		if err != nil {
+			return nil, err
+		}
+		details = append(details, PlanDetail{Plan: plan, Stages: stages})
+	}
+	return details, nil
+}
+
 // Run executes pending or previously failed stages in order. Every stage result is
 // persisted before the next stage starts. Succeeded stages are never re-run, and
 // a failure stops the plan as partial_failure with later stages still pending.

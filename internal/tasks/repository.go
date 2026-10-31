@@ -213,6 +213,27 @@ func (r *Repo) Transition(ctx context.Context, q storage.Queryer, id string, fro
 	return affected == 1, nil
 }
 
+// ResumeUnstarted extends the offline wait of a queued task that has dispatched
+// nothing and advances its revision. It never changes a target state, so a
+// resumed task cannot re-run any side effect.
+func (r *Repo) ResumeUnstarted(ctx context.Context, q storage.Queryer, id string, expectedRevision uint64, deadline, now time.Time) (bool, error) {
+	if r == nil || q == nil {
+		return false, errors.New("tasks: repository is not configured")
+	}
+	outcome, err := q.Exec(ctx, `UPDATE tasks SET revision = revision + 1,
+		unstarted_deadline = ?, updated_at = ?
+		WHERE id = ? AND status = ? AND started_at IS NULL AND cancel_requested = 0 AND revision = ?`,
+		encodeTime(deadline), encodeTime(now), id, string(StatusQueued), expectedRevision)
+	if err != nil {
+		return false, err
+	}
+	affected, err := outcome.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	return affected == 1, nil
+}
+
 func (r *Repo) SetStarted(ctx context.Context, q storage.Queryer, id string) error {
 	_, err := q.Exec(ctx, "UPDATE tasks SET started_at = COALESCE(started_at, ?), updated_at = ? WHERE id = ? AND started_at IS NULL",
 		encodeTime(time.Now().UTC()), encodeTime(time.Now().UTC()), id)

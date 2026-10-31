@@ -122,6 +122,38 @@ type CreateInput struct {
 	IdempotencyKey        string
 }
 
+// PreviewInput is a server-side preflight request. It never creates a plan.
+type PreviewInput struct {
+	ServiceGroupID        string
+	ExpectedGroupRevision uint64
+	Domain                string
+	GatewayIDs            []string
+	HTTPS                 bool
+}
+
+// PreviewCheck is one preflight observation. Only facts the domain can verify
+// locally are reported; provider health is not invented.
+type PreviewCheck struct {
+	Name   string
+	Passed bool
+	Reason string
+}
+
+// Preview is the honest publication preflight answer.
+type Preview struct {
+	Eligible      bool
+	GroupRevision uint64
+	TargetNodeIDs []string
+	Checks        []PreviewCheck
+	Warnings      []string
+}
+
+// PlanDetail is a plan with its persisted stage rows.
+type PlanDetail struct {
+	Plan   Plan
+	Stages []Stage
+}
+
 // Stable stage error codes. Raw provider errors are never stored.
 const (
 	ErrorCodePublishError  = "publish_error"

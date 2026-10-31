@@ -33,6 +33,12 @@ func normalizeCreateInput(input CreateInternalDistributionInput) (CreateInternal
 	if err := input.KeyRef.Validate(); err != nil {
 		return CreateInternalDistributionInput{}, err
 	}
+	if input.CredentialType == "" {
+		input.CredentialType = CredentialTrustBundle
+	}
+	if !input.CredentialType.valid() {
+		return CreateInternalDistributionInput{}, fmt.Errorf("%w: credential type", ErrInvalidInput)
+	}
 	validity, err := normalizeValidity(input.Validity)
 	if err != nil {
 		return CreateInternalDistributionInput{}, err

@@ -25,6 +25,7 @@ const (
 	ActionApprove          = "tasks.approve"
 	ActionRevise           = "tasks.revise"
 	ActionCancel           = "tasks.cancel"
+	ActionResume           = "tasks.resume"
 	ActionDispatchDenied   = "tasks.dispatch_denied"
 	ActionFinished         = "tasks.finished"
 	ActionApprovalConsumed = "tasks.approval_consumed"
@@ -33,7 +34,7 @@ const (
 // ServiceActions returns the audit action catalog this domain emits.
 func ServiceActions() []string {
 	return []string{ActionApprovalConsumed, ActionApprove, ActionCancel, ActionDispatchDenied,
-		ActionFinished, ActionRevise, ActionSubmit}
+		ActionFinished, ActionResume, ActionRevise, ActionSubmit}
 }
 
 // AuditSink is the durable audit port.
@@ -521,6 +522,66 @@ func (s *Service) Revise(ctx context.Context, taskID string, request ReviseReque
 	}
 	task.Targets = targets
 	return task, nil
+}
+
+// Resume re-arms a queued task that has not dispatched anything: it re-checks
+// authorization and approval, then extends the offline wait and advances the
+// revision. Terminal, running or cancelling tasks are never resumed, and no
+// target state is changed.
+func (s *Service) Resume(ctx context.Context, taskID, subjectID, requestID string, expectedRevision uint64, reason string) (Task, error) {
+	if err := s.requireRequest(requestID); err != nil {
+		return Task{}, err
+	}
+	if reason != "" && !validLabel(reason, 300) {
+		return Task{}, fmt.Errorf("%w: reason", ErrInvalidTask)
+	}
+	unlock := s.lockTask(taskID)
+	defer unlock()
+	task, err := s.repo.Get(ctx, taskID)
+	if err != nil {
+		return Task{}, err
+	}
+	if expectedRevision > 0 && task.Revision != expectedRevision {
+		return Task{}, ErrInvalidStatus
+	}
+	if task.Status.Terminal() {
+		return Task{}, ErrTaskTerminal
+	}
+	if task.Status != StatusQueued || !task.StartedAt.IsZero() || task.CancelRequested {
+		return Task{}, fmt.Errorf("%w: only an unstarted queued task can be resumed", ErrInvalidStatus)
+	}
+	if task.ApprovalRequired {
+		if err := s.checkApproval(ctx, task); err != nil {
+			return Task{}, err
+		}
+	}
+	targetIDs := taskTargetIDs(task)
+	if err := s.authorize(ctx, subjectID, task.ActionID, requestID, targetIDs, "task_resume"); err != nil {
+		return Task{}, err
+	}
+	now := s.now().UTC()
+	deadline := now.Add(s.unstartedTTL)
+	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		moved, err := s.repo.ResumeUnstarted(txCtx, tx, taskID, task.Revision, deadline, now)
+		if err != nil {
+			return err
+		}
+		if !moved {
+			return ErrInvalidStatus
+		}
+		if err := s.repo.AppendEvent(txCtx, tx, taskID, "resumed", map[string]any{
+			"revision": task.Revision + 1, "expectedRevision": task.Revision,
+		}, now); err != nil {
+			return err
+		}
+		event := s.event(subjectID, ActionResume, "success", requestID, targetIDs, "resumed")
+		event.TaskID = taskID
+		return s.audit.AppendTx(txCtx, tx, event)
+	})
+	if err != nil {
+		return Task{}, err
+	}
+	return s.repo.Get(ctx, taskID)
 }
 
 // Cancel stops an unstarted task immediately and asks the transport to interrupt
