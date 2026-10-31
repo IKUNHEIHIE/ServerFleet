@@ -352,6 +352,53 @@ func (s *agentIdentityStore) Accept(ctx context.Context, result transport.AgentE
 	return nil
 }
 
+// Status reports the locally verified issued identity without changing state.
+func (s *agentIdentityStore) Status(ctx context.Context) (agentIdentityFacts, bool, error) {
+	if s == nil || ctx == nil || ctx.Err() != nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.root == nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	if _, err := s.root.Lstat("issued.json"); errors.Is(err, os.ErrNotExist) {
+		if _, err := s.root.Lstat("enrollment.json"); errors.Is(err, os.ErrNotExist) {
+			return agentIdentityFacts{}, false, nil
+		} else if err != nil {
+			return agentIdentityFacts{}, false, errAgentIdentity
+		}
+		if _, _, preparedErr := s.prepared(); preparedErr != nil {
+			return agentIdentityFacts{}, false, errAgentIdentity
+		}
+		return agentIdentityFacts{}, false, nil
+	} else if err != nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	_, key, err := s.prepared()
+	if err != nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	defer clear(key)
+	raw, err := s.read("issued.json", 64<<10)
+	if err != nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	var issued transport.AgentEnrollmentResult
+	if json.Unmarshal(raw, &issued) != nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	canonical, _ := json.Marshal(issued)
+	if !bytes.Equal(raw, canonical) {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	_, facts, err := s.validate(issued, key)
+	if err != nil {
+		return agentIdentityFacts{}, false, errAgentIdentity
+	}
+	return facts, true, nil
+}
+
 // WithCertificate lends a locally verified pair only through a mandatory current
 // profile/trust/revocation gate. Consumer must not retain it or reenter this store;
 // session admission and Controller leaf mapping are still required on EVERY use.
