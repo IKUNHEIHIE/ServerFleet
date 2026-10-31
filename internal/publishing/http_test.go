@@ -153,6 +153,162 @@ func TestHTTPPublicationPreviewAndCreateRejections(t *testing.T) {
 	}
 }
 
+func TestHTTPPublicationRunAndRollback(t *testing.T) {
+	fixture := newPublicationFixture(t)
+	server := newPublishingServer(t, fixture)
+
+	create := pubJSON(t, server.URL+"/api/v1/publishing/publications", http.MethodPost, publicationDraft())
+	if create.StatusCode != http.StatusAccepted {
+		t.Fatalf("create status = %d body=%s", create.StatusCode, create.Body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	pubDecode(t, create.Body, &created)
+
+	run := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/run", http.MethodPost, map[string]any{})
+	if run.StatusCode != http.StatusOK {
+		t.Fatalf("run status = %d body=%s", run.StatusCode, run.Body)
+	}
+	var operation struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+		Stages []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"stages"`
+	}
+	pubDecode(t, run.Body, &operation)
+	if operation.ID != created.ID || operation.Status != "succeeded" || len(operation.Stages) != 3 {
+		t.Fatalf("run operation = %+v", operation)
+	}
+	for _, stage := range operation.Stages {
+		if stage.Status != "succeeded" {
+			t.Fatalf("stage = %+v", stage)
+		}
+	}
+	order := fixture.ports.callLog.snapshot()
+	if len(order) != 3 || order[0] != publishing.StageDNS || order[1] != publishing.StageCertificate || order[2] != publishing.StageGateway {
+		t.Fatalf("stage order = %v", order)
+	}
+
+	pending := pubJSON(t, server.URL+"/api/v1/publishing/publications", http.MethodPost, publicationDraft())
+	if pending.StatusCode != http.StatusAccepted {
+		t.Fatalf("second create status = %d body=%s", pending.StatusCode, pending.Body)
+	}
+	var second struct {
+		ID string `json:"id"`
+	}
+	pubDecode(t, pending.Body, &second)
+	notRollable := pubJSON(t, server.URL+"/api/v1/publications/"+second.ID+"/rollback", http.MethodPost, map[string]any{"stage": "dns"})
+	if notRollable.StatusCode != http.StatusBadRequest {
+		t.Fatalf("pending rollback status = %d body=%s", notRollable.StatusCode, notRollable.Body)
+	}
+
+	rollbackDNS := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/rollback", http.MethodPost, map[string]any{"stage": "dns"})
+	if rollbackDNS.StatusCode != http.StatusOK {
+		t.Fatalf("rollback status = %d body=%s", rollbackDNS.StatusCode, rollbackDNS.Body)
+	}
+	pubDecode(t, rollbackDNS.Body, &operation)
+	if operation.Status != "partially_completed" || operation.Stages[0].Name != "dns" || operation.Stages[0].Status != "rolled_back" {
+		t.Fatalf("rollback operation = %+v", operation)
+	}
+	if _, rollbacks := fixture.ports.dns.counts(); rollbacks != 1 || fixture.ports.dns.lastRollback().PlanID != created.ID {
+		t.Fatalf("dns rollback calls = %d %+v", rollbacks, fixture.ports.dns.lastRollback())
+	}
+	for _, stage := range []string{"certificate", "gateway"} {
+		response := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/rollback", http.MethodPost, map[string]any{"stage": stage})
+		if response.StatusCode != http.StatusOK {
+			t.Fatalf("%s rollback status = %d body=%s", stage, response.StatusCode, response.Body)
+		}
+	}
+	after := pubGet(t, server.URL+"/api/v1/publishing/publications/"+created.ID)
+	pubDecode(t, after.Body, &operation)
+	for _, stage := range operation.Stages {
+		if stage.Status != "rolled_back" {
+			t.Fatalf("stage after full rollback = %+v", operation.Stages)
+		}
+	}
+}
+
+func TestHTTPPublicationRunFailureAndRetry(t *testing.T) {
+	fixture := newPublicationFixture(t)
+	server := newPublishingServer(t, fixture)
+
+	create := pubJSON(t, server.URL+"/api/v1/publishing/publications", http.MethodPost, publicationDraft())
+	if create.StatusCode != http.StatusAccepted {
+		t.Fatalf("create status = %d body=%s", create.StatusCode, create.Body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	pubDecode(t, create.Body, &created)
+
+	fixture.ports.gateway.set(publishing.StageResult{}, errors.New("provider refused"))
+	failed := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/run", http.MethodPost, map[string]any{})
+	if failed.StatusCode != http.StatusBadGateway {
+		t.Fatalf("failed run status = %d body=%s", failed.StatusCode, failed.Body)
+	}
+	var operation struct {
+		Status string `json:"status"`
+		Stages []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"stages"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	pubDecode(t, failed.Body, &operation)
+	if operation.Status != "partially_completed" || operation.Error.Code != "stage_failed" {
+		t.Fatalf("failed operation = %+v", operation)
+	}
+	state := map[string]string{}
+	for _, stage := range operation.Stages {
+		state[stage.Name] = stage.Status
+	}
+	if state["dns"] != "succeeded" || state["certificate"] != "succeeded" || state["gateway"] != "failed" {
+		t.Fatalf("stages after failure = %+v", state)
+	}
+	if bytes.Contains(failed.Body, []byte("provider refused")) {
+		t.Fatalf("provider error leaked: %s", failed.Body)
+	}
+
+	fixture.ports.gateway.set(publishing.StageResult{Summary: "gateway ok"}, nil)
+	retry := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/run", http.MethodPost, map[string]any{})
+	if retry.StatusCode != http.StatusOK {
+		t.Fatalf("retry status = %d body=%s", retry.StatusCode, retry.Body)
+	}
+	pubDecode(t, retry.Body, &operation)
+	if operation.Status != "succeeded" {
+		t.Fatalf("retry operation = %+v", operation)
+	}
+	dnsPublishes, _ := fixture.ports.dns.counts()
+	certPublishes, _ := fixture.ports.cert.counts()
+	gwPublishes, _ := fixture.ports.gateway.counts()
+	if dnsPublishes != 1 || certPublishes != 1 || gwPublishes != 2 {
+		t.Fatalf("publish counts = dns:%d cert:%d gateway:%d", dnsPublishes, certPublishes, gwPublishes)
+	}
+	if response := pubJSON(t, server.URL+"/api/v1/publishing/publications/missing/run", http.MethodPost, map[string]any{}); response.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing run status = %d", response.StatusCode)
+	}
+	if response := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/rollback", http.MethodPost, map[string]any{"stage": "database"}); response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid stage rollback status = %d body=%s", response.StatusCode, response.Body)
+	}
+	if response := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/rollback", http.MethodPost, map[string]any{}); response.StatusCode != http.StatusBadRequest {
+		t.Fatalf("missing stage rollback status = %d", response.StatusCode)
+	}
+
+	fixture.authorizer.deny = true
+	denied := pubJSON(t, server.URL+"/api/v1/publishing/publications/"+created.ID+"/run", http.MethodPost, map[string]any{})
+	if denied.StatusCode != http.StatusForbidden {
+		t.Fatalf("denied run status = %d body=%s", denied.StatusCode, denied.Body)
+	}
+	if bytes.Contains(denied.Body, []byte(created.ID)) {
+		t.Fatalf("denied run leaked plan data: %s", denied.Body)
+	}
+}
+
 func TestHTTPPublicationAuthenticationAndAuditActions(t *testing.T) {
 	fixture := newPublicationFixture(t)
 	mux := http.NewServeMux()

@@ -48,11 +48,15 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/publishing/publications", api.list)
 	mux.HandleFunc("POST /api/v1/publishing/publications", api.create)
 	mux.HandleFunc("GET /api/v1/publishing/publications/{publicationId}", api.get)
+	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/run", api.run)
+	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/rollback", api.rollback)
 	// The v0.9 candidate contract and the web client use the unprefixed paths.
 	mux.HandleFunc("POST /api/v1/publications/preview", api.preview)
 	mux.HandleFunc("GET /api/v1/publications", api.list)
 	mux.HandleFunc("POST /api/v1/publications", api.create)
 	mux.HandleFunc("GET /api/v1/publications/{publicationId}", api.get)
+	mux.HandleFunc("POST /api/v1/publications/{publicationId}/run", api.run)
+	mux.HandleFunc("POST /api/v1/publications/{publicationId}/rollback", api.rollback)
 	return nil
 }
 
@@ -202,6 +206,130 @@ func (api *httpAPI) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, operationFromDetail(PlanDetail{Plan: plan, Stages: stages}))
+}
+
+// run executes pending or failed stages in order. The response always carries
+// the current persisted plan and stage rows, including when a stage fails, so an
+// operator can distinguish a partial failure from a transport error.
+func (api *httpAPI) run(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	detail, err := api.service.RunDetail(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("publicationId"))
+	if err == nil {
+		writeJSON(w, http.StatusOK, operationFromDetail(detail))
+		return
+	}
+	if detail.Plan.ID == "" || isPublishingAuthorizationError(err) {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, publicationErrorStatus(err), operationWithError(detail, err))
+}
+
+// rollback compensates exactly one executed stage through its publisher port.
+func (api *httpAPI) rollback(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Stage string `json:"stage"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if body.Stage == "" {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "stage is required")
+		return
+	}
+	detail, err := api.service.RollbackDetail(r.Context(), principal.SubjectID, principal.RequestID,
+		r.PathValue("publicationId"), StageKind(body.Stage))
+	if err == nil {
+		writeJSON(w, http.StatusOK, operationFromDetail(detail))
+		return
+	}
+	if detail.Plan.ID == "" || isPublishingAuthorizationError(err) {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, publicationErrorStatus(err), operationWithError(detail, err))
+}
+
+func operationWithError(detail PlanDetail, cause error) map[string]any {
+	operation := operationFromDetail(detail)
+	return map[string]any{
+		"id": operation.ID, "status": operation.Status, "createdAt": operation.CreatedAt,
+		"stages": operation.Stages,
+		"error":  map[string]string{"code": publicationErrorCode(cause), "message": "publication operation failed"},
+	}
+}
+
+func isPublishingAuthorizationError(err error) bool {
+	return errors.Is(err, auth.ErrDenied) || errors.Is(err, auth.ErrInvalidCheck) || errors.Is(err, auth.ErrPolicyUnavailable)
+}
+
+func publicationErrorStatus(err error) int {
+	switch {
+	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrInvalidCheck), errors.Is(err, auth.ErrPolicyUnavailable):
+		return http.StatusForbidden
+	case errors.Is(err, ErrPlanNotFound), errors.Is(err, ErrServiceGroupNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return http.StatusRequestTimeout
+	case errors.Is(err, ErrRevisionConflict), errors.Is(err, ErrPlanExists), errors.Is(err, ErrDuplicatePlan),
+		errors.Is(err, ErrPlanCompleted), errors.Is(err, ErrPlanCanceled), errors.Is(err, ErrPlanNotRunnable),
+		errors.Is(err, ErrStageAlreadyRunning):
+		return http.StatusConflict
+	case errors.Is(err, ErrInvalidPlan), errors.Is(err, ErrInvalidStage), errors.Is(err, ErrStageNotFound),
+		errors.Is(err, ErrStageNotRollable), errors.Is(err, ErrRequestIDRequired):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrGroupLookupFailed), errors.Is(err, ErrPublisherUnavailable), errors.Is(err, ErrStageFailed),
+		errors.Is(err, ErrInvalidStageResult), errors.Is(err, ErrRollbackFailed):
+		return http.StatusBadGateway
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+func publicationErrorCode(err error) string {
+	switch {
+	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrInvalidCheck), errors.Is(err, auth.ErrPolicyUnavailable):
+		return "forbidden"
+	case errors.Is(err, ErrPlanNotFound), errors.Is(err, ErrServiceGroupNotFound):
+		return "not_found"
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
+		return "request_timeout"
+	case errors.Is(err, ErrRevisionConflict):
+		return "revision_conflict"
+	case errors.Is(err, ErrPlanCompleted):
+		return "plan_completed"
+	case errors.Is(err, ErrPlanCanceled):
+		return "plan_canceled"
+	case errors.Is(err, ErrPlanNotRunnable):
+		return "plan_not_runnable"
+	case errors.Is(err, ErrStageAlreadyRunning):
+		return "stage_already_running"
+	case errors.Is(err, ErrStageNotFound):
+		return "stage_not_found"
+	case errors.Is(err, ErrStageNotRollable):
+		return "stage_not_rollable"
+	case errors.Is(err, ErrPublisherUnavailable):
+		return "publisher_unavailable"
+	case errors.Is(err, ErrStageFailed):
+		return "stage_failed"
+	case errors.Is(err, ErrInvalidStageResult):
+		return "invalid_stage_result"
+	case errors.Is(err, ErrRollbackFailed):
+		return "rollback_failed"
+	case errors.Is(err, ErrInvalidPlan), errors.Is(err, ErrInvalidStage), errors.Is(err, ErrRequestIDRequired):
+		return "invalid_request"
+	case errors.Is(err, ErrGroupLookupFailed):
+		return "group_lookup_failed"
+	default:
+		return "internal_error"
+	}
 }
 
 func validDraft(w http.ResponseWriter, body draftBody) bool {

@@ -365,6 +365,34 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 	return s.complete(ctx, subjectID, requestID, plan, group.NodeIDs)
 }
 
+// RunDetail executes Run and returns the persisted stage rows from the same
+// authorized operation. The returned detail is populated whenever the plan could
+// be loaded, including when a stage failed.
+func (s *Service) RunDetail(ctx context.Context, subjectID, requestID, planID string) (PlanDetail, error) {
+	plan, err := s.Run(ctx, subjectID, requestID, planID)
+	if plan.ID == "" {
+		return PlanDetail{}, err
+	}
+	stages, stageErr := s.repo.stages(ctx, planID)
+	if stageErr != nil {
+		return PlanDetail{Plan: plan}, stageErr
+	}
+	return PlanDetail{Plan: plan, Stages: stages}, err
+}
+
+// RollbackDetail is RunDetail for one stage compensation.
+func (s *Service) RollbackDetail(ctx context.Context, subjectID, requestID, planID string, kind StageKind) (PlanDetail, error) {
+	plan, err := s.Rollback(ctx, subjectID, requestID, planID, kind)
+	if plan.ID == "" {
+		return PlanDetail{}, err
+	}
+	stages, stageErr := s.repo.stages(ctx, planID)
+	if stageErr != nil {
+		return PlanDetail{Plan: plan}, stageErr
+	}
+	return PlanDetail{Plan: plan, Stages: stages}, err
+}
+
 // Rollback invokes the explicit compensation port for one executed stage. The
 // plan becomes canceled only after every executed stage is rolled_back; a partial
 // rollback leaves it partial_failure. No stage summary is rewritten, so a DNS TTL
