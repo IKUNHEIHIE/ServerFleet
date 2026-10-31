@@ -1,0 +1,28 @@
+{
+  "taskId": "V09-WAVE3-REVIEW",
+  "reviewerSession": "agy-review-01",
+  "reviewedAt": "2026-10-31T20:35:00+08:00",
+  "baselineCommit": "98f39e04e73ee3150b9f6146d92102c59e5358c3",
+  "cxCommit": "04ff698452b7a347063386f83948a3b3c8fbb053",
+  "cxCodeCommit": "9ef6a3b9c2041c69bbac0ab990ba3c5c912e7913",
+  "dsCommit": "a858817313f02d2bacb48dda08b1956c3f19557b",
+  "dsCodeCommit": "a7e0852ab4ca393e18b5f199f83f0fd3750df755",
+  "gmCommit": "2aebec31d59db4093276acab7023c3c62865a0ba",
+  "integrationCodeCommit": "038ecaf8e1511163d33b95bc511d92107c8fe36a",
+  "status": "ACCEPTED",
+  "verification": {
+    "npmRunCheck": "PASS",
+    "npmRunCheckSecurity": "PASS",
+    "goTopLevelTestsPassed": 573,
+    "goSubTestsPassed": 1128,
+    "goTotalTestPasses": 1701,
+    "goTestsFailed": 0,
+    "webTestFilesPassed": 36,
+    "webTestsPassed": 306,
+    "webTestsFailed": 0,
+    "browserStubStepsPassed": 16,
+    "browserLiveControllerStepsPassed": 32,
+    "npmAuditHigh": 0,
+    "govulncheck": 0
+  }
+}
