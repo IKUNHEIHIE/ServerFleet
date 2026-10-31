@@ -11,6 +11,7 @@ import { authApi } from "@/lib/api/endpoints";
 import { setCsrfProvider, onUnauthorized } from "@/lib/api/client";
 import { ApiError, describeApiError, isApiError } from "@/lib/api/errors";
 import type { BootstrapState, Identity, LoginResult } from "@/lib/api/dto";
+import { hasPermission } from "@/lib/permissions/backend-aliases";
 
 export type SessionState =
   | { readonly kind: "checking" }
@@ -387,7 +388,8 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
     (permission: string): boolean => {
       if (!identity) return false;
       if (identity.isBootstrapAdmin === true) return true;
-      return identity.permissions?.includes(permission) ?? false;
+      // GM-W3-01：同时接受候选契约 UI 键与真实 Controller 权限目录键（显式授予，不推断）。
+      return hasPermission(identity.permissions, permission);
     },
     [identity],
   );

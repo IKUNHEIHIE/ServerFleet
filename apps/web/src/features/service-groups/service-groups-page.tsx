@@ -39,6 +39,7 @@ function ServiceGroupEditor({
   readonly onClose: () => void;
   readonly onSaved: (group: ServiceGroup) => void;
 }) {
+  const session = useSession();
   const group = state.group;
   const [name, setName] = useState(group?.name ?? "");
   const [description, setDescription] = useState(group?.description ?? "");
@@ -47,9 +48,15 @@ function ServiceGroupEditor({
   const [healthCheck, setHealthCheck] = useState(group?.service?.healthCheck ?? "");
   const [lbEnabled, setLbEnabled] = useState(group?.loadBalancing.enabled ?? false);
   const [strategy, setStrategy] = useState(group?.loadBalancing.strategy ?? "round_robin");
+  // 真实 Controller 按成员节点集合授权（internal/servicegroups Service.Create/Update 以
+  // members 作为授权范围）；创建时必须显式选择成员，空成员集合会被服务端拒绝。
+  const [memberIds, setMemberIds] = useState<ReadonlySet<string>>(new Set(group?.memberNodeIds ?? []));
   const [localError, setLocalError] = useState<string | null>(null);
   const action = useAction((body: ServiceGroupInput) =>
     group ? serviceGroupsApi.patch(group.id, body) : serviceGroupsApi.create(body),
+  );
+  const memberOptions = useResource(`service-group-editor:nodes:${session.viewEpoch}`, signal =>
+    nodesApi.list({ signal }).then(result => result.data.items),
   );
 
   useEffect(() => {
@@ -61,8 +68,18 @@ function ServiceGroupEditor({
     setHealthCheck(group?.service?.healthCheck ?? "");
     setLbEnabled(group?.loadBalancing.enabled ?? false);
     setStrategy(group?.loadBalancing.strategy ?? "round_robin");
+    setMemberIds(new Set(group?.memberNodeIds ?? []));
     setLocalError(null);
   }, [state.open, group]);
+
+  function toggleMember(nodeId: string, checked: boolean) {
+    setMemberIds(current => {
+      const next = new Set(current);
+      if (checked) next.add(nodeId);
+      else next.delete(nodeId);
+      return next;
+    });
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -79,7 +96,7 @@ function ServiceGroupEditor({
     const body: ServiceGroupInput = {
       name: name.trim(),
       ...(description.trim() ? { description: description.trim() } : {}),
-      memberNodeIds: group?.memberNodeIds ?? [],
+      memberNodeIds: [...memberIds],
       service: { port: numericPort, protocol, ...(healthCheck.trim() ? { healthCheck: healthCheck.trim() } : {}) },
       loadBalancing: { enabled: lbEnabled, strategy },
       ...(group ? { expectedRevision: group.revision } : {}),
@@ -145,7 +162,36 @@ function ServiceGroupEditor({
             )}
           </Field>
         </div>
-        <p className="text-xs text-muted-foreground">成员在详情页管理；创建后可再添加节点与网关联动。</p>
+        <fieldset className="max-h-56 overflow-y-auto rounded-lg border px-4 py-3">
+          <legend className="px-1 text-sm font-medium">成员节点（{memberIds.size} 已选）</legend>
+          <p className="mb-1 text-xs text-muted-foreground">
+            服务端按成员节点集合校验创建/修改权限；至少选择一个已授权节点。
+          </p>
+          <AsyncPanel
+            state={memberOptions.state}
+            onRetry={memberOptions.reload}
+            errorTitle="节点列表加载失败"
+            empty={<p className="py-2 text-sm text-muted-foreground">当前没有可见节点；请先在节点授权中获得 nodes.read。</p>}
+            isEmpty={data => data.length === 0}
+          >
+            {data => (
+              <>
+                {data.map(node => (
+                  <label key={node.id} className="mt-1 flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 accent-[var(--primary)]"
+                      checked={memberIds.has(node.id)}
+                      onChange={event => toggleMember(node.id, event.target.checked)}
+                    />
+                    {node.name.trim() || node.id} {node.online ? "" : "（离线）"}
+                  </label>
+                ))}
+              </>
+            )}
+          </AsyncPanel>
+        </fieldset>
+        <p className="text-xs text-muted-foreground">成员创建后仍可在详情页继续管理。</p>
       </form>
     </Modal>
   );

@@ -70,7 +70,8 @@ describe("dns page", () => {
     await waitFor(() => {
       const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/dns/accounts");
       expect(call).toBeDefined();
-      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ providerCode: "cloudflare", displayName: "New", apiToken: "cf-token-secret" });
+      // 真实 Controller（internal/dns/http.go）：凭据只以 credentialRef 引用提交，不传输明文。
+      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ displayName: "New", credentialRef: "cf-token-secret", makeDefault: false });
     });
     expect(document.body.textContent).not.toContain("cf-token-secret");
 

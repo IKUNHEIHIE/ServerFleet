@@ -41,6 +41,14 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
     tasksApi.executions(taskId, { limit: 200 }, signal).then(result => result.data),
   );
   const current: TaskSummary | null = task.state.status === "ready" ? task.state.data : null;
+  // 真实 GET /api/v1/tasks/{jobId} 返回 batch 形状，不含 planDigest；审批必须使用服务端签发的
+  // planDigest，因此从服务端任务列表按 taskId 补齐，绝不本地编造摘要。
+  const planDigestLookup = useResource(
+    `task:plan:${session.viewEpoch}:${taskId}`,
+    signal => tasksApi.list({ limit: 200 }, signal).then(result => result.data.items.find(item => item.taskId === taskId)?.planDigest ?? null),
+    { enabled: Boolean(current) && !current?.planDigest },
+  );
+  const planDigest: string | null = current?.planDigest ?? (planDigestLookup.state.status === "ready" ? planDigestLookup.state.data : null);
   const terminal = current ? isTaskTerminal(current.state) : false;
 
   const stream = useEventStream({
@@ -91,8 +99,9 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
     event.preventDefault();
     if (!decision || !current) return;
     if (decision === "approve" || decision === "deny") {
+      if (!planDigest) return; // 按钮已禁用：服务端未提供 planDigest 时不提交，不编造。
       const result = await approveAction.run({
-        planDigest: current.planDigest,
+        planDigest,
         decision,
         ...(reason.trim() ? { reason: reason.trim() } : {}),
       });
@@ -131,8 +140,8 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
             <a href="#/tasks" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回任务中心</a>
             {current?.state === "awaiting_approval" ? (
               <>
-                <Button type="button" disabled={!canApprove || writesLocked || busy} onClick={() => openDecision("approve")}>批准</Button>
-                <Button type="button" variant="danger" disabled={!canApprove || writesLocked || busy} onClick={() => openDecision("deny")}>拒绝</Button>
+                <Button type="button" disabled={!canApprove || writesLocked || busy || !planDigest} onClick={() => openDecision("approve")}>批准</Button>
+                <Button type="button" variant="danger" disabled={!canApprove || writesLocked || busy || !planDigest} onClick={() => openDecision("deny")}>拒绝</Button>
               </>
             ) : null}
             {current?.state === "paused" ? (
@@ -167,7 +176,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                 <p>创建：{formatDateTime(data.createdAt) ?? "—"}</p>
                 <p>创建者：{data.createdBy ?? "—"}</p>
                 <p>到期：{formatDateTime(data.expiresAt) ?? "—"}</p>
-                <p className="lg:col-span-2">planDigest：<span className="break-all font-mono text-xs">{data.planDigest}</span></p>
+                <p className="lg:col-span-2">planDigest：<span className="break-all font-mono text-xs">{data.planDigest ?? planDigest ?? "（此端点未返回 planDigest；服务端任务列表中也没有该任务，审批保持禁用）"}</span></p>
                 <p>revision：{data.revision}</p>
                 <p>目标快照：{data.targetNodeIdsSnapshot.length} 台</p>
               </div>
@@ -220,15 +229,15 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                   <DataTable
                     caption="任务执行结果"
                     rows={page.items}
-                    rowKey={execution => execution.executionId}
+                    rowKey={execution => execution.executionId ?? execution.nodeId}
                     columns={[
                       { key: "node", header: "节点", render: execution => <span className="font-mono text-xs">{execution.nodeId}</span> },
                       { key: "state", header: "状态", render: execution => execution.state },
                       { key: "exit", header: "退出码", render: execution => (execution.exitCode === null || execution.exitCode === undefined ? "—" : execution.exitCode) },
                       { key: "start", header: "开始", render: execution => formatDateTime(execution.startedAt) ?? "—" },
                       { key: "finish", header: "结束", render: execution => formatDateTime(execution.finishedAt) ?? "—" },
-                      { key: "seq", header: "最后序号", align: "right", render: execution => execution.lastSequence },
-                      { key: "truncated", header: "输出截断", render: execution => (execution.outputTruncated ? "是" : "否") },
+                      { key: "seq", header: "最后序号", align: "right", render: execution => execution.lastSequence ?? "—" },
+                      { key: "truncated", header: "输出截断", render: execution => (execution.outputTruncated === undefined ? "—" : execution.outputTruncated ? "是" : "否") },
                     ]}
                   />
                 )}
@@ -262,7 +271,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
       >
         <form id="task-decision" onSubmit={submit} className="space-y-4">
           {actionError ? <Notice tone="error" title="操作失败">{describeApiError(actionError)}</Notice> : null}
-          {current ? <p className="text-xs text-muted-foreground">planDigest：<span className="break-all font-mono">{current.planDigest}</span></p> : null}
+          {current ? <p className="text-xs text-muted-foreground">planDigest：<span className="break-all font-mono">{current.planDigest ?? planDigest ?? "未返回"}</span></p> : null}
           <Field label="原因（可选）" hint="服务端会写入审计；取消/恢复需要说明。">
             {ids => <TextArea id={ids.inputId} value={reason} onChange={event => setReason(event.target.value)} maxLength={500} />}
           </Field>

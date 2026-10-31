@@ -69,6 +69,13 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
       setLocalError("命令/脚本不能为空。");
       return null;
     }
+    // 真实 Controller 把 command 当作单一动作 ID（如 host.root / tasks.command / host.patch）
+    // 用于操作分级与授权；含空白/换行的自由文本会被服务端判为非法并返回 500 而非 400。
+    // 在客户端先诚实校验，不静默截断、不改写用户输入。
+    if (/\s/.test(command.trim())) {
+      setLocalError("命令必须是单一动作 ID（如 host.root / tasks.command / host.patch），不能包含空格或换行。");
+      return null;
+    }
     if (targetType === "node_ids" && selectedNodes.size === 0) {
       setLocalError("至少选择一个目标节点。");
       return null;
@@ -83,7 +90,7 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
         targetType === "node_ids"
           ? { type: "node_ids" as const, nodeIds: [...selectedNodes] }
           : { type: targetType, groupId: targetGroupId },
-      command,
+      command: command.trim(),
       dryRun,
       dispatchMode,
     };

@@ -221,6 +221,8 @@ export function DnsPage() {
   const [recordEditor, setRecordEditor] = useState<{ open: boolean; record: DNSRecord | null }>({ open: false, record: null });
   const [deletingRecord, setDeletingRecord] = useState<DNSRecord | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
+  // 真实 Controller 的 Zone 同步要求显式 providerZoneId；缺失时不提交，不编造。
+  const [zoneSyncDraft, setZoneSyncDraft] = useState("");
 
   const providers = useResource(`dns:providers:${session.viewEpoch}`, signal => dnsApi.providers(signal).then(result => result.data));
   const accounts = useResource(`dns:accounts:${session.viewEpoch}`, signal => dnsApi.accounts(signal).then(result => result.data));
@@ -244,7 +246,7 @@ export function DnsPage() {
   const rotateAction = useAction((id: string, token: string) => dnsApi.rotateCredential(id, token));
   const defaultAction = useAction((id: string) => dnsApi.setDefault(id));
   const testAction = useAction((id: string) => dnsApi.test(id));
-  const syncAction = useAction((id: string) => dnsApi.syncZones(id));
+  const syncAction = useAction((id: string, providerZoneId: string) => dnsApi.syncZones(id, { providerZoneId }));
   const deleteRecordAction = useAction((record: DNSRecord) => dnsApi.removeRecord(record.zoneId, record.id));
 
   async function removeAccount() {
@@ -285,9 +287,15 @@ export function DnsPage() {
   }
 
   async function sync(account: DNSAccount) {
-    const result = await syncAction.run(account.id);
+    const providerZoneId = zoneSyncDraft.trim();
+    if (!providerZoneId) {
+      // 服务端要求服务商 Zone ID；留空即不发请求，不静默使用猜测值。
+      setOutcome("同步被跳过：请先填写服务商 Zone ID（真实 Controller 按显式 Zone ID 同步）。");
+      return;
+    }
+    const result = await syncAction.run(account.id, providerZoneId);
     if (result.ok) {
-      setOutcome("Zone 清单同步请求已完成（服务端结果）。");
+      setOutcome(`Zone 同步请求已完成（${providerZoneId}，服务端结果）。`);
       zones.reload();
     }
   }
@@ -313,7 +321,7 @@ export function DnsPage() {
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
         <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
-          {data => <p className="px-5 py-4 text-sm">{data.items.map(provider => `${provider.displayName}（${provider.code}）· Zone 同步 ${provider.capabilities.supportsZoneSync ? "支持" : "未声明"}`).join("；") || "没有供应商"}</p>}
+          {data => <p className="px-5 py-4 text-sm">{data.items.map(provider => `${provider.displayName}（${provider.code}）· Zone 同步 ${provider.capabilities?.supportsZoneSync ? "支持" : "未声明"}`).join("；") || "没有供应商"}</p>}
         </AsyncPanel>
       </Panel>
       <div className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
@@ -366,6 +374,17 @@ export function DnsPage() {
               </Button>
             }
           >
+            <label className="flex flex-wrap items-center gap-2 border-b px-5 py-3 text-xs text-muted-foreground">
+              服务商 Zone ID
+              <TextInput
+                aria-label="服务商 Zone ID"
+                value={zoneSyncDraft}
+                onChange={event => setZoneSyncDraft(event.target.value)}
+                placeholder="同步前必填；不猜测、不默认"
+                className="max-w-64"
+                disabled={!selectedAccount || !canManageAccounts || session.writesLocked}
+              />
+            </label>
             {!selectedAccount ? <EmptyState title="请选择账号" /> : (
               <AsyncPanel state={zones.state} onRetry={zones.reload} errorTitle="Zone 加载失败" empty={<EmptyState title="该账号没有可见 Zone" description="可尝试同步；未授权 Zone 不会显示。" />} isEmpty={data => data.items.length === 0}>
                 {data => (
