@@ -175,3 +175,28 @@
   - 未改 `apps/controller/**`、`apps/web/**`、公共契约/锁/根文件；**未新增迁移**（保持 19 项基线）。monitor 的 `sourceNodeId` 未持久化，history/probe 无法按关联节点过滤可见性（需契约/迁移决策）。
   - 文件 `UploadTransport`、监控 `Prober`、发布 publisher 仍由组合层注入；`server.go` 当前未注入 Uploads、Prober/publisher 为 fail-closed，故真实进程下 content 可暂存但 complete/run 诚实返回 503/502。
   - 真实 Agent 字节通道、真实 HTTP/TCP/TLS 公网目标、Cloudflare/ACME/Nginx、QQ/SMTP 投递仍未实测：UNTESTED/BLOCKED，详见 AC-EVIDENCE-WAVE4。
+
+## 检查点 C12 · V09-5D-DS Wave 5（deepseek-05：真实 NetProber 与本地暂存传输）
+
+- 分支 `feature/v09-services-ds02`；起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`（Wave 4 已合入 main）。
+- 会话：`deepseek-05`；代码提交：`d475c8a`（monitoring）、`f2f7b9e`（files）、`506c977`（集成测试）、`25939d8`（失败归类防御）、`be70f9d`（HTTPS 测试）；交接 [HANDOFF-WAVE5.md](HANDOFF-WAVE5.md)、证据 [AC-EVIDENCE-WAVE4.md](AC-EVIDENCE-WAVE4.md) 第 4 节。
+- **DS-W5-01 真实标准库 NetProber**（`internal/monitoring/prober.go`）：
+  - `NewNetProber(NetProberConfig{AllowedHosts, Resolver, RootCAs})` 实现 `monitoring.Prober`；HTTP/HTTPS 走显式禁用代理的 `http.Transport`，TCP 完成握手，TLS 完成经证书链校验的握手（最低 TLS 1.2）。
+  - 防 DNS Rebinding：自定义 `DialContext` 对每个底层连接先解析、对解析出的每个 IP 重新执行 SSRF 地址校验，再按字面 IP 连接；任一地址被拒绝即失败关闭。元数据地址/主机名始终拒绝；回环/私网等仅由显式白名单放行（字面 IP 需 IP/CIDR 条目，主机名需精确主机名条目）；重定向每一跳复用同一校验。
+  - 脱敏：返回 `ProbeResult`（Healthy/Latency/StatusCode/Reason）；失败为 `*ProbeError`，仅含稳定码（`invalid_target`/`target_forbidden`/`dns_failure`/`dial_failed`/`tls_failed`/`request_failed`/`timeout`）与固定摘要，不读取/回显响应体与响应头。HTTP 2xx/3xx 为 up，其余为 down（`http_status_<code>`）。
+  - 单测：真实 httptest HTTP/TCP/TLS 正反向、状态码不健康、超时、调用方取消、DNS 失败、metadata/localhost/userinfo/非法目标拒绝、伪造解析器返回回环与公私混合地址被拦截、回环仅在显式主机名/IP 白名单下放行。
+- **DS-W5-02 受控本地目录 LocalStagingTransport**（`internal/files/local_transport.go`）：
+  - `NewLocalStagingTransport(rootDir)` 同时实现 `files.UploadTransport`/`DownloadTransport`；布局 `<rootDir>/<nodeID>/<remotePath>`。
+  - `PushFile` 校验 nodeID/远端路径/SHA-256 格式，逐段创建目录（`Lstat` 拒绝符号链接）、临时文件 + `Sync` + 原子 `Rename`（0600/0700），核对写入字节数与摘要，失败清理且目标不变；`PullFile` 逐段拒绝符号链接、仅普通文件流式读回并支持 ctx 取消；Windows 保留名与 `:` 路径段拒绝。
+  - 单测：推/拉/覆盖往返；nodeID 与路径逃逸矩阵；字节数/摘要失败无残留；符号链接目录与目标文件拒绝且外部文件不被改写；缺失/目录/符号链接 pull 拒绝；取消；坏 root；Windows 保留名。
+- **DS-W5-02 端到端集成**（`tests/integration/v09/services/wave4_http_test.go`，扩展 `wave3_http_test.go` 的 `newWaveEnvWith` 注入点）：
+  - 真实 `NewNetProber` + 本地 `httptest.Server`（`AllowedHosts=127.0.0.1`）：HTTP 创建 monitor → `POST /probe` 返回 200/up/latency/statusCode → `GET /history` 读回持久样本，响应不含目标响应体；`/missing` 目标返回 404 → down + `http_status_404` 且不回显响应体。
+  - 真实 `NewLocalStagingTransport`（`t.TempDir()`）：HTTP 创建上传 → `PUT .../content` → `POST .../complete` 返回 `completed` 与真实 SHA-256 → 磁盘文件字节一致 → `files.Service.Download` 读回一致；未落盘文件下载失败。
+- 验证：
+  - `go test ./internal/monitoring/... ./internal/files/... ./tests/integration/v09/services/... -count=1` → PASS（`ok monitoring 0.613s`、`ok files 0.402s`、`ok services 0.669s`）。
+  - `TestWave5RealProberAndLocalStagingTransport` → PASS（2 子测试）。
+  - `npm run check` → PASS（policy/contracts/go/web/git；`TestWave5RealProberAndLocalStagingTransport` 在 `reports/go-tests.log` 中执行）；`npm run check:security` → PASS（npm audit 0，govulncheck 无漏洞）。
+- 边界与剩余风险：
+  - 未改 `apps/controller/**`（接线由总控按 HANDOFF-WAVE5 执行）、`apps/web/**`、公共契约/锁/根文件；**未新增迁移**（19 项基线）。
+  - 本分支真实网络目标仅 `127.0.0.1` 的 httptest；公网目标/IPv6/证书异常主机、真实 DNS TTL 切换未实测：UNTESTED。
+  - HTTP 健康口径固定 2xx/3xx；本地 staging 无配额/清理；生产 Agent 上行/下行通道仍属 CX，未接线时 downloads 保持失败关闭。
