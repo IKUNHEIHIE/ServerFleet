@@ -4,6 +4,7 @@ package server
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -52,6 +53,11 @@ type Config struct {
 	AgentServerName  string
 	EnrollmentIssuer *transport.CertificateIssuer
 	AgentFrameBytes  int
+
+	// Optional signed plugin package trust. Empty maps keep installation closed.
+	PluginTrustKeys         map[string]ed25519.PublicKey
+	PluginTrustSources      map[string]bool
+	PluginTrustCapabilities map[string]bool
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
@@ -86,9 +92,17 @@ type Server struct {
 	AIMessagesHTTP *ai.MessagesHTTP
 	AIEventsHTTP   *ai.MessageEventsHTTP
 
+	Plugins          *plugins.LifecycleManager
+	PluginRepository plugins.RepositoryStore
+	PluginOperations plugins.OperationStore
+	PluginVault      *plugins.PackageVault
+	PluginHTTP       *plugins.ManagementHTTP
+	XrayHTTP         *plugins.XrayDeclarativeHTTP
+
 	agentBridge *agentLinkBridge
 	mux         *http.ServeMux
 	now         func() time.Time
+	stagingDir  string
 
 	runCancel context.CancelFunc
 	runDone   chan struct{}
@@ -206,6 +220,20 @@ func AuditActions() []string {
 		"ai.approvals.consume",
 		"ai.models.read",
 		"ai.models.update",
+		"plugins.install",
+		"plugins.install.intent",
+		"plugins.upgrade",
+		"plugins.upgrade.intent",
+		"plugins.enable",
+		"plugins.enable.intent",
+		"plugins.disable",
+		"plugins.disable.intent",
+		"plugins.uninstall",
+		"plugins.uninstall.intent",
+		"plugins.invoke",
+		"plugins.history.save",
+		"plugins.history.list",
+		"plugins.history.restore-source",
 	}
 	for _, list := range [][]string{
 		nodes.ServiceActions(),
@@ -431,6 +459,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		GroupsRepo:        groupsRepo,
 		ServiceGroupsRepo: serviceGroupsRepo,
 		now:               now,
+		stagingDir:        stagingDir,
 	}
 
 	authorizer := &composedAuthorizer{identity: identityService}
@@ -494,6 +523,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		agentBridge.tasks = tasksService
 	}
 	if err := s.setupAI(); err != nil {
+		return cleanup(err)
+	}
+	if err := s.setupPlugins(cfg); err != nil {
 		return cleanup(err)
 	}
 
@@ -587,6 +619,10 @@ func (s *Server) Close() error {
 		}
 		s.runCancel = nil
 	}
+	if s.PluginVault != nil {
+		_ = s.PluginVault.Close()
+		s.PluginVault = nil
+	}
 	if s.DB == nil {
 		return nil
 	}
@@ -625,6 +661,7 @@ func (s *Server) registerRoutes() error {
 
 	s.registerEnrollmentRoutes()
 	s.registerAIRoutes()
+	s.registerPluginRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {
@@ -766,6 +803,32 @@ func (s *Server) registerAIRoutes() {
 	}
 	if s.AIEventsHTTP != nil {
 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/events", s.AIEventsHTTP)
+	}
+}
+
+func (s *Server) registerPluginRoutes() {
+	if s.PluginHTTP != nil {
+		for _, pattern := range []string{
+			"GET /api/v1/plugins",
+			"GET /api/v1/plugins/repository",
+			"PUT /api/v1/plugins/repository",
+			"GET /api/v1/plugins/catalog",
+			"POST /api/v1/plugins/catalog/refresh",
+			"POST /api/v1/plugins/{pluginId}/install",
+			"PATCH /api/v1/plugins/{pluginId}/activation",
+			"PUT /api/v1/plugins/{pluginId}/activation",
+			"POST /api/v1/plugins/{pluginId}/update",
+			"DELETE /api/v1/plugins/{pluginId}",
+			"GET /api/v1/plugins/{pluginId}",
+			"GET /api/v1/plugin-operations/{operationId}",
+		} {
+			s.mux.Handle(pattern, s.PluginHTTP)
+		}
+	}
+	if s.XrayHTTP != nil {
+		for _, pattern := range s.XrayHTTP.Patterns() {
+			s.mux.Handle(pattern, s.XrayHTTP)
+		}
 	}
 }
 
