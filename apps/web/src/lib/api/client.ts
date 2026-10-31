@@ -138,6 +138,15 @@ function parseRetryAfter(value: string | null): number | null {
   return delta >= 0 && delta <= 86_400 ? delta : null;
 }
 
+/** 原始字节体统一复制为独立 ArrayBuffer 视图，避免视图偏移与 SharedArrayBuffer 类型问题。 */
+function toBodyBytes(body: ArrayBuffer | Uint8Array | string): Uint8Array<ArrayBuffer> {
+  if (typeof body === "string") return new TextEncoder().encode(body);
+  if (body instanceof ArrayBuffer) return new Uint8Array(body);
+  const copy = new Uint8Array(new ArrayBuffer(body.byteLength));
+  copy.set(body);
+  return copy;
+}
+
 async function readJson(response: Response): Promise<unknown> {
   const text = await response.text();
   if (text.trim() === "") return null;
@@ -202,6 +211,38 @@ export class ApiClient {
       headers.set("X-CSRF-Token", token);
     }
 
+    return this.send<T>(path, method, headers, options.body === undefined ? undefined : JSON.stringify(options.body), options);
+  }
+
+  /**
+   * 原始字节请求（GM-W5-01）：上传会话字节流使用 application/octet-stream，
+   * 不做 JSON 序列化；CSRF/同源头与 request() 一致。仅用于文件字节 PUT。
+   */
+  async requestRaw<T>(
+    path: string,
+    body: ArrayBuffer | Uint8Array | string,
+    options: { readonly query?: RequestOptions["query"]; readonly method?: "PUT" | "POST"; readonly signal?: AbortSignal; readonly timeoutMs?: number } = {},
+  ): Promise<ApiResponse<T>> {
+    const method = options.method ?? "PUT";
+    const headers = new Headers();
+    headers.set("Accept", "application/json");
+    headers.set("X-Requested-With", "ServerFleetWeb");
+    headers.set("Content-Type", "application/octet-stream");
+    const token = csrfProvider();
+    if (!token) {
+      throw new ApiError({ kind: "csrf-missing", status: 0 });
+    }
+    headers.set("X-CSRF-Token", token);
+    return this.send<T>(path, method, headers, toBodyBytes(body), options);
+  }
+
+  private async send<T>(
+    path: string,
+    method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
+    headers: Headers,
+    body: BodyInit | undefined,
+    options: { readonly query?: RequestOptions["query"]; readonly signal?: AbortSignal; readonly timeoutMs?: number; readonly authEvent?: boolean },
+  ): Promise<ApiResponse<T>> {
     const timeout = mergeSignals(options.signal, options.timeoutMs ?? this.defaultTimeoutMs);
     let response: Response;
     try {
@@ -210,7 +251,7 @@ export class ApiClient {
         headers,
         credentials: "include",
         cache: "no-store",
-        body: options.body === undefined ? undefined : JSON.stringify(options.body),
+        body,
         signal: timeout.signal,
       });
     } catch (cause) {

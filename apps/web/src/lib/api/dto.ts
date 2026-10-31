@@ -368,6 +368,101 @@ export interface UploadCompletion {
   readonly files?: readonly FileEntry[];
 }
 
+/** PUT …/files/uploads/{uploadId}/content 的服务端进度回执（internal/files/upload.go）。 */
+export interface UploadProgress {
+  readonly uploadId: string;
+  readonly status: "awaiting_data";
+  readonly bytesReceived: number;
+  readonly expectedSize?: number | null;
+}
+
+/** 自动化工作流（internal/workflows/http.go workflowView；参数为字符串键值对象）。 */
+export type WorkflowTriggerKind = "schedule" | "monitor.alert" | "task.completed" | "manual";
+
+export interface WorkflowStep {
+  readonly actionId: "tasks.command" | "host.patch" | "host.root" | string;
+  readonly nodeIds: readonly string[];
+  readonly parameters?: Readonly<Record<string, string>> | null;
+  readonly humanApproval?: boolean;
+}
+
+export interface WorkflowView {
+  readonly id: string;
+  readonly revision: number;
+  readonly enabled: boolean;
+  readonly trigger: WorkflowTriggerKind | string;
+  readonly match?: Readonly<Record<string, string>>;
+  readonly steps: readonly WorkflowStep[];
+}
+
+export interface WorkflowRunStep {
+  readonly taskId?: string;
+  readonly state: string;
+}
+
+export interface WorkflowRunView {
+  readonly runId: string;
+  readonly workflowId: string;
+  readonly workflowRevision: number;
+  readonly eventId: string;
+  readonly state: string;
+  readonly steps: readonly WorkflowRunStep[];
+  readonly createdAt: string;
+}
+
+export interface WorkflowTriggerResult {
+  readonly matched: boolean;
+  readonly run: WorkflowRunView | null;
+}
+
+export interface WorkflowCreateInput {
+  readonly enabled?: boolean;
+  readonly trigger: WorkflowTriggerKind | string;
+  readonly match?: Readonly<Record<string, string>>;
+  readonly steps: readonly {
+    readonly actionId: string;
+    readonly nodeIds: readonly string[];
+    readonly parameters?: Readonly<Record<string, string>>;
+    readonly humanApproval: boolean;
+  }[];
+}
+
+export interface WorkflowUpdateInput {
+  readonly expectedRevision: number;
+  readonly enabled?: boolean;
+  readonly trigger?: WorkflowTriggerKind | string;
+  readonly match?: Readonly<Record<string, string>>;
+  readonly steps?: readonly {
+    readonly actionId: string;
+    readonly nodeIds: readonly string[];
+    readonly parameters?: Readonly<Record<string, string>>;
+    readonly humanApproval: boolean;
+  }[];
+}
+
+/** GET …/availability-monitors/{id}/history 的单条检查记录（internal/monitoring/http.go checkDTO）。 */
+export interface MonitorCheckEntry {
+  readonly id?: number;
+  readonly monitorId?: string;
+  readonly status: "up" | "down" | "unknown" | string;
+  readonly latencyMs?: number | null;
+  readonly statusCode?: number | null;
+  readonly error?: string;
+  readonly checkedAt: string;
+}
+
+/** POST …/availability-monitors/{id}/probe 的服务端回执（probeDTO）。 */
+export interface MonitorProbeResult {
+  readonly monitorId: string;
+  readonly status: "up" | "down" | "unknown" | string;
+  readonly state: string;
+  readonly latencyMs?: number | null;
+  readonly statusCode?: number | null;
+  readonly error?: string;
+  readonly checkedAt: string;
+  readonly consecutiveFailures: number;
+}
+
 export type TransferStatus = "queued" | "running" | "completed" | "partial_failure" | "failed" | "cancelling" | "cancelled";
 
 export interface TransferItemResult {

@@ -10,7 +10,7 @@ import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, trafficApi } from "@/lib/api/endpoints";
 import { monitoringApi, notificationsApi } from "@/lib/api/endpoints-infra";
-import type { AvailabilityMonitor, MonitorState, NotificationDelivery, NotificationChannel, NodeSummary, TrafficRisk } from "@/lib/api/dto";
+import type { AvailabilityMonitor, MonitorCheckEntry, MonitorState, MonitorProbeResult, NotificationDelivery, NotificationChannel, NodeSummary, TrafficRisk } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 import { adaptMetric } from "@/features/nodes/legacy-adapter";
@@ -26,6 +26,69 @@ const MONITOR_STATE_TEXT: Record<MonitorState, string> = {
   unknown: "未知",
   paused: "已暂停",
 };
+
+const CHECK_STATUS_TEXT: Record<string, string> = {
+  up: "up（可达）",
+  down: "down（不可达）",
+  unknown: "unknown（未判定）",
+};
+
+/** 检查历史弹窗：GET /api/v1/availability-monitors/{id}/history，服务端记录为准；无记录如实显示。 */
+function CheckHistory({ monitor, onClose }: { readonly monitor: AvailabilityMonitor; readonly onClose: () => void }) {
+  const [state, setState] = useState<{ loading: boolean; error: string | null; items: readonly MonitorCheckEntry[] }>({
+    loading: true, error: null, items: [],
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    setState({ loading: true, error: null, items: [] });
+    monitoringApi
+      .history(monitor.id ?? "")
+      .then(result => {
+        if (cancelled) return;
+        setState({ loading: false, error: null, items: result.data.items });
+      })
+      .catch(error => {
+        if (cancelled) return;
+        setState({ loading: false, error: describeApiError(error), items: [] });
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [monitor.id]);
+
+  return (
+    <Modal
+      open
+      title={monitor.name ? `检查历史 · ${monitor.name}` : "检查历史"}
+      description="服务端持久化的探测采样（新→旧）；探测源失联只标记 unknown，不推断业务宕机。"
+      onClose={onClose}
+      wide
+      footer={<Button type="button" onClick={onClose}>关闭</Button>}
+    >
+      {state.loading ? <p className="text-sm text-muted-foreground">正在加载…</p> : null}
+      {state.error ? <Notice tone="error" title="检查历史加载失败">{state.error}</Notice> : null}
+      {!state.loading && !state.error ? (
+        state.items.length === 0 ? (
+          <EmptyState title="暂无检查记录" description="服务端没有该监控的探测采样；不会伪造历史。" />
+        ) : (
+          <DataTable
+            caption="检查历史"
+            rows={state.items}
+            rowKey={(check, index) => `${check.checkedAt}-${check.id ?? index}`}
+            columns={[
+              { key: "checkedAt", header: "检查时间", render: check => formatDateTime(check.checkedAt) ?? check.checkedAt },
+              { key: "status", header: "状态", render: check => CHECK_STATUS_TEXT[check.status] ?? check.status },
+              { key: "latency", header: "延迟", align: "right", render: check => (typeof check.latencyMs === "number" ? `${check.latencyMs} ms` : "—") },
+              { key: "code", header: "状态码", align: "right", render: check => (typeof check.statusCode === "number" ? check.statusCode : "—") },
+              { key: "error", header: "错误摘要", render: check => check.error?.trim() || "—" },
+            ]}
+          />
+        )
+      ) : null}
+    </Modal>
+  );
+}
 
 const DELIVERY_STATUS_TEXT: Record<NotificationDelivery["status"], string> = {
   queued: "排队",
@@ -186,7 +249,7 @@ export function MonitoringPage() {
   const [tab, setTab] = useState<Tab>("resources");
   const [editor, setEditor] = useState<{ open: boolean; monitor: AvailabilityMonitor | null }>({ open: false, monitor: null });
   const [deleting, setDeleting] = useState<AvailabilityMonitor | null>(null);
-  const [checksResult, setChecksResult] = useState<{ name: string; ok: boolean } | null>(null);
+  const [history, setHistory] = useState<AvailabilityMonitor | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const nodes = useResource(`monitor:nodes:${session.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data));
@@ -214,7 +277,24 @@ export function MonitoringPage() {
     }),
   );
   const deleteAction = useAction((monitorId: string) => monitoringApi.remove(monitorId));
-  const checksAction = useAction((monitor: AvailabilityMonitor) => monitoringApi.checks(monitor.id ?? ""));
+  const probeAction = useAction((monitorId: string) => monitoringApi.probe(monitorId));
+
+  async function probe(monitor: AvailabilityMonitor) {
+    const result = await probeAction.run(monitor.id ?? "");
+    if (result.ok && result.data) {
+      const check: MonitorProbeResult = result.data.data;
+      const latency = typeof check.latencyMs === "number" ? ` · 延迟 ${check.latencyMs} ms` : "";
+      const code = typeof check.statusCode === "number" ? ` · 状态码 ${check.statusCode}` : "";
+      setOutcome(
+        `立即探测完成：${CHECK_STATUS_TEXT[check.status] ?? check.status}${latency}${code} · 连续失败 ${check.consecutiveFailures}。${check.error ? ` 错误摘要：${check.error}` : ""}`,
+      );
+      monitors.reload();
+    } else if (result.error) {
+      setOutcome(
+        `探测未执行（HTTP ${result.error.status}${result.error.code ? ` · 错误码 ${result.error.code}` : ""}）：${describeApiError(result.error)} 探测是否发起始终由服务端 SSRF/白名单边界决定。`,
+      );
+    }
+  }
 
   async function pause(monitor: AvailabilityMonitor, paused: boolean) {
     const result = await pauseAction.run(monitor, paused);
@@ -234,18 +314,13 @@ export function MonitoringPage() {
     }
   }
 
-  async function loadChecks(monitor: AvailabilityMonitor) {
-    const result = await checksAction.run(monitor);
-    if (result.ok && result.data) setChecksResult({ name: monitor.name, ok: result.data.data.ok });
-  }
-
   const canManage = session.can("monitor.manage");
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="监控告警"
-        description="资源当前读数、HTTP/TCP/TLS 可用性监控与通知投递。历史趋势/告警事件受当前契约限制，不能伪造。"
+        description="资源当前读数、HTTP/TCP/TLS 可用性监控（含真实检查历史与立即探测）与通知投递。资源历史趋势仍受当前契约限制，不能伪造。"
         badge={<span className="rounded-md border px-2 py-1 text-xs">监控</span>}
         actions={<Button type="button" onClick={() => { nodes.reload(); risks.reload(); monitors.reload(); channels.reload(); deliveries.reload(); }}>刷新</Button>}
       />
@@ -315,7 +390,7 @@ export function MonitoringPage() {
           {!canManage ? <Notice tone="warning" title="写操作已锁定">当前身份未返回监控管理权限（`monitor.manage`）。</Notice> : null}
           <Panel
             title="服务可用性监控"
-            description="GET/POST/PATCH/DELETE /api/v1/availability-monitors；探测源失联只能标记未知，不推断业务宕机。"
+            description="GET/POST/PATCH/DELETE /api/v1/availability-monitors；“检查历史”与“立即探测”对接真实历史/探测端点，探测由服务端 SSRF 边界执行。"
             actions={<Button size="sm" variant="primary" disabled={!canManage || session.writesLocked} onClick={() => setEditor({ open: true, monitor: null })}>新建监控</Button>}
           >
             <AsyncPanel
@@ -350,7 +425,16 @@ export function MonitoringPage() {
                           >
                             {monitor.state === "paused" ? "恢复" : "暂停"}
                           </Button>
-                          <Button size="sm" onClick={() => void loadChecks(monitor)} loading={checksAction.pending}>检查历史</Button>
+                          <Button size="sm" onClick={() => setHistory(monitor)}>检查历史</Button>
+                          <Button
+                            size="sm"
+                            variant="primary"
+                            disabled={!canManage || session.writesLocked || probeAction.pending}
+                            onClick={() => void probe(monitor)}
+                            loading={probeAction.pending}
+                          >
+                            立即探测
+                          </Button>
                           <Button size="sm" variant="danger" disabled={!canManage || session.writesLocked} onClick={() => setDeleting(monitor)}>删除</Button>
                         </div>
                       ),
@@ -359,11 +443,6 @@ export function MonitoringPage() {
                 />
               )}
             </AsyncPanel>
-            {checksResult ? (
-              <div className="border-t px-5 py-3 text-xs">
-                监控“{checksResult.name}”检查接口返回 ok={String(checksResult.ok)}；契约没有检查历史/探测源状态字段，因此不展示伪造历史。
-              </div>
-            ) : null}
           </Panel>
         </div>
       ) : null}
@@ -422,6 +501,7 @@ export function MonitoringPage() {
           monitors.reload();
         }}
       />
+      {history ? <CheckHistory monitor={history} onClose={() => setHistory(null)} /> : null}
       <Modal
         open={deleting !== null}
         title="删除服务监控"

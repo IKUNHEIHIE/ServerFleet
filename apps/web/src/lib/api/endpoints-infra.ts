@@ -14,6 +14,8 @@ import type {
   GatewayRoute,
   GatewayRouteInput,
   InternalCertificateJob,
+  MonitorCheckEntry,
+  MonitorProbeResult,
   NotificationChannel,
   NotificationDelivery,
   NotificationSettings,
@@ -36,6 +38,18 @@ export const monitoringApi = {
     apiClient.request<{ ok: boolean }>(`/api/v1/availability-monitors/${encodeURIComponent(monitorId)}`, { method: "DELETE" }),
   checks: (monitorId: string, signal?: AbortSignal) =>
     apiClient.request<{ ok: boolean }>(`/api/v1/availability-monitors/${encodeURIComponent(monitorId)}/checks`, { signal }),
+  // GM-W5-01c：Wave 4 合入的真实检查历史与立即探测（internal/monitoring/http.go）。
+  // history 返回 {monitorId, items, limit}；probe 在未注入探测器时 503 prober_unavailable，
+  // 目标被 SSRF 边界拦截时 4xx —— 均如实展示服务端错误。
+  history: (monitorId: string, limit = 20, signal?: AbortSignal) =>
+    apiClient.request<{ monitorId: string; items: readonly MonitorCheckEntry[]; limit: number }>(
+      `/api/v1/availability-monitors/${encodeURIComponent(monitorId)}/history`,
+      { query: { limit }, signal },
+    ),
+  probe: (monitorId: string) =>
+    apiClient.request<MonitorProbeResult>(`/api/v1/availability-monitors/${encodeURIComponent(monitorId)}/probe`, {
+      method: "POST",
+    }),
 };
 
 export const notificationsApi = {
@@ -203,4 +217,15 @@ export const publicationsApi = {
   create: (body: PublicationDraft) => apiClient.request<AsyncOperation>("/api/v1/publications", { method: "POST", body }),
   get: (publicationId: string, signal?: AbortSignal) =>
     apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}`, { signal }),
+  // GM-W5-01d：Wave 4 合入的执行与回滚。run/rollback 失败时服务端仍返回更新后的
+  // 计划与阶段（502 stage_failed / rollback_failed 等），页面据此如实展示并刷新。
+  run: (publicationId: string) =>
+    apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/run`, {
+      method: "POST",
+    }),
+  rollback: (publicationId: string, stage: string) =>
+    apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/rollback`, {
+      method: "POST",
+      body: { stage },
+    }),
 };

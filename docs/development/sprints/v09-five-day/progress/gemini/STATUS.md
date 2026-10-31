@@ -3,6 +3,7 @@
 分支 `feature/v09-console-gm02`；目录 `D:\admin\desktop\codex\myproject\ks\.worktrees\feature--v09-console-gm02`；基线 `8a7dd4707d2d7e142e137d098296788d2c80eddd`。
 
 > **Wave 4（gemini-04）**：起始基线 `0f9a75e416a82a9589a29d4d9cf8a52bf0266066`（main，总控已挂载 Wave 3 全部路由）。本轮交付见文末「Wave 4 检查点（gemini-04）」一节。
+> **Wave 5（gemini-05）**：起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`（main，Wave 4 复审合入）。本轮交付见文末「Wave 5 检查点（gemini-05）」一节。
 
 ## 检查点
 
@@ -144,3 +145,28 @@ Wave 3 全部工作收束于基线 `98f39e0` 之上的单一提交 `feat(web): a
 - 监控创建使用公网样式目标：服务端 SSRF 策略（`internal/monitoring/ssrf.go`）拒绝 `.internal` 等内网后缀，第一轮联调以 `invalid_request` 实证后调整，前端可见具体错误码。
 - AI 消息生成未接模型（`ErrModelUnavailable`）；AI 会话的 approval-events 与 recommendation decision 路由在当前 `server.go` 未注册，界面显示诚实加载失败（登记 SHARED-CHANGES §13.3）。
 - 未修改任何 Go 文件、公共契约、`package.json`/锁文件或 CI 配置；`apps/web/dist` 为构建产物不入库。
+
+## Wave 5 检查点（gemini-05 · 起始基线 `3adf891`）
+
+| 任务 | 内容 | 结果 |
+|---|---|---|
+| GM-W5-01a | 移除 `#/workflows` 的 `BLOCKED：无工作流接口` 静态占位，新增 `apps/web/src/lib/api/endpoints-workflows.ts`（`workflowsApi`：list/create/get/update/trigger 对接 Wave 4 合入的 `GET/POST /api/v1/workflows*`、`PATCH …/{id}`（`expectedRevision`）、`POST …/{id}/runs`）；重写 `workflows-page.tsx`：工作流列表（标识/启停/触发器+匹配/版本/步骤摘要）、创建表单（触发器标识、目标节点 ID、动作 `tasks.command`/`host.patch`/`host.root`、每行 `key=value` 参数、`humanApproval` 开关）、启停切换、手动触发（显示运行状态与生成的 `tsk_` 任务 ID）、详情弹窗（工作流 + 运行记录/关联任务 ID）；`backend-aliases.ts` 对齐后端键 `workflows.read`/`workflows.write`（UI 键 `workflow.read`/`workflow.write`），无写权限时诚实禁用写操作 | 新增 `workflows-page.test.tsx` 6 项（创建契约体/expectedRevision 启停/触发任务 ID/matched=false 诚实/详情任务 ID/只读禁用）+ `backend-aliases.test.ts` 2 项，全部 PASS |
+| GM-W5-01b | `client.ts` 新增 `requestRaw`（`application/octet-stream` + `X-CSRF-Token` + `X-Requested-With: ServerFleetWeb`，字节体独立复制）；`filesApi.uploadContent(nodeId, uploadId, body, offset=0)` 调用 `PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content?offset=0`；重写 `files-page.tsx` 的 `handleFiles`：单文件上传会话（`POST …/uploads`，带浏览器 crypto.subtle 计算的 SHA-256）→ 立即读取文件字节上传字节流 → `POST …/complete` 触发服务端字节数与 SHA-256 校验；`200 completed` 显示完成并刷新目录，`503 unavailable` 诚实显示「文件字节流（X B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）」；页面能力边界说明同步更新（下载端点仍无，不伪造） | `files-page.test.tsx` 4 项 PASS（含 PUT 字节体/头断言与 503 诚实分支） |
+| GM-W5-01c | `monitoringApi` 新增 `history(monitorId, limit)`（`GET …/availability-monitors/{id}/history`）与 `probe(monitorId)`（`POST …/probe`）；移除从未在真实后端存在的 `checks` 端点用法；监控页「检查历史」改为真实历史弹窗（检查时间/状态 up·down·unknown/延迟/状态码/错误摘要，无记录诚实显示「暂无检查记录」），新增「立即探测」按钮：成功显示服务端探测结果，失败诚实显示 HTTP 状态与错误码（如 `503 prober_unavailable`）；`tests/browser/v09/fixtures.mjs` 补齐 history/probe、文件字节通道、发布 run/rollback 与工作流 CRUD 桩路由 | `monitoring-page.test.tsx` 5 项 PASS（真实历史渲染/空态/探测成功/503 诚实/请求断言） |
+| GM-W5-01d | `publicationsApi` 新增 `run(publicationId)` 与 `rollback(publicationId, stage)`（真实后端要求 body `{stage}`，比任务单描述多一个必填参数）；发布记录操作列新增「执行发布」，阶段详情弹窗新增「执行发布」与逐阶段「回滚此阶段」；`502 stage_failed`/`rollback_failed` 诚实展示并刷新列表与详情的服务端阶段状态 | `publishing-page.test.tsx` 4 项 PASS（执行/回滚请求体、502 诚实与阶段刷新） |
+| GM-W5-02 | `run-live-controller-acceptance.mjs` 58→**70 步**：57 工作流列表真实读取、58 UI 创建工作流 201、59 启停 PATCH×2（revision 2/3 服务端核验）、60 手动触发 202 + `tsk_` 任务 ID、61 详情弹窗运行记录、62 工作流任务在统一任务中心可见（无绕行通道）、63 检查历史真实空态、64 立即探测诚实 503 `prober_unavailable`、65 文件字节流上传（DataTransfer 注入真实文件字节 → PUT content `bytesReceived` 服务端核对 → complete 503 诚实展示）、66 发布执行诚实 502 `stage_failed`（dns 阶段持久化 failed）、67 阶段回滚诚实 502 `rollback_failed`、68 Wave 5 审计闭环（`workflows.save/trigger/task.submit`、`files.upload_create`、`publishing.stage/run/rollback`）；管理员授权新增 `files.write`/`workflows.read`/`workflows.write` | **70/70 PASS**；新截图 `evidence/live/live-33..38-*.png` |
+| GM-W5-03 | 更新 `STATUS.md`/`ACCEPTANCE.md`/`AC-EVIDENCE-WAVE4.md`（Wave 5 增量）；顺带修复 `node-add-page.test.tsx` 既有负载竞态（批准按钮在异步面板内，`getByRole` 改 `findByRole`，断言语义不变）与 `plugins-page.test.tsx` 中断言旧 BLOCKED 占位的用例（改为断言真实接口失败时的诚实错误态） | 完成 |
+
+### Wave 5 验证结果
+
+- `node tests/browser/v09/run-acceptance.mjs` → **16/16 PASS**（exit 0）。
+- `node tests/browser/v09/run-live-controller-acceptance.mjs` → **70/70 PASS**（真实 Controller + SQLite WAL + HTTPS；首轮 69/70，唯一失败为脚本读取被页面同步清空的 file input，修正读取时机后全绿）。
+- `npm run check` → PASS（Go 全量测试 PASS；Web 37 文件 / **329 项** PASS，较 Wave 4 +13；typecheck/build/contracts/policy PASS）。
+- `npm run check:security` → PASS（npm audit 0 漏洞；govulncheck No vulnerabilities found）。
+
+### Wave 5 边界说明
+
+- 组合运行时未注入监控探测器（`NetProber`，DS Wave 5 交付、总控接线）、文件传输通道（`LocalStagingTransport`）与外部发布器：立即探测 503 `prober_unavailable`、上传 complete 503 `unavailable`（字节已落暂存并通过 SHA-256 校验，界面如实区分“校验通过”与“未送达远端”）、发布 run 502 `stage_failed`、回滚 502 `rollback_failed`。均为服务端 fail-closed 语义，验收断言诚实错误。
+- 工作流手动触发提交真实任务（`tasks.command` 标准级、`RequireApproval: false`）；`humanApproval: true` 的步骤会进入任务审批流（由任务中心处理），本轮 E2E 未覆盖该分支（属任务域既有验收范围）。
+- 服务器端 `POST …/workflows/{id}/runs` 在事件与触发器不匹配时返回 `{matched:false, run:null}`（202），页面如实显示“未创建运行”；单测覆盖。
+- 未修改任何 Go 文件、OpenAPI/Proto、`package.json`/锁文件或 CI 配置。

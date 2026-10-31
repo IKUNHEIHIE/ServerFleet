@@ -77,7 +77,7 @@ function FilePane({
   const [renameTarget, setRenameTarget] = useState<FileEntry | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
   const [sizeResult, setSizeResult] = useState<string | null>(null);
-  const [uploadSession, setUploadSession] = useState<{ nodeId: string; uploadId: string; expiresAt?: string; count: number } | null>(null);
+  const [uploadOutcome, setUploadOutcome] = useState<string | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("skip");
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -111,7 +111,7 @@ function FilePane({
     setSearchDraft(state.search);
     setSelected(new Set());
     setSizeResult(null);
-    setUploadSession(null);
+    setUploadOutcome(null);
   }, [state.nodeId, state.path, state.search, state.cursor]);
 
   const entries = list.state.status === "ready" ? list.state.data.entries : [];
@@ -132,7 +132,7 @@ function FilePane({
     setState(current => ({ ...current, ...patch, cursor: null, stack: [] }));
     setSelected(new Set());
     setSizeResult(null);
-    setUploadSession(null);
+    setUploadOutcome(null);
   }
 
   function selectNode(nodeId: string) {
@@ -181,23 +181,53 @@ function FilePane({
   const remove = useAction((path: string, recursive: boolean) => filesApi.remove(state.nodeId ?? "", path, recursive));
   const size = useAction((path: string) => filesApi.size(state.nodeId ?? "", path));
   const upload = useAction((body: Parameters<typeof filesApi.createUpload>[1]) => filesApi.createUpload(state.nodeId ?? "", body));
+  const uploadBytes = useAction((uploadId: string, bytes: ArrayBuffer) => filesApi.uploadContent(state.nodeId ?? "", uploadId, bytes, 0));
+  const complete = useAction((uploadId: string) => filesApi.completeUpload(state.nodeId ?? "", uploadId));
   const transfer = useAction((body: Parameters<typeof transfersApi.create>[0], key: string) => transfersApi.create(body, key));
 
+  // GM-W5-01b：单文件上传会话 → PUT 字节流（offset=0）→ POST complete 触发服务端
+  // 字节数与 SHA-256 校验。传输通道未注入时服务端返回 503 unavailable，此时字节已
+  // 落地暂存并通过校验，界面如实区分“校验通过”与“未送达远端节点”。
   async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
     const files = Array.from(event.target.files ?? []);
     event.target.value = "";
     if (files.length === 0 || !state.nodeId) return;
-    setOutcome(null);
-    const metadata = await Promise.all(
-      files.map(async file => {
-        const sha256 = await sha256Hex(file);
-        return { name: file.name, sizeBytes: file.size, ...(sha256 ? { sha256 } : {}) };
-      }),
-    );
-    const result = await upload.run({ destinationDir: state.path, conflictPolicy: "skip", files: metadata });
-    if (result.ok && result.data) {
-      setUploadSession({ nodeId: state.nodeId, uploadId: result.data.data.uploadId, expiresAt: result.data.data.expiresAt, count: metadata.length });
+    setUploadOutcome(null);
+    const lines: string[] = [];
+    for (const file of files) {
+      const sha256 = await sha256Hex(file);
+      const created = await upload.run({
+        destinationDir: state.path,
+        conflictPolicy: "skip",
+        files: [{ name: file.name, sizeBytes: file.size, ...(sha256 ? { sha256 } : {}) }],
+      });
+      if (!created.ok || !created.data) {
+        lines.push(`${file.name}：上传会话创建失败。`);
+        continue;
+      }
+      const uploadId = created.data.data.uploadId;
+      const bytes = await file.arrayBuffer();
+      const content = await uploadBytes.run(uploadId, bytes);
+      if (!content.ok || !content.data) {
+        lines.push(`${file.name}：字节流上传失败（uploadId ${uploadId}）。`);
+        continue;
+      }
+      const received = content.data.data.bytesReceived;
+      const completed = await complete.run(uploadId);
+      if (completed.ok && completed.data && completed.data.data.status === "completed") {
+        lines.push(`${file.name}：上传完成，服务端校验通过（${received} B）。`);
+      } else if (completed.ok && completed.data) {
+        lines.push(`${file.name}：服务端返回 status=${completed.data.data.status}；不声称完成。`);
+      } else if (completed.error && completed.error.status === 503) {
+        lines.push(
+          `文件字节流（${received} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）。`,
+        );
+      } else if (completed.error) {
+        lines.push(`${file.name}：完成校验失败（${completed.error.status} ${completed.error.code ?? completed.error.kind}）。`);
+      }
     }
+    setUploadOutcome(lines.join(" "));
+    list.reload();
   }
 
   async function submitCreate(event: FormEvent<HTMLFormElement>) {
@@ -368,7 +398,7 @@ function FilePane({
             新建文件夹
           </Button>
           <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
-            上传文件（仅声明元数据）
+            上传文件
             <input
               type="file"
               multiple
@@ -382,11 +412,9 @@ function FilePane({
           </Button>
         </div>
         {!canWrite ? <p className="text-xs text-muted-foreground">当前身份没有文件写入权限（`file.write`/`file.manage`）。</p> : null}
-        {uploadSession ? (
-          <Notice tone="warning" title="上传会话已创建，但字节通道未实现">
-            节点 {uploadSession.nodeId} · uploadId {uploadSession.uploadId} · {uploadSession.count} 个文件
-            {uploadSession.expiresAt ? ` · 到期 ${formatDateTime(uploadSession.expiresAt) ?? "无法解析"}` : ""}。
-            契约明确“实际字节传输通道待设计”，因此本页不能调用 complete 冒充上传完成，也不会生成成功文件。
+        {uploadOutcome ? (
+          <Notice tone="info" title="上传结果" actions={<Button size="sm" onClick={() => setUploadOutcome(null)}>关闭</Button>}>
+            {uploadOutcome}
           </Notice>
         ) : null}
         {sizeResult ? <p role="status" className="text-xs text-muted-foreground">{sizeResult}</p> : null}
@@ -606,13 +634,14 @@ export function FilesPage() {
     <div className="space-y-5">
       <PageHeader
         title="文件互传"
-        description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；下载与上传字节通道在当前契约中尚未定义。"
+        description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；上传走真实字节通道（POST uploads → PUT content → POST complete 校验）。"
         badge={<span className="rounded-md border px-2 py-1 text-xs">异步复制</span>}
         actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}>刷新</Button>}
       />
-      <Notice tone="warning" title="能力边界">
-        当前契约只定义目录/重命名/删除/大小计算、上传会话元数据和跨节点异步复制；**没有下载端点，也没有上传字节传输通道**。
-        本页不会把“元数据已声明”说成真实上传，也不会伪造下载成功。这两项记录为 BLOCKED/UNTESTED。
+      <Notice tone="info" title="能力边界">
+        上传会话会真实传输文件字节并由服务端校验字节数与 SHA-256（`PUT …/content` → `POST …/complete`）；
+        远端节点传输通道未注入时服务端返回 503，界面如实区分“校验通过”与“未送达远端”。
+        当前契约仍**没有下载端点**，本页不伪造下载成功。
       </Notice>
       {outcome ? <Notice tone="success" title="操作结果" actions={<Button size="sm" onClick={() => setOutcome(null)}>关闭</Button>}>{outcome}</Notice> : null}
 

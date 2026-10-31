@@ -37,6 +37,7 @@ import type {
   TrafficQuota,
   TransferJob,
   UploadCompletion,
+  UploadProgress,
   UploadSession,
   User,
 } from "./dto";
@@ -474,6 +475,19 @@ export const filesApi = {
       method: "POST",
       body,
     }),
+  // GM-W5-01：真实字节通道。offset 必须与服务端已收字节数一致（否则 409）；
+  // 服务端写入后回传 bytesReceived，最终由 complete 触发字节数与 SHA-256 校验。
+  uploadContent: (
+    nodeId: string,
+    uploadId: string,
+    body: ArrayBuffer | Uint8Array | string,
+    offset = 0,
+  ) =>
+    apiClient.requestRaw<UploadProgress>(
+      `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}/content?offset=${offset}`,
+      body,
+      { method: "PUT" },
+    ),
   completeUpload: (nodeId: string, uploadId: string) =>
     apiClient.request<UploadCompletion>(
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}/complete`,

@@ -4,13 +4,24 @@
 - 起始基线：`0f9a75e416a82a9589a29d4d9cf8a52bf0266066`（main，含总控 Wave 3 组合接线）
 - 验收命令：
   - Stub 契约验收：`node tests/browser/v09/run-acceptance.mjs` → **16/16 PASS**
-  - 真实 Controller + SQLite WAL + HTTPS 验收：`node tests/browser/v09/run-live-controller-acceptance.mjs` → **58/58 PASS**
-    （步骤 01–30 为 Wave 1–3 全链路回归；步骤 31–56 为本轮新增的 Wave 3 接线模块实测）
+  - 真实 Controller + SQLite WAL + HTTPS 验收：`node tests/browser/v09/run-live-controller-acceptance.mjs` → **58/58 PASS**（Wave 5 后扩展为 70 步）
+    （步骤 01–30 为 Wave 1–3 全链路回归；步骤 31–56 为 Wave 4 新增的 Wave 3 接线模块实测；步骤 57–68 为 Wave 5 新增模块实测）
 - 截图证据：
   - Stub：`evidence/0*..2*-…png`（登录/概览/写锁定/节点/任务 SSE/503/403/会话撤销/移动端等 22 张）
-  - Live：`evidence/live/live-01..32-*.png`（bootstrap→授权→双人审批→SSE→DNS→网关→监控→审计→节点详情/配额→监控创建→证书→发布→AI→插件→Xray 门控→更新→备份恢复→新域审计）
-- Vitest：36 个测试文件 / 316 项测试全部 PASS（`npm test --workspace @serverfleet/web`）
-- 诚实边界原则：真实 Controller 未注入的适配器（更新源、插件目录源、发布器、恢复执行器、Prober、Agent 派发器、nginx Checker）一律按服务端语义诚实失败；本盘点不把「诚实 503/501」计为功能缺失失败，但明确标注为外部/集成边界。
+  - Live：`evidence/live/live-01..38-*.png`（bootstrap→授权→双人审批→SSE→DNS→网关→监控→审计→节点详情/配额→监控创建→证书→发布→AI→插件→Xray 门控→更新→备份恢复→新域审计→**工作流→监控历史/探测→文件字节上传→发布执行/回滚→Wave 5 审计**）
+- Vitest：Wave 4 时 36 文件 / 316 项 PASS；**Wave 5 后 37 文件 / 329 项 PASS**（`npm test --workspace @serverfleet/web`，新增工作流页 6 项 + 文件/监控/发布/权限别名共 13 项）
+- 诚实边界原则：真实 Controller 未注入的适配器（更新源、插件目录源、发布器、恢复执行器、Prober、Agent 派发器、nginx Checker、文件传输通道）一律按服务端语义诚实失败；本盘点不把「诚实 503/501/502」计为功能缺失失败，但明确标注为外部/集成边界。
+
+## Wave 5 增量更新（gemini-05 · 基线 `3adf891`）
+
+下表登记 Wave 5（GM-W5-01/02）对 Wave 4 盘点结论的增量修正；未列出的 AC 条目维持 Wave 4 结论。
+
+| AC | Wave 5 变化 | 证据 |
+|---|---|---|
+| AC-03 文件互传 | 上传字节通道已接入真实后端：上传会话（POST uploads，含浏览器 SHA-256）→ `PUT …/content?offset=0` 字节流 → `POST …/complete` 服务端字节数与 SHA-256 校验；旧「BLOCKED：上传字节通道未实现」结论作废。下载端点仍无契约，页面如实说明。 | Vitest `files-page.test.tsx`（PUT 字节体/头、503 诚实分支）；Live 65（`live-36`） |
+| AC-09 监控告警 | 「检查历史」对接真实 `GET …/history`（时间/状态/延迟/错误摘要，空态诚实）；新增「立即探测」对接真实 `POST …/probe`；无 Prober 时 503 `prober_unavailable` 诚实展示。Wave 4「探测历史/按需探测端点未挂载」结论作废。 | Vitest `monitoring-page.test.tsx` 5 项；Live 63/64（`live-35`） |
+| AC-14 工作流 | `#/workflows` 从诚实 BLOCKED 页升级为真实工作流控制台：列表/创建（201）/启停（expectedRevision）/手动触发（202 + `tsk_` 任务 ID）/详情（运行记录）；权限键 `workflows.read`/`workflows.write` 已入 `backend-aliases.ts`，只读身份诚实禁用写操作。Wave 4「工作流 HTTP 契约缺失」结论作废。 | Vitest `workflows-page.test.tsx` 6 项；Live 57–62（`live-33/34`）；Live 68 审计 `workflows.*`（`live-38`） |
+| AC-15 服务发布 | 新增「执行发布」与逐阶段「回滚」按钮：run 未注入发布器 502 `stage_failed`（dns 阶段持久化 failed）、rollback 502 `rollback_failed`，均诚实展示并刷新服务端阶段状态。 | Vitest `publishing-page.test.tsx` 4 项；Live 66/67（`live-37`）；Live 68 审计 `publishing.stage/run/rollback`（`live-38`） |
 
 ## 逐条证据映射
 

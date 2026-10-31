@@ -62,6 +62,49 @@ export function PublishingPage() {
 
   const previewAction = useAction((body: Parameters<typeof publicationsApi.preview>[0]) => publicationsApi.preview(body));
   const createAction = useAction((body: Parameters<typeof publicationsApi.create>[0]) => publicationsApi.create(body));
+  const runAction = useAction((publicationId: string) => publicationsApi.run(publicationId));
+  const rollbackAction = useAction((publicationId: string, stage: string) => publicationsApi.rollback(publicationId, stage));
+
+  /** 执行/回滚失败时服务端仍返回更新后的计划与阶段（如 502 stage_failed/rollback_failed）；
+   * 界面如实展示失败关闭错误，并刷新列表与详情显示服务端最新阶段状态。 */
+  async function refreshDetail(publicationId: string) {
+    publications.reload();
+    if (detail?.id !== publicationId) return;
+    try {
+      const refreshed = await publicationsApi.get(publicationId);
+      setDetail(current => (current && current.id === publicationId ? refreshed.data : current));
+    } catch {
+      /* 详情刷新失败保留当前内容；列表刷新结果仍可见 */
+    }
+  }
+
+  async function runPublication(publicationId: string) {
+    const result = await runAction.run(publicationId);
+    if (result.ok && result.data) {
+      setOutcome(`发布 ${publicationId} 执行已受理：状态 ${result.data.data.status}；阶段结果以服务端返回为准。`);
+      setDetail(result.data.data);
+      publications.reload();
+    } else if (result.error) {
+      setOutcome(
+        `执行发布失败（HTTP ${result.error.status}${result.error.code ? ` · 错误码 ${result.error.code}` : ""}）：${describeApiError(result.error)} 已刷新服务端阶段状态。`,
+      );
+      await refreshDetail(publicationId);
+    }
+  }
+
+  async function rollbackStage(publicationId: string, stage: string) {
+    const result = await rollbackAction.run(publicationId, stage);
+    if (result.ok && result.data) {
+      setOutcome(`发布 ${publicationId} 阶段 ${stage} 回滚已受理：状态 ${result.data.data.status}；已执行阶段的逆序补偿由服务端发布器执行。`);
+      setDetail(result.data.data);
+      publications.reload();
+    } else if (result.error) {
+      setOutcome(
+        `回滚阶段 ${stage} 失败（HTTP ${result.error.status}${result.error.code ? ` · 错误码 ${result.error.code}` : ""}）：${describeApiError(result.error)} 已刷新服务端阶段状态。`,
+      );
+      await refreshDetail(publicationId);
+    }
+  }
 
   function draft() {
     return {
@@ -249,7 +292,24 @@ export function PublishingPage() {
                 { key: "status", header: "状态", render: operation => PUBLICATION_STATE[operation.status] },
                 { key: "created", header: "创建", render: operation => formatDateTime(operation.createdAt) ?? "—" },
                 { key: "stages", header: "阶段", render: operation => `${operation.stages?.length ?? 0} 个` },
-                { key: "actions", header: "操作", render: operation => <Button size="sm" onClick={() => setDetail(operation)}>阶段详情</Button> },
+                {
+                  key: "actions",
+                  header: "操作",
+                  render: operation => (
+                    <div className="flex flex-wrap gap-1">
+                      <Button size="sm" onClick={() => setDetail(operation)}>阶段详情</Button>
+                      <Button
+                        size="sm"
+                        variant="primary"
+                        disabled={!canManage || session.writesLocked || runAction.pending}
+                        onClick={() => void runPublication(operation.id)}
+                        loading={runAction.pending}
+                      >
+                        执行发布
+                      </Button>
+                    </div>
+                  ),
+                },
               ]}
             />
           )}
@@ -265,16 +325,36 @@ export function PublishingPage() {
         {detail ? (
           <div className="space-y-2 text-sm">
             <p>状态：{PUBLICATION_STATE[detail.status]}</p>
+            <div className="flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="primary"
+                disabled={!canManage || session.writesLocked || runAction.pending}
+                onClick={() => void runPublication(detail.id)}
+                loading={runAction.pending}
+              >
+                执行发布
+              </Button>
+              {rollbackAction.error ? <span className="text-xs text-red-700">{describeApiError(rollbackAction.error)}</span> : null}
+            </div>
             {detail.stages?.length ? (
               <ol className="space-y-1">
                 {detail.stages.map((stage, index) => (
-                  <li key={`${stage.name}-${index}`} className="text-xs">
-                    {stage.status} · {stage.name}{stage.message ? `：${stage.message}` : ""}
+                  <li key={`${stage.name}-${index}`} className="flex flex-wrap items-center gap-2 text-xs">
+                    <span>{stage.status} · {stage.name}{stage.message ? `：${stage.message}` : ""}</span>
+                    <Button
+                      size="sm"
+                      disabled={!canManage || session.writesLocked || rollbackAction.pending}
+                      onClick={() => void rollbackStage(detail.id, stage.name)}
+                      loading={rollbackAction.pending}
+                    >
+                      回滚此阶段
+                    </Button>
                   </li>
                 ))}
               </ol>
             ) : <p className="text-muted-foreground">服务端未返回阶段详情。</p>}
-            <p className="text-xs text-muted-foreground">发布跨 DNS/网关/证书步骤，不是原子事务；DNS TTL 使即时全网回滚不可保证。</p>
+            <p className="text-xs text-muted-foreground">发布跨 DNS/网关/证书步骤，不是原子事务；DNS TTL 使即时全网回滚不可保证。回滚是对单个已执行阶段的显式补偿，由服务端发布器执行。</p>
           </div>
         ) : null}
       </Modal>

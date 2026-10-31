@@ -18,8 +18,11 @@
  *      步骤 01–30 覆盖 Wave 1–3 全链路（bootstrap、授权、双人审批、SSE、DNS/网关/通知/审计），
  *      步骤 31–56 覆盖 Wave 3 新增接线模块（节点详情/流量配额、监控与流量风险、证书、
  *      服务发布向导、AI 会话与一次性审批、插件中心与 Xray 门控、更新中心与备份恢复、
- *      新域审计）。组合运行时未注入的适配器（更新源、插件目录源、nginx Checker、恢复执行器）
- *      按服务端语义诚实失败，脚本断言诚实错误而不是伪造成功。
+ *      新域审计），步骤 57–67 覆盖 Wave 5 新增接线模块（工作流管理与手动触发、
+ *      监控检查历史与立即探测、文件字节流上传与 SHA-256 校验、发布执行与回滚、
+ *      Wave 5 审计闭环）。组合运行时未注入的适配器（更新源、插件目录源、nginx Checker、
+ *      恢复执行器、监控探测器、文件传输通道、外部发布器）按服务端语义诚实失败，
+ *      脚本断言诚实错误而不是伪造成功。
  *
  * 用法（在 `scripts/env.ps1` 环境中）：
  *   node tests/browser/v09/run-live-controller-acceptance.mjs [--out <目录>] [--skip-build] [--keep]
@@ -538,6 +541,8 @@ async function main() {
     "monitoring.read", "monitoring.write", "quota.read", "quota.write",
     "certificates.read", "publishing.read", "publishing.write",
     "tasks.command", "host.patch",
+    // GM-W5-02：Wave 5 工作流管理与文件字节流上传所需的授权键。
+    "files.write", "workflows.read", "workflows.write",
   ]));
   await step("09b approver granted approve/read on the node", () => createGrant(approverUserId, [
     "tasks.approve", "tasks.read",
@@ -1134,6 +1139,178 @@ async function main() {
     return "GET /api/v1/audit/events covers monitoring/quota/publishing/ai domains";
   });
   await screenshot(session, join(outDir, "live-32-audit-wave3.png"), { width: 1280, height: 1400 });
+
+  // =====================================================================
+  // GM-W5-02 · Wave 5 新增接线模块（工作流管理/监控历史与探测/文件字节流上传/
+  // 发布执行与回滚）真后端浏览器实测。组合运行时未注入监控探测器、文件传输
+  // 通道与外部发布器；这些路径按服务端语义诚实失败，验收断言诚实错误，绝不
+  // 伪造成功。
+  // =====================================================================
+
+  // ---- 20. 自动化工作流（#/workflows）
+  await goto(session, `${base}/#/workflows`);
+  await step("57 workflow console reads the real controller list", async () => {
+    await expectText(session, "创建工作流", 20_000);
+    const workflows = await evaluate(session, `(${PAGE_FETCH})('/api/v1/workflows')`);
+    if (!Array.isArray(workflows.items)) throw new Error("workflows response missing items");
+    return `GET /api/v1/workflows -> ${workflows.items.length} items (workflows.read granted)`;
+  });
+  await screenshot(session, join(outDir, "live-33-workflows-console.png"));
+
+  let workflowId = null;
+  let workflowTaskId = null;
+  await step("58 create a workflow through the UI (POST -> 201)", async () => {
+    await fillField(session, "目标节点 ID", NODE_A);
+    await fillField(session, "参数（每行 key=value，可选）", "command=uptime");
+    await clickText(session, "创建工作流", { exact: true });
+    await expectText(session, "已创建", 20_000);
+    const workflows = await evaluate(session, `(${PAGE_FETCH})('/api/v1/workflows')`);
+    const created = (workflows.items ?? []).find(entry =>
+      entry.trigger === "manual" && Array.isArray(entry.steps) && entry.steps[0]?.actionId === "tasks.command");
+    if (!created) throw new Error("created workflow missing from the real list");
+    if (created.enabled !== true || created.revision !== 1) {
+      throw new Error(`unexpected created state: ${JSON.stringify(created)}`);
+    }
+    workflowId = created.id;
+    return `POST /api/v1/workflows -> 201 ${created.id} (manual trigger, tasks.command on ${NODE_A})`;
+  });
+
+  await step("59 toggle enable state with expectedRevision (PATCH -> 200 twice)", async () => {
+    await clickText(session, "停用", { exact: true });
+    await expectText(session, "已停用（revision 2）", 20_000);
+    const paused = await evaluate(session, `(${PAGE_FETCH})('/api/v1/workflows/${workflowId}')`);
+    if (paused.workflow?.enabled !== false) throw new Error("workflow still enabled after pause");
+    await clickText(session, "启用", { exact: true });
+    await expectText(session, "已启用（revision 3）", 20_000);
+    return "PATCH /api/v1/workflows/{id} -> 200 (enabled=false then true; revision advanced server-side)";
+  });
+
+  await step("60 trigger a manual run (POST runs -> 202) and surface the generated task id", async () => {
+    await clickText(session, "触发运行", { exact: true });
+    await expectText(session, "任务 ID：tsk_", 25_000);
+    const detail = await evaluate(session, `(${PAGE_FETCH})('/api/v1/workflows/${workflowId}')`);
+    const run = (detail.runs ?? [])[0];
+    if (!run?.steps?.[0]?.taskId) throw new Error(`no persisted run with taskId: ${JSON.stringify(detail.runs)}`);
+    if (run.state !== "running" && run.state !== "queued" && run.state !== "pending") {
+      throw new Error(`unexpected run state: ${run.state}`);
+    }
+    workflowTaskId = run.steps[0].taskId;
+    return `POST /api/v1/workflows/${workflowId}/runs -> 202 matched=true; task ${workflowTaskId} submitted through the sole task service`;
+  });
+  await screenshot(session, join(outDir, "live-34-workflow-run.png"));
+
+  await step("61 workflow detail dialog lists the run with its task id", async () => {
+    await clickText(session, "详情", { exact: true });
+    await expectText(session, "运行记录", 15_000);
+    await expectText(session, workflowTaskId, 10_000);
+    await clickText(session, "关闭", { exact: true });
+    return `GET /api/v1/workflows/${workflowId} -> 200 with runs[0].taskId rendered`;
+  });
+
+  await step("62 workflow task is visible in the unified task center", async () => {
+    await goto(session, `${base}/#/tasks/${encodeURIComponent(workflowTaskId)}`);
+    await expectText(session, "任务快照", 20_000);
+    return `workflow-submitted task ${workflowTaskId} opened in the task center (no bypass channel)`;
+  });
+
+  // ---- 21. 监控检查历史与立即探测（#/monitoring）
+  await goto(session, `${base}/#/monitoring`);
+  await step("63 check history is real and honestly empty before any probe", async () => {
+    await clickText(session, "服务监控", { exact: true });
+    await expectText(session, "edge-http", 20_000);
+    await clickText(session, "检查历史", { exact: true });
+    await expectText(session, "暂无检查记录", 15_000);
+    await clickText(session, "关闭", { exact: true });
+    const history = await evaluate(session, `(${PAGE_FETCH})('/api/v1/availability-monitors')`);
+    const monitor = (Array.isArray(history) ? history : []).find(entry => entry.name === "edge-http");
+    if (!monitor?.id) throw new Error("edge-http monitor missing from the real list");
+    const samples = await evaluate(session, `(${PAGE_FETCH})('/api/v1/availability-monitors/${monitor.id}/history')`);
+    if (samples.monitorId !== monitor.id || !Array.isArray(samples.items)) {
+      throw new Error(`unexpected history payload: ${JSON.stringify(samples).slice(0, 200)}`);
+    }
+    return `GET /api/v1/availability-monitors/${monitor.id}/history -> 200 with ${samples.items.length} persisted samples (honest empty)`;
+  });
+
+  await step("64 immediate probe fails closed without a wired prober (503 prober_unavailable)", async () => {
+    await clickText(session, "立即探测", { exact: true });
+    await expectText(session, "HTTP 503 · 错误码 prober_unavailable", 25_000);
+    return "POST /api/v1/availability-monitors/{id}/probe -> 503 prober_unavailable (NetProber not wired in composed runtime; honest error surfaced)";
+  });
+  await screenshot(session, join(outDir, "live-35-monitoring-history-probe.png"));
+
+  // ---- 22. 文件字节流上传与完成校验（#/files）
+  const UPLOAD_CONTENT = "serverfleet wave5 live upload";
+  await goto(session, `${base}/#/files`);
+  await step("65 byte-stream upload through session content channel with server SHA-256 verification", async () => {
+    await expectText(session, "上传文件", 20_000);
+    const injected = await evaluate(session, `(() => {
+      const input = [...document.querySelectorAll('input[type="file"]')][0];
+      if (!input) throw new Error("file input missing");
+      const file = new File([${JSON.stringify(UPLOAD_CONTENT)}], "live-wave5.txt", { type: "text/plain" });
+      const transfer = new DataTransfer();
+      transfer.items.add(file);
+      input.files = transfer.files;
+      // 页面的 change 处理器会同步执行 event.target.value = ""；长度必须在派发前读取。
+      const injectedCount = input.files.length;
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+      return injectedCount;
+    })()`);
+    if (injected !== 1) throw new Error(`file input injection returned ${injected}`);
+    await expectText(
+      session,
+      `文件字节流（${UPLOAD_CONTENT.length} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）`,
+      30_000,
+    );
+    return `POST .../files/uploads -> 201; PUT .../content?offset=0 -> 200 bytesReceived=${UPLOAD_CONTENT.length}; POST .../complete -> 503 unavailable (transport not wired; bytes verified server-side)`;
+  });
+  await screenshot(session, join(outDir, "live-36-files-byte-upload.png"));
+
+  // ---- 23. 服务发布执行与回滚（#/publishing）
+  await goto(session, `${base}/#/publishing`);
+  const publicationId = await evaluate(session, `(${PAGE_FETCH})('/api/v1/publishing/publications').then(list => {
+    const queued = (Array.isArray(list) ? list : []).find(entry => entry.status === "queued") ?? (list ?? [])[0];
+    return queued ? queued.id : null;
+  })`);
+  if (!publicationId) throw new Error("no publication available for the Wave 5 run/rollback steps");
+  await step("66 publication run honestly fails closed without a wired publisher (502 stage_failed)", async () => {
+    await expectText(session, publicationId, 20_000);
+    await clickText(session, "执行发布", { exact: true });
+    await expectText(session, "HTTP 502 · 错误码 stage_failed", 30_000);
+    const detail = await evaluate(session, `(${PAGE_FETCH})('/api/v1/publishing/publications/${publicationId}')`);
+    if (detail.status !== "partially_completed") throw new Error(`plan status after failed run: ${detail.status}`);
+    if (detail.stages?.[0]?.status !== "failed") throw new Error(`first stage after failed run: ${JSON.stringify(detail.stages)}`);
+    return `POST /api/v1/publications/${publicationId}/run -> 502 stage_failed; dns stage persisted as failed (publisher not wired; honest)`;
+  });
+
+  await step("67 stage rollback honestly fails without a publisher compensation port (502 rollback_failed)", async () => {
+    await clickText(session, "阶段详情", { exact: true });
+    await expectText(session, "回滚此阶段", 15_000);
+    // 三个阶段各有回滚按钮；明确点击第一个（dns —— 唯一已执行并失败、可回滚的阶段）。
+    const clicked = await evaluate(session, `(() => {
+      const buttons = [...document.querySelectorAll("button")]
+        .filter(node => node.textContent.trim() === "回滚此阶段" && node.getBoundingClientRect().height > 0);
+      if (buttons.length === 0) return false;
+      buttons[0].scrollIntoView({ block: "center" });
+      buttons[0].click();
+      return true;
+    })()`);
+    if (!clicked) throw new Error("no rollback button rendered in the stage dialog");
+    await expectText(session, "HTTP 502 · 错误码 rollback_failed", 30_000);
+    return `POST /api/v1/publications/${publicationId}/rollback {stage:"dns"} -> 502 rollback_failed (no compensation port wired; honest, stages refreshed)`;
+  });
+  await screenshot(session, join(outDir, "live-37-publishing-run-rollback.png"));
+
+  // ---- 24. Wave 5 审计闭环
+  await goto(session, `${base}/#/audit`);
+  await step("68 audit records the wave 5 workflow/files/publishing actions", async () => {
+    await expectText(session, "workflows.save", 25_000);
+    const text = await evaluate(session, "document.body.innerText");
+    const expected = ["workflows.trigger", "workflows.task.submit", "files.upload_create", "publishing.stage", "publishing.run", "publishing.rollback"];
+    const missing = expected.filter(action => !text.includes(action));
+    if (missing.length > 0) throw new Error(`audit missing wave 5 actions: ${missing.join(", ")}`);
+    return "GET /api/v1/audit/events covers workflows/files.upload/publishing Wave 5 actions";
+  });
+  await screenshot(session, join(outDir, "live-38-audit-wave5.png"), { width: 1280, height: 1400 });
 
   await session.close();
 }

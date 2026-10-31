@@ -40,6 +40,10 @@ function fileRoutes(): FetchRoutes {
       jsonResponse({ name: "new", path: "/new", type: "directory" }, 201),
     "POST /api/v1/nodes/n-1/files/uploads": () =>
       jsonResponse({ uploadId: "up-1", status: "awaiting_data", expiresAt: "2026-10-30T03:00:00Z" }, 201),
+    "PUT /api/v1/nodes/n-1/files/uploads/up-1/content": () =>
+      jsonResponse({ uploadId: "up-1", status: "awaiting_data", bytesReceived: 5, expectedSize: 5 }),
+    "POST /api/v1/nodes/n-1/files/uploads/up-1/complete": () =>
+      jsonResponse({ uploadId: "up-1", status: "completed", files: [] }),
     "GET /api/v1/transfers": () => jsonResponse({ items: [] }),
     "POST /api/v1/transfers": () =>
       jsonResponse(
@@ -109,22 +113,48 @@ describe("files page", () => {
     });
   });
 
-  it("declares upload metadata but never calls complete without a byte channel", async () => {
+  it("uploads real bytes through the session content channel and completes with server verification", async () => {
     const { calls } = await renderAuthenticated("/files", fileRoutes());
     await screen.findByRole("table", { name: "左侧目录内容" });
     const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
     expect(inputs.length).toBeGreaterThan(0);
     fireEvent.change(inputs[0], { target: { files: [new File(["hello"], "hello.txt", { type: "text/plain" })] } });
     await waitFor(() => {
-      const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/nodes/n-1/files/uploads");
-      expect(call).toBeDefined();
-      expect(JSON.parse(String(call?.init?.body))).toMatchObject({
+      const session = calls.find(call => call.method === "POST" && call.url === "/api/v1/nodes/n-1/files/uploads");
+      expect(session).toBeDefined();
+      expect(JSON.parse(String(session?.init?.body))).toMatchObject({
         destinationDir: "/",
         files: [{ name: "hello.txt", sizeBytes: 5 }],
       });
+      const content = calls.find(call => call.method === "PUT" && call.url.includes("/files/uploads/up-1/content"));
+      expect(content).toBeDefined();
+      expect(content?.url).toContain("offset=0");
+      expect(new Headers(content?.init?.headers).get("Content-Type")).toBe("application/octet-stream");
+      expect(new Headers(content?.init?.headers).get("X-CSRF-Token")).toBeTruthy();
+      expect(new Headers(content?.init?.headers).get("X-Requested-With")).toBe("ServerFleetWeb");
+      const bytes = content?.init?.body as Uint8Array;
+      expect(new TextDecoder().decode(bytes)).toBe("hello");
+      expect(calls.some(call => call.method === "POST" && call.url.includes("/files/uploads/up-1/complete"))).toBe(true);
     });
-    expect(await screen.findByText(/上传会话已创建/)).toBeVisible();
-    expect(screen.getByText(/不能调用 complete 冒充上传完成/)).toBeVisible();
-    expect(calls.some(call => call.url.includes("/files/uploads/up-1/complete"))).toBe(false);
+    expect(await screen.findByText(/上传完成，服务端校验通过（5 B）/)).toBeVisible();
+    expect(screen.queryByText(/字节通道未实现/)).toBeNull();
+  });
+
+  it("honestly reports verified bytes when the node transport is not injected (503 unavailable)", async () => {
+    await renderAuthenticated("/files", {
+      ...fileRoutes(),
+      "POST /api/v1/nodes/n-1/files/uploads/up-1/complete": () =>
+        jsonResponse({ error: { code: "unavailable", message: "file transport is unavailable" } }, 503),
+    });
+    await screen.findByRole("table", { name: "左侧目录内容" });
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(inputs[0], { target: { files: [new File(["hello"], "hello.txt", { type: "text/plain" })] } });
+    expect(
+      await screen.findByText(
+        /文件字节流（5 B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）/,
+      ),
+    ).toBeVisible();
+    // 校验通过 ≠ 已送达远端节点：不得显示“上传完成”。
+    expect(screen.queryByText(/上传完成，服务端校验通过/)).toBeNull();
   });
 });

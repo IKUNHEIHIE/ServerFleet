@@ -37,6 +37,9 @@ const BACKEND_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "notify.test": ["notifications.test"],
   "audit.read": ["audit.read"],
   "credential.manage": ["credentials.create", "credentials.rotate", "credentials.revoke"],
+  // GM-W5-01a：Wave 4 合入的工作流权限键（apps/controller/server/server.go ExtraPermissions）。
+  "workflow.read": ["workflows.read"],
+  "workflow.write": ["workflows.write"],
 };
 
 /**
