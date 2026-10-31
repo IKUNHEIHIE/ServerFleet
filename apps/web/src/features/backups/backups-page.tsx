@@ -100,7 +100,7 @@ export function BackupsPage() {
       setExpectedVersion(payload.expectedVersion ?? "");
       setExpectedNodeIds((payload.expectedNodeIds ?? []).join(","));
       setKeyReference(payload.recoveryKeyReference ?? "");
-      setOutcome("校验请求已受理（202）；结果以服务端返回的计划与检查项为准。");
+      setOutcome("校验请求已受理；结果以服务端返回的计划与检查项为准。");
     }
   }
 

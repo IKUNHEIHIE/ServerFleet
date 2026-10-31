@@ -11,6 +11,7 @@
  * - 未在两种已知形状中出现的字段保持“缺失”，由界面按缺口展示；本层不补造数据。
  */
 import { ApiError } from "./errors";
+import type { InstalledPlugin } from "./dto";
 
 function invalid(detail: string): ApiError {
   return new ApiError({ kind: "invalid", status: 200, code: "RESPONSE_SHAPE", cause: detail });
@@ -216,4 +217,56 @@ export function normalizeTransferItem(item: unknown, label: string): {
   if (bytes !== undefined) normalized.bytes = bytes;
   if (error !== null) normalized.error = error;
   return normalized;
+}
+
+/**
+ * 已安装插件：候选契约返回 `status` 枚举；真实 `internal/plugins` Lifecycle 返回
+ * `phase`（`installed_disabled/disabled/enabled/starting/stopping/runtime_unknown/stop_unknown`，
+ * `uninstalled` 在列表与单个读取中均不可见）且没有 `status`/`installedAt` 字段。
+ * 本函数只接受两种已知形状：`status` 缺失时按真实 phase 映射到语义一致的状态，
+ * 未知形状抛 `ApiError(kind:"invalid")`，绝不编造默认状态。
+ */
+export function normalizeInstalledPlugin(payload: unknown, label: string): InstalledPlugin {
+  if (!isRecord(payload)) throw invalid(`${label}: response is not an object`);
+  const id = asString(payload.id);
+  const version = typeof payload.version === "string" ? payload.version : null;
+  if (id === null || version === null) throw invalid(`${label}: missing id/version`);
+  if (typeof payload.enabled !== "boolean") throw invalid(`${label}: enabled is not a boolean`);
+  const PHASE_STATUS: Readonly<Record<string, InstalledPlugin["status"]>> = {
+    installed_disabled: "installed_disabled",
+    disabled: "installed_disabled",
+    enabled: "enabled",
+    starting: "starting",
+    stopping: "stopping",
+    runtime_unknown: "runtime_unknown",
+    stop_unknown: "stop_unknown",
+  };
+  const KNOWN_STATUS = new Set(Object.values(PHASE_STATUS));
+  const status: InstalledPlugin["status"] | null =
+    typeof payload.status === "string" && KNOWN_STATUS.has(payload.status as InstalledPlugin["status"])
+      ? payload.status as InstalledPlugin["status"]
+      : typeof payload.phase === "string" ? PHASE_STATUS[payload.phase] ?? null : null;
+  if (status === null) throw invalid(`${label}: neither a known status nor a known phase`);
+  const source = asString(payload.source) ?? asString(payload.sourceCommit);
+  const digest = typeof payload.digest === "string" && payload.digest.length > 0 ? payload.digest : null;
+  const runtimeId = typeof payload.runtimeId === "string" && payload.runtimeId.length > 0 ? payload.runtimeId : null;
+  const revision = typeof payload.revision === "number" && Number.isInteger(payload.revision) && payload.revision >= 0
+    ? payload.revision
+    : null;
+  return {
+    id,
+    version,
+    status,
+    enabled: payload.enabled,
+    ...(source !== null ? { source } : {}),
+    ...(digest !== null ? { digest } : {}),
+    ...(revision !== null ? { revision } : {}),
+    ...(runtimeId !== null ? { runtimeId } : {}),
+  };
+}
+
+/** 已安装插件列表：真实与候选契约都返回 `{items: [...]}`；逐条走 normalizeInstalledPlugin 校验。 */
+export function normalizePluginList(payload: unknown, label: string): { readonly items: readonly InstalledPlugin[] } {
+  if (!isRecord(payload) || !Array.isArray(payload.items)) throw invalid(`${label}: items is not an array`);
+  return { items: payload.items.map((item, index) => normalizeInstalledPlugin(item, `${label}[${index}]`)) };
 }

@@ -1,4 +1,5 @@
 import { apiClient } from "./client";
+import { normalizeInstalledPlugin, normalizePluginList } from "./compat";
 import type {
   AIApprovalEvent,
   AIApprovalMode,
@@ -9,7 +10,6 @@ import type {
   AIResourceRecommendation,
   AISecurityPolicy,
   AISession,
-  InstalledPlugin,
   Page,
   PluginCatalogEntry,
   PluginOperation,
@@ -80,9 +80,13 @@ export const pluginsApi = {
     apiClient.request<{ items: readonly PluginCatalogEntry[] }>("/api/v1/plugins/catalog", { signal }),
   refreshCatalog: () => apiClient.request<{ items: readonly PluginCatalogEntry[] }>("/api/v1/plugins/catalog/refresh", { method: "POST" }),
   installed: (signal?: AbortSignal) =>
-    apiClient.request<{ items: readonly InstalledPlugin[] }>("/api/v1/plugins", { signal }),
+    apiClient
+      .request<unknown>("/api/v1/plugins", { signal })
+      .then(result => ({ ...result, data: normalizePluginList(result.data, "installed plugins") })),
   installedOne: (pluginId: string, signal?: AbortSignal) =>
-    apiClient.request<InstalledPlugin>(`/api/v1/plugins/${encodeURIComponent(pluginId)}`, { signal }),
+    apiClient
+      .request<unknown>(`/api/v1/plugins/${encodeURIComponent(pluginId)}`, { signal })
+      .then(result => ({ ...result, data: normalizeInstalledPlugin(result.data, "installed plugin") })),
   install: (pluginId: string, body: { version: string; sourceCommit: string; expectedSha256: string; acceptedPermissions: readonly string[]; enableAfterInstall?: boolean }) =>
     apiClient.request<PluginOperation>(`/api/v1/plugins/${encodeURIComponent(pluginId)}/install`, { method: "POST", body }),
   activation: (pluginId: string, enabled: boolean) =>

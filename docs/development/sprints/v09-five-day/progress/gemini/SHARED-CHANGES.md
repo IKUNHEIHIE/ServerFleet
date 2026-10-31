@@ -110,3 +110,27 @@ Wave 3 已对照 `main` 上真实 Controller（`internal/{auth,nodes,servicegrou
 ### 12.4 验收桩损坏修复（需总控知悉）
 - `tests/browser/v09/stub-server.mjs` 在 Wave 1 集成移动目录时发生**双重编码损坏**（中文注释/字符串乱码且部分字符串字面量闭引号被吞），Node 无法解析（SyntaxError），桩验收自 Wave 1 合入后实际不可运行。本轮已按原逻辑以干净 UTF-8 重写修复；`run-acceptance.mjs` 16/16 步骤通过。
 - `tests/browser/v09/fixtures.mjs` 同样存在**有损**乱码（路由/ID/数值完好，仅人读文案为乱码，可解析、不影响断言）。原中文无法机械恢复；是否由作者重写文案交总控决定，本轮未改动其字节。
+
+## 13. GM-W4-01/02 · Wave 3 全模块真后端浏览器联调结果与差异登记（Wave 4）
+
+Wave 4 在真实 Controller + SQLite WAL + HTTPS 上实测了 `monitoring`/`quota`/`certificates`/`publishing`/`ai`/`plugins`/`updates`/`recovery` 全部接线模块（`run-live-controller-acceptance.mjs` 58/58 PASS）。以下差异全部已在 `apps/web` 内消化（compat/页面层），无一处伪造数据；需要后端/契约 owner 知悉或跟进的项如下。
+
+### 13.1 已在前端消化的真实响应/请求差异（无需后端改动）
+- **节点详情路由缺失**：真实 Controller 没有 `GET /api/v1/nodes/{nodeId}`（只有 `identity/capabilities/diagnostics/suspend/revoke` 子资源）。节点详情页已改为子资源独立加载；详情 404 时元数据面板回退为 `GET /api/v1/nodes` 列表中的真实摘要字段（不编造 revision/platform/agentVersion）。若后续 CX 补详情路由，前端无需改动即自动采用。
+- **节点生命周期不接受乐观锁**：`internal/nodes/http.go` 对非零 `expectedRevision` 返回 400 `revision_not_supported`（节点清单无持久化版本号）。前端暂停/吊销只提交 `{reason}`；弹窗内说明服务端以审计与权限校验为准。
+- **监控写路径严格 JSON**：`internal/monitoring/http.go` 的 `decodeJSON` 使用 `DisallowUnknownFields`，而列表响应含 `consecutiveFailures/createdAt/lastError` 等只读字段；页面此前把整行回传导致 400。现已改为白名单请求体（暂停/恢复仅提交 `id/name/type/target/intervalSeconds/timeoutSeconds/state`）。
+- **插件安装状态字段名**：真实 `internal/plugins` 返回 `phase`（`installed_disabled/disabled/enabled/starting/stopping/runtime_unknown/stop_unknown`）而非候选的 `status`，且无 `installedAt`。新增 `compat.normalizeInstalledPlugin/normalizePluginList` 双形状归一；未知 phase 抛 `ApiError(kind:"invalid")` 不编造状态。`disabled` 映射为 `installed_disabled`（语义相同），`XrayPage` 的门控判定恢复正确。
+- **错误码嵌套形状**：quota/publishing/certificates/monitoring 的 `writeFixed` 返回 `{error:{code,message}}`（嵌套），updates/recovery/plugins/ai 返回顶层 `{code,title}`。客户端两种形状都接受，UI 现在能显示 `quota_not_found`、`invalid_request` 等具体错误码。
+- **流量配额精简响应**：真实 quota HTTP 只持久化限额/预警/到期/方向；`cycleResetDay/timezone/expiryType/remindDays/dataComplete/source` 接受但不回传（`source` 仅在有使用样本时返回）。DTO 改为可选，配额面板诚实显示「未返回」，编辑器预填回退默认值并在说明中注明兼容字段不回传。
+- **能力面板**：真实 `capabilities` 响应无 `protocolMajor/protocolMinor`（`recorded=false` + `message`）。DTO 改可选，面板显示「未返回（当前 Controller 不记录协议版本）」并展示服务端 message。
+- **目录刷新失败静默**：`POST /api/v1/plugins/catalog/refresh` 在未配置发布源时返回 501 `PLUGIN_CATALOG_SOURCE_UNAVAILABLE`，但插件中心此前不渲染该错误。已补充错误 Notice（真实 501 现在可见）。
+
+### 13.2 验收脚本与后端行为观察（建议 owner 评审，前端已诚实呈现）
+- **SSRF 目标策略**：`internal/monitoring/ssrf.go` 拒绝 `.internal/.local/.home.arpa` 后缀、loopback、RFC1918 与 metadata 主机（第一轮联调以 400 `invalid_request` 实证）。验收改用公网样式目标。建议在候选契约或 UI 文案中说明「目标主机需满足服务端 allowlist/公网解析」约束，避免用户误以为是前端校验问题。
+- **发布向导依赖网关调度资格**：`schedulingEligible = online && ready && nginxInstalled && checksPassed && enabled`，组合运行时未注入 Checker 时网关永远「不可调度」，向导 UI 因此诚实阻止预览/创建（页面内以同源 fetch 直测 `POST /api/v1/publishing/preview|publications` 验证服务端链路：preview eligible=true、创建 202 三阶段计划）。若后续注入 Checker，UI 无需改动。
+- **AI 会话 approval-events 与推荐决策路由未注册**：`apps/controller/server/server.go` 的 `registerAIRoutes` 没有挂载 `GET /api/v1/ai/sessions/{id}/approval-events` 与 `POST /api/v1/ai/sessions/{id}/resource-recommendations/{id}/decision`（`internal/ai` 已实现 approve/deny 语义但主控未接线）；AI 会话页「审批审计」面板显示诚实 404，「批准并授权建议」不可用。请 CX 在 Wave 4 集成时补挂载（web 端点路径已就绪，无需改动）。
+- **`POST /api/v1/backups/{id}/verify` 返回 200**（非候选契约标注的 202）；备份页文案已去除硬编码状态码，仅表述「校验请求已受理；结果以服务端计划与检查项为准」。恢复预演的 `target_controller_identity`/`old_controller_fenced` 检查恒为未通过（`target_identity_not_observed`/`fencing_evidence_unavailable`），前端据此保持「创建恢复作业」禁用——这是预期 fail-closed 行为，不是缺陷。
+- **验收脚本职责扩展**：live 脚本作为「本机安装器」现在还以 node:sqlite `VACUUM INTO` 生成真实备份文件（`<dbdir>/backups/<id>.db`），备份校验/恢复预演本身全部走真实 HTTP；安装器正式形态仍待总控确认（同 §12.3 PrepareSetup 项）。
+
+### 13.3 AI 会话授权与权限交集（知悉项）
+- AI 会话资源授权的 `allowedActions` 必须是**注册工具**（当前仅 `host.root/host.patch/tasks.command`），且要求管理员对目标节点持有同名资源授权（`aiAuthority` 计算 AllowedNodes 交集）。验收中先授予 `tasks.command` 再授权会话，`allowedNodeIds` 由服务端计算为 `[node-alpha]`。请在契约或文档中明确「AI 会话授权动作 = 注册工具 ID」，避免与 RBAC 权限键（`nodes.read` 等）混淆——用 RBAC 键调用会得到 403/503。

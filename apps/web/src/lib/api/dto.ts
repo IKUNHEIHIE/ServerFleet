@@ -95,10 +95,14 @@ export interface NodeIdentity {
 
 export interface NodeCapabilities {
   readonly nodeId: string;
-  readonly protocolMajor: number;
-  readonly protocolMinor: number;
+  /** 真实 Controller 的 nodes 模块不记录协议版本（recorded=false + message）；候选契约字段缺失时界面显示未返回。 */
+  readonly protocolMajor?: number;
+  readonly protocolMinor?: number;
   readonly capabilities: readonly string[];
   readonly observedAt?: string;
+  /** 真实 Controller 附加字段：是否记录过能力与说明。 */
+  readonly recorded?: boolean;
+  readonly message?: string;
 }
 
 export type NodeGroupKind = "manual" | "automatic";
@@ -276,10 +280,12 @@ export interface TrafficQuota {
   readonly nodeId: string;
   readonly quotaGb: number;
   readonly usedGb?: number;
-  readonly cycleResetDay: number;
-  readonly timezone: string;
+  /** 真实 Controller 的 quota HTTP 只持久化限额/预警/到期/方向；重置日与时区接受但不回传（GM-W4-02）。 */
+  readonly cycleResetDay?: number;
+  readonly timezone?: string;
   readonly direction: "ingress" | "egress" | "combined";
-  readonly source: "agent_estimate" | "provider_billing";
+  /** 真实 Controller 仅在有使用样本时返回 source；无样本时缺失。 */
+  readonly source?: "agent_estimate" | "provider_billing";
   readonly dataComplete?: boolean;
   readonly thresholdsPct?: readonly number[];
   readonly expiryType?: "instance" | "trial" | "credit" | "other";
@@ -736,10 +742,18 @@ export interface PluginCatalogEntry {
 export interface InstalledPlugin {
   readonly id: string;
   readonly version: string;
-  readonly status: "installed_disabled" | "starting" | "enabled" | "draining" | "updating" | "uninstalling" | "failed";
+  /** 候选契约枚举 + 真实 Controller lifecycle phase（compat 层把 phase 映射为相同语义的状态）。 */
+  readonly status:
+    | "installed_disabled" | "starting" | "enabled" | "draining" | "updating" | "uninstalling" | "failed"
+    | "disabled" | "stopping" | "runtime_unknown" | "stop_unknown";
   readonly enabled: boolean;
   readonly sourceURL?: string;
-  readonly sourceCommit: string;
+  /** 真实 Controller 返回 `source`（来源 URL 或 commit）；候选契约字段为 `sourceCommit`。 */
+  readonly source?: string;
+  readonly sourceCommit?: string;
+  readonly digest?: string;
+  readonly revision?: number;
+  readonly runtimeId?: string;
   readonly permissions?: readonly string[];
   readonly lastError?: string;
   readonly installedAt?: string;

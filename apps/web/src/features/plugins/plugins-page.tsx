@@ -15,11 +15,15 @@ import { formatDateTime } from "@/lib/format";
 
 const PLUGIN_STATUS: Record<InstalledPlugin["status"], string> = {
   installed_disabled: "已安装·停用",
+  disabled: "已安装·停用",
   starting: "启动中",
   enabled: "已启用",
   draining: "排空中",
   updating: "更新中",
   uninstalling: "卸载中",
+  stopping: "停止中",
+  runtime_unknown: "运行状态未知",
+  stop_unknown: "停止状态未知",
   failed: "失败",
 };
 
@@ -215,6 +219,9 @@ export function PluginsPage() {
               刷新目录
             </Button>
           </div>
+          {refreshCatalog.error ? (
+            <Notice tone="error" title="目录刷新失败">{describeApiError(refreshCatalog.error)}</Notice>
+          ) : null}
         </form>
       </Panel>
 
@@ -257,7 +264,7 @@ export function PluginsPage() {
                 { key: "id", header: "插件", render: plugin => <span>{plugin.id}<span className="block text-xs text-muted-foreground">{plugin.version}</span></span> },
                 { key: "status", header: "状态", render: plugin => PLUGIN_STATUS[plugin.status] },
                 { key: "enabled", header: "启用", render: plugin => (plugin.enabled ? "是" : "否") },
-                { key: "source", header: "来源", render: plugin => plugin.sourceURL ?? plugin.sourceCommit },
+                { key: "source", header: "来源", render: plugin => plugin.sourceURL ?? plugin.source ?? plugin.sourceCommit ?? "—" },
                 { key: "installed", header: "安装时间", render: plugin => formatDateTime(plugin.installedAt) ?? "—" },
                 { key: "error", header: "错误", render: plugin => plugin.lastError ?? "—" },
                 {
