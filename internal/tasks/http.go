@@ -609,7 +609,7 @@ func writeFixed(w http.ResponseWriter, status int, code, message string) {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
-	case errors.Is(err, auth.ErrDenied):
+	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrPolicyUnavailable):
 		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
 	case errors.Is(err, ErrTaskNotFound):
 		writeFixed(w, http.StatusNotFound, "not_found", "task was not found")
@@ -620,7 +620,8 @@ func writeError(w http.ResponseWriter, err error) {
 		errors.Is(err, ErrTaskTerminal):
 		writeFixed(w, http.StatusConflict, "conflict", "task state changed")
 	case errors.Is(err, ErrInvalidTask), errors.Is(err, ErrUnknownOperationClass),
-		errors.Is(err, ErrTargetNotFound), errors.Is(err, ErrRequestIDRequired):
+		errors.Is(err, ErrTargetNotFound), errors.Is(err, ErrRequestIDRequired),
+		errors.Is(err, auth.ErrInvalidCheck):
 		writeFixed(w, http.StatusBadRequest, "invalid_request", "request is invalid")
 	default:
 		writeFixed(w, http.StatusInternalServerError, "internal_error", "request failed")

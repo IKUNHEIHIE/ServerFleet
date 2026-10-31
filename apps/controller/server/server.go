@@ -41,13 +41,16 @@ import (
 
 // Config configures the composed Controller management runtime.
 type Config struct {
-	DBPath         string
-	Origin         string
-	StagingDir     string
-	Dispatcher     tasks.Dispatcher
-	DNSProvider    dns.Provider
-	GatewayChecker gateway.Checker
-	Now            func() time.Time
+	DBPath                 string
+	Origin                 string
+	StagingDir             string
+	Dispatcher             tasks.Dispatcher
+	DNSProvider            dns.Provider
+	GatewayChecker         gateway.Checker
+	MonitoringProber       monitoring.Prober
+	MonitoringAllowedHosts []string
+	CertificateIssuer      certificates.Issuer
+	Now                    func() time.Time
 
 	// Agent transport composition. Enrollment and the Agent WSS link stay
 	// unmounted unless the local PKI issuer and exact authority are supplied.
@@ -76,6 +79,10 @@ type Server struct {
 	NodesRepo         *nodes.Repo
 	GroupsRepo        *nodes.GroupRepo
 	ServiceGroupsRepo *servicegroups.Repo
+	MonitoringRepo    *monitoring.Repo
+	QuotaRepo         *quota.Repo
+	CertificatesRepo  *certificates.Repo
+	PublishingRepo    *publishing.Repo
 	Nodes             *nodes.Service
 	ServiceGroups     *servicegroups.Service
 	TasksRepo         *tasks.Repo
@@ -84,6 +91,10 @@ type Server struct {
 	DNS               *dns.Service
 	Notifications     *notifications.Service
 	Gateway           *gateway.Service
+	Monitoring        *monitoring.Service
+	Quota             *quota.Service
+	Certificates      *certificates.Service
+	Publishing        *publishing.Service
 
 	Enrollment           *transport.EnrollmentService
 	EnrollmentHTTP       *transport.EnrollmentHTTP
@@ -276,17 +287,32 @@ func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
 		{Key: nodes.ActionNodesWrite, Description: "Modify granted nodes", ResourceType: "node"},
 		{Key: nodes.ActionNodeCreate, Description: "Create nodes", ResourceType: "node"},
+		{Key: nodes.ActionNodesSuspend, Description: "Suspend granted nodes", ResourceType: "node"},
+		{Key: nodes.ActionNodesRevoke, Description: "Revoke granted nodes", ResourceType: "node", AdminOnly: true},
 		{Key: nodes.ActionGroupsWrite, Description: "Manage node groups on granted nodes", ResourceType: "node"},
 		{Key: servicegroups.ActionRead, Description: "Read service groups on granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: servicegroups.ActionWrite, Description: "Modify service groups on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionCancel, Description: "Cancel tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
+		{Key: tasks.ActionResume, Description: "Resume unstarted queued tasks on granted nodes", ResourceType: "node"},
 		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
 		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
 		{Key: "host.root", Description: "Execute root-level host changes on granted nodes", ResourceType: "node", AdminOnly: true},
 		{Key: files.ActionRead, Description: "Read files on granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: files.ActionWrite, Description: "Write files on granted nodes", ResourceType: "node"},
 		{Key: files.ActionTransfer, Description: "Transfer files across granted nodes", ResourceType: "node"},
+		{Key: monitoring.ActionRead, Description: "Read availability monitors and traffic risks", ResourceType: "node", ReadOnly: true},
+		{Key: monitoring.ActionWrite, Description: "Create and update availability monitors", ResourceType: "node"},
+		{Key: quota.ActionRead, Description: "Read node traffic quota and usage", ResourceType: "node", ReadOnly: true},
+		{Key: quota.ActionWrite, Description: "Configure node traffic quota", ResourceType: "node"},
+		{Key: certificates.ActionCertificateRead, Description: "Read internal certificate distributions", ResourceType: "node", ReadOnly: true},
+		{Key: certificates.ActionDistributionCreate, Description: "Create internal certificate distributions on granted nodes", ResourceType: "node"},
+		{Key: certificates.ActionCertificateRenew, Description: "Renew internal certificates on granted nodes", ResourceType: "node"},
+		{Key: certificates.ActionCertificateRevoke, Description: "Revoke internal certificates on granted nodes", ResourceType: "node"},
+		{Key: certificates.ActionCertificateRotate, Description: "Rotate internal certificates on granted nodes", ResourceType: "node"},
+		{Key: publishing.ActionRead, Description: "Read service publication plans and previews", ResourceType: "node", ReadOnly: true},
+		{Key: publishing.ActionWrite, Description: "Create and manage service publication plans", ResourceType: "node"},
+		{Key: publishing.ActionCreate, Description: "Create staged service publication plans", ResourceType: "node"},
 		{Key: gateway.ActionRead, Description: "Read gateways and routes on granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: gateway.ActionWrite, Description: "Manage gateways and routes on granted nodes", ResourceType: "node"},
 		{Key: gateway.ActionProvision, Description: "Provision gateway runtime on granted nodes", ResourceType: "node"},
@@ -336,7 +362,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	var s *Server
 	cleanup := func(cause error) (*Server, error) {
+		if s != nil && s.PluginVault != nil {
+			_ = s.PluginVault.Close()
+			s.PluginVault = nil
+		}
 		_ = db.Close()
 		return nil, cause
 	}
@@ -389,6 +420,22 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	gatewayRepo, err := gateway.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	monitoringRepo, err := monitoring.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	quotaRepo, err := quota.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	certificatesRepo, err := certificates.NewRepo(db)
+	if err != nil {
+		return cleanup(err)
+	}
+	publishingRepo, err := publishing.NewRepo(db)
 	if err != nil {
 		return cleanup(err)
 	}
@@ -457,7 +504,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
-	s := &Server{
+	s = &Server{
 		DB:                db,
 		Audit:             auditRecorder,
 		IdentityStore:     identityStore,
@@ -467,6 +514,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		NodesRepo:         nodesRepo,
 		GroupsRepo:        groupsRepo,
 		ServiceGroupsRepo: serviceGroupsRepo,
+		MonitoringRepo:    monitoringRepo,
+		QuotaRepo:         quotaRepo,
+		CertificatesRepo:  certificatesRepo,
+		PublishingRepo:    publishingRepo,
 		now:               now,
 		stagingDir:        stagingDir,
 	}
@@ -579,11 +630,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	sgLookup := &composedServiceGroupLookup{repo: serviceGroupsRepo}
 	gatewayService, err := gateway.NewService(gateway.Options{
 		DB:            db,
 		Repo:          gatewayRepo,
 		Nodes:         nodeLookup,
-		ServiceGroups: &composedServiceGroupLookup{repo: serviceGroupsRepo},
+		ServiceGroups: sgLookup,
 		Checker:       cfg.GatewayChecker,
 		Tasks:         taskBridge,
 		Audit:         auditRecorder,
@@ -594,11 +646,70 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	monitoringService, err := monitoring.NewService(monitoring.Options{
+		DB:           db,
+		Repo:         monitoringRepo,
+		Audit:        auditRecorder,
+		Authorizer:   authorizer,
+		Prober:       cfg.MonitoringProber,
+		AllowedHosts: cfg.MonitoringAllowedHosts,
+		Now:          now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	quotaService, err := quota.NewService(quota.Options{
+		DB:         db,
+		Repo:       quotaRepo,
+		Nodes:      nodesRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		Notifier:   notificationsService,
+		Now:        now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	certificatesService, err := certificates.NewService(certificates.Options{
+		DB:             db,
+		Repo:           certificatesRepo,
+		Audit:          auditRecorder,
+		Authorizer:     authorizer,
+		Issuer:         cfg.CertificateIssuer,
+		Tasks:          &composedCertTaskBridge{tasks: tasksService},
+		GroupRevisions: sgLookup,
+		Now:            now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
+	publishingService, err := publishing.NewService(publishing.Options{
+		DB:           db,
+		Repo:         publishingRepo,
+		Groups:       sgLookup,
+		DNS:          failClosedPublisher{},
+		Certificates: failClosedCertPublisher{},
+		Gateway:      failClosedGatewayPublisher{},
+		Audit:        auditRecorder,
+		Authorizer:   authorizer,
+		Now:          now,
+	})
+	if err != nil {
+		return cleanup(err)
+	}
+
 	s.ServiceGroups = serviceGroupsService
 	s.Files = filesService
 	s.DNS = dnsService
 	s.Notifications = notificationsService
 	s.Gateway = gatewayService
+	s.Monitoring = monitoringService
+	s.Quota = quotaService
+	s.Certificates = certificatesService
+	s.Publishing = publishingService
 	s.mux = http.NewServeMux()
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
@@ -748,6 +859,40 @@ func (s *Server) registerRoutes() error {
 	if err := gateway.RegisterHTTP(s.mux, s.Gateway, func(r *http.Request) (gateway.Principal, error) {
 		sub, reqID, err := s.authenticate(r)
 		return gateway.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	if err := monitoring.RegisterHTTP(
+		s.mux,
+		s.Monitoring,
+		&composedTrafficRiskSource{quota: s.Quota},
+		func(r *http.Request) (monitoring.Principal, error) {
+			sub, reqID, err := s.authenticate(r)
+			return monitoring.Principal{SubjectID: sub, RequestID: reqID}, err
+		},
+	); err != nil {
+		return err
+	}
+	if err := quota.RegisterHTTP(s.mux, s.Quota, func(r *http.Request) (quota.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return quota.Principal{SubjectID: sub, RequestID: reqID}, err
+	}); err != nil {
+		return err
+	}
+	if err := certificates.RegisterHTTP(
+		s.mux,
+		s.Certificates,
+		&composedServiceGroupLookup{repo: s.ServiceGroupsRepo},
+		func(r *http.Request) (certificates.Principal, error) {
+			sub, reqID, err := s.authenticate(r)
+			return certificates.Principal{SubjectID: sub, RequestID: reqID}, err
+		},
+	); err != nil {
+		return err
+	}
+	if err := publishing.RegisterHTTP(s.mux, s.Publishing, func(r *http.Request) (publishing.Principal, error) {
+		sub, reqID, err := s.authenticate(r)
+		return publishing.Principal{SubjectID: sub, RequestID: reqID}, err
 	}); err != nil {
 		return err
 	}
@@ -933,7 +1078,12 @@ func (a *composedAuthorizer) Authorize(ctx context.Context, check auth.Check) er
 		return auth.ErrPolicyUnavailable
 	}
 	if len(check.NodeIDs) == 0 {
-		if check.Action == nodes.ActionGroupsWrite || strings.HasPrefix(check.Action, "dns.") || strings.HasPrefix(check.Action, "notifications.") {
+		if check.Action == nodes.ActionGroupsWrite ||
+			strings.HasPrefix(check.Action, "dns.") ||
+			strings.HasPrefix(check.Action, "notifications.") ||
+			strings.HasPrefix(check.Action, "monitoring.") ||
+			check.Action == certificates.ActionCertificateRead ||
+			check.Action == publishing.ActionRead {
 			return a.identity.AuthorizeSubjectAction(ctx, check.SubjectID, check.Action)
 		}
 		return auth.ErrInvalidCheck
@@ -1035,6 +1185,9 @@ func (r *composedGroupResolver) ResolveTargets(ctx context.Context, targetType, 
 }
 
 func resolveOperationClass(actionID string) (tasks.OperationClass, error) {
+	if strings.TrimSpace(actionID) == "" || strings.ContainsAny(actionID, " \t\r\n:") {
+		return "", tasks.ErrUnknownOperationClass
+	}
 	switch actionID {
 	case tasks.ActionSubmit, "tasks.command", files.ActionTransfer:
 		return tasks.OperationClassStandard, nil
@@ -1088,6 +1241,123 @@ func (l *composedServiceGroupLookup) LookupServiceGroup(ctx context.Context, ser
 		ID:       group.ID,
 		Revision: group.Revision,
 	}, true, nil
+}
+
+func (l *composedServiceGroupLookup) Revision(ctx context.Context, serviceGroupID string) (uint64, error) {
+	group, err := l.repo.Get(ctx, serviceGroupID)
+	if err != nil {
+		return 0, err
+	}
+	return group.Revision, nil
+}
+
+func (l *composedServiceGroupLookup) Members(ctx context.Context, serviceGroupID string) ([]string, error) {
+	group, err := l.repo.Get(ctx, serviceGroupID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(group.Members))
+	for _, m := range group.Members {
+		out = append(out, m.NodeID)
+	}
+	return out, nil
+}
+
+func (l *composedServiceGroupLookup) LookupGroup(ctx context.Context, serviceGroupID string) (publishing.GroupRef, bool, error) {
+	group, err := l.repo.Get(ctx, serviceGroupID)
+	if storage.IsNotFound(err) {
+		return publishing.GroupRef{}, false, nil
+	}
+	if err != nil {
+		return publishing.GroupRef{}, false, err
+	}
+	nodeIDs := make([]string, 0, len(group.Members))
+	for _, m := range group.Members {
+		nodeIDs = append(nodeIDs, m.NodeID)
+	}
+	return publishing.GroupRef{
+		ID:       group.ID,
+		Revision: group.Revision,
+		NodeIDs:  nodeIDs,
+	}, true, nil
+}
+
+type composedTrafficRiskSource struct {
+	quota *quota.Service
+}
+
+func (s *composedTrafficRiskSource) ListTrafficRisks(ctx context.Context, subjectID string) ([]monitoring.TrafficRisk, error) {
+	if s == nil || s.quota == nil {
+		return nil, errors.New("quota: traffic risk source is unavailable")
+	}
+	items, err := s.quota.ListTrafficRisks(ctx, subjectID)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]monitoring.TrafficRisk, 0, len(items))
+	for _, item := range items {
+		out = append(out, monitoring.TrafficRisk{
+			NodeID:    item.NodeID,
+			Kind:      item.Kind,
+			Severity:  item.Severity,
+			Estimated: item.Estimated,
+		})
+	}
+	return out, nil
+}
+
+type composedCertTaskBridge struct {
+	tasks *tasks.Service
+}
+
+func (b *composedCertTaskBridge) Submit(ctx context.Context, req certificates.DistributionTask) (string, error) {
+	task, err := b.tasks.Submit(ctx, tasks.SubmitRequest{
+		SubjectID:      req.SubjectID,
+		RequestID:      newRequestID(),
+		Name:           "certificate distribution " + req.CertificateID,
+		ActionID:       certificates.ActionDistributionCreate,
+		OperationClass: tasks.OperationClassStandard,
+		TargetType:     "node_ids",
+		TargetNodeIDs:  req.NodeIDs,
+		Params: map[string]string{
+			"certificate_id":   req.CertificateID,
+			"service_group_id": req.ServiceGroupID,
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return task.ID, nil
+}
+
+type failClosedPublisher struct{}
+
+func (failClosedPublisher) Publish(context.Context, publishing.DNSPublishRequest) (publishing.StageResult, error) {
+	return publishing.StageResult{}, publishing.ErrPublisherUnavailable
+}
+
+func (failClosedPublisher) Rollback(context.Context, string, publishing.StageResult) error {
+	return publishing.ErrPublisherUnavailable
+}
+
+type failClosedCertPublisher struct{}
+
+func (failClosedCertPublisher) Publish(context.Context, publishing.CertificateRequest) (publishing.StageResult, error) {
+	return publishing.StageResult{}, publishing.ErrPublisherUnavailable
+}
+
+func (failClosedCertPublisher) Rollback(context.Context, string, publishing.StageResult) error {
+	return publishing.ErrPublisherUnavailable
+}
+
+type failClosedGatewayPublisher struct{}
+
+func (failClosedGatewayPublisher) Publish(context.Context, publishing.GatewayRequest) (publishing.StageResult, error) {
+	return publishing.StageResult{}, publishing.ErrPublisherUnavailable
+}
+
+func (failClosedGatewayPublisher) Rollback(context.Context, string, publishing.StageResult) error {
+	return publishing.ErrPublisherUnavailable
 }
 
 type composedTaskBridge struct {

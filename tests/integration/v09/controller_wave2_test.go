@@ -71,13 +71,15 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	}
 
 	newClient := func() *http.Client {
-		c := tlsServer.Client()
+		base := tlsServer.Client()
 		jar, err := cookiejar.New(nil)
 		if err != nil {
 			t.Fatal(err)
 		}
-		c.Jar = jar
-		return c
+		return &http.Client{
+			Transport: base.Transport,
+			Jar:       jar,
+		}
 	}
 	adminClient := newClient()
 
@@ -217,6 +219,14 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 			"servicegroups.write",
 			"tasks.submit",
 			"tasks.read",
+			"monitoring.read",
+			"monitoring.write",
+			"quota.read",
+			"quota.write",
+			"certificates.read",
+			"publishing.read",
+			"publishing.write",
+			"publishing.plan_create",
 		},
 	}, adminLogin.CSRF, "wave2-grant-admin-0001")
 	if resp.StatusCode != http.StatusOK {
@@ -268,6 +278,13 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	}, adminLogin.CSRF, "")
 	if resp.StatusCode != http.StatusCreated {
 		t.Fatalf("create service group = %d: %s", resp.StatusCode, data)
+	}
+	var createdSG struct {
+		ID       string `json:"id"`
+		Revision uint64 `json:"revision"`
+	}
+	if err := json.Unmarshal(data, &createdSG); err != nil || createdSG.ID == "" {
+		t.Fatalf("decode created service group: %v (%s)", err, data)
 	}
 
 	// 4. Create second operator for two-person task approval, preview & submit task, reject self-approval, approve & execute
@@ -409,7 +426,103 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		t.Fatalf("SSE events = %d: %s", sseResp.StatusCode, string(buf[:n]))
 	}
 
-	// 5. Verify durable audit query over HTTPS
+	// 5. Verify Wave 3 DS routes on the composed HTTPS Controller
+	resp, data = doReq(adminClient, "GET", "/api/v1/service-groups", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list service groups = %d: %s", resp.StatusCode, data)
+	}
+	var sgList struct {
+		Items []struct {
+			ID       string `json:"id"`
+			Revision uint64 `json:"revision"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(data, &sgList); err != nil || len(sgList.Items) != 1 {
+		t.Fatalf("unexpected service groups: %+v (%v) raw=%s", sgList, err, string(data))
+	}
+
+	// Invalid command action ID with spaces/colons must return 400 Bad Request, not 500
+	resp, data = doReq(adminClient, "POST", "/api/v1/tasks/preview", map[string]any{
+		"name":    "invalid command",
+		"command": "host.root: apply patch",
+		"target": map[string]any{
+			"type":    "node_ids",
+			"nodeIds": []string{"node-tokyo"},
+		},
+	}, adminLogin.CSRF, "")
+	if resp.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid command preview = %d, want 400: %s", resp.StatusCode, data)
+	}
+
+	// Task executions endpoint
+	resp, data = doReq(adminClient, "GET", "/api/v1/tasks/"+createdJob.JobID+"/executions", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("task executions = %d: %s", resp.StatusCode, data)
+	}
+
+	// Node diagnostics/identity/capabilities
+	for _, suffix := range []string{"/identity", "/capabilities", "/diagnostics"} {
+		resp, data = doReq(adminClient, "GET", "/api/v1/nodes/node-tokyo"+suffix, nil, "", "")
+		if resp.StatusCode != http.StatusOK {
+			t.Fatalf("GET /api/v1/nodes/node-tokyo%s = %d: %s", suffix, resp.StatusCode, data)
+		}
+	}
+
+	// Quota configuration and monitoring traffic risks
+	resp, data = doReq(adminClient, "PUT", "/api/v1/nodes/node-tokyo/traffic-quota", map[string]any{
+		"monthlyLimitBytes": 1000000000,
+		"cycleResetDay":     1,
+		"warningPercent":    80,
+		"estimated":         true,
+	}, adminLogin.CSRF, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("put traffic-quota = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "GET", "/api/v1/nodes/node-tokyo/traffic-quota", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get traffic-quota = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "GET", "/api/v1/monitoring/availability-monitors", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get availability-monitors = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "GET", "/api/v1/monitoring/traffic-risks", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get traffic-risks = %d: %s", resp.StatusCode, data)
+	}
+
+	// Certificates list and Publishing preview + create
+	resp, data = doReq(adminClient, "GET", "/api/v1/certificates/internal/distributions", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("get internal distributions = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "POST", "/api/v1/publishing/preview", map[string]any{
+		"serviceGroupId":        createdSG.ID,
+		"expectedGroupRevision": createdSG.Revision,
+		"domain":                "edge.example.internal",
+		"gatewayIds":            []string{"gw-tokyo"},
+		"https":                 true,
+	}, adminLogin.CSRF, "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("publishing preview = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "POST", "/api/v1/publishing/publications", map[string]any{
+		"name":                  "Tokyo Edge Publish",
+		"domain":                "edge.example.internal",
+		"serviceGroupId":        createdSG.ID,
+		"expectedGroupRevision": createdSG.Revision,
+		"gatewayIds":            []string{"gw-tokyo"},
+		"https":                 true,
+	}, adminLogin.CSRF, "wave3-pub-create-0001")
+	if resp.StatusCode != http.StatusAccepted {
+		t.Fatalf("create publication = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "GET", "/api/v1/publishing/publications", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list publications = %d: %s", resp.StatusCode, data)
+	}
+
+	// 6. Verify durable audit query over HTTPS
 	resp, data = doReq(adminClient, "GET", "/api/v1/audit/events?limit=50", nil, "", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("audit events = %d: %s", resp.StatusCode, data)

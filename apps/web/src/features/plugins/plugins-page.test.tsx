@@ -126,8 +126,8 @@ describe("plugin center", () => {
   it("hides the plugin navigation entry when the plugin is installed but disabled", async () => {
     await renderAuthenticated("/plugins", pluginRoutes([{ ...INSTALLED_ENABLED, enabled: false, status: "installed_disabled" }]));
     expect(await screen.findByRole("heading", { level: 1, name: "插件中心" })).toBeVisible();
+    expect(await screen.findByText("已安装·停用")).toBeVisible();
     expect(screen.queryByRole("link", { name: "Xray 节点管理器" })).not.toBeInTheDocument();
-    expect(screen.getByText("已安装·停用")).toBeVisible();
   });
 });
 

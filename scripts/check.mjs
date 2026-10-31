@@ -4,9 +4,9 @@ import { root, go, run, npm, tool, goTool } from "./lib.mjs";
 
 function goFiles(dir) {
   return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
-    if ([".git", ".tools", ".cache", "node_modules", "docs", "reports"].includes(entry.name)) return [];
+    if ([".git", ".worktrees", ".tools", ".cache", "node_modules", "docs", "reports"].includes(entry.name)) return [];
     const full = path.join(dir, entry.name);
-    return entry.isDirectory() ? goFiles(full) : entry.name.endsWith(".go") ? [full] : [];
+    return entry.isDirectory() ? goFiles(full) : entry.name.endsWith(".go") ? [path.relative(root, full)] : [];
   });
 }
 
