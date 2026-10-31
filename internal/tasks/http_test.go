@@ -61,6 +61,176 @@ func postJSONAs(t *testing.T, url string, body any, subject string) *http.Respon
 	return response
 }
 
+func TestHTTPTaskExecutionsAndResume(t *testing.T) {
+	t.Parallel()
+	_, server := httpFixture(t, tasks.OperationClassStandard, nil)
+	defer server.Close()
+
+	create := postJSON(t, server.URL+"/api/v1/tasks", map[string]any{
+		"name": "offline wait", "command": "host.patch",
+		"target": map[string]any{"type": "node_ids", "nodeIds": []string{"n1", "n2"}},
+		"dryRun": false,
+	})
+	if create.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(create.Body)
+		t.Fatalf("create status = %d body=%s", create.StatusCode, body)
+	}
+	var job struct {
+		JobID string `json:"jobId"`
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(create.Body).Decode(&job); err != nil {
+		t.Fatal(err)
+	}
+	create.Body.Close()
+	if job.JobID == "" || job.State != "queued" {
+		t.Fatalf("job = %+v", job)
+	}
+	detail, err := http.Get(server.URL + "/api/v1/tasks/" + job.JobID)
+	if err != nil || detail.StatusCode != http.StatusOK {
+		t.Fatalf("detail = %v %d", err, detail.StatusCode)
+	}
+	var detailBody struct {
+		Revision uint64 `json:"revision"`
+	}
+	if err := json.NewDecoder(detail.Body).Decode(&detailBody); err != nil {
+		t.Fatal(err)
+	}
+	detail.Body.Close()
+	if detailBody.Revision != 1 {
+		t.Fatalf("detail revision = %d", detailBody.Revision)
+	}
+
+	executions, err := http.Get(server.URL + "/api/v1/tasks/" + job.JobID + "/executions")
+	if err != nil || executions.StatusCode != http.StatusOK {
+		t.Fatalf("executions = %v %d", err, executions.StatusCode)
+	}
+	var page struct {
+		Items []struct {
+			NodeID string `json:"nodeId"`
+			State  string `json:"state"`
+		} `json:"items"`
+	}
+	if err := json.NewDecoder(executions.Body).Decode(&page); err != nil {
+		t.Fatal(err)
+	}
+	executions.Body.Close()
+	if len(page.Items) != 2 || page.Items[0].State != "queued" || page.Items[0].NodeID == "" {
+		t.Fatalf("executions = %+v", page)
+	}
+
+	resume := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/resume", map[string]any{
+		"reason": "extend offline wait", "expectedRevision": 1,
+	})
+	if resume.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resume.Body)
+		t.Fatalf("resume status = %d body=%s", resume.StatusCode, body)
+	}
+	var resumed struct {
+		State    string `json:"state"`
+		Revision uint64 `json:"revision"`
+	}
+	if err := json.NewDecoder(resume.Body).Decode(&resumed); err != nil {
+		t.Fatal(err)
+	}
+	resume.Body.Close()
+	if resumed.State != "queued" || resumed.Revision != 2 {
+		t.Fatalf("resumed = %+v", resumed)
+	}
+
+	stale := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/resume", map[string]any{
+		"reason": "again", "expectedRevision": 1,
+	})
+	if stale.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(stale.Body)
+		t.Fatalf("stale resume status = %d body=%s", stale.StatusCode, body)
+	}
+	stale.Body.Close()
+
+	cancel := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/cancel", map[string]any{
+		"reason": "operator stop", "expectedRevision": 2,
+	})
+	if cancel.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(cancel.Body)
+		t.Fatalf("cancel status = %d body=%s", cancel.StatusCode, body)
+	}
+	cancel.Body.Close()
+	terminal := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/resume", map[string]any{
+		"reason": "too late",
+	})
+	if terminal.StatusCode != http.StatusConflict {
+		body, _ := io.ReadAll(terminal.Body)
+		t.Fatalf("terminal resume status = %d body=%s", terminal.StatusCode, body)
+	}
+	terminal.Body.Close()
+}
+
+func TestHTTPTaskResumeRejectsApprovalAndDenied(t *testing.T) {
+	t.Parallel()
+	_, server := httpFixture(t, tasks.OperationClassRoot, nil)
+	defer server.Close()
+	create := postJSON(t, server.URL+"/api/v1/tasks", map[string]any{
+		"name": "root patch", "command": "host.root",
+		"target": map[string]any{"type": "node_ids", "nodeIds": []string{"n1"}},
+		"dryRun": false,
+	})
+	var job struct {
+		JobID string `json:"jobId"`
+		State string `json:"state"`
+	}
+	if create.StatusCode != http.StatusAccepted {
+		body, _ := io.ReadAll(create.Body)
+		t.Fatalf("create status = %d body=%s", create.StatusCode, body)
+	}
+	if err := json.NewDecoder(create.Body).Decode(&job); err != nil {
+		t.Fatal(err)
+	}
+	create.Body.Close()
+	if job.State != "awaiting_approval" {
+		t.Fatalf("job = %+v", job)
+	}
+	pending := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/resume", map[string]any{
+		"reason": "resume", "expectedRevision": 1,
+	})
+	if pending.StatusCode != http.StatusConflict {
+		t.Fatalf("awaiting approval resume status = %d", pending.StatusCode)
+	}
+	pending.Body.Close()
+
+	deniedFixture, deniedServer := httpFixture(t, tasks.OperationClassStandard, nil)
+	defer deniedServer.Close()
+	standalone := postJSON(t, deniedServer.URL+"/api/v1/tasks", map[string]any{
+		"name": "standard", "command": "host.patch",
+		"target": map[string]any{"type": "node_ids", "nodeIds": []string{"n1"}},
+		"dryRun": false,
+	})
+	var deniedJob struct {
+		JobID string `json:"jobId"`
+	}
+	if err := json.NewDecoder(standalone.Body).Decode(&deniedJob); err != nil {
+		t.Fatal(err)
+	}
+	standalone.Body.Close()
+	deniedFixture.authorizer.setDeny(true)
+	denied := postJSON(t, deniedServer.URL+"/api/v1/tasks/"+deniedJob.JobID+"/resume", map[string]any{
+		"reason": "resume", "expectedRevision": 1,
+	})
+	if denied.StatusCode != http.StatusForbidden {
+		body, _ := io.ReadAll(denied.Body)
+		t.Fatalf("denied resume status = %d body=%s", denied.StatusCode, body)
+	}
+	denied.Body.Close()
+	foundResume := false
+	for _, action := range tasks.ServiceActions() {
+		if action == tasks.ActionResume {
+			foundResume = true
+		}
+	}
+	if !foundResume {
+		t.Fatalf("tasks.ServiceActions missing %q", tasks.ActionResume)
+	}
+}
+
 func TestHTTPCreateGetListAndDryRun(t *testing.T) {
 	t.Parallel()
 	f, server := httpFixture(t, tasks.OperationClassStandard, nil)

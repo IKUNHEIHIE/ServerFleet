@@ -68,6 +68,7 @@ func Register(mux *http.ServeMux, service *Service, authenticator Authenticator,
 	mux.HandleFunc("GET /api/v1/tasks/{jobId}", api.get)
 	mux.HandleFunc("POST /api/v1/tasks/{jobId}/approve", api.approve)
 	mux.HandleFunc("POST /api/v1/tasks/{jobId}/cancel", api.cancel)
+	mux.HandleFunc("POST /api/v1/tasks/{jobId}/resume", api.resume)
 	mux.HandleFunc("GET /api/v1/tasks/{jobId}/executions", api.executions)
 	mux.HandleFunc("GET /api/v1/tasks/{jobId}/events", api.events)
 	return nil
@@ -119,6 +120,8 @@ type batchTaskJob struct {
 	State                 string            `json:"state"`
 	Results               []executionResult `json:"results"`
 	CreatedAt             string            `json:"createdAt"`
+	Revision              uint64            `json:"revision"`
+	PlanDigest            string            `json:"planDigest,omitempty"`
 }
 
 type page struct {
@@ -298,6 +301,27 @@ func (api *httpAPI) cancel(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	updated, err := api.service.Cancel(r.Context(), r.PathValue("jobId"), principal.SubjectID, principal.RequestID, body.ExpectedRevision)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, summaryFromTask(updated))
+}
+
+func (api *httpAPI) resume(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Reason           string `json:"reason"`
+		ExpectedRevision uint64 `json:"expectedRevision"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	updated, err := api.service.Resume(r.Context(), r.PathValue("jobId"), principal.SubjectID, principal.RequestID,
+		body.ExpectedRevision, body.Reason)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -497,6 +521,7 @@ func jobFromTask(task Task) batchTaskJob {
 		JobID: task.ID, Name: task.Name, TargetType: task.TargetType,
 		TargetResourceID: task.TargetResourceID, TargetNodeIDsSnapshot: snapshotIDs(task),
 		State: batchState(task.Status), Results: results, CreatedAt: formatTime(task.CreatedAt),
+		Revision: task.Revision, PlanDigest: task.PlanHash,
 	}
 }
 
@@ -591,7 +616,8 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
 	case errors.Is(err, ErrApprovalInvalid), errors.Is(err, ErrSelfApproval),
-		errors.Is(err, ErrInvalidStatus), errors.Is(err, ErrDuplicateResult), errors.Is(err, ErrIdempotencyMismatch):
+		errors.Is(err, ErrInvalidStatus), errors.Is(err, ErrDuplicateResult), errors.Is(err, ErrIdempotencyMismatch),
+		errors.Is(err, ErrTaskTerminal):
 		writeFixed(w, http.StatusConflict, "conflict", "task state changed")
 	case errors.Is(err, ErrInvalidTask), errors.Is(err, ErrUnknownOperationClass),
 		errors.Is(err, ErrTargetNotFound), errors.Is(err, ErrRequestIDRequired):
