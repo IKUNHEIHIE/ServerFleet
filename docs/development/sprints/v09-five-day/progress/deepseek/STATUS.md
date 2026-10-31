@@ -167,7 +167,7 @@
 - **DS-W4-03 发布适配与 HTTP 集成**：
   - `internal/publishing/bridge.go` 新增可组合 `LocalBridge`/`NewLocalBridge`（DNS/证书/网关三端口由组合层函数注入，nil 失败关闭，绝不假成功）。
   - 新增 `POST /api/v1/publishing/publications/{id}/run` 与 `.../rollback`（+ `/api/v1/publications/...` 别名），响应携带真实持久阶段状态；失败返回对应状态码 + 稳定 `error.code`（不泄露 provider 原文）；新增 `RunDetail`/`RollbackDetail` 避免执行后额外要求读权限，拒绝时不回显计划数据。
-  - `tests/integration/v09/services/wave4_http_test.go`：真实文件 SQLite WAL + HTTP 覆盖监控探测/历史、文件分块上传/SHA 完成/负向、发布三阶段执行/失败重试/逐阶段回滚/审计；Wave 3 集成环境扩展文件服务与可观测 publisher。
+  - `tests/integration/v09/services/wave4_http_test.go`：真实文件 SQLite WAL + HTTP 覆盖监控探测/历史、文件字节上传/SHA 完成/负向、发布三阶段执行/失败重试/逐阶段回滚/审计；分块续传由 `TestHTTPUploadContentAndCompleteChecksum` 覆盖。Wave 3 集成环境扩展文件服务与可观测 publisher。
 - 验证（本机，固定 Go 1.27.3 / Node 24.22.1）：
   - `go test ./...` → 全部 PASS（含 architecture/contracts/integration/POC）；`go test ./internal/monitoring ./internal/files ./internal/publishing ./tests/integration/v09/services -count=1` → PASS。
   - `TestWave4ServiceHTTPEndToEnd` PASS（4 子测试：monitoring probe history / file upload bytes and checksum / publication execution and rollback / audit）。
