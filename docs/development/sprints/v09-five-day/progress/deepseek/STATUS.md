@@ -147,3 +147,9 @@
   - certificates 的 Issuer/TaskSubmitter、publishing 的三个 publisher、monitoring 真实 Prober 与真实 notifications 适配均无生产实现；未接线前保持失败关闭，真实网络/CA/DNS/Nginx/Agent 验收 UNTESTED。
   - `tasks.resume` 只处理 queued 未开始任务（后端无 paused 状态）；`GET /api/v1/nodes/{nodeId}` 详情不在 Wave 3 DS 清单内，仍未提供。
   - Node 无持久 revision，suspend/revoke 拒绝非 0 `expectedRevision`；revoke 不负责关闭活动 WSS 或吊销节点证书（属 transport/CX）。
+
+### 最终校验（文档检查点 `fe6f77c`）
+
+- `npm run check`（2026-10-31T09:58:45Z）→ `policy` PASS、`contracts` PASS、`go` PASS、`web` PASS、`git` PASS；`reports/go-tests.log` 中 `tests/integration/v09/services` 为 PASS，新增 `TestWave3ServiceHTTPEndToEnd` 已执行。
+- `npm run check:security` → `npm audit` 0 漏洞，`govulncheck ./...` 无漏洞。
+- 本地提交未推送、未合并；收件与后续接线由总控 `agy-review-01` 按 [HANDOFF-WAVE3.md](HANDOFF-WAVE3.md) 处理。
