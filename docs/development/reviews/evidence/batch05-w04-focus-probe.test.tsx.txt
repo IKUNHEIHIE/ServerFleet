@@ -1,0 +1,33 @@
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
+import { NodeListWorkspace } from "../../../apps/web/src/features/nodes/node-list-workspace";
+import { readyNodes, readyState } from "../../../apps/web/src/features/nodes/test/fixtures";
+
+function row() {
+  const table = screen.getByRole("table", { name: "节点列表" });
+  return within(table.querySelector("tbody")!).getAllByRole("row")[0];
+}
+function selectThenActivateSameRow() {
+  const current = row();
+  fireEvent.click(current);
+  act(() => current.focus());
+  fireEvent.keyDown(current, { key: "Enter" });
+}
+
+describe("independent W04 repeated selection regression", () => {
+  it("keyboard activation of an already pointer-selected row focuses detail immediately", () => {
+    render(<NodeListWorkspace state={readyState} />);
+    selectThenActivateSameRow();
+    expect(screen.getByRole("region", { name: "节点详情" })).toHaveFocus();
+  });
+
+  it("a background refresh does not perform a delayed focus request after the user moves to search", () => {
+    const { rerender } = render(<NodeListWorkspace state={readyState} />);
+    selectThenActivateSameRow();
+    const search = screen.getByRole("searchbox", { name: "搜索节点" });
+    act(() => search.focus());
+    expect(search).toHaveFocus();
+    rerender(<NodeListWorkspace state={{ status: "ready", nodes: readyNodes.map(n => ({ ...n, name: n.name + "-updated" })) }} />);
+    expect(search).toHaveFocus();
+  });
+});

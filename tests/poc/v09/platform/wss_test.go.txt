@@ -1,0 +1,174 @@
+package platformpoc
+
+import (
+	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
+	"crypto/sha256"
+	"crypto/tls"
+	"crypto/x509"
+	"encoding/hex"
+	"errors"
+	"math/big"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/coder/websocket"
+	"google.golang.org/protobuf/proto"
+	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
+	"serverfleet.local/serverfleet/internal/transport"
+)
+
+func ephemeralCertificates(t *testing.T) (tls.Certificate, tls.Certificate, *x509.CertPool) {
+	t.Helper()
+	now := time.Now()
+	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := &x509.Certificate{SerialNumber: big.NewInt(1), NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign}
+	der, err := x509.CreateCertificate(rand.Reader, root, root, &key.PublicKey, key)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err = x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	pool := x509.NewCertPool()
+	pool.AddCert(root)
+	leaf := func(serial int64, eku x509.ExtKeyUsage) tls.Certificate {
+		k, e := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		if e != nil {
+			t.Fatal(e)
+		}
+		tmpl := &x509.Certificate{SerialNumber: big.NewInt(serial), DNSNames: []string{"fleet.test"}, NotBefore: now.Add(-time.Minute), NotAfter: now.Add(time.Hour), KeyUsage: x509.KeyUsageDigitalSignature, ExtKeyUsage: []x509.ExtKeyUsage{eku}}
+		b, e := x509.CreateCertificate(rand.Reader, tmpl, root, &k.PublicKey, key)
+		if e != nil {
+			t.Fatal(e)
+		}
+		parsed, e := x509.ParseCertificate(b)
+		if e != nil {
+			t.Fatal(e)
+		}
+		return tls.Certificate{Certificate: [][]byte{b}, PrivateKey: k, Leaf: parsed}
+	}
+	return leaf(2, x509.ExtKeyUsageServerAuth), leaf(3, x509.ExtKeyUsageClientAuth), pool
+}
+
+func TestWSSActualMutualTLSBinaryProtobufAndRefusals(t *testing.T) {
+	serverCert, agentCert, pool := ephemeralCertificates(t)
+	fingerprint := sha256.Sum256(agentCert.Certificate[0])
+	revoked := atomic.Bool{}
+	verifier, err := transport.NewPeerVerifier(func(context.Context, string) (transport.AgentIdentity, error) {
+		return transport.AgentIdentity{NodeID: "node-a", FingerprintSHA256: hex.EncodeToString(fingerprint[:]), Serial: "3", Enabled: true, Revoked: revoked.Load(), TrustGeneration: 1}, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tlsConfig, err := verifier.ControllerTLSConfig(serverCert, pool)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.TLS == nil || r.Header.Get("Origin") != "" {
+			http.Error(w, "rejected", http.StatusForbidden)
+			return
+		}
+		if _, err := verifier.Verify(r.Context(), *r.TLS, ""); err != nil {
+			http.Error(w, "rejected", http.StatusForbidden)
+			return
+		}
+		conn, err := websocket.Accept(w, r, &websocket.AcceptOptions{CompressionMode: websocket.CompressionDisabled})
+		if err != nil {
+			return
+		}
+		defer conn.CloseNow()
+		conn.SetReadLimit(256)
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		for {
+			kind, raw, err := conn.Read(ctx)
+			if err != nil {
+				return
+			}
+			var envelope agentv1.Envelope
+			if kind != websocket.MessageBinary || proto.Unmarshal(raw, &envelope) != nil {
+				_ = conn.Close(websocket.StatusPolicyViolation, "frame rejected")
+				return
+			}
+			if _, err = verifier.Verify(ctx, *r.TLS, envelope.NodeId); err != nil {
+				_ = conn.Close(websocket.StatusPolicyViolation, "identity rejected")
+				return
+			}
+			if err = conn.Write(ctx, websocket.MessageBinary, raw); err != nil {
+				return
+			}
+		}
+	})
+	server := httptest.NewUnstartedServer(handler)
+	server.TLS = tlsConfig
+	server.StartTLS()
+	defer server.Close()
+	agentTLS, err := transport.AgentTLSConfig(agentCert, pool, "fleet.test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	httpClient := &http.Client{Transport: &http.Transport{TLSClientConfig: agentTLS, ForceAttemptHTTP2: false}, CheckRedirect: func(*http.Request, []*http.Request) error { return errors.New("redirect refused") }}
+	defer httpClient.CloseIdleConnections()
+	url := "wss" + strings.TrimPrefix(server.URL, "https")
+	dial := func(ctx context.Context) *websocket.Conn {
+		c, _, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPClient: httpClient})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return c
+	}
+	raw, err := proto.Marshal(&agentv1.Envelope{NodeId: "node-a", Sequence: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	for _, scenario := range []string{"roundtrip", "text", "oversize", "node-mismatch", "revoked-live"} {
+		t.Run(scenario, func(t *testing.T) {
+			conn := dial(ctx)
+			defer conn.CloseNow()
+			kind := websocket.MessageBinary
+			body := raw
+			switch scenario {
+			case "text":
+				kind = websocket.MessageText
+			case "oversize":
+				body = make([]byte, 1024)
+			case "node-mismatch":
+				body, _ = proto.Marshal(&agentv1.Envelope{NodeId: "node-b"})
+			case "revoked-live":
+				revoked.Store(true)
+				defer revoked.Store(false)
+			}
+			writeErr := conn.Write(ctx, kind, body)
+			responseKind, response, readErr := conn.Read(ctx)
+			if scenario == "roundtrip" {
+				if writeErr != nil || readErr != nil || responseKind != websocket.MessageBinary || string(response) != string(raw) {
+					t.Fatal("binary roundtrip failed", writeErr, readErr)
+				}
+			} else if writeErr == nil && readErr == nil {
+				t.Fatal("unsafe frame accepted")
+			}
+		})
+	}
+	headers := http.Header{"Origin": []string{"https://foreign.test"}}
+	conn, response, err := websocket.Dial(ctx, url, &websocket.DialOptions{HTTPClient: httpClient, HTTPHeader: headers})
+	if conn != nil {
+		_ = conn.CloseNow()
+	}
+	if err == nil || response == nil || response.StatusCode != http.StatusForbidden {
+		t.Fatal("foreign browser origin admitted", err)
+	}
+}

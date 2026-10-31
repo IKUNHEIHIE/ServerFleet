@@ -1,0 +1,70 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import YAML from 'yaml';
+
+const base = '98a1f6b2971d87adbb88c74bbc8ec1484c0e9de2';
+const head = '4da769c166c0cf0eabc8970a536f077374ad43a4';
+const main = '69d6d431281512dec6c5847b8fe2d06e1ce97b48';
+const read = (ref, path) => execFileSync('git', ['show', `${ref}:${path}`], { encoding: 'utf8' });
+const paths = ['PROPOSAL.md', 'ACCEPTANCE.md', 'HANDOFF.md'].map(name => `docs/contracts/decisions/node-read-01/${name}`);
+const currentRefs = new Set(['docs/development/reviews/N03-A-REVIEW.md', 'docs/development/reviews/FOLLOWUP-03-REVIEW.md']);
+let references = 0;
+const referencedFiles = new Set();
+const problems = [];
+const documents = paths.map(path => read(head, path));
+for (let i = 0; i < documents.length; ++i) {
+  for (const match of documents[i].matchAll(/`([^`\r\n]+?\.(?:md|go|ts|tsx|yaml)):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)`/g)) {
+    references++;
+    const [, path, ranges] = match;
+    referencedFiles.add(path);
+    const ref = currentRefs.has(path) ? main : base;
+    try {
+      const lines = read(ref, path).split('\n').length;
+      for (const range of ranges.split(',')) {
+        const [start, end = start] = range.split('-').map(Number);
+        if (start < 1 || end < start || end > lines) problems.push({ document: paths[i], path, range, lines, ref });
+      }
+    } catch { problems.push({ document: paths[i], path, ref, missing: true }); }
+  }
+}
+const candidateText = read(main, 'api/openapi/revisions/g2-r03/nodes-read-candidate.yaml');
+const candidate = YAML.parse(candidateText);
+const schema = candidate.components.schemas.NodeDetail;
+const node = read(base, 'internal/nodes/node.go');
+const browserRoot = 'D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01';
+const browserResult = JSON.parse(readFileSync(`${browserRoot}/reports/_review/w06/w06-results.json`, 'utf8'));
+const result = {
+  task: 'FOLLOWUP04-REVIEW',
+  plan: {
+    head, historicalBaseline: base, currentEvidenceRef: main,
+    references, referencedFiles: referencedFiles.size, citationProblems: problems,
+    facts: {
+      statusAlreadyExists: /Status\s+Status/.test(node),
+      observedAtAlreadyExists: /ObservedAt\s+time\.Time/.test(node),
+      onlineOnly: candidate.paths['/api/v1/nodes'].get.parameters.find(p => p.name === 'onlineOnly'),
+      detailRequired: schema.required,
+      optionalMetadataTypes: Object.fromEntries(['platform', 'agentVersion', 'lastSeenAt'].map(name => [name, schema.properties[name].type])),
+      authorField01ConflatesPublicNull: documents[1].includes('`platform/agentVersion` 是可选、可为 null'),
+      integratorField01Clarified: readFileSync(paths[1], 'utf8').includes('不允许显式 null；局部 Web VM'),
+      candidateSha256: createHash('sha256').update(candidateText).digest('hex'),
+    },
+    decision: 'ACCEPT_WITH_INTEGRATOR_DOCUMENT_CLARIFICATION; original RP01-R01/R02 closed; no runtime approval',
+  },
+  browser: {
+    head: '99cd6635b3da4739a4e2b30816bb9749d14419ae',
+    evidenceCodeHead: browserResult.codeHead,
+    authorReportedCases: browserResult.results.length,
+    authorReportedPass: browserResult.results.filter(r => r.pass).length,
+    independentBrowserRerun: false,
+    evidenceReview: 'read driver and preview sources, JSON and logs; viewed all six screenshots; inspected actual workspace close/activation implementation',
+    findings: [
+      { id: 'W06-R01', priority: 2, status: 'OPEN', evidence: 'C6 sends Escape and production handleClose clears selectedId before C7 Space; selectedId-equal reactivation and close-button activation untested', required: 'real keyboard Enter and Space on already-selected row while detail remains mounted, then actual close-button activation and focus restoration' },
+      { id: 'W06-R02', priority: 2, status: 'OPEN', evidence: 'driver only settles old requests with success; preview has no unmount operation; missing mandatory late-failure and unmount evidence', required: 'controlled old rejection after switch/invalidation and pending unmount with abort, retained detailed state/commit trace; accurately label any non-run cases' },
+    ],
+    decision: 'CHANGES_REQUESTED: mandatory browser coverage incomplete, not a demonstrated production bug; preserve 19 existing results',
+  },
+};
+writeFileSync('reports/followup04-document-evidence-audit.json', `${JSON.stringify(result, null, 2)}\n`);
+console.log(JSON.stringify(result, null, 2));
+if (problems.length) process.exitCode = 1;

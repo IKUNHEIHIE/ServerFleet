@@ -1,0 +1,2059 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet G2 核心 API 候选契约
+  version: 0.9.0-g2-candidate
+  description: G2 设计审查稿：仅补充认证/权限、节点身份、任务、审计和 AI 消息事件。不是已冻结或已部署接口；现有主 API 保留。
+servers:
+- url: /
+security:
+- cookieSession: []
+- bearerAuth: []
+tags:
+- name: Authentication
+- name: Identity
+- name: Authorization
+- name: Audit
+- name: NodeLifecycle
+- name: Tasks
+- name: AIEvents
+paths:
+  /api/v1/auth/bootstrap-status:
+    get:
+      tags:
+      - Authentication
+      operationId: getBootstrapStatus
+      summary: 检查是否允许首次初始化
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapState'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      security: []
+  /api/v1/auth/bootstrap:
+    post:
+      tags:
+      - Authentication
+      operationId: bootstrapInitialAdmin
+      summary: 以本机一次性安装令牌初始化首位管理员
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BootstrapRequest'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      security: []
+  /api/v1/agent/enroll:
+    post:
+      tags:
+      - Authentication
+      operationId: enrollAgentWithCSR
+      summary: 以短期注册令牌与私钥持有证明请求单节点身份
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AgentEnrollResult'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AgentEnrollRequest'
+      security: []
+  /api/v1/auth/login:
+    post:
+      tags:
+      - Authentication
+      operationId: login
+      summary: 认证并创建限时 HttpOnly 会话
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResult'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      security: []
+  /api/v1/auth/logout:
+    post:
+      tags:
+      - Authentication
+      operationId: logout
+      summary: 使当前会话失效
+      responses:
+        '204':
+          description: 成功，无响应内容
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/auth/me:
+    get:
+      tags:
+      - Authentication
+      operationId: getCurrentIdentity
+      summary: 取得当前登录身份和权限
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Identity'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+  /api/v1/auth/sessions:
+    get:
+      tags:
+      - Authentication
+      operationId: listOwnSessions
+      summary: 读取自己的活跃会话
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ListSessions'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+  /api/v1/auth/sessions/{sessionId}:
+    delete:
+      tags:
+      - Authentication
+      operationId: revokeOwnSession
+      summary: 撤销指定会话
+      responses:
+        '204':
+          description: 成功，无响应内容
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: &id001
+          type: string
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/users:
+    get:
+      tags:
+      - Identity
+      operationId: listUsers
+      summary: 权限范围内用户列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfUser'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+    post:
+      tags:
+      - Identity
+      operationId: createUser
+      summary: 创建普通用户
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserInput'
+      parameters:
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/users/{userId}:
+    get:
+      tags:
+      - Identity
+      operationId: getUser
+      summary: 用户详情
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: *id001
+    patch:
+      tags:
+      - Identity
+      operationId: patchUser
+      summary: 修订角色或停用用户
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserPatch'
+      parameters:
+      - name: userId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IfMatch'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/roles:
+    get:
+      tags:
+      - Authorization
+      operationId: listRoles
+      summary: 已配置角色列表
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleList'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+  /api/v1/permissions:
+    get:
+      tags:
+      - Authorization
+      operationId: listPermissions
+      summary: 系统能力目录
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionList'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+  /api/v1/resource-grants:
+    get:
+      tags:
+      - Authorization
+      operationId: listResourceGrants
+      summary: 当前可查询的资源授权记录
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfGrant'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+    post:
+      tags:
+      - Authorization
+      operationId: createResourceGrant
+      summary: 授权资源操作范围
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Grant'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GrantRequest'
+      parameters:
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/resource-grants/{grantId}:
+    delete:
+      tags:
+      - Authorization
+      operationId: revokeResourceGrant
+      summary: 撤销资源授权
+      responses:
+        '204':
+          description: 成功，无响应内容
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: grantId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/audit/events:
+    get:
+      tags:
+      - Audit
+      operationId: listAuditEvents
+      summary: 查询脱敏审计事件
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfAuditEvent'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+      - name: resourceId
+        in: query
+        schema: *id001
+      - name: actorId
+        in: query
+        schema: *id001
+      - name: since
+        in: query
+        schema: &id002
+          type: string
+          format: date-time
+  /api/v1/audit/events/{eventId}:
+    get:
+      tags:
+      - Audit
+      operationId: getAuditEvent
+      summary: 按 ID 查询单条审计事件
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuditEvent'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: eventId
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/nodes/{nodeId}:
+    get:
+      tags:
+      - NodeLifecycle
+      operationId: getNodeDetailG2
+      summary: 读取节点详情
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDetail'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema: *id001
+    patch:
+      tags:
+      - NodeLifecycle
+      operationId: patchNodeG2
+      summary: 变更节点元数据
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDetail'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodePatch'
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IfMatch'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/nodes/{nodeId}/identity:
+    get:
+      tags:
+      - NodeLifecycle
+      operationId: getNodeIdentityG2
+      summary: 读取节点证书状态和摘要
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeIdentity'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/nodes/{nodeId}/capabilities:
+    get:
+      tags:
+      - NodeLifecycle
+      operationId: getNodeCapabilitiesG2
+      summary: 读取经过身份认证后协商的 Agent 能力
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeCapabilities'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema: *id001
+  /api/v1/nodes/{nodeId}/suspend:
+    post:
+      tags:
+      - NodeLifecycle
+      operationId: suspendNodeG2
+      summary: 暂停节点任务派发
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeDetail'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeActionInput'
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/nodes/{nodeId}/revoke:
+    post:
+      tags:
+      - NodeLifecycle
+      operationId: revokeNodeIdentityG2
+      summary: 吊销节点身份且禁止后续任务派发
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NodeIdentity'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/NodeActionInput'
+      parameters:
+      - name: nodeId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/tasks:
+    get:
+      tags:
+      - Tasks
+      operationId: listTasksG2
+      summary: 分页查询唯一任务系统的任务历史
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfTaskSummary'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+  /api/v1/tasks/{jobId}/approve:
+    post:
+      tags:
+      - Tasks
+      operationId: approveTaskG2
+      summary: 一次性审批固定任务计划
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskSummary'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskDecision'
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/tasks/{jobId}/executions:
+    get:
+      tags:
+      - Tasks
+      operationId: listTaskExecutionsG2
+      summary: 查询逐节点执行及未知状态
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfTaskExecution'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+  /api/v1/tasks/{jobId}/events:
+    get:
+      tags:
+      - Tasks
+      operationId: streamTaskEventsG2
+      summary: SSE 任务事件流，支持 Last-Event-ID 游标
+      responses:
+        '204':
+          description: 成功，无响应内容
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '200':
+          description: SSE 事件流
+          content:
+            text/event-stream:
+              schema:
+                type: string
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: *id001
+      - name: Last-Event-ID
+        in: header
+        schema: *id001
+  /api/v1/tasks/{jobId}/cancel:
+    post:
+      tags:
+      - Tasks
+      operationId: cancelTaskG2
+      summary: 尽力取消，不能承诺回滚
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskSummary'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskAction'
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/tasks/{jobId}/resume:
+    post:
+      tags:
+      - Tasks
+      operationId: resumeTaskG2
+      summary: 仅恢复未开始的批次
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskSummary'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TaskAction'
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/CSRF'
+  /api/v1/ai/sessions/{sessionId}/messages:
+    get:
+      tags:
+      - AIEvents
+      operationId: listAISessionMessagesG2
+      summary: 查看当前用户有权限的 AI 会话消息
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PageOfAIMessage'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+    post:
+      tags:
+      - AIEvents
+      operationId: createAIMessageG2
+      summary: 提交消息且检查 scopeRevision
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AIMessage'
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AIMessageInput'
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: *id001
+      - $ref: '#/components/parameters/CSRF'
+      - $ref: '#/components/parameters/IdempotencyKey'
+  /api/v1/ai/sessions/{sessionId}/events:
+    get:
+      tags:
+      - AIEvents
+      operationId: streamAISessionEventsG2
+      summary: SSE AI 工具与审批事件流
+      responses:
+        '204':
+          description: 成功，无响应内容
+        '400':
+          $ref: '#/components/responses/Error400'
+        '401':
+          $ref: '#/components/responses/Error401'
+        '403':
+          $ref: '#/components/responses/Error403'
+        '404':
+          $ref: '#/components/responses/Error404'
+        '409':
+          $ref: '#/components/responses/Error409'
+        '412':
+          $ref: '#/components/responses/Error412'
+        '428':
+          $ref: '#/components/responses/Error428'
+        '429':
+          $ref: '#/components/responses/Error429'
+        '503':
+          $ref: '#/components/responses/Error503'
+        '200':
+          description: SSE
+          content:
+            text/event-stream:
+              schema:
+                type: string
+      parameters:
+      - name: sessionId
+        in: path
+        required: true
+        schema: *id001
+      - name: Last-Event-ID
+        in: header
+        schema: *id001
+components:
+  schemas:
+    Problem:
+      type: object
+      properties:
+        type: *id001
+        title: *id001
+        status:
+          type: integer
+          minimum: 400
+          maximum: 599
+        detail: *id001
+        instance: *id001
+        code: *id001
+        requestId: *id001
+        fieldErrors:
+          type: array
+          items:
+            type: object
+            properties:
+              pointer: *id001
+              message: *id001
+            additionalProperties: false
+      required:
+      - type
+      - title
+      - status
+      - code
+      - requestId
+      additionalProperties: false
+    PageMeta:
+      type: object
+      properties:
+        nextCursor:
+          type:
+          - string
+          - 'null'
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 200
+        hasMore:
+          type: boolean
+      required:
+      - limit
+      - hasMore
+      additionalProperties: false
+    Identity:
+      type: object
+      properties:
+        userId: *id001
+        displayName: *id001
+        roles:
+          type: array
+          items: *id001
+        permissions:
+          type: array
+          items: *id001
+        isBootstrapAdmin:
+          type: boolean
+      required:
+      - userId
+      - displayName
+      - roles
+      additionalProperties: false
+    AgentEnrollRequest:
+      type: object
+      properties:
+        enrollmentToken:
+          type: string
+          writeOnly: true
+        requestId: *id001
+        csrPem:
+          type: string
+          writeOnly: true
+        pinnedRootSpkiSha256: *id001
+        agentVersion: *id001
+        platform: *id001
+      required:
+      - enrollmentToken
+      - requestId
+      - csrPem
+      - pinnedRootSpkiSha256
+      - agentVersion
+      additionalProperties: false
+    AgentEnrollResult:
+      type: object
+      properties:
+        state:
+          type: string
+          enum:
+          - pending
+          - issued
+          - denied
+        nodeId: *id001
+        certificatePem: *id001
+        intermediateChainPem: *id001
+        agentEndpoint: *id001
+        reasonCode: *id001
+      required:
+      - state
+      additionalProperties: false
+    LoginRequest:
+      type: object
+      properties:
+        username: *id001
+        password:
+          type: string
+          writeOnly: true
+        secondFactorCode:
+          type: string
+          writeOnly: true
+      required:
+      - username
+      - password
+      additionalProperties: false
+    BootstrapRequest:
+      type: object
+      properties:
+        setupToken:
+          type: string
+          writeOnly: true
+        username: *id001
+        password:
+          type: string
+          writeOnly: true
+      required:
+      - setupToken
+      - username
+      - password
+      additionalProperties: false
+    BootstrapState:
+      type: object
+      properties:
+        bootstrapAvailable:
+          type: boolean
+        setupMethod:
+          type: string
+          enum:
+          - local-console-token
+        initialized:
+          type: boolean
+      required:
+      - bootstrapAvailable
+      - initialized
+      additionalProperties: false
+    LoginResult:
+      type: object
+      properties:
+        identity:
+          $ref: '#/components/schemas/Identity'
+        sessionExpiresAt: *id002
+        csrfToken:
+          type: string
+          description: 仅针对 Cookie 会话的同源 CSRF 防护；不得存储于日志
+      required:
+      - identity
+      - sessionExpiresAt
+      additionalProperties: false
+    Session:
+      type: object
+      properties:
+        sessionId: *id001
+        createdAt: *id002
+        expiresAt: *id002
+        lastSeenAt: *id002
+        current:
+          type: boolean
+      required:
+      - sessionId
+      - expiresAt
+      - current
+      additionalProperties: false
+    UserInput:
+      type: object
+      properties:
+        username: *id001
+        displayName: *id001
+        password:
+          type: string
+          writeOnly: true
+        roleIds:
+          type: array
+          items: *id001
+        enabled:
+          type: boolean
+      required:
+      - username
+      - roleIds
+      additionalProperties: false
+    User:
+      type: object
+      properties:
+        userId: *id001
+        username: *id001
+        displayName: *id001
+        roleIds:
+          type: array
+          items: *id001
+        enabled:
+          type: boolean
+        revision:
+          type: integer
+          minimum: 1
+      required:
+      - userId
+      - username
+      - roleIds
+      - enabled
+      - revision
+      additionalProperties: false
+    UserPatch:
+      type: object
+      properties:
+        displayName: *id001
+        roleIds:
+          type: array
+          items: *id001
+        enabled:
+          type: boolean
+      additionalProperties: false
+    Role:
+      type: object
+      properties:
+        roleId: *id001
+        label: *id001
+        permissions:
+          type: array
+          items: *id001
+        builtIn:
+          type: boolean
+      required:
+      - roleId
+      - label
+      - permissions
+      additionalProperties: false
+    Permission:
+      type: object
+      properties:
+        key: *id001
+        description: *id001
+        resourceType: *id001
+      required:
+      - key
+      - description
+      additionalProperties: false
+    GrantRequest:
+      type: object
+      properties:
+        principalId: *id001
+        resourceType:
+          type: string
+          enum:
+          - node
+          - node_group
+          - service_group
+        resourceId: *id001
+        permissions:
+          type: array
+          items: *id001
+        expiresAt: *id002
+      required:
+      - principalId
+      - resourceType
+      - resourceId
+      - permissions
+      additionalProperties: false
+    Grant:
+      type: object
+      properties:
+        grantId: *id001
+        principalId: *id001
+        resourceType: *id001
+        resourceId: *id001
+        permissions:
+          type: array
+          items: *id001
+        createdAt: *id002
+        expiresAt: *id002
+      required:
+      - grantId
+      - principalId
+      - resourceType
+      - resourceId
+      - permissions
+      additionalProperties: false
+    AuditEvent:
+      type: object
+      properties:
+        eventId: *id001
+        occurredAt: *id002
+        actorType:
+          type: string
+          enum:
+          - user
+          - agent
+          - plugin
+          - ai
+          - system
+        actorId: *id001
+        action: *id001
+        resourceType: *id001
+        resourceId: *id001
+        result:
+          type: string
+          enum:
+          - allowed
+          - denied
+          - success
+          - failure
+          - partial
+        requestId: *id001
+        taskId: *id001
+        redactedSummary: *id001
+      required:
+      - eventId
+      - occurredAt
+      - actorType
+      - action
+      - result
+      - requestId
+      additionalProperties: false
+    NodeDetail:
+      type: object
+      properties:
+        nodeId: *id001
+        displayName: *id001
+        status:
+          type: string
+          enum:
+          - online
+          - offline
+          - suspended
+          - revoked
+          - unknown
+        lastSeenAt: *id002
+        agentVersion: *id001
+        platform: *id001
+        revision:
+          type: integer
+          minimum: 1
+      required:
+      - nodeId
+      - displayName
+      - status
+      - revision
+      additionalProperties: false
+    NodePatch:
+      type: object
+      properties:
+        displayName: *id001
+        tags:
+          type: array
+          items: *id001
+        notes: *id001
+      additionalProperties: false
+    NodeIdentity:
+      type: object
+      properties:
+        nodeId: *id001
+        certificateFingerprintSha256: *id001
+        issuerFingerprintSha256: *id001
+        serial: *id001
+        notAfter: *id002
+        revoked:
+          type: boolean
+        lastVerifiedAt: *id002
+      required:
+      - nodeId
+      - revoked
+      additionalProperties: false
+    NodeCapabilities:
+      type: object
+      properties:
+        nodeId: *id001
+        protocolMajor:
+          type: integer
+          minimum: 1
+        protocolMinor:
+          type: integer
+          minimum: 0
+        capabilities:
+          type: array
+          items: *id001
+        observedAt: *id002
+      required:
+      - nodeId
+      - protocolMajor
+      - protocolMinor
+      - capabilities
+      additionalProperties: false
+    NodeActionInput:
+      type: object
+      properties:
+        reason: *id001
+        expectedRevision:
+          type: integer
+          minimum: 1
+      required:
+      - reason
+      additionalProperties: false
+    TaskSummary:
+      type: object
+      properties:
+        taskId: *id001
+        state:
+          type: string
+          enum:
+          - awaiting_approval
+          - queued
+          - waiting_node
+          - running
+          - paused
+          - completed
+          - partially_failed
+          - failed
+          - canceling
+          - canceled
+          - unknown
+          - expired
+        createdAt: *id002
+        createdBy: *id001
+        targetNodeIdsSnapshot:
+          type: array
+          items: *id001
+          maxItems: 1000
+        revision:
+          type: integer
+          minimum: 1
+        planDigest: *id001
+        expiresAt: *id002
+      required:
+      - taskId
+      - state
+      - createdAt
+      - targetNodeIdsSnapshot
+      - revision
+      - planDigest
+      additionalProperties: false
+    TaskExecution:
+      type: object
+      properties:
+        executionId: *id001
+        taskId: *id001
+        nodeId: *id001
+        state:
+          type: string
+          enum:
+          - queued
+          - waiting_node
+          - offered
+          - acknowledged
+          - running
+          - succeeded
+          - failed
+          - cancel_requested
+          - canceled
+          - timed_out
+          - unknown
+          - expired
+        startedAt: *id002
+        finishedAt: *id002
+        exitCode:
+          type:
+          - integer
+          - 'null'
+        outputTruncated:
+          type: boolean
+        lastSequence:
+          type: integer
+          minimum: 0
+      required:
+      - executionId
+      - taskId
+      - nodeId
+      - state
+      - lastSequence
+      additionalProperties: false
+    TaskDecision:
+      type: object
+      properties:
+        planDigest: *id001
+        decision:
+          type: string
+          enum:
+          - approve
+          - deny
+        reason: *id001
+      required:
+      - planDigest
+      - decision
+      additionalProperties: false
+    TaskAction:
+      type: object
+      properties:
+        reason: *id001
+        expectedRevision:
+          type: integer
+          minimum: 1
+      required:
+      - reason
+      additionalProperties: false
+    AIMessageInput:
+      type: object
+      properties:
+        content:
+          type: string
+          maxLength: 32000
+        clientMessageId: *id001
+        scopeRevision:
+          type: integer
+          minimum: 0
+      required:
+      - content
+      - clientMessageId
+      - scopeRevision
+      additionalProperties: false
+    AIMessage:
+      type: object
+      properties:
+        messageId: *id001
+        sessionId: *id001
+        role:
+          type: string
+          enum:
+          - user
+          - assistant
+          - tool
+        redactedContent: *id001
+        createdAt: *id002
+        taskIds:
+          type: array
+          items: *id001
+      required:
+      - messageId
+      - sessionId
+      - role
+      - createdAt
+      additionalProperties: false
+    ListSessions:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Session'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    PageOfUser:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    PageOfGrant:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Grant'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    PageOfAuditEvent:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AuditEvent'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    PageOfTaskSummary:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskSummary'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    PageOfTaskExecution:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskExecution'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    PageOfAIMessage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/AIMessage'
+        page:
+          $ref: '#/components/schemas/PageMeta'
+      required:
+      - items
+      - page
+      additionalProperties: false
+    RoleList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+      required:
+      - items
+      additionalProperties: false
+    PermissionList:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Permission'
+      required:
+      - items
+      additionalProperties: false
+    ResultAccepted:
+      type: object
+      properties:
+        taskId: *id001
+        state: *id001
+      required:
+      - taskId
+      - state
+      additionalProperties: false
+  parameters:
+    Cursor:
+      name: cursor
+      in: query
+      schema: *id001
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        default: 50
+        minimum: 1
+        maximum: 200
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      schema: *id001
+      description: 资源 revision 对应的强 ETag，防止丢失更新
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema:
+        type: string
+        minLength: 8
+        maxLength: 128
+      description: 同一主体+操作+请求摘要去重；相同 key 不同参数 409
+    CSRF:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      schema: *id001
+      description: Cookie 会话变更操作必须提供；Bearer 请求不使用此字段
+  responses:
+    Error400:
+      description: Bad request
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error401:
+      description: Unauthenticated
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error403:
+      description: Forbidden
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error404:
+      description: Not found
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error409:
+      description: State conflict
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error412:
+      description: Revision mismatch
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error428:
+      description: Precondition required
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error429:
+      description: Rate limited
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+    Error503:
+      description: Unavailable
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: sf_session
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: opaque

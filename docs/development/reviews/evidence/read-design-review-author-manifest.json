@@ -1,0 +1,47 @@
+[
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks.worktrees/docs--node-read-auth-design-cx01/docs/contracts/decisions/node-read-auth-01/DESIGN.md",
+    "archive": "read-design-review-author-auth-DESIGN.md.txt",
+    "sha256": "35c8a21f02a2d5ab1d43027f67b1c0d13d3ca630f62c2a2d0f14fe5b71cce6cb"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks.worktrees/docs--node-read-auth-design-cx01/docs/contracts/decisions/node-read-auth-01/ACCEPTANCE.md",
+    "archive": "read-design-review-author-auth-ACCEPTANCE.md.txt",
+    "sha256": "41ca283f4876f9c7882042803961e226995afc18057c139d3f48ac00f559c041"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks.worktrees/docs--node-read-auth-design-cx01/docs/contracts/decisions/node-read-auth-01/HANDOFF.md",
+    "archive": "read-design-review-author-auth-HANDOFF.md.txt",
+    "sha256": "c92e7138d91a0d202ddec76234f63de4046d3a0aa285d3a64103ccc1353ac3f9"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-http-design-ds01/docs/contracts/decisions/node-read-http-01/DESIGN.md",
+    "archive": "read-design-review-author-http-DESIGN.md.txt",
+    "sha256": "b4baa256efe5d5a849068815848627cc8530c7163e32c52bcb11fae64addf88e"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-http-design-ds01/docs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+    "archive": "read-design-review-author-http-ACCEPTANCE.md.txt",
+    "sha256": "b294e3675dd6ee87ef7af44c37f9b36dcab06715c5ecd8db8f64f7649b8aee2f"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-http-design-ds01/docs/contracts/decisions/node-read-http-01/HANDOFF.md",
+    "archive": "read-design-review-author-http-HANDOFF.md.txt",
+    "sha256": "95a24ac11c23bbabe88bf8e195a7671f213ecf99feb69b5afb60b5548c889d2f"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-web-design-gm01/docs/contracts/decisions/node-read-web-01/DESIGN.md",
+    "archive": "read-design-review-author-web-DESIGN.md.txt",
+    "sha256": "a0edbc81f0a7e6fe5409dfb61876b353a3f42d73436e9e921dae0ddc5b9040c7"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-web-design-gm01/docs/contracts/decisions/node-read-web-01/ACCEPTANCE.md",
+    "archive": "read-design-review-author-web-ACCEPTANCE.md.txt",
+    "sha256": "6d765741a2dc78af02e7a3e289dd2ab104db11326d192d59808e3e547b642d7f"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-web-design-gm01/docs/contracts/decisions/node-read-web-01/HANDOFF.md",
+    "archive": "read-design-review-author-web-HANDOFF.md.txt",
+    "sha256": "ee6bd668a570b2f050925727d94cf1f2ba590a3c3829e5c305913ec18201cf2a"
+  }
+]

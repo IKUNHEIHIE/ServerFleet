@@ -1,0 +1,88 @@
+{
+  "stage": "M0-P1",
+  "timezone": "Asia/Shanghai",
+  "localDate": "2026-10-29",
+  "validatedFoundationCommit": "64dddd55127f3a8c1696aedccf1781c2efb88af8",
+  "environment": {
+    "os": "windows/amd64",
+    "go": "1.27.3",
+    "node": "24.22.1",
+    "npm": "11.19.1"
+  },
+  "sourceArchiveSHA256": "68a0dc1d982d639d122b715ef4b8e63c7a4d6796d933e29b41a8509c449b0f00",
+  "checks": {
+    "all": {
+      "executedAt": "2026-10-28T18:35:37.440Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        },
+        {
+          "name": "contracts",
+          "status": "PASS"
+        },
+        {
+          "name": "go",
+          "status": "PASS"
+        },
+        {
+          "name": "web",
+          "status": "PASS"
+        },
+        {
+          "name": "git",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-10-28T18:33:14.527Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "policy": {
+      "executedAt": "2026-10-28T18:33:16.670Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        }
+      ]
+    }
+  },
+  "additionalEvidence": {
+    "originalProtoBuild": "PASS",
+    "originalBufLint": "FAIL: module path missing; independent revised configuration provided",
+    "originalGoGeneration": "FAIL: go_package missing; independent M0-P1-r1 provided",
+    "wireCompatibilityWithOriginal": "PASS",
+    "linuxCrossBuilds": [
+      "agent/amd64:PASS",
+      "agent/arm64:PASS",
+      "controller/amd64:PASS",
+      "controller/arm64:PASS"
+    ],
+    "runtimeSmoke": "PASS: local process health, management route closed, all processes stopped",
+    "worktreeSmoke": "PASS: create, refuse dirty cleanup, remove clean merged worktree and test branch",
+    "goTests": {
+      "topLevel": 6,
+      "subtests": 4,
+      "status": "PASS"
+    },
+    "webTests": {
+      "count": 3,
+      "status": "PASS"
+    },
+    "toolingTests": {
+      "count": 8,
+      "status": "PASS"
+    },
+    "githubCI": "UNTESTED: no remote",
+    "g2Freeze": "BLOCKED: candidate review and required security/PoC evidence pending",
+    "productionSecurityPerformance": "UNTESTED: outside P1 scope"
+  }
+}

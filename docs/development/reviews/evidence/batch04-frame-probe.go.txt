@@ -1,0 +1,51 @@
+package main
+
+import (
+	"bytes"
+	"errors"
+	"fmt"
+	"time"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
+	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
+	"serverfleet.local/serverfleet/internal/transport"
+)
+
+func main() {
+	now := time.Date(2026, 10, 29, 1, 0, 0, 0, time.UTC)
+	c := transport.ValidationContext{Direction: transport.AgentToController, Phase: transport.Established, ProtocolMajor: 1, Now: now}
+	s := transport.ValidationLimits{MaxMessageBytes: 8192, MaxTextBytes: 256, MaxParametersBytes: 256, MaxOutputBytes: 256, MaxMetrics: 4, MaxSyncExecutions: 4, MaxCapabilities: 4, MaxTimeoutSeconds: 60, MaxOfferLifetime: time.Minute}
+	l := transport.FrameDecodeLimits{MaxFrameBytes: 8192, MaxFields: 64, MaxDepth: 4}
+	e := &agentv1.Envelope{ProtocolMajor: 1, MessageId: "m", ConnectionId: "c", NodeId: "n", Sequence: 1, SentAtUnixMs: now.UnixMilli(), Message: &agentv1.Envelope_Heartbeat{Heartbeat: &agentv1.Heartbeat{ConnectivityStatus: "online"}}}
+	raw, err := proto.Marshal(e); if err != nil { panic(err) }
+	pass := func(name string, ok bool) { if !ok { panic("FAIL " + name) }; fmt.Println("PASS " + name) }
+	msg, err := transport.DecodeEnvelopeFrame(raw, c, s, l)
+	pass("valid heartbeat actual decoder", err == nil && proto.Equal(msg, e))
+	check := func(name string, data []byte, limits transport.FrameDecodeLimits, code transport.FrameErrorCode) {
+		before := bytes.Clone(data)
+		m, err := transport.DecodeEnvelopeFrame(data, c, s, limits)
+		var detail *transport.FrameError
+		pass(name, m == nil && errors.As(err, &detail) && detail.Code == code && bytes.Equal(data, before))
+	}
+	l.MaxFrameBytes = len(raw)
+	msg, err = transport.DecodeEnvelopeFrame(raw, c, s, l)
+	pass("exact raw-byte limit accepted", err == nil && msg != nil)
+	l.MaxFrameBytes--
+	check("raw-byte limit precedes malformed parsing", bytes.Repeat([]byte{0xff}, len(raw)), l, transport.FrameTooLarge)
+	l.MaxFrameBytes = 8192
+	check("duplicate metadata rejected", append(bytes.Clone(raw), 8, 1), l, transport.FrameDuplicateMetadata)
+	check("same oneof occurrence rejected", append(bytes.Clone(raw), protowire.AppendBytes(protowire.AppendTag(nil, 22, protowire.BytesType), nil)...), l, transport.FrameDuplicatePayload)
+	check("complete concatenation rejected", append(bytes.Clone(raw), raw...), l, transport.FrameDuplicateMetadata)
+	check("valid prefix cannot escape trailing truncation", append(bytes.Clone(raw), 0x80), l, transport.FrameMalformed)
+	group := bytes.Clone(raw)
+	for i:=0; i<10; i++ { group = protowire.AppendTag(group, 100, protowire.StartGroupType) }
+	for i:=0; i<10; i++ { group = protowire.AppendTag(group, 100, protowire.EndGroupType) }
+	check("unknown groups bounded before decode", group, l, transport.FrameDepthLimit)
+	unknown := protowire.AppendBytes(protowire.AppendTag(nil, 100, protowire.BytesType), []byte{0xff, 0x80, 0})
+	msg, err = transport.DecodeEnvelopeFrame(append(bytes.Clone(raw), unknown...), c, s, l)
+	pass("unknown opaque bytes preserved", err == nil && bytes.Equal(msg.ProtoReflect().GetUnknown(), unknown))
+	c.Direction = transport.ControllerToAgent
+	msg, err = transport.DecodeEnvelopeFrame(raw, c, s, l)
+	var semantic *transport.ValidationError
+	pass("semantic rejection returns nil message", msg == nil && errors.As(err, &semantic) && semantic.Code == transport.InvalidDirection)
+}

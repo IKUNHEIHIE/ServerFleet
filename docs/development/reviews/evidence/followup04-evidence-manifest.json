@@ -1,0 +1,112 @@
+[
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-plan-ds01/reports/check-policy.json",
+    "archive": "followup04-author-plan-policy.json",
+    "sha256": "cd90ce004a74ea8835f33db23b0d5b3b49d3580c6d5ce9237b4a2f459795b6eb",
+    "bytes": 126
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/browser-qa.mjs",
+    "archive": "followup04-author-w06-browser-qa.mjs.txt",
+    "sha256": "5f5b928131a05fdf2c35de36421c290a1e126d5ed09b1de22e3dbd9692943da1",
+    "bytes": 21811
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/check-policy.log",
+    "archive": "followup04-author-w06-check-policy.log",
+    "sha256": "f40e2edac4eb13f8a08d714267c6864d45157a0f1ff7a4161fd10a9c0c0a4975",
+    "bytes": 1902
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/check-web.log",
+    "archive": "followup04-author-w06-check-web.log",
+    "sha256": "f5fd2c3716a36c254e0a363d51d62bd41f6fbb604327b643dcfa4b5192b79dc6",
+    "bytes": 2000
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/error-state.png",
+    "archive": "followup04-author-w06-error-state.png",
+    "sha256": "944c4e387d926bb2febbfdd1ed5f36be7587ddcc342acc507b1c69a78b4fecda",
+    "bytes": 32924
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/focus-detail-1280.png",
+    "archive": "followup04-author-w06-focus-detail-1280.png",
+    "sha256": "11b78a0bd612b9666e5e882df2e6912a30768859077e840b1e033a854846aa15",
+    "bytes": 74970
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/focus-row-1280.png",
+    "archive": "followup04-author-w06-focus-row-1280.png",
+    "sha256": "640c9885d88e6539b11f84ea1bbdbbed0d3368bcdc8216d9b0b6d7fec25f56bd",
+    "bytes": 78323
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/loading-state.png",
+    "archive": "followup04-author-w06-loading-state.png",
+    "sha256": "581db6970ea283dc78699c6f0cf1f2dd7bb4378351092799ebf849d539103101",
+    "bytes": 28067
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/narrow-420.png",
+    "archive": "followup04-author-w06-narrow-420.png",
+    "sha256": "ea21aea0f58cd13d0c753e49f2d2cec420588ad89978e6952a2dfabd31a9ace7",
+    "bytes": 50952
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_preview/preview.html",
+    "archive": "followup04-author-w06-preview.html.txt",
+    "sha256": "59fec62a4f47025d44293073ab875ff80cd50d7c1cdfdc9dc42d2093fac84649",
+    "bytes": 338
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_preview/preview.tsx",
+    "archive": "followup04-author-w06-preview.tsx.txt",
+    "sha256": "de62d5b97ae0894c4356c5214e12adb9e0ecddf6fa672b7d719d470269d09d65",
+    "bytes": 5885
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/apps/web/src/features/nodes/BROWSER-ACCEPTANCE.md",
+    "archive": "followup04-author-w06-report.md.txt",
+    "sha256": "dedd0889561373b2592b464e3f1c57a04a5ccc6b97c0bd20f4a652b6271ae459",
+    "bytes": 7094
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_preview/vite.preview.config.ts",
+    "archive": "followup04-author-w06-vite.config.ts.txt",
+    "sha256": "61d24f131f2d0f9e82f62b9ea86a4d228a8f2b4c37dcb852db63970bd8d3f8a1",
+    "bytes": 734
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/w06-results.json",
+    "archive": "followup04-author-w06-w06-results.json",
+    "sha256": "557f7304763eb484c66203157799753353e9f66669c95acd6a7268bd9b8cda5a",
+    "bytes": 4561
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/w06.log",
+    "archive": "followup04-author-w06-w06.log.base64.txt",
+    "sha256": "f58aab067b04b130b2d4e46bcff4824a8b5ea3e4c4b0336d5c8f84d527052e18",
+    "bytes": 2009,
+    "encoding": "base64: decode for original bytes and source sha256",
+    "archiveSha256": "222562680f600f720113028a0bf91771d4f659da984dc51be52ee87cc467ba08"
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/reports/_review/w06/wide-1280.png",
+    "archive": "followup04-author-w06-wide-1280.png",
+    "sha256": "1022e07ef677c4a0db10e515e02f8e102fc9ea05f89c9cdcc1401986f7ef95c2",
+    "bytes": 75156
+  },
+  {
+    "source": "reports/followup04-document-evidence-audit.json",
+    "archive": "followup04-document-evidence-audit.json",
+    "sha256": "cab540cc456f20f016cbd3cf94384c7fd9f7eabc3c7f4d91f2b4f83dca32b8b9",
+    "bytes": 2552
+  },
+  {
+    "source": "reports/_review/followup04/audit.mjs",
+    "archive": "followup04-document-evidence-audit.mjs.txt",
+    "sha256": "d0d22d63ea39b1b8a36d7e8e58ea4f03cecef13a7610d299279a752956728ef5",
+    "bytes": 4574
+  }
+]

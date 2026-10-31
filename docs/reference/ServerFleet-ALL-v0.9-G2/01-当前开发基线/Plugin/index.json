@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "status": "design-only",
+  "source": "official-repository-pending",
+  "plugins": [
+    {
+      "id": "xray-manager",
+      "name": "Xray 节点管理器",
+      "manifest": "xray-manager/manifest.yaml",
+      "status": "approved-not-built",
+      "installable": false
+    }
+  ]
+}

@@ -1,0 +1,73 @@
+package platformpoc
+
+import (
+ "context"
+ "crypto/sha256"
+ "encoding/hex"
+ "errors"
+ "net/http"
+ "net/http/httptest"
+ "strings"
+ "sync/atomic"
+ "testing"
+ "time"
+
+ "github.com/coder/websocket"
+ "google.golang.org/protobuf/proto"
+ agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
+ "serverfleet.local/serverfleet/internal/transport"
+)
+
+type websocketFrames struct{c *websocket.Conn}
+func(s websocketFrames)Read(ctx context.Context)(bool,[]byte,error){kind,b,err:=s.c.Read(ctx);return kind==websocket.MessageBinary,b,err}
+func(s websocketFrames)Write(ctx context.Context,b []byte)error{return s.c.Write(ctx,websocket.MessageBinary,b)}
+func(s websocketFrames)Close()error{return s.c.CloseNow()}
+
+// Actual WSS+mTLS exercises production ControllerLinks. Domain callbacks and
+// admission are explicit fixtures, not proof of integrated DS task execution.
+func TestControllerLinksActualWSSHandshakeOfferEventReplacementRevocation(t *testing.T){
+ serverCert,agentCert,roots:=ephemeralCertificates(t)
+ fp:=sha256.Sum256(agentCert.Certificate[0]);revoked:=atomic.Bool{};allow:=atomic.Bool{}
+ verifier,_:=transport.NewPeerVerifier(func(context.Context,string)(transport.AgentIdentity,error){return transport.AgentIdentity{NodeID:"node-a",FingerprintSHA256:hex.EncodeToString(fp[:]),Serial:"3",Enabled:true,Revoked:revoked.Load(),TrustGeneration:1},nil})
+ events:=make(chan *agentv1.Envelope,16);offline:=make(chan string,16)
+ cfg:=transport.ControllerLinkConfig{ProtocolMajor:1,ProtocolMinor:0,MaxConnections:2,HeartbeatInterval:time.Second,Frames:transport.FrameDecodeLimits{MaxFrameBytes:16384,MaxFields:256,MaxDepth:8},Semantic:transport.ValidationLimits{MaxMessageBytes:16384,MaxTextBytes:256,MaxParametersBytes:1024,MaxOutputBytes:1024,MaxMetrics:8,MaxSyncExecutions:8,MaxCapabilities:8,MaxTimeoutSeconds:60,MaxOfferLifetime:15*time.Minute,AllowedActions:map[string]string{"synthetic.read":"v1"}},Handshake:func(context.Context,transport.LinkObservation,*agentv1.AgentHello)([]string,error){return []string{"synthetic.read"},nil},Admit:func(context.Context,transport.LinkObservation,*agentv1.Envelope)error{if !allow.Load(){return errors.New("not admitted")};return nil},Event:func(_ context.Context,_ transport.LinkObservation,e *agentv1.Envelope)error{events<-e;return nil},Disconnected:func(_ context.Context,o transport.LinkObservation)error{offline<-o.ConnectionID;return nil}}
+ hub,err:=transport.NewControllerLinks(verifier,cfg);if err!=nil{t.Fatal(err)}
+ ctx,cancel:=context.WithTimeout(context.Background(),15*time.Second);defer cancel()
+ server:=httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter,r *http.Request){
+  if r.TLS==nil||len(r.Header.Values("Origin"))!=0||len(r.Header.Values("Cookie"))!=0||len(r.Header.Values("Authorization"))!=0{http.Error(w,"rejected",403);return}
+  if _,err:=verifier.Verify(ctx,*r.TLS,"");err!=nil{http.Error(w,"rejected",403);return}
+  id,err:=transport.NewConnectionID();if err!=nil{http.Error(w,"unavailable",503);return};w.Header().Set("X-SF-Connection-ID",id)
+  conn,err:=websocket.Accept(w,r,&websocket.AcceptOptions{CompressionMode:websocket.CompressionDisabled});if err!=nil{return}
+  conn.SetReadLimit(16384)
+  _=hub.Serve(ctx,websocketFrames{conn},*r.TLS,id)
+ }))
+ server.TLS,_=verifier.ControllerTLSConfig(serverCert,roots);server.StartTLS();defer server.Close()
+ clientTLS,_:=transport.AgentTLSConfig(agentCert,roots,"fleet.test")
+ client:=&http.Client{Transport:&http.Transport{TLSClientConfig:clientTLS},CheckRedirect:func(*http.Request,[]*http.Request)error{return errors.New("redirect rejected")}};defer client.CloseIdleConnections()
+ envelope:=func(id string,seq uint64)*agentv1.Envelope{return &agentv1.Envelope{ProtocolMajor:1,ConnectionId:id,NodeId:"node-a",MessageId:"synthetic-message",Sequence:seq,SentAtUnixMs:time.Now().UnixMilli()}}
+ send:=func(c *websocket.Conn,e *agentv1.Envelope){b,err:=proto.Marshal(e);if err!=nil{t.Fatal(err)};if err=c.Write(ctx,websocket.MessageBinary,b);err!=nil{t.Fatal(err)}}
+ receive:=func(c *websocket.Conn)*agentv1.Envelope{kind,b,err:=c.Read(ctx);if err!=nil||kind!=websocket.MessageBinary{t.Fatal("binary expected",err)};e:=new(agentv1.Envelope);if proto.Unmarshal(b,e)!=nil{t.Fatal("bad protobuf")};return e}
+ waitEvent:=func()*agentv1.Envelope{select{case e:=<-events:return e;case <-ctx.Done():t.Fatal("missing event");return nil}}
+ connect:=func()(*websocket.Conn,string){
+  c,response,err:=websocket.Dial(ctx,"wss"+strings.TrimPrefix(server.URL,"https"),&websocket.DialOptions{HTTPClient:client});if err!=nil{t.Fatal(err)}
+  id:=response.Header.Get("X-SF-Connection-ID");hello:=envelope(id,1);hello.Message=&agentv1.Envelope_AgentHello{AgentHello:&agentv1.AgentHello{AgentVersion:"synthetic-v1",Platform:"linux",Architecture:"amd64",CapabilityIds:[]string{"synthetic.read"},MinProtocolMajor:1,MaxProtocolMajor:1,BootId:"synthetic-boot"}};send(c,hello)
+  reply:=receive(c);if reply.GetControllerHello()==nil||!reply.GetControllerHello().Accepted||reply.ConnectionId!=id||reply.Sequence!=1{t.Fatal("hello failed")}
+  if waitEvent().GetAgentHello()==nil{t.Fatal("first event not hello")};return c,id
+ }
+ first,id:=connect();defer first.CloseNow()
+ offer:=&agentv1.Envelope{Message:&agentv1.Envelope_TaskOffer{TaskOffer:&agentv1.TaskOffer{TaskId:"task-a",ExecutionId:"execution-a",PlanDigestSha256:strings.Repeat("a",64),ActionId:"synthetic.read",CanonicalParametersJson:[]byte(`{}`),Privilege:agentv1.Privilege_PRIVILEGE_NORMAL,ExpiresAtUnixMs:time.Now().Add(time.Minute).UnixMilli(),TimeoutSeconds:30,ScopeRevision:1,ActionSchemaVersion:"v1"}}}
+ if err=hub.Send(ctx,"node-a",offer);err==nil{t.Fatal("admission bypass")};allow.Store(true)
+ if err=hub.Send(ctx,"node-a",offer);err!=nil{t.Fatal(err)}
+ received:=receive(first);if received.GetTaskOffer()==nil||received.Sequence!=2||received.ConnectionId!=id||offer.Sequence!=0{t.Fatal("offer not safely detached/bound")}
+ ack:=envelope(id,2);ack.Message=&agentv1.Envelope_TaskAck{TaskAck:&agentv1.TaskAck{TaskId:"task-a",ExecutionId:"execution-a",Accepted:true}};send(first,ack)
+ if waitEvent().GetTaskAck()==nil{t.Fatal("ack missing")}
+ second,newID:=connect();defer second.CloseNow();if newID==id{t.Fatal("connection ID reused")}
+ if _,_,err=first.Read(ctx);err==nil{t.Fatal("old connection survived replacement")}
+ select{case <-offline:t.Fatal("old disconnect marked replacement offline");default:}
+ revoked.Store(true)
+ if err=hub.Send(ctx,"node-a",offer);err==nil{t.Fatal("revoked live send accepted")}
+ heartbeat:=envelope(newID,2);heartbeat.Message=&agentv1.Envelope_Heartbeat{Heartbeat:&agentv1.Heartbeat{ConnectivityStatus:"online"}};send(second,heartbeat)
+ if _,_,err=second.Read(ctx);err==nil{t.Fatal("revoked live event accepted")}
+ select{case got:=<-offline:if got!=newID{t.Fatal("wrong offline observation")};case <-ctx.Done():t.Fatal("disconnect missing")}
+ select{case <-events:t.Fatal("revoked event reached domain");default:}
+}

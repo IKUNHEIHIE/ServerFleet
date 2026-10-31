@@ -1,0 +1,63 @@
+{
+  "task": "FOLLOWUP04-REVIEW",
+  "plan": {
+    "head": "4da769c166c0cf0eabc8970a536f077374ad43a4",
+    "historicalBaseline": "98a1f6b2971d87adbb88c74bbc8ec1484c0e9de2",
+    "currentEvidenceRef": "69d6d431281512dec6c5847b8fe2d06e1ce97b48",
+    "references": 68,
+    "referencedFiles": 25,
+    "citationProblems": [],
+    "facts": {
+      "statusAlreadyExists": true,
+      "observedAtAlreadyExists": true,
+      "onlineOnly": {
+        "in": "query",
+        "name": "onlineOnly",
+        "schema": {
+          "type": "boolean",
+          "default": false
+        }
+      },
+      "detailRequired": [
+        "nodeId",
+        "displayName",
+        "status",
+        "revision"
+      ],
+      "optionalMetadataTypes": {
+        "platform": "string",
+        "agentVersion": "string",
+        "lastSeenAt": "string"
+      },
+      "authorField01ConflatesPublicNull": true,
+      "integratorField01Clarified": true,
+      "candidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd"
+    },
+    "decision": "ACCEPT_WITH_INTEGRATOR_DOCUMENT_CLARIFICATION; original RP01-R01/R02 closed; no runtime approval"
+  },
+  "browser": {
+    "head": "99cd6635b3da4739a4e2b30816bb9749d14419ae",
+    "evidenceCodeHead": "ddf8c5beaee24694e687ad3166db32597ef60df1",
+    "authorReportedCases": 19,
+    "authorReportedPass": 19,
+    "independentBrowserRerun": false,
+    "evidenceReview": "read driver and preview sources, JSON and logs; viewed all six screenshots; inspected actual workspace close/activation implementation",
+    "findings": [
+      {
+        "id": "W06-R01",
+        "priority": 2,
+        "status": "OPEN",
+        "evidence": "C6 sends Escape and production handleClose clears selectedId before C7 Space; selectedId-equal reactivation and close-button activation untested",
+        "required": "real keyboard Enter and Space on already-selected row while detail remains mounted, then actual close-button activation and focus restoration"
+      },
+      {
+        "id": "W06-R02",
+        "priority": 2,
+        "status": "OPEN",
+        "evidence": "driver only settles old requests with success; preview has no unmount operation; missing mandatory late-failure and unmount evidence",
+        "required": "controlled old rejection after switch/invalidation and pending unmount with abort, retained detailed state/commit trace; accurately label any non-run cases"
+      }
+    ],
+    "decision": "CHANGES_REQUESTED: mandatory browser coverage incomplete, not a demonstrated production bug; preserve 19 existing results"
+  }
+}

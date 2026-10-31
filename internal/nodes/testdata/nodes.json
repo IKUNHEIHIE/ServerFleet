@@ -1,0 +1,55 @@
+[
+  {
+    "ID": "node-online-a",
+    "Name": "Alpha Web 01",
+    "Address": "10.0.0.11",
+    "Region": "cn-north",
+    "Provider": "cloud-a",
+    "Tags": ["web", "prod", "web"],
+    "Status": "online",
+    "LastSeenAt": "2026-10-29T08:59:30Z",
+    "Metrics": {"CPUPercent": 12.5, "MemoryPercent": 41, "ObservedAt": "2026-10-29T08:59:00Z"}
+  },
+  {
+    "ID": "node-online-b",
+    "Name": "Beta API 01",
+    "Address": "10.0.0.12",
+    "Region": "cn-east",
+    "Provider": "cloud-b",
+    "Tags": ["api", "prod"],
+    "Status": "online",
+    "LastSeenAt": "2026-10-29T08:58:00Z",
+    "Metrics": {"CPUPercent": 7, "MemoryPercent": 22, "ObservedAt": "2026-10-29T08:58:30Z"}
+  },
+  {
+    "ID": "node-offline-a",
+    "Name": "Gamma DB 01",
+    "Address": "10.0.0.21",
+    "Region": "cn-north",
+    "Provider": "cloud-a",
+    "Tags": ["db"],
+    "Status": "offline",
+    "LastSeenAt": "2026-10-29T02:00:00Z"
+  },
+  {
+    "ID": "node-offline-b",
+    "Name": "Delta Cache 01",
+    "Address": "10.0.0.22",
+    "Region": "cn-east",
+    "Provider": "cloud-b",
+    "Tags": ["cache", "prod"],
+    "Status": "offline",
+    "LastSeenAt": "2026-10-29T01:00:00Z",
+    "Metrics": {"CPUPercent": 0, "MemoryPercent": 0, "ObservedAt": "2026-10-29T01:00:00Z"}
+  },
+  {
+    "ID": "node-suspended-a",
+    "Name": "Epsilon Test 01",
+    "Address": "10.0.0.31",
+    "Region": "",
+    "Provider": "cloud-a",
+    "Tags": ["test", ""],
+    "Status": "suspended",
+    "LastSeenAt": "2026-10-28T12:00:00Z"
+  }
+]

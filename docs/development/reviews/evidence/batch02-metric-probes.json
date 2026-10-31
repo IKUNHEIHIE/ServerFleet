@@ -1,0 +1,110 @@
+[
+  {
+    "name": "missing-time",
+    "status": "PASS",
+    "reading": {
+      "quality": "missing",
+      "percent": null,
+      "sampledAt": null,
+      "reason": "no-timestamp",
+      "ageMs": null
+    },
+    "presentation": {
+      "kind": "empty",
+      "value": null,
+      "note": null,
+      "reason": "无有效数据（缺少采样时间）",
+      "stale": false
+    }
+  },
+  {
+    "name": "invalid-time",
+    "status": "PASS",
+    "reading": {
+      "quality": "missing",
+      "percent": null,
+      "sampledAt": null,
+      "reason": "invalid-timestamp",
+      "ageMs": null
+    },
+    "presentation": {
+      "kind": "empty",
+      "value": null,
+      "note": null,
+      "reason": "无有效数据（采样时间无法解析）",
+      "stale": false
+    }
+  },
+  {
+    "name": "future-time",
+    "status": "PASS",
+    "reading": {
+      "quality": "invalid",
+      "percent": null,
+      "sampledAt": "2026-10-29T12:00:00.001Z",
+      "reason": "future-timestamp",
+      "ageMs": -1
+    },
+    "presentation": {
+      "kind": "empty",
+      "value": null,
+      "note": null,
+      "reason": "无有效数据（采样时间晚于当前时间）",
+      "stale": false
+    }
+  },
+  {
+    "name": "stale-time",
+    "status": "PASS",
+    "reading": {
+      "quality": "stale",
+      "percent": 37,
+      "sampledAt": "2000-01-01T00:00:00Z",
+      "reason": null,
+      "ageMs": 846590400000
+    },
+    "presentation": {
+      "kind": "value",
+      "value": "37%",
+      "note": "陈旧 · 采样于 2000-01-01 00:00 UTC",
+      "reason": null,
+      "stale": true
+    }
+  },
+  {
+    "name": "out-of-range",
+    "status": "PASS",
+    "reading": {
+      "quality": "invalid",
+      "percent": null,
+      "sampledAt": null,
+      "reason": "out-of-range",
+      "ageMs": null
+    },
+    "presentation": {
+      "kind": "empty",
+      "value": null,
+      "note": null,
+      "reason": "无有效数据（超出 0–100 范围）",
+      "stale": false
+    }
+  },
+  {
+    "name": "fresh-zero",
+    "status": "PASS",
+    "reading": {
+      "quality": "fresh",
+      "percent": 0,
+      "sampledAt": "2026-10-29T11:59:00Z",
+      "reason": null,
+      "ageMs": 60000
+    },
+    "presentation": {
+      "kind": "value",
+      "value": "0%",
+      "note": null,
+      "reason": null,
+      "stale": false
+    }
+  }
+]

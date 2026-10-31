@@ -1,0 +1,21 @@
+PASS auth explicit grant
+PASS auth mixed targets deny entire request
+PASS auth empty targets never global
+PASS auth wildcard rejected
+PASS auth adapter initial allow
+PASS auth revocation read on next call
+PASS auth source failure no stale allow or raw secret
+PASS auth cancellation during final read
+PASS auth node grant cannot authorize root shell
+PASS audit valid event
+PASS audit unknown action no echo
+PASS audit bidirectional control rejected
+PASS audit future boundary rejected
+PASS audit past boundary accepted
+PASS audit past boundary exceeded rejected
+PASS audit 32 concurrent same-request events retained
+PASS audit snapshot detached
+PASS audit final page exact total
+PASS audit projection detached
+PASS audit canceled append does not write
+PASS audit excessive page limit rejected

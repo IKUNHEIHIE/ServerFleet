@@ -1,0 +1,12 @@
+PASS empty binding rejected
+PASS zero guard rejects message
+PASS first sequence commits
+PASS replay rejected without watermark change
+PASS wrong node rejected without consuming sequence
+PASS wrong connection rejected without consuming sequence
+PASS corrected same sequence accepted
+PASS 32 concurrent copies of a sequence commit once
+PASS maximum uint64 accepted without arithmetic overflow
+PASS maximum sequence cannot wrap to one
+PASS close applies to copied handle
+PASS old connection cannot enter explicit new guard

@@ -1,0 +1,26 @@
+{
+  "task":"READ-DESIGN-REVIEW",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"4196b2e8ab9c389ae0830bf56f905d9bafa00d05",
+  "authors":[
+    {"task":"READ-AUTH-DESIGN-01","session":"codex-01","head":"48409bacf4e582f8ab4f196982a5677fa3a21d18","decision":"ACCEPT_PROPOSED_DOCUMENTS","onlyThreeAddedMarkdown":true,"clean":true,"runtimeAcceptance":"UNTESTED"},
+    {"task":"READ-HTTP-DESIGN-01","session":"deepseek-01","head":"ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734","decision":"CHANGES_REQUESTED","onlyThreeAddedMarkdown":true,"clean":true,"merged":false},
+    {"task":"READ-WEB-DESIGN-01","session":"gemini-01","head":"63b0feb8dffad7dc88252dd7dd786b80c7e54e7c","decision":"CHANGES_REQUESTED","onlyThreeAddedMarkdown":true,"clean":true,"merged":false}
+  ],
+  "findings":[
+    {"id":"HD01-R01","priority":2,"status":"OPEN","reason":"identity/session source outage has no distinct HTTP branch; unavailable source conflated with invalid credentials"},
+    {"id":"HD01-R02","priority":2,"status":"OPEN","reason":"minimum trusted policy/inventory source establishment, update, ownership and read model deferred rather than designed"},
+    {"id":"WD01-R01","priority":2,"status":"OPEN","reason":"403 incorrectly clears authenticated session state rather than only the denied resource view"},
+    {"id":"WD01-R02","priority":2,"status":"OPEN","reason":"online=false plus valid untimed historical metrics renders percentages without unavailable/last-update handling"}
+  ],
+  "documentChecks":{"auth":{"runs":2,"status":"PASS","localLinks":38,"ranges":31,"sourceQuotes":22,"futureAcceptanceItems":34,"approvalContextManuallyReviewed":true},"http":{"references":60,"files":22,"rangeProblems":0,"semanticStatus":"CHANGES_REQUESTED"},"web":{"references":23,"files":11,"rangeProblems":0,"semanticStatus":"CHANGES_REQUESTED"},"originalDocumentsHashed":9,"externalReferences":"OWASP Session/CSRF and MDN Set-Cookie checked; mechanisms do not approve project defaults"},
+  "testedCombinedHead":"9642ab4b671a73015ee3d2b841bbbbb8f5b75613",
+  "checks":{"npmCi":"PASS","toolsInstall":"PASS","combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":212,"goSubtestsPassed":805,"goFailures":0,"webPassed":179,"webFailures":0},"combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},"originalFilesVerified":69,"byteExactOriginalCandidatesVerified":3,"g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd","productionCodeOrCandidateChanged":false},
+  "coordination":{"codex":"current design complete; stop","deepseek":"append READ-HTTP-DESIGN-01-R1 in original worktree","gemini":"append READ-WEB-DESIGN-01-R1 in original worktree","implementationAuthorized":false,"reaskA1B1":false},
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

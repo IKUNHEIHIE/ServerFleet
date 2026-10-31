@@ -1,0 +1,26 @@
+[
+  {
+    "name": "search trims and folds case, preserves order",
+    "status": "PASS"
+  },
+  {
+    "name": "combined status and ID search",
+    "status": "PASS"
+  },
+  {
+    "name": "Chinese substring search",
+    "status": "PASS"
+  },
+  {
+    "name": "whitespace input is clearable without excluding rows",
+    "status": "PASS"
+  },
+  {
+    "name": "no source mutation, same element identities",
+    "status": "PASS"
+  },
+  {
+    "name": "loaded count distinguishes no matches and empty input",
+    "status": "PASS"
+  }
+]

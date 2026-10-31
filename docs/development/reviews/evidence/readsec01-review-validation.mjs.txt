@@ -1,0 +1,49 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import path from "node:path";
+const root = process.cwd(), dir = path.resolve(root, "docs/contracts/decisions/node-read-security-01");
+const files = ["SOURCES.md", "SECURITY-ACCEPTANCE.md", "HANDOFF.md"];
+const read = file => readFileSync(file, "utf8");
+const fence = String.fromCharCode(96).repeat(3);
+let links = 0, ranges = 0, quotes = 0;
+function target(from, href) {
+  const [name, fragment] = href.split("#"), file = path.resolve(path.dirname(from), name);
+  assert.ok(file.startsWith(root + path.sep), "reference escaped workspace");
+  const lines = read(file).split(/\r?\n/);
+  if (!fragment) return lines.join("\n");
+  const m = /^L(\d+)(?:-L?(\d+))?$/.exec(fragment);
+  assert.ok(m, "unexpected reference fragment: " + href);
+  const start = Number(m[1]), end = Number(m[2] ?? m[1]);
+  assert.ok(start >= 1 && end >= start && end <= lines.length, "bad line range: " + href);
+  ranges++;
+  return lines.slice(start - 1, end).join("\n");
+}
+for (const name of files) {
+  const file = path.join(dir, name), body = read(file).replace(new RegExp(fence + "[\\s\\S]*?" + fence, "g"), "");
+  for (const m of body.matchAll(/\[[^\]]*\]\(([^)]+)\)/g)) { target(file, m[1]); links++; }
+}
+const source = read(path.join(dir, "SOURCES.md")), ids = new Set();
+for (const row of source.split(/\r?\n/)) {
+  const m = /^\| (S\d{2}) \|.*?\]\(([^)]+)\) \| `([^`]+)` \|/.exec(row);
+  if (!m) continue;
+  assert.ok(!ids.has(m[1]), "duplicate source ID"); ids.add(m[1]);
+  assert.ok(target(path.join(dir, "SOURCES.md"), m[2]).includes(m[3]), "quote mismatch: " + m[1]); quotes++;
+}
+assert.equal(quotes, 32);
+const acceptance = read(path.join(dir, "SECURITY-ACCEPTANCE.md"));
+for (const m of acceptance.matchAll(/\bS\d{2}\b/g)) assert.ok(ids.has(m[0]), "unknown source ID");
+for (const m of acceptance.matchAll(/S(\d{2})[–-]S(\d{2})/g)) for (let n = +m[1]; n <= +m[2]; n++) assert.ok(ids.has("S" + String(n).padStart(2, "0")));
+assert.equal((acceptance.match(/^\| A\d{2} /gm) ?? []).length, 16);
+const json = file => JSON.parse(read(path.resolve(root, file)));
+const auth = json("docs/development/reviews/evidence/auth01b-review-probe.json");
+const nodes = json("docs/development/reviews/evidence/n03a-review-probe.json");
+assert.equal(auth.status, "PASS"); assert.equal(auth.assertions, 36);
+assert.equal(nodes.status, "PASS"); assert.equal(nodes.assertions, 33);
+const review = json("docs/development/reviews/N03-A-RESULTS.json");
+assert.equal(review.testedCodeHead, "0ec62214d206af71c4dffb81bdc033fde4eec062");
+assert.equal(review.checks.combinedCheck.goTopLevelPassed, 212); assert.equal(review.checks.combinedCheck.goSubtestsPassed, 805);
+for (const id of ["D05", "D06", "D07"]) assert.ok(review.openDecisions.includes(id));
+const sha = createHash("sha256").update(readFileSync("api/openapi/revisions/g2-r03/nodes-read-candidate.yaml")).digest("hex");
+assert.equal(sha, review.checks.g2r03CandidateSha256);
+console.log(JSON.stringify({ status: "PASS", files: files.length, localLinks: links, lineRangeChecks: ranges, sourceQuotes: quotes, acceptanceItems: 16, historicalProbeAssertions: [36, 33], historicalEvidenceOnly: true, candidateSha256: sha }));

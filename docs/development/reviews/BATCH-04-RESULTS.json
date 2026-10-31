@@ -1,0 +1,38 @@
+{
+  "reviewDate": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "task": "BATCH04-REVIEW",
+  "reviewer": "codex-review-01",
+  "baseline": "ff66dea5c5402f7ba13907230759f842e4dea44f",
+  "testedAcceptedCodeHead": "1b67e2fffd905cded10a4cdfeea5081ba241bcf9",
+  "overallDecision": "PARTIAL_ACCEPT",
+  "decisions": [
+    {"task": "T01-B", "head": "3488197265c1280e85330ff1bac477133b03e96d", "decision": "ACCEPT_OFFLINE_CANDIDATE", "coveragePercent": 98.0},
+    {"task": "N02", "head": "ea7ed5c99c85c28dc0797fcaeaa2ba1da9bef9f0", "decision": "CHANGES_REQUESTED", "merged": false, "moduleTests": "PASS", "moduleCoveragePercent": 95.3, "independentNegativeProbe": "FAIL", "failedAssertions": 15},
+    {"task": "W03", "head": "64465c4bab86a6d2abd473afc6840604af6a73d1", "decision": "ACCEPT_LOCAL_COMPONENT", "webTests": 129}
+  ],
+  "findings": [
+    {"id": "N02-R01", "priority": 2, "status": "OPEN", "file": "internal/nodes/visibility.go", "line": 52, "summary": "errors.Join(ErrDenied, fatal) is treated as a pure denial, swallowing policy/context/unknown errors and returning successful partial output.", "task": "N02-R1"}
+  ],
+  "acceptedIntegration": {
+    "includes": ["T01-B", "W03"],
+    "excludes": ["N02"],
+    "npmCi": "PASS",
+    "toolsInstall": "PASS_WITH_LOCAL_FILE_MODULE_CACHE",
+    "check": "PASS",
+    "security": "PASS",
+    "goTopLevelTests": 113,
+    "goSubtests": 469,
+    "goFailures": 0,
+    "webTests": 129,
+    "webFailures": 0,
+    "npmVulnerabilities": 0,
+    "govulncheck": "No vulnerabilities found.",
+    "independentFrameAssertions": 10,
+    "reviewerFuzzExecutions": 36980
+  },
+  "notVerified": ["GitHub CI", "Linux race", "browser Tab and visual acceptance", "real mTLS and revocation", "connection identity binding and sequence guard", "production auth/audit/storage", "real nodes or execution", "1C1G performance"],
+  "g2Frozen": false,
+  "agentsStarted": false,
+  "remotePushed": false
+}

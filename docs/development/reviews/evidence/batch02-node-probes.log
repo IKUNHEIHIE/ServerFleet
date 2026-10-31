@@ -1,0 +1,4 @@
+PASS: last authorization cancellation propagated
+PASS: stale rename rejected without overwrite
+PASS: 32 concurrent rename attempts yielded 1 success / 31 conflicts
+PASS: CPU/memory NaN and both infinities rejected; real zero retained

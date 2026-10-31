@@ -1,0 +1,12 @@
+serverfleet.local/serverfleet/internal/auth/node_policy.go:28:		EvaluateNodePolicy	95.8%
+serverfleet.local/serverfleet/internal/auth/node_policy.go:77:		NewNodePolicyAuthorizer	100.0%
+serverfleet.local/serverfleet/internal/auth/node_policy.go:81:		Authorize		100.0%
+serverfleet.local/serverfleet/internal/auth/node_policy.go:120:		validPolicyID		100.0%
+serverfleet.local/serverfleet/internal/auth/node_policy.go:127:		validateNodeCheck	100.0%
+serverfleet.local/serverfleet/internal/auth/node_policy.go:153:		validateNodePolicy	100.0%
+serverfleet.local/serverfleet/internal/auth/node_read_scope.go:23:	PrepareNodeReadScope	100.0%
+serverfleet.local/serverfleet/internal/auth/node_read_scope.go:80:	CheckNode		100.0%
+serverfleet.local/serverfleet/internal/auth/policy_errors.go:26:	Error			100.0%
+serverfleet.local/serverfleet/internal/auth/policy_errors.go:30:	Unwrap			80.0%
+serverfleet.local/serverfleet/internal/auth/policy_errors.go:43:	policyError		100.0%
+total:									(statements)		98.6%

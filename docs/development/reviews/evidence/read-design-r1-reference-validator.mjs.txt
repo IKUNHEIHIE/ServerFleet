@@ -1,0 +1,47 @@
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { writeFileSync } from 'node:fs';
+const baseline = '4196b2e8ab9c389ae0830bf56f905d9bafa00d05';
+const acceptedMain = '3c817f881bd9f96f23f525af50199aa56e3a5291';
+const integratedRef = process.argv[2];
+const primary = 'D:/admin/desktop/codex/myproject/ks/';
+const fallback = new Set([
+  'docs/contracts/decisions/node-read-auth-01/DESIGN.md',
+  'docs/development/READ-DESIGN-01-REPAIR.md',
+  'docs/development/reviews/READ-DESIGN-01-REVIEW.md',
+]);
+const read = (ref, file) => execFileSync('git', ['show', `${ref}:${file}`], {stdio:['ignore','pipe','pipe']});
+const summaries = [];
+for (const [task, dir, head, prior] of [
+  ['READ-HTTP-DESIGN-01-R1','node-read-http-01','4fbdcf5126b02981f8f3fcf5cb403641693172fb','ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734'],
+  ['READ-WEB-DESIGN-01-R1','node-read-web-01','39b2b7cd1bf047c9691206c08bc489ff4ef112c9','63b0feb8dffad7dc88252dd7dd786b80c7e54e7c'],
+]) {
+  const scope = execFileSync('git',['diff','--name-only',prior,head],{encoding:'utf8'}).trim().split('\n');
+  const documents=[], references=[], problems=[];
+  for (const name of ['DESIGN.md','ACCEPTANCE.md','HANDOFF.md']) {
+    const document=`docs/contracts/decisions/${dir}/${name}`;
+    const raw = read(integratedRef ?? head,document), body=raw.toString('utf8');
+    documents.push({document,sha256:createHash('sha256').update(raw).digest('hex')});
+    for (const match of body.matchAll(/`([^`\r\n]+?\.(?:md|go|ts|tsx|yaml)):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)`/g)) {
+      let [, file, ranges]=match;
+      file=file.replaceAll('\\','/');
+      if (!file.includes('/')) continue;
+      if (file.startsWith(primary)) file=file.slice(primary.length);
+      const ref=fallback.has(file)?acceptedMain:baseline;
+      const reference={document,file,ranges,ref}; references.push(reference);
+      try {
+        const length=read(ref,file).toString('utf8').split('\n').length;
+        for (const range of ranges.split(',')) {
+          const [start,end=start]=range.split('-').map(Number);
+          if(start<1 || end<start || end>length) problems.push({...reference,range,length});
+        }
+      } catch {problems.push({...reference,missing:true});}
+    }
+  }
+  summaries.push({task,head,prior,reviewedDocumentRef:integratedRef ?? head,baseline,acceptedMain,scope,documents,referenceCount:references.length,
+    referencedFiles:new Set(references.map(x=>x.file)).size,rangeProblems:problems,references,
+    semanticReviewRequired:true,scopeValid:scope.length===3 && scope.every(x=>documents.some(d=>d.document===x))});
+}
+writeFileSync(`reports/read-design-r1-${integratedRef ? 'integrated-' : ''}references.json`,JSON.stringify(summaries,null,2)+'\n');
+console.log(JSON.stringify(summaries.map(({references,documents,...rest})=>rest),null,2));
+if(summaries.some(x=>x.rangeProblems.length||!x.scopeValid)) process.exitCode=1;

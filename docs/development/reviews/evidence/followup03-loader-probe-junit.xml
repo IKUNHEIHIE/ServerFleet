@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="5" failures="0" errors="0" time="0.246952">
+    <testsuite name="../../reports/_review/followup01/source-return.test.tsx" timestamp="2026-10-29T10:05:06.784Z" hostname="DESKTOP-6A2IJTG" tests="2" failures="0" errors="0" skipped="0" time="0.0537712">
+        <testcase classname="../../reports/_review/followup01/source-return.test.tsx" name="restoring the same source after null must hide old ready data in the first commit" time="0.0403425">
+        </testcase>
+        <testcase classname="../../reports/_review/followup01/source-return.test.tsx" name="changing the exact scope key must not collapse padded identities" time="0.0126075">
+        </testcase>
+    </testsuite>
+    <testsuite name="../../reports/_review/followup02/load-return.test.tsx" timestamp="2026-10-29T10:05:06.785Z" hostname="DESKTOP-6A2IJTG" tests="3" failures="0" errors="0" skipped="0" time="0.1931808">
+        <testcase classname="../../reports/_review/followup02/load-return.test.tsx" name="restoring a same-key source after invalid load must hide old rows, count and detail in first commit" time="0.1670963">
+        </testcase>
+        <testcase classname="../../reports/_review/followup02/load-return.test.tsx" name="same-key invalid load aborts old pending request and ignores late success" time="0.0108617">
+        </testcase>
+        <testcase classname="../../reports/_review/followup02/load-return.test.tsx" name="same-key invalid load aborts old pending request and ignores late failure" time="0.0142789">
+        </testcase>
+    </testsuite>
+</testsuites>

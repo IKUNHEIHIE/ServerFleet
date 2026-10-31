@@ -1,0 +1,6 @@
+id: task_123:42
+event: execution.updated
+data: {"taskId":"task_123","executionId":"exec_05","nodeId":"node_05","state":"unknown","sequence":42}
+
+: heartbeat
+

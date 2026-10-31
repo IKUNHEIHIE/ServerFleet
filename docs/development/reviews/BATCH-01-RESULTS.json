@@ -1,0 +1,167 @@
+{
+  "reviewDate": "2026-10-29",
+  "timezone": "Asia/Shanghai",
+  "reviewer": "codex-review-01",
+  "startingMain": "15814c67beddad0172fac2440fc3f45f502bfcad",
+  "candidateIntegrationMerge": "02664215e8460fb78cc25c356987067d37b2560e",
+  "decisions": [
+    {
+      "task": "G2-R01",
+      "commit": "8821555928326a206b11d5bba921b33f468de3fe",
+      "decision": "ACCEPT_REVIEW_ARTIFACTS_ONLY",
+      "runtimeProfileApproved": false,
+      "g2Frozen": false,
+      "contractSamplesPassed": 26,
+      "goProtocolTopLevelPassed": 3,
+      "goOneofSubtestsPassed": 13,
+      "archivedEvidenceHashFiles": 13
+    },
+    {
+      "task": "N01",
+      "commit": "04c45e97c76df189fa4f94b0de8034df84529442",
+      "decision": "CHANGES_REQUESTED",
+      "moduleCoveragePercent": 94.9,
+      "testkitCoveragePercent": 100.0,
+      "existingGoTopLevelTestsIncludingFoundation": 36,
+      "existingGoSubtestsIncludingFoundation": 22,
+      "checkGo": {
+        "executedAt": "2026-10-28T19:23:35.724Z",
+        "results": [
+          {
+            "name": "go",
+            "status": "PASS"
+          }
+        ]
+      },
+      "checkPolicy": {
+        "executedAt": "2026-10-28T19:23:36.834Z",
+        "results": [
+          {
+            "name": "policy",
+            "status": "PASS"
+          }
+        ]
+      },
+      "regressionIssues": [
+        "N01-R01",
+        "N01-R02",
+        "N01-R03"
+      ]
+    },
+    {
+      "task": "W01",
+      "commit": "c6302a90bd208195c24233ad790bcf4f887a68e0",
+      "decision": "CHANGES_REQUESTED",
+      "existingComponentAndModelTestsPassed": 35,
+      "checkWeb": {
+        "executedAt": "2026-10-28T19:23:21.584Z",
+        "results": [
+          {
+            "name": "web",
+            "status": "PASS"
+          }
+        ]
+      },
+      "checkPolicy": {
+        "executedAt": "2026-10-28T19:29:50.866Z",
+        "results": [
+          {
+            "name": "policy",
+            "status": "PASS"
+          }
+        ]
+      },
+      "regressionIssues": [
+        "W01-R01",
+        "W01-R02"
+      ],
+      "environmentNote": "Missing pinned actionlint in worktree was installed locally; policy rerun passed"
+    }
+  ],
+  "regressions": [
+    {
+      "id": "N01-R01",
+      "priority": 2,
+      "status": "FAIL",
+      "actual": "last Authorize canceled context, Visible returned nil error",
+      "expected": "context cancellation/deadline propagated"
+    },
+    {
+      "id": "N01-R02",
+      "priority": 2,
+      "status": "FAIL",
+      "actual": "two editors read revision1, second Rename overwrote first; revision3, nil error",
+      "expected": "atomic compare-and-update; stale writer rejected"
+    },
+    {
+      "id": "N01-R03",
+      "priority": 2,
+      "status": "FAIL",
+      "actual": "fresh online sample CPU NaN/memory +Inf returned ok=true",
+      "expected": "non-finite sample not marked usable"
+    },
+    {
+      "id": "W01-R01",
+      "priority": 2,
+      "status": "FAIL",
+      "actual": "missing/invalid/year2000 sample timestamp produced ordinary 37% reading",
+      "expected": "missing/invalid/future/stale data not marked current valid"
+    },
+    {
+      "id": "W01-R02",
+      "priority": 2,
+      "status": "FAIL",
+      "actual": "bounded local percent model displayed -10% and 150% normally",
+      "expected": "invalid quality, not ordinary valid percentage or silent clamping"
+    }
+  ],
+  "integration": {
+    "checkAll": {
+      "executedAt": "2026-10-28T19:36:25.938Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        },
+        {
+          "name": "contracts",
+          "status": "PASS"
+        },
+        {
+          "name": "go",
+          "status": "PASS"
+        },
+        {
+          "name": "web",
+          "status": "PASS"
+        },
+        {
+          "name": "git",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-10-28T19:36:39.807Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "goTopLevelTests": 9,
+    "goSubtests": 17,
+    "webTests": 3,
+    "containsNodeFeature": false,
+    "containsWebFeature": false
+  },
+  "nextAssignments": [
+    "T01-A:codex-01",
+    "N01-R1:deepseek-01",
+    "W01-R1:gemini-01"
+  ],
+  "githubCI": "UNTESTED: no remote",
+  "realNodeOperations": "UNTESTED: not authorized",
+  "agentAutoDispatch": false
+}

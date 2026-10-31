@@ -1,0 +1,53 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { execFileSync } from 'node:child_process';
+const dir = 'docs/contracts/decisions/node-read-auth-01';
+const names = ['DESIGN.md', 'ACCEPTANCE.md', 'HANDOFF.md'];
+const root = process.cwd();
+let localLinks = 0, lineRanges = 0, sourceQuotes = 0;
+const fence = String.fromCharCode(96).repeat(3);
+const clean = s => s.replace(new RegExp('^' + fence + '[^\\n]*\\n[\\s\\S]*?^' + fence + '[ \\t]*$', 'gm'), '');
+const fail = s => { throw new Error(s); };
+for (const name of names) {
+  const file = path.join(root, dir, name);
+  const md = clean(fs.readFileSync(file, 'utf8'));
+  for (const m of md.matchAll(/\[[^\]]+\]\(([^)]+)\)/g)) {
+    if (/^https?:\/\//.test(m[1])) continue;
+    const [rel, hash] = m[1].split('#');
+    const target = path.resolve(path.dirname(file), decodeURIComponent(rel));
+    const within = path.relative(root, target);
+    if (within.startsWith('..') || path.isAbsolute(within) || !fs.existsSync(target)) fail('bad link: ' + m[1]);
+    localLinks++;
+    if (hash) {
+      const range = /^L(\d+)(?:-L(\d+))?$/.exec(hash);
+      if (!range) fail('unsupported local anchor: ' + hash);
+      const lines = fs.readFileSync(target, 'utf8').trimEnd().split(/\r?\n/);
+      const a = +range[1], b = +(range[2] || range[1]);
+      if (a < 1 || b < a || b > lines.length) fail('bad range: ' + m[1]);
+      lineRanges++;
+    }
+  }
+  if (name === 'DESIGN.md') {
+    const rows = md.split(/\r?\n/).filter(x => /^\| R\d{2} \|/.test(x));
+    if (rows.length !== 22) fail('source row count');
+    rows.forEach((row, i) => {
+      if (!row.startsWith('| R' + String(i + 1).padStart(2, '0') + ' |')) fail('source sequence');
+      const ref = /\]\(([^)]+)#L(\d+)-L(\d+)\)/.exec(row);
+      const quote = /\| `([^`]+)` \|/.exec(row);
+      if (!ref || !quote) fail('source syntax');
+      const source = fs.readFileSync(path.resolve(path.dirname(file), ref[1]), 'utf8').split(/\r?\n/).slice(+ref[2] - 1, +ref[3]).join('\n');
+      if (!source.includes(quote[1])) fail('quote mismatch: R' + (i + 1));
+      sourceQuotes++;
+    });
+  }
+  if (name === 'ACCEPTANCE.md') {
+    const rows = md.split(/\r?\n/).filter(x => /^\| AU\d{2} \/ /.test(x));
+    if (rows.length !== 34) fail('acceptance row count');
+    rows.forEach((row, i) => {
+      if (!row.startsWith('| AU' + String(i + 1).padStart(2, '0') + ' / ') || !row.includes('UNTESTED')) fail('acceptance state/sequence');
+    });
+  }
+}
+const unchanged = execFileSync('git', ['diff', '--name-only', '0569c1a5ae01ea7715b53a979a3dbb0af50b6b3c', '4196b2e8ab9c389ae0830bf56f905d9bafa00d05', '--', 'internal', 'apps', 'api', 'proto', 'docs/reference', 'docs/contracts/revisions'], { encoding: 'utf8' }).trim();
+if (unchanged) fail('code/reference baseline changed');
+console.log(JSON.stringify({ status: 'PASS', files: names.length, localLinks, lineRanges, sourceQuotes, acceptanceItems: 34, runtimeAcceptance: 'UNTESTED', baselineContentEqual: true }));

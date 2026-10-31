@@ -1,0 +1,164 @@
+[
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\browser-qa-r1.mjs",
+    "archive": "w06r1-author-browser-qa-r1.mjs.txt",
+    "sha256": "2c8b5bf8eb13b0adb2f7cbef57b3824eca5ed9f491634322d079cc4b0200212a",
+    "bytes": 27442
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\check-policy.log",
+    "archive": "w06r1-author-check-policy.log",
+    "sha256": "17fd39fcf318b42ff2d7cfbe429546125527511a9d4ed24eb0f115f415790c87",
+    "bytes": 1905
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\check-web.log",
+    "archive": "w06r1-author-check-web.log",
+    "sha256": "d2ffe7c2119498890cadd21fe6be1a6e9d723537e94ffe439b7a51f216d7dcef",
+    "bytes": 2110
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\error-state.png",
+    "archive": "w06r1-author-error-state.png",
+    "sha256": "c11d7fd69b5d1334927cfce245d066678f569da3fe3192c9e0ba96dfb454dbfa",
+    "bytes": 33071
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\focus-detail-1280.png",
+    "archive": "w06r1-author-focus-detail-1280.png",
+    "sha256": "11b78a0bd612b9666e5e882df2e6912a30768859077e840b1e033a854846aa15",
+    "bytes": 74970
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\focus-row-1280.png",
+    "archive": "w06r1-author-focus-row-1280.png",
+    "sha256": "d99cc24e715af49a94ee528686728c7489a9de9514738fe8624e9cffb0d8e8a7",
+    "bytes": 78456
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\loading-state.png",
+    "archive": "w06r1-author-loading-state.png",
+    "sha256": "1e9a052771f675b1eee9673c592128be71d9bcffab8687ee6ba402916f449b0e",
+    "bytes": 28293
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\narrow-420.png",
+    "archive": "w06r1-author-narrow-420.png",
+    "sha256": "30c3337f9356d46da845db04007bcade9761c2d1c8c9dce03c329f9178d81857",
+    "bytes": 51089
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\preview.html",
+    "archive": "w06r1-author-preview.html.txt",
+    "sha256": "5a9f11f918dbc572feac62e15f7d72a45d81c29de97002e5c7cb3c328d17a406",
+    "bytes": 341
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\preview.tsx",
+    "archive": "w06r1-author-preview.tsx.txt",
+    "sha256": "a93afec9208a69461e094cf2bf665dbae067a27f7286f5ab924e4b87c418d9ef",
+    "bytes": 7239
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\r01-close-return-1280.png",
+    "archive": "w06r1-author-r01-close-return-1280.png",
+    "sha256": "1e156be4ae1732be7f0ea81c2bcedf3be0a9e90f057befcbf75ed0bac658da0e",
+    "bytes": 78239
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\r01-repeat-enter-1280.png",
+    "archive": "w06r1-author-r01-repeat-enter-1280.png",
+    "sha256": "b68768e5e3f9177ff85df6381f6839fa610ad702831992852db76392678f3459",
+    "bytes": 75155
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\r02-late-failure-1280.png",
+    "archive": "w06r1-author-r02-late-failure-1280.png",
+    "sha256": "4f36d9e6962a259c2ba3a6a6cd8afa3b5c4e52172cc2489e047a03474a74fd32",
+    "bytes": 79067
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\r02-unmounted.png",
+    "archive": "w06r1-author-r02-unmounted.png",
+    "sha256": "6b94410bb779b21cd3778546fcfa0f4390ffed5636bcb6ce60396e93a944aee6",
+    "bytes": 14838
+  },
+  {
+    "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/chore--web-node-browser-qa-gm01/apps/web/src/features/nodes/BROWSER-ACCEPTANCE.md",
+    "archive": "w06r1-author-report.md.txt",
+    "sha256": "541f6bc76dfffc3c979625ddd6fbba0aa83f910f75c027ac4d152788fd40d38d",
+    "bytes": 11980
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\vite.preview.config.ts",
+    "archive": "w06r1-author-vite.preview.config.ts.txt",
+    "sha256": "5192eb07b37350f28731cb1f3e614e1c51e096f2c90dd95888f3fcd48315d0f6",
+    "bytes": 840
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\w06r1-results.json",
+    "archive": "w06r1-author-w06r1-results.json",
+    "sha256": "77551feefd5fb8b30eef8a4d2a51f528a5f462b3351276caaf0aadf30579830b",
+    "bytes": 19079
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\w06r1.log",
+    "archive": "w06r1-author-w06r1.log",
+    "sha256": "88a7e180fccb43052e1a339f62730668a7486155f07c16ba0c094e42fea6d349",
+    "bytes": 4586
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\chore--web-node-browser-qa-gm01\\reports\\_review\\w06r1\\wide-1280.png",
+    "archive": "w06r1-author-wide-1280.png",
+    "sha256": "1022e07ef677c4a0db10e515e02f8e102fc9ea05f89c9cdcc1401986f7ef95c2",
+    "bytes": 75156
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\w06r1-preview-build.log",
+    "archive": "w06r1-reviewer-preview-build.log",
+    "sha256": "502f6f81af3758f0124f097ccc0f7c7b03bc994034cc6048733733ba3b4d2de4",
+    "bytes": 469
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\preview.html",
+    "archive": "w06r1-reviewer-preview.html.txt",
+    "sha256": "5a9f11f918dbc572feac62e15f7d72a45d81c29de97002e5c7cb3c328d17a406",
+    "bytes": 341
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\preview.tsx",
+    "archive": "w06r1-reviewer-preview.tsx.txt",
+    "sha256": "a93afec9208a69461e094cf2bf665dbae067a27f7286f5ab924e4b87c418d9ef",
+    "bytes": 7239
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\same-key-old-failure.png",
+    "archive": "w06r1-reviewer-same-key-old-failure.png",
+    "sha256": "06004c6e4aa3803ea71224095c84a77fac60c398c0b806025079bbb1aef34215",
+    "bytes": 31169
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\serve.mjs",
+    "archive": "w06r1-reviewer-serve.mjs.txt",
+    "sha256": "3ba85aa1314fbfc6fdeb3816069e939fb1b52de6c0f7fceb7c7edb7ead08c10a",
+    "bytes": 886
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\supplemental-results.json",
+    "archive": "w06r1-reviewer-supplemental-results.json",
+    "sha256": "3618464c39db42912a05aca9d67b9012e3bff11f869eebe0306d49d660896f8b",
+    "bytes": 12518
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\unmounted-late-failure.png",
+    "archive": "w06r1-reviewer-unmounted-late-failure.png",
+    "sha256": "782ae7d89baf0b0a79477794206ddceb2b7e714f18ac490482ef74097dd03f1a",
+    "bytes": 15835
+  },
+  {
+    "source": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\integration--w06r1-review\\reports\\_review\\w06close\\vite.preview.config.ts",
+    "archive": "w06r1-reviewer-vite.preview.config.ts.txt",
+    "sha256": "5192eb07b37350f28731cb1f3e614e1c51e096f2c90dd95888f3fcd48315d0f6",
+    "bytes": 840
+  }
+]

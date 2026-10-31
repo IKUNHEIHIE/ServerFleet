@@ -1,0 +1,46 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, copyFileSync, existsSync } from 'node:fs';
+import path from 'node:path';
+import { createHash } from 'node:crypto';
+import { gunzipSync } from 'node:zlib';
+const base='3c817f881bd9f96f23f525af50199aa56e3a5291', dir='docs/development/reviews/evidence';
+const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
+const parse=p=>JSON.parse(readFileSync(p,'utf8').replace(/^\uFEFF/,''));
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const results=parse('docs/development/reviews/READ-DESIGN-R1-RESULTS.json');
+const manifest=parse(`${dir}/read-design-r1-manifest.json`);
+for(const a of manifest.artifacts){
+  const bytes=gunzipSync(Buffer.from(readFileSync(`${dir}/${a.artifact}`,'utf8'),'base64'));
+  if(bytes.length!==a.originalBytes||hash(bytes)!==a.sha256) throw new Error(`Evidence mismatch ${a.artifact}`);
+}
+for(const r of parse(`${dir}/read-design-r1-references.json`)) for(const d of r.documents){
+  const bytes=execFileSync('git',['show',`${r.head}:${d.document}`]);
+  if(hash(bytes)!==d.sha256) throw new Error(`Author document mismatch ${d.document}`);
+}
+for(const a of results.authors) git('merge-base','--is-ancestor',a.head,'HEAD');
+const paths=['apps','internal','api','proto','gen','tests','scripts','plugins','package.json','package-lock.json','go.mod','go.sum','AGENTS.md','.github'];
+git('diff','--exit-code',base,'HEAD','--',...paths); git('diff','--exit-code','--',...paths); git('diff','--cached','--exit-code','--',...paths);
+const changed=new Set([...git('diff','--name-only',base,'HEAD').split('\n'),...git('diff','--cached','--name-only').split('\n')].filter(Boolean));
+if([...changed].some(x=>!x.startsWith('docs/')&&x!=='README.md')) throw new Error('Non-document final scope');
+let links=0; const problems=[];
+for(const file of changed){
+  if(!file.endsWith('.md')) continue;
+  const body=readFileSync(file,'utf8');
+  for(const [,target] of body.matchAll(/(?<!!)\[[^\]\n]+\]\(([^)\n]+)\)/g)){
+    if(/^(?:https?:|mailto:|#)/.test(target)) continue;
+    const raw=target.replace(/^<|>$/g,'').split('#')[0];
+    const resolved=path.resolve(path.dirname(file),decodeURIComponent(raw)); links++;
+    if(!existsSync(resolved)) problems.push({file,target});
+  }
+}
+if(problems.length) throw new Error(JSON.stringify(problems));
+if(existsSync('D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-legacy-view-gm02')) throw new Error('Unapproved new worktree exists');
+git('diff','--check'); git('diff','--cached','--check');
+const audit={date:'2026-10-30',status:'PASS',baseMain:base,technicalHead:results.testedCombinedHead,
+  evidenceRoundTrips:manifest.artifacts.length,authorDocumentsHashed:6,localMarkdownLinks:links,linkProblems:problems,
+  authorAncestors:true,runtimeAndProtectedPathsUnchanged:true,allChangesDocumentationOnly:true,
+  proposedAuthorWorktreeCreated:false,finalPolicy:results.checks.finalPolicy,
+  note:'Run before documentation/evidence commit; final main fast-forward and cleanliness checked separately.'};
+writeFileSync(`${dir}/read-design-r1-final-audit.json`,JSON.stringify(audit,null,2)+'\n');
+copyFileSync('reports/_review/read-design-r1/final-audit.mjs',`${dir}/read-design-r1-final-audit.mjs.txt`);
+console.log(JSON.stringify(audit,null,2));

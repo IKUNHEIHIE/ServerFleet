@@ -1,0 +1,685 @@
+// W06-R1 临时验收脚本（reports/_review/w06r1，不提交）：
+// 在 W06 原 19 项基础上补齐 R01（同 ID 保持选中时的真实键盘重复激活、关闭按钮返回焦点）
+// 与 R02（迟到失败、pending 卸载）；同时复跑原 19 项，结果写入本目录新文件。
+// 真实按键/鼠标均走 CDP Input.dispatchKeyEvent / Input.dispatchMouseEvent，不是 jsdom、不是 element.focus()。
+import { spawn, execSync } from "node:child_process";
+import { createServer } from "node:http";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import path from "node:path";
+
+const CHROME = "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+const HTTP_PORT = 8462;
+const CDP_PORT = 9462;
+const OUT = path.resolve("reports/_review/w06r1");
+const DIST = path.resolve("reports/_review/w06r1/dist");
+const PAGE = `http://127.0.0.1:${HTTP_PORT}/index.html`;
+const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+mkdirSync(OUT, { recursive: true });
+
+const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".png": "image/png" };
+const server = createServer((request, response) => {
+  const url = request.url === "/" ? "/index.html" : request.url.split("?")[0];
+  const file = path.join(DIST, path.normalize(url).replace(/^([\\/])+/, ""));
+  try {
+    const body = readFileSync(file);
+    response.writeHead(200, { "content-type": MIME[path.extname(file)] ?? "application/octet-stream" });
+    response.end(body);
+  } catch {
+    response.writeHead(404);
+    response.end("not found");
+  }
+});
+
+const chrome = spawn(
+  CHROME,
+  [
+    "--headless=new",
+    "--disable-gpu",
+    "--hide-scrollbars",
+    `--remote-debugging-port=${CDP_PORT}`,
+    `--user-data-dir=${path.join(OUT, "profile")}`,
+    "--window-size=1280,900",
+    PAGE,
+  ],
+  { stdio: "ignore" },
+);
+
+class Cdp {
+  constructor(socket) {
+    this.socket = socket;
+    this.nextId = 1;
+    this.pending = new Map();
+    socket.addEventListener("message", event => {
+      const message = JSON.parse(event.data);
+      if (message.id && this.pending.has(message.id)) {
+        const { resolve, reject } = this.pending.get(message.id);
+        this.pending.delete(message.id);
+        message.error ? reject(new Error(JSON.stringify(message.error))) : resolve(message.result);
+      }
+    });
+  }
+  send(method, params = {}) {
+    const id = this.nextId++;
+    this.socket.send(JSON.stringify({ id, method, params }));
+    return new Promise((resolve, reject) => this.pending.set(id, { resolve, reject }));
+  }
+}
+
+async function findTarget() {
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    try {
+      const response = await fetch(`http://127.0.0.1:${CDP_PORT}/json/list`);
+      const targets = await response.json();
+      const page = targets.find(target => target.type === "page" && target.url.startsWith("http://127.0.0.1"));
+      if (page?.webSocketDebuggerUrl) return page.webSocketDebuggerUrl;
+    } catch {
+      /* not ready yet */
+    }
+    await sleep(250);
+  }
+  throw new Error("DevTools target not available");
+}
+
+const results = [];
+const traces = {};
+const record = (name, pass, details) => {
+  results.push({ name, pass, details });
+  console.log(`${pass ? "PASS" : "FAIL"}  ${name}${details ? ` — ${typeof details === "string" ? details : JSON.stringify(details)}` : ""}`);
+};
+
+async function main() {
+  const head = execSync("git rev-parse HEAD", { encoding: "utf8" }).trim();
+  const wsUrl = await findTarget();
+  const socket = new WebSocket(wsUrl);
+  await new Promise((resolve, reject) => {
+    socket.addEventListener("open", resolve, { once: true });
+    socket.addEventListener("error", reject, { once: true });
+  });
+  const cdp = new Cdp(socket);
+  await cdp.send("Page.enable");
+  await cdp.send("Runtime.enable");
+
+  const evaluate = async expression => {
+    const result = await cdp.send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: false });
+    if (result.exceptionDetails) {
+      throw new Error(`eval failed: ${result.exceptionDetails.exception?.description ?? result.exceptionDetails.text} :: ${expression.slice(0, 120)}`);
+    }
+    return result.result?.value;
+  };
+  const qa = (method, ...args) =>
+    evaluate(`window.__qa && window.__qa.${method}(${args.map(arg => JSON.stringify(arg)).join(",")})`);
+  const commits = () => evaluate("window.__qa ? window.__qa.commits.slice() : []");
+  const state = () => qa("snapshot");
+  const focus = () => qa("focus");
+  const key = async (k, code, vk, modifiers = 0) => {
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "rawKeyDown",
+      key: k,
+      code,
+      windowsVirtualKeyCode: vk,
+      nativeVirtualKeyCode: vk,
+      modifiers,
+    });
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: k,
+      code,
+      windowsVirtualKeyCode: vk,
+      nativeVirtualKeyCode: vk,
+      modifiers,
+    });
+    await sleep(160);
+  };
+  const tab = () => key("Tab", "Tab", 9);
+  const shiftTab = () => key("Tab", "Tab", 9, 8);
+  /** Enter 需要带 text 的 keyDown 才能激活原生按钮；rawKeyDown 只触发自定义 onKeyDown。 */
+  const enter = async () => {
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyDown",
+      key: "Enter",
+      code: "Enter",
+      text: "\r",
+      unmodifiedText: "\r",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    });
+    await cdp.send("Input.dispatchKeyEvent", {
+      type: "keyUp",
+      key: "Enter",
+      code: "Enter",
+      windowsVirtualKeyCode: 13,
+      nativeVirtualKeyCode: 13,
+    });
+    await sleep(200);
+  };
+  const space = () => key(" ", "Space", 32);
+  const escape = () => key("Escape", "Escape", 27);
+  const clickAt = async (x, y) => {
+    await cdp.send("Input.dispatchMouseEvent", { type: "mousePressed", x, y, button: "left", clickCount: 1 });
+    await cdp.send("Input.dispatchMouseEvent", { type: "mouseReleased", x, y, button: "left", clickCount: 1 });
+    await sleep(250);
+  };
+  const clickSelector = async selector => {
+    const rect = await evaluate(`(() => { const el = document.querySelector(${JSON.stringify(selector)}); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    if (!rect) throw new Error(`selector not found: ${selector}`);
+    await clickAt(rect.x, rect.y);
+  };
+  const clickText = async (tag, text) => {
+    const rect = await evaluate(`(() => { const el = [...document.querySelectorAll(${JSON.stringify(tag)})].find(x => (x.textContent || "").trim() === ${JSON.stringify(text)}); if (!el) return null; const r = el.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 }; })()`);
+    if (!rect) throw new Error(`button not found: ${text}`);
+    await clickAt(rect.x, rect.y);
+  };
+  const lastRequestIndex = async () => (await qa("requests")).length - 1;
+  const commitWait = () => sleep(260);
+  const capture = async name => {
+    const shot = await cdp.send("Page.captureScreenshot", { format: "png" });
+    writeFileSync(path.join(OUT, name), Buffer.from(shot.data, "base64"));
+  };
+
+  const tabToRow = async () => {
+    for (let i = 0; i < 8; i += 1) {
+      await tab();
+      if ((await focus()).tag === "TR") return true;
+    }
+    return false;
+  };
+  /** 保证当前来源是 A 且已 ready（用于 R01 前置状态）。 */
+  const ensureReadyA = async () => {
+    const now = await state();
+    if (now.sourceKind === "a" && now.hasTable) return;
+    await qa("setSource", "a");
+    await commitWait();
+    const pending = (await qa("requests")).at(-1);
+    if (pending && pending.settled === null) {
+      await qa("settle", await lastRequestIndex(), "success");
+      await commitWait();
+    }
+  };
+
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    if ((await evaluate("document.readyState")) === "complete") break;
+    await sleep(150);
+  }
+  let mounted = false;
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    mounted = (await evaluate("typeof window.__qa === 'object'")) === true;
+    if (mounted) break;
+    await sleep(150);
+  }
+  if (!mounted) throw new Error("preview not mounted");
+  await sleep(200);
+
+  const version = await cdp.send("Browser.getVersion");
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(250);
+
+  // ===== 原 19 项（与 W06 相同断言，C7 更名） =====
+  const initial = await state();
+  record("C1 首次加载显示 loading，无表格", Boolean(initial?.hasLoading) && !initial?.hasTable && initial.body.includes("正在加载节点"), {
+    hasLoading: initial?.hasLoading,
+    hasTable: initial?.hasTable,
+  });
+  await capture("loading-state.png");
+
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+  const ready = await state();
+  record("C2 成功后展示节点与计数", Boolean(ready?.hasTable) && ready.body.includes("共 8 个节点") && ready.body.includes("aws-tokyo-01"), {
+    hasTable: ready?.hasTable,
+  });
+  record("C3 固定时钟下指标质量（真实 0% 与陈旧可见时间）", ready.body.includes("0%") && ready.body.includes("陈旧 · 采样于"), {
+    has0: ready.body.includes("0%"),
+    hasStale: ready.body.includes("陈旧 · 采样于"),
+  });
+
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  const tabStops = [];
+  for (let step = 1; step <= 8; step += 1) {
+    await tab();
+    const now = await focus();
+    tabStops.push({ step, ...now });
+    if (now.tag === "TR") break;
+  }
+  record(
+    "C4 真实 Tab：搜索框 → 状态筛选 → 表格行（禁用的清空按钮被跳过）",
+    tabStops.length === 3 && tabStops[0].tag === "INPUT" && tabStops[1].tag === "SELECT" && tabStops[2].tag === "TR",
+    tabStops.map(stop => `${stop.step}:<${stop.tag}>`).join(" "),
+  );
+
+  await enter();
+  let focused = await focus();
+  record("C5 Enter 激活行后焦点进入详情区", focused.tag === "SECTION" && focused.heading === "节点详情", `<${focused.tag}>`);
+  await capture("focus-detail-1280.png");
+
+  await tab();
+  const afterTab = await focus();
+  await tab();
+  const tabOut = await focus();
+  await shiftTab();
+  const back = await focus();
+  await escape();
+  focused = await focus();
+  const afterEscape = await state();
+  record(
+    "C6 Tab/Shift+Tab/Escape：详情内只有关闭按钮，可离开可返回，Escape 回到来源行",
+    afterTab.tag === "BUTTON" &&
+      afterTab.text === "关闭详情" &&
+      tabOut.tag === "BODY" &&
+      back.tag === "BUTTON" &&
+      focused.tag === "TR" &&
+      !afterEscape.hasDetail,
+    { tab: afterTab, out: tabOut, back, esc: focused },
+  );
+
+  // C7 关后 Space 重开（原 W06 的 C7 更名，不是“重复激活”）
+  await space();
+  focused = await focus();
+  record("C7 关闭后 Space 重开（未选中→新选中，非重复激活）", focused.tag === "SECTION" && focused.heading === "节点详情", `<${focused.tag}>`);
+  await escape();
+
+  await clickSelector("tbody tr");
+  const afterClick = await focus();
+  const clickState = await state();
+  record("C8 真实鼠标点击行打开详情且不搬动焦点", clickState.hasDetail && afterClick.tag === "TR", { focus: afterClick });
+  await escape();
+
+  await qa("setSource", "b");
+  await commitWait();
+  await qa("settle", await lastRequestIndex(), "failure");
+  await commitWait();
+  const failed = await state();
+  record("C9 失败显示固定安全提示（无异常原文）", Boolean(failed?.hasAlert) && failed.body.includes("节点数据暂时无法加载，请稍后重试。"), {
+    hasAlert: failed?.hasAlert,
+  });
+  await capture("error-state.png");
+
+  await clickText("button", "重新加载");
+  const retrying = await state();
+  record("C10 鼠标点击重新加载立即回到 loading，无节点/计数/详情", Boolean(retrying?.hasLoading) && !retrying.hasTable && !retrying.hasDetail, {
+    hasLoading: retrying?.hasLoading,
+  });
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+
+  await qa("setSource", "a");
+  await commitWait();
+  await qa("settle", await lastRequestIndex(), "failure");
+  await commitWait();
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  await tab();
+  focused = await focus();
+  await enter();
+  const retry2 = await state();
+  record("C11 键盘 Tab+Enter 触发重试同样进入 loading", focused.tag === "BUTTON" && focused.text === "重新加载" && Boolean(retry2?.hasLoading), {
+    button: focused,
+    hasLoading: retry2?.hasLoading,
+  });
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+
+  await qa("clearCommits");
+  await qa("setSource", "b");
+  await commitWait();
+  const commitsA = await commits();
+  const first = commitsA?.[0] ?? "";
+  traces.firstCommitC12 = first;
+  const switchState = await state();
+  record(
+    "C12 A→B 首个提交即为 loading，不含旧节点/计数",
+    first.includes("正在加载节点") && !first.includes("aws-tokyo-01") && !first.includes("共 8 个节点") && !switchState.hasTable,
+    { firstCommitChars: first.length, hasTable: switchState.hasTable },
+  );
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+  const bReady = await state();
+  record("C13 B 成功后展示 B 的节点", bReady.body.includes("gcp-singapore-01") && !bReady.body.includes("aws-tokyo-01"), {});
+
+  await qa("setSource", "a");
+  await commitWait();
+  const lateAIndex = await lastRequestIndex();
+  await qa("setSource", "b");
+  await commitWait();
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+  await clickSelector("input[type='search']");
+  const focusBeforeLate = await focus();
+  await qa("settle", lateAIndex, "success");
+  await commitWait();
+  const afterLate = await state();
+  const focusAfterLate = await focus();
+  const lateRequests = await qa("requests");
+  record(
+    "C14 旧请求迟到成功不覆盖 B，且不抢走搜索框焦点",
+    !afterLate.body.includes("aws-tokyo-01") && focusAfterLate.tag === "INPUT" && lateRequests[lateAIndex].aborted,
+    { focusBefore: focusBeforeLate, focusAfter: focusAfterLate, oldAborted: lateRequests[lateAIndex].aborted },
+  );
+
+  await qa("setSource", "a");
+  await commitWait();
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  await tabToRow();
+  await enter();
+  const withDetail = await state();
+  await qa("clearCommits");
+  await qa("setSource", "none");
+  await commitWait();
+  const nullState = await state();
+  await qa("clearCommits");
+  await qa("setSource", "a");
+  await commitWait();
+  const commitsB = await commits();
+  const first2 = commitsB?.[0] ?? "";
+  traces.firstCommitC15 = first2;
+  record(
+    "C15 A→null→A：无效期隐藏，恢复首个提交即 loading（旧详情不复活）",
+    Boolean(withDetail?.hasDetail) &&
+      Boolean(nullState?.hasAlert) &&
+      !nullState.hasTable &&
+      first2.includes("正在加载节点") &&
+      !first2.includes("aws-tokyo-01") &&
+      !first2.includes("共 8 个节点") &&
+      !first2.includes("节点详情"),
+    { nullAlert: nullState?.hasAlert, firstCommitChars: first2.length },
+  );
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  await tabToRow();
+  await enter();
+  await qa("clearCommits");
+  await qa("setSource", "broken");
+  await commitWait();
+  const brokenState = await state();
+  await qa("clearCommits");
+  await qa("setSource", "a");
+  await commitWait();
+  const commitsC = await commits();
+  const first3 = commitsC?.[0] ?? "";
+  traces.firstCommitC16 = first3;
+  record(
+    "C16 同 key 无效 load → 恢复有效来源：首个提交即 loading，无旧节点/计数/详情",
+    Boolean(brokenState?.hasAlert) &&
+      !brokenState.hasTable &&
+      first3.includes("正在加载节点") &&
+      !first3.includes("aws-tokyo-01") &&
+      !first3.includes("共 8 个节点") &&
+      !first3.includes("节点详情"),
+    { brokenAlert: brokenState?.hasAlert, firstCommitChars: first3.length },
+  );
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+
+  await qa("setSource", "b");
+  await commitWait();
+  const pendingIndex = await lastRequestIndex();
+  await qa("setSource", "broken");
+  await commitWait();
+  const requestsNow = await qa("requests");
+  await qa("setSource", "b");
+  await commitWait();
+  await qa("settle", pendingIndex, "success");
+  await commitWait();
+  const afterLateOld = await state();
+  record(
+    "C17 pending 请求在失效时被 abort，迟到成功不覆盖恢复后的 loading",
+    requestsNow[pendingIndex].aborted && Boolean(afterLateOld?.hasLoading) && !afterLateOld.hasTable,
+    { aborted: requestsNow[pendingIndex].aborted },
+  );
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  await tabToRow();
+  await enter();
+  const detailFocus = await focus();
+  await qa("setSource", "a");
+  await commitWait();
+  const switchFocus = await focus();
+  await sleep(400);
+  const switchFocusLater = await focus();
+  record(
+    "C18 详情打开时切换来源：旧详情隐藏，焦点不残留旧详情、不被后台更新抢走",
+    detailFocus.tag === "SECTION" && switchFocus.tag !== "SECTION" && switchFocusLater.tag === switchFocus.tag,
+    { before: detailFocus, after: switchFocus, later: switchFocusLater },
+  );
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  await tabToRow();
+  await capture("focus-row-1280.png");
+  await enter();
+  await capture("wide-1280.png");
+  await escape();
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 420, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(400);
+  const narrowMetrics = await evaluate(
+    "(() => { const box = document.querySelector('div.overflow-x-auto'); return { innerWidth: window.innerWidth, htmlScroll: document.documentElement.scrollWidth, bodyScroll: document.body.scrollWidth, boxClient: box ? box.clientWidth : null, boxScroll: box ? box.scrollWidth : null }; })()",
+  );
+  await capture("narrow-420.png");
+  record(
+    "C19 窄屏 420px：页面不横向滚动，表格在卡片内滚动",
+    narrowMetrics.htmlScroll <= narrowMetrics.innerWidth && narrowMetrics.boxScroll > narrowMetrics.boxClient,
+    narrowMetrics,
+  );
+  await cdp.send("Emulation.setDeviceMetricsOverride", { width: 1280, height: 900, deviceScaleFactor: 1, mobile: false });
+  await sleep(300);
+
+  // ===== W06-R01：同 ID 保持选中时的真实键盘重复激活 =====
+  await ensureReadyA();
+  await evaluate("document.activeElement && document.activeElement.blur()");
+  await tabToRow();
+  await enter();
+  const opened = await focus();
+  await shiftTab();
+  const rowFocus = await focus();
+  const beforeRepeat = await state();
+  await enter();
+  const repeatEnter = await focus();
+  const afterRepeatEnter = await state();
+  traces.r01 = { opened, rowFocus, beforeRepeat, repeatEnter, afterRepeatEnter };
+  record(
+    "C20 R01 详情保持打开、同 ID 保持选中时，Shift+Tab 回行后 Enter 重复激活立即聚焦详情",
+    opened.tag === "SECTION" &&
+      opened.heading === "节点详情" &&
+      rowFocus.tag === "TR" &&
+      beforeRepeat.hasDetail &&
+      Boolean(beforeRepeat.selectedRowId) &&
+      repeatEnter.tag === "SECTION" &&
+      repeatEnter.heading === "节点详情" &&
+      afterRepeatEnter.hasDetail,
+    { opened, rowFocus, selectedRowId: beforeRepeat.selectedRowId, repeatEnter, detailAfter: afterRepeatEnter.hasDetail },
+  );
+  await capture("r01-repeat-enter-1280.png");
+
+  await shiftTab();
+  const rowFocus2 = await focus();
+  await space();
+  const repeatSpace = await focus();
+  traces.r01Space = { rowFocus2, repeatSpace };
+  record(
+    "C21 R01 同一保持选中状态下，Shift+Tab 回行后 Space 重复激活同样立即聚焦详情",
+    rowFocus2.tag === "TR" && repeatSpace.tag === "SECTION" && repeatSpace.heading === "节点详情",
+    { rowFocus: rowFocus2, repeatSpace },
+  );
+
+  // ===== W06-R01：键盘激活关闭按钮 =====
+  await tab();
+  const closeButton = await focus();
+  await enter();
+  const afterCloseEnter = await focus();
+  const stateAfterCloseEnter = await state();
+  await enter(); // 重新打开（此时行聚焦）
+  const reopened = await focus();
+  await tab();
+  await space();
+  const afterCloseSpace = await focus();
+  const stateAfterCloseSpace = await state();
+  traces.r01Close = { closeButton, afterCloseEnter, stateAfterCloseEnter, reopened, afterCloseSpace, stateAfterCloseSpace };
+  record(
+    "C22 R01 键盘 Enter/Space 激活“关闭详情”：详情消失并把焦点送回来源行（两次独立重开验证）",
+    closeButton.tag === "BUTTON" &&
+      closeButton.text === "关闭详情" &&
+      afterCloseEnter.tag === "TR" &&
+      !stateAfterCloseEnter.hasDetail &&
+      reopened.heading === "节点详情" &&
+      afterCloseSpace.tag === "TR" &&
+      !stateAfterCloseSpace.hasDetail,
+    { closeButton, afterCloseEnter, reopened, afterCloseSpace },
+  );
+  await capture("r01-close-return-1280.png");
+
+  // ===== W06-R02：迟到失败 =====
+  await ensureReadyA();
+  await qa("setSource", "b");
+  await commitWait();
+  const oldBIndex = await lastRequestIndex();
+  await qa("setSource", "a");
+  await commitWait();
+  await qa("settle", await lastRequestIndex(), "success");
+  await commitWait();
+  await clickSelector("input[type='search']");
+  const focusBeforeLateFail = await focus();
+  await qa("settle", oldBIndex, "failure");
+  await commitWait();
+  const afterLateFail = await state();
+  const focusAfterLateFail = await focus();
+  const lateFailRequests = await qa("requests");
+  traces.lateFailureSwitch = { focusBeforeLateFail, focusAfterLateFail, afterLateFail };
+  record(
+    "C23 R02 来源切换后旧请求迟到失败：不产生错误态、不覆盖新结果、不抢焦点",
+    !afterLateFail.hasAlert &&
+      afterLateFail.body.includes("aws-tokyo-01") &&
+      focusAfterLateFail.tag === "INPUT" &&
+      lateFailRequests[oldBIndex].aborted,
+    { hasAlert: afterLateFail.hasAlert, focus: focusAfterLateFail, oldAborted: lateFailRequests[oldBIndex].aborted },
+  );
+  await capture("r02-late-failure-1280.png");
+
+  // C24 同 key 失效恢复后旧请求迟到失败
+  await qa("setSource", "b");
+  await commitWait();
+  const staleSameKey = await lastRequestIndex();
+  await qa("setSource", "broken");
+  await commitWait();
+  await qa("setSource", "a");
+  await commitWait();
+  const freshAfterBroken = await lastRequestIndex();
+  await qa("settle", staleSameKey, "failure");
+  await commitWait();
+  const afterStaleFail = await state();
+  traces.lateFailureSameKey = { afterStaleFail };
+  record(
+    "C24 R02 同 key 失效恢复后旧请求迟到失败：仍保持 loading，不变成错误态",
+    Boolean(afterStaleFail?.hasLoading) && !afterStaleFail.hasAlert && !afterStaleFail.hasTable,
+    { hasLoading: afterStaleFail?.hasLoading, hasAlert: afterStaleFail?.hasAlert },
+  );
+  await qa("settle", freshAfterBroken, "success");
+  await commitWait();
+
+  // ===== W06-R02：pending 卸载（两个独立请求：迟到成功 / 迟到失败）=====
+  const errorsBeforeUnmount = (await evaluate("window.__qa.errors.slice()")).length;
+  await qa("setSource", "b");
+  await commitWait();
+  const unmountSuccessIndex = await lastRequestIndex();
+  await qa("setMounted", false);
+  await commitWait();
+  const afterUnmount = await state();
+  const unmountRequests = await qa("requests");
+  await qa("settle", unmountSuccessIndex, "success");
+  await commitWait();
+  const afterUnmountLateSuccess = await state();
+  const errorsAfterLateSuccess = (await evaluate("window.__qa.errors.slice()")).length;
+
+  await qa("setMounted", true);
+  await commitWait();
+  await qa("setSource", "a");
+  await commitWait();
+  const unmountFailureIndex = await lastRequestIndex();
+  await qa("setMounted", false);
+  await commitWait();
+  await qa("settle", unmountFailureIndex, "failure");
+  await commitWait();
+  const afterUnmountLateFailure = await state();
+  const errorsFinal = (await evaluate("window.__qa.errors.slice()")).length;
+  traces.unmount = { afterUnmount, afterUnmountLateSuccess, afterUnmountLateFailure, errorsBeforeUnmount, errorsAfterLateSuccess, errorsFinal };
+  record(
+    "C25 R02 pending 卸载：请求被 abort，迟到成功/失败均无渲染变化、无未处理拒绝、无抢焦点",
+    unmountRequests[unmountSuccessIndex].aborted &&
+      !afterUnmount.hasTable &&
+      !afterUnmount.hasAlert &&
+      !afterUnmount.hasDetail &&
+      !afterUnmountLateSuccess.hasTable &&
+      !afterUnmountLateFailure.hasTable &&
+      !afterUnmountLateFailure.hasAlert &&
+      errorsFinal === errorsBeforeUnmount,
+    {
+      aborted: unmountRequests[unmountSuccessIndex].aborted,
+      errorsBeforeUnmount,
+      errorsAfterLateSuccess,
+      errorsFinal,
+    },
+  );
+  await capture("r02-unmounted.png");
+
+  // 恢复渲染，供截图/复核
+  await qa("setMounted", true);
+  await commitWait();
+  await qa("setSource", "a");
+  await commitWait();
+  const finalPending = (await qa("requests")).at(-1);
+  if (finalPending && finalPending.settled === null) {
+    await qa("settle", await lastRequestIndex(), "success");
+    await commitWait();
+  }
+
+  const summary = {
+    page: PAGE,
+    codeHead: head,
+    browser: version,
+    keyMechanism:
+      "Chrome DevTools Protocol. Tab/Shift+Tab/Escape/Space: Input.dispatchKeyEvent with type=rawKeyDown + keyUp. Enter: type=keyDown with text=\"\\r\" (rawKeyDown does not activate native buttons) + keyUp. Clicks: Input.dispatchMouseEvent mousePressed/mouseReleased.",
+    tabStops,
+    results,
+    traces,
+    screenshots: [
+      "reports/_review/w06r1/loading-state.png",
+      "reports/_review/w06r1/error-state.png",
+      "reports/_review/w06r1/focus-detail-1280.png",
+      "reports/_review/w06r1/focus-row-1280.png",
+      "reports/_review/w06r1/wide-1280.png",
+      "reports/_review/w06r1/narrow-420.png",
+      "reports/_review/w06r1/r01-repeat-enter-1280.png",
+      "reports/_review/w06r1/r01-close-return-1280.png",
+      "reports/_review/w06r1/r02-late-failure-1280.png",
+      "reports/_review/w06r1/r02-unmounted.png",
+    ],
+    narrowMetrics,
+  };
+  writeFileSync(path.join(OUT, "w06r1-results.json"), `${JSON.stringify(summary, null, 2)}\n`);
+  writeFileSync(
+    path.join(OUT, "w06r1.log"),
+    `${results.map(r => `${r.pass ? "PASS" : "FAIL"}  ${r.name} — ${typeof r.details === "string" ? r.details : JSON.stringify(r.details ?? {})}`).join("\n")}\n`,
+  );
+
+  socket.close();
+  const failedCount = results.filter(r => !r.pass).length;
+  console.log(`\n${results.length - failedCount}/${results.length} PASS`);
+  if (failedCount > 0) process.exitCode = 1;
+}
+
+server.listen(HTTP_PORT, "127.0.0.1");
+main()
+  .catch(error => {
+    console.error("FAILED:", error.message);
+    process.exitCode = 1;
+  })
+  .finally(async () => {
+    chrome.kill();
+    await sleep(300);
+    server.close();
+  });

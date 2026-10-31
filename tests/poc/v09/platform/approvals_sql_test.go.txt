@@ -1,0 +1,170 @@
+package persistencepoc
+
+import (
+	"context"
+	"errors"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/auth"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+// Actual SQLite transaction + DS audit. The prepared task planner/admission are
+// explicit fixtures; this test does not claim actual DS task execution or UI.
+func TestApprovalActualSQLiteOuterRollbackRestartAndFullTaskBinding(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "approval.db")
+	db := newDB(t, path, true)
+	defer db.Close()
+	for _, m := range audit.Migrations() {
+		for _, sql := range m.Statements {
+			if _, err := db.Exec(ctx, sql); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	validator, err := audit.NewValidator([]string{"auth.setup", "auth.bootstrap", "auth.login", "auth.user.create", "auth.grant.create", "auth.approval.request", "auth.approval.approve", "auth.approval.deny", "auth.approval.consume"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorder := func(db *ds.DB) *audit.SQLRecorder {
+		r, err := audit.NewSQLRecorder(db, validator, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+	ops := func(tx ds.Tx, r *audit.SQLRecorder) auth.IdentitySQLStatements {
+		op := statements(tx)
+		op.AppendAudit = func(ctx context.Context, events []auth.IdentityAuditEvent) error {
+			for _, e := range events {
+				if err := r.AppendTx(ctx, tx, audit.Event{SubjectID: e.SubjectID, Action: e.Action, Result: e.Result, RequestID: e.RequestID, Source: audit.Source(e.Source), At: e.At, NodeIDs: e.NodeIDs}); err != nil {
+					return err
+				}
+			}
+			return nil
+		}
+		return op
+	}
+	identity := func(db *ds.DB) *auth.IdentityService {
+		r := recorder(db)
+		store, err := auth.NewSQLIdentityStore(auth.IdentitySQLBackend{Read: statements(db).Read, InTx: func(ctx context.Context, fn func(auth.IdentitySQLStatements) error) error {
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error { return fn(ops(tx, r)) })
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		s, err := auth.NewIdentityServiceWithResources(store, func(_ context.Context, _, id string) ([]string, error) { return []string{id}, nil }, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	service := identity(db)
+	setup, err := service.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Bootstrap(ctx, setup, "admin", "synthetic-admin-password"); err != nil {
+		t.Fatal(err)
+	}
+	admin, err := service.Login(ctx, "admin", "synthetic-admin-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	operatorUser, err := service.CreateUser(ctx, admin.Secret, admin.CSRF, auth.UserCreation{Username: "operator", Password: "synthetic-operator-password", RoleIDs: []string{"operator"}, Enabled: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, subject := range []string{admin.Identity.SubjectID, operatorUser.UserID} {
+		if _, err = service.CreateResourceGrant(ctx, admin.Secret, admin.CSRF, auth.GrantRequest{PrincipalID: subject, ResourceType: "node", ResourceID: "node-a", Permissions: []string{"tasks.submit", "tasks.approve"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	operator, err := service.Login(ctx, "operator", "synthetic-operator-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	plan := auth.PreparedApprovalPlan{ID: "prepared-fixture-01", SubjectID: operatorUser.UserID, ActionID: "tasks.submit", Digest: strings.Repeat("a", 64), Source: "ai", AISessionID: "ai-session-a", AIScopeRevision: 1, NodeIDs: []string{"node-a"}, RootShell: true, ReviewSummary: []byte(`{"operation":"synthetic reviewed root action"}`), ExpiresAt: time.Now().Add(10 * time.Minute)}
+	approvalService := func(identity *auth.IdentityService) *auth.ApprovalService {
+		s, err := auth.NewApprovalService(identity, func(_ context.Context, id string) (auth.PreparedApprovalPlan, error) {
+			if id != plan.ID {
+				return auth.PreparedApprovalPlan{}, errors.New("unknown plan")
+			}
+			return plan, nil
+		}, func(_ context.Context, p auth.PreparedApprovalPlan) error {
+			if p.AISessionID != "ai-session-a" || p.AIScopeRevision != 1 {
+				return auth.ErrDenied
+			}
+			return nil
+		}, 5*time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return s
+	}
+	approvals := approvalService(service)
+	pending, err := approvals.Request(ctx, operator.Secret, operator.CSRF, plan.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = approvals.Decide(ctx, admin.Secret, admin.CSRF, pending.ID, 1, true); err != nil {
+		t.Fatal(err)
+	}
+	binding := auth.ApprovalTaskBinding{TaskID: "actual-task-fixture", SubjectID: operatorUser.UserID, ActionID: plan.ActionID, Digest: plan.Digest, Source: plan.Source, AISessionID: plan.AISessionID, AIScopeRevision: 1, NodeIDs: []string{"node-a"}}
+	consume := func(db *ds.DB, s *auth.ApprovalService, b auth.ApprovalTaskBinding, fail bool) error {
+		r := recorder(db)
+		return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+			who, err := s.ConsumeTx(ctx, ops(tx, r), pending.ID, b)
+			if err != nil {
+				return err
+			}
+			if who != admin.Identity.SubjectID {
+				t.Fatal("wrong approver")
+			}
+			if fail {
+				return errors.New("injected after consumption and audit, before outer task commit")
+			}
+			return nil
+		})
+	}
+	wrong := binding
+	wrong.AIScopeRevision = 999
+	if err = consume(db, approvals, wrong, false); err != auth.ErrDenied {
+		t.Fatal("same hash changed scope", err)
+	}
+	if err = consume(db, approvals, binding, true); err == nil {
+		t.Fatal("outer transaction failure acknowledged")
+	}
+	var count int
+	if err = db.QueryRow(ctx, "SELECT COUNT(*) FROM audit_events WHERE action='auth.approval.consume'").Scan(&count); err != nil || count != 0 {
+		t.Fatal("failed consumption audit survived", count, err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	service = identity(db)
+	approvals = approvalService(service)
+	view, err := approvals.Get(ctx, operator.Secret, pending.ID)
+	if err != nil || view.State != "approved" {
+		t.Fatal("restart lost rollback", view, err)
+	}
+	if err = consume(db, approvals, binding, false); err != nil {
+		t.Fatal(err)
+	}
+	if err = db.QueryRow(ctx, "SELECT COUNT(*) FROM audit_events WHERE action='auth.approval.consume'").Scan(&count); err != nil || count != 1 {
+		t.Fatal(count, err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	approvals = approvalService(identity(db))
+	binding.TaskID = "another-task-fixture"
+	if err = consume(db, approvals, binding, false); err != auth.ErrDenied {
+		t.Fatal("restart replayed approval", err)
+	}
+}

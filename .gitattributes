@@ -1,0 +1,6 @@
+* text=auto eol=lf
+*.zip binary
+*.binpb binary
+# Original evidence must retain exact bytes for SHA256 verification.
+docs/reference/** -text
+api/openapi/*.yaml -text

@@ -1,0 +1,74 @@
+package main
+
+import (
+ "context"
+ "encoding/json"
+ "errors"
+ "fmt"
+ "os"
+ "strings"
+
+ "serverfleet.local/serverfleet/internal/auth"
+)
+
+func main() {
+ checks := 0
+ assert := func(ok bool, label string) { if !ok { panic(label) }; checks++ }
+ set := func(ids ...string) map[string]struct{} { out := make(map[string]struct{},len(ids)); for _,id := range ids { out[id]=struct{}{} }; return out }
+ bg := context.Background()
+ policy := &auth.NodePolicy{KnownNodes:set("a","b"), ReadGrants:map[string]map[string]struct{}{"alice":set("a"),"bob":set("b"),"empty":nil}}
+ calls := 0
+ var readerErr error
+ reader := func(context.Context)(*auth.NodePolicy,error) { calls++; return policy,readerErr }
+ scope,err := auth.PrepareNodeReadScope(bg,"alice",reader)
+ assert(scope != nil && err == nil && calls==1,"prepare once before inventory")
+ assert(scope.CheckNode(bg,"a")==nil,"allow captured grant")
+ assert(errors.Is(scope.CheckNode(bg,"b"),auth.ErrDenied),"other subject grant denied")
+ assert(calls==1,"checking does not refresh")
+ delete(policy.ReadGrants["alice"],"a")
+ policy.ReadGrants["alice"]["b"]=struct{}{}
+ delete(policy.KnownNodes,"a")
+ policy.ReadGrants = map[string]map[string]struct{}{"alice":set("b")}
+ assert(scope.CheckNode(bg,"a")==nil,"source mutations do not revoke captured snapshot")
+ assert(errors.Is(scope.CheckNode(bg,"b"),auth.ErrDenied),"source mutations do not expand captured snapshot")
+ second,err := auth.PrepareNodeReadScope(bg,"alice",reader)
+ assert(err==nil && second!=nil && calls==2,"new prepare reads current source once")
+ assert(errors.Is(second.CheckNode(bg,"a"),auth.ErrDenied),"new snapshot sees revocation")
+ assert(second.CheckNode(bg,"b")==nil,"new snapshot sees current grant")
+ readerErr = errors.New("secret=/private/token")
+ third,err := auth.PrepareNodeReadScope(bg,"alice",reader)
+ assert(third==nil && calls==3 && errors.Is(err,auth.ErrPolicyUnavailable),"source failure never reuses old allow")
+ assert(!strings.Contains(fmt.Sprint(err),"private") && !errors.Is(err,readerErr),"source text and cause not retained")
+ for _,bad:=range []string{""," alice","alice ","ali ce","*","alice?","[alice]",string([]byte{0xff})} {
+  before:=calls
+  result,err:=auth.PrepareNodeReadScope(bg,bad,reader)
+  assert(result==nil && errors.Is(err,auth.ErrInvalidCheck) && calls==before,"invalid identity rejected before source")
+ }
+ emptyPolicy:=&auth.NodePolicy{ReadGrants:map[string]map[string]struct{}{"known":nil}}
+ emptyReader:=func(context.Context)(*auth.NodePolicy,error){return emptyPolicy,nil}
+ zero,err:=auth.PrepareNodeReadScope(bg,"known",emptyReader)
+ assert(err==nil && zero!=nil,"known empty inventory preflight valid")
+ assert(errors.Is(zero.CheckNode(bg,"a"),auth.ErrDenied),"zero grants do not mean all")
+ unknown,err:=auth.PrepareNodeReadScope(bg,"unknown",emptyReader)
+ assert(unknown==nil && errors.Is(err,auth.ErrDenied),"unknown subject denied with empty inventory")
+ nilReaderScope,err:=auth.PrepareNodeReadScope(bg,"known",nil)
+ assert(nilReaderScope==nil && errors.Is(err,auth.ErrPolicyUnavailable),"nil source refused")
+ emptyPolicy.ReadGrants["unrelated"]=set("dangling")
+ malformed,err:=auth.PrepareNodeReadScope(bg,"known",emptyReader)
+ assert(malformed==nil && errors.Is(err,auth.ErrPolicyUnavailable),"unrelated bad policy rejected")
+ for _,invalidScope:=range []*auth.NodeReadScope{nil,{}} {
+  assert(errors.Is(invalidScope.CheckNode(bg,"a"),auth.ErrPolicyUnavailable),"nil and zero scopes refused")
+ }
+ for _,bad:=range []string{""," a","a ","*","node?","[a]"} {
+  assert(errors.Is(scope.CheckNode(bg,bad),auth.ErrInvalidCheck),"invalid exact target refused")
+ }
+ ctx,cancel:=context.WithCancel(bg)
+ canceled,err:=auth.PrepareNodeReadScope(ctx,"known",func(context.Context)(*auth.NodePolicy,error){cancel();return &auth.NodePolicy{ReadGrants:map[string]map[string]struct{}{"known":nil}},nil})
+ assert(canceled==nil && err==context.Canceled,"canceled final read cannot return scope")
+ assert(scope.CheckNode(ctx,"a")==context.Canceled,"cancellation beats captured allow")
+ for _,cause:=range []error{context.Canceled,context.DeadlineExceeded} {
+  wrapped,err:=auth.PrepareNodeReadScope(bg,"known",func(context.Context)(*auth.NodePolicy,error){return nil,fmt.Errorf("secret-wrap: %w",cause)})
+  assert(wrapped==nil && err==cause && !strings.Contains(err.Error(),"secret"),"wrapped cancellation normalized")
+ }
+ if err:=json.NewEncoder(os.Stdout).Encode(map[string]any{"status":"PASS","assertions":checks,"scope":"actual auth functions only; not runtime authentication or atomic inventory/output revocation"});err!=nil{panic(err)}
+}

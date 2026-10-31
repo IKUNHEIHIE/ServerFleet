@@ -1,0 +1,36 @@
+{
+  "executedAt": "2026-10-28T19:23:17.648Z",
+  "node": "v24.22.1",
+  "candidateSha256": "d84235693d9e0a85549ca19b54a4b64d7881b9838baea84979736ef0f0b98d74",
+  "sourceSha256": "c779a4366d5fe0d3088d1c682b231dfe9d157c3d2ae562e1440cba7ccc3f6726",
+  "results": [
+    {
+      "name": "structure",
+      "status": "PASS",
+      "paths": 147,
+      "operations": 185
+    },
+    {
+      "name": "lint",
+      "status": "PASS"
+    },
+    {
+      "name": "contract-model-tests",
+      "status": "PASS"
+    },
+    {
+      "name": "original-proto-build",
+      "status": "PASS"
+    },
+    {
+      "name": "original-wire-compatibility",
+      "status": "PASS"
+    },
+    {
+      "name": "go-proto-tests",
+      "status": "PASS"
+    }
+  ],
+  "runtimeSecurity": "UNTESTED",
+  "typeScriptGeneration": "UNTESTED"
+}

@@ -1,0 +1,187 @@
+package persistencepoc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"net/http/httptest"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"serverfleet.local/serverfleet/internal/auth"
+)
+
+func TestIdentityRealHTTPSUserGrantLogoutAndDatabaseRestart(t *testing.T) {
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "web-identity.db")
+	db := newDB(t, dbPath, true)
+	resolver := func(_ context.Context, kind, id string) ([]string, error) {
+		if kind == "node" && id == "node-a" {
+			return []string{id}, nil
+		}
+		return nil, errors.New("unknown fixture resource")
+	}
+	service, err := auth.NewIdentityServiceWithResources(identityStore(t, db), resolver, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	setup, err := service.PrepareSetup(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := func(service *auth.IdentityService) (*httptest.Server, *http.Client) {
+		server := httptest.NewUnstartedServer(nil)
+		origin := "https://" + server.Listener.Addr().String()
+		handler, err := auth.NewIdentityHTTP(service, auth.IdentityHTTPConfig{Origin: origin})
+		if err != nil {
+			t.Fatal(err)
+		}
+		server.Config.Handler = handler
+		server.StartTLS()
+		client := server.Client()
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client.Jar = jar
+		return server, client
+	}
+	server, client := start(service)
+	request := func(client *http.Client, origin, method, path string, input any, csrf, key string, extra map[string]string) (*http.Response, []byte) {
+		var encoded []byte
+		if input != nil {
+			var err error
+			encoded, err = json.Marshal(input)
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		req, err := http.NewRequest(method, origin+path, strings.NewReader(string(encoded)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Origin", origin)
+		if input != nil {
+			req.Header.Set("Content-Type", "application/json")
+		}
+		if csrf != "" {
+			req.Header.Set("X-CSRF-Token", csrf)
+		}
+		if key != "" {
+			req.Header.Set("Idempotency-Key", key)
+		}
+		for k, v := range extra {
+			req.Header.Set(k, v)
+		}
+		response, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		_ = response.Body.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if response.Header.Get("Cache-Control") != "no-store" {
+			t.Fatal("cache policy")
+		}
+		return response, body
+	}
+	response, body := request(client, server.URL, "POST", "/api/v1/auth/bootstrap", map[string]string{"setupToken": setup, "username": "admin", "password": "long-test-admin-password"}, "", "bootstrap-test-key-0001", nil)
+	if response.StatusCode != 204 || response.Header.Get("Set-Cookie") != "" {
+		t.Fatal(response.StatusCode, string(body))
+	}
+	response, body = request(client, server.URL, "POST", "/api/v1/auth/login", map[string]string{"username": "admin", "password": "long-test-admin-password"}, "", "", nil)
+	if response.StatusCode != 200 {
+		t.Fatal(response.StatusCode, string(body))
+	}
+	var login struct {
+		Identity auth.IdentityView `json:"identity"`
+		CSRF     string            `json:"csrfToken"`
+	}
+	if err = json.Unmarshal(body, &login); err != nil {
+		t.Fatal(err)
+	}
+	cookies := response.Cookies()
+	if len(cookies) != 1 || !cookies[0].Secure || !cookies[0].HttpOnly || cookies[0].SameSite != http.SameSiteStrictMode || strings.Contains(string(body), cookies[0].Value) {
+		t.Fatal("credential delivery policy")
+	}
+	oldSecret := cookies[0].Value
+	input := map[string]any{"username": "reader", "password": "long-test-reader-password", "roleIds": []string{"reader"}}
+	response, body = request(client, server.URL, "POST", "/api/v1/users", input, login.CSRF, "user-create-test-key-0001", nil)
+	var user auth.ManagedUser
+	if err = json.Unmarshal(body, &user); err != nil || response.StatusCode != 200 {
+		t.Fatal(response.StatusCode, string(body), err)
+	}
+	response, body = request(client, server.URL, "POST", "/api/v1/users", input, login.CSRF, "user-create-test-key-0001", nil)
+	var replay auth.ManagedUser
+	_ = json.Unmarshal(body, &replay)
+	if response.StatusCode != 200 || replay.UserID != user.UserID {
+		t.Fatal("persistent idempotency failed")
+	}
+	if err = service.Authorize(ctx, auth.Check{SubjectID: user.UserID, Action: "nodes.read", NodeIDs: []string{"node-a"}}); !errors.Is(err, auth.ErrDenied) {
+		t.Fatal("user got implicit node access", err)
+	}
+	response, body = request(client, server.URL, "POST", "/api/v1/resource-grants", map[string]any{"principalId": user.UserID, "resourceType": "node", "resourceId": "node-a", "permissions": []string{"nodes.read"}}, login.CSRF, "grant-create-test-key-0001", nil)
+	if response.StatusCode != 200 {
+		t.Fatal(response.StatusCode, string(body))
+	}
+	if err = service.Authorize(ctx, auth.Check{SubjectID: user.UserID, Action: "nodes.read", NodeIDs: []string{"node-a"}}); err != nil {
+		t.Fatal(err)
+	}
+	if err = service.Authorize(ctx, auth.Check{SubjectID: login.Identity.UserID, Action: "nodes.read", NodeIDs: []string{"node-a"}}); !errors.Is(err, auth.ErrDenied) {
+		t.Fatal("admin got implicit node access", err)
+	}
+	response, body = request(client, server.URL, "POST", "/api/v1/auth/logout", nil, login.CSRF, "", nil)
+	if response.StatusCode != 204 {
+		t.Fatal(response.StatusCode, string(body))
+	}
+	response, body = request(client, server.URL, "GET", "/api/v1/auth/me", nil, "", "", map[string]string{"Cookie": auth.SessionCookieName + "=" + oldSecret})
+	if response.StatusCode != 401 {
+		t.Fatal("logout replay accepted", response.StatusCode, string(body))
+	}
+	_ = db.Close()
+	response, body = request(client, server.URL, "GET", "/api/v1/auth/bootstrap-status", nil, "", "", nil)
+	if response.StatusCode != 503 || strings.Contains(string(body), dbPath) {
+		t.Fatal("closed source became uninitialized", response.StatusCode, string(body))
+	}
+	server.Close()
+	reopened := newDB(t, dbPath, false)
+	defer reopened.Close()
+	restarted, _ := auth.NewIdentityServiceWithResources(identityStore(t, reopened), resolver, nil)
+	server, client = start(restarted)
+	defer server.Close()
+	response, body = request(client, server.URL, "GET", "/api/v1/auth/me", nil, "", "", map[string]string{"Cookie": auth.SessionCookieName + "=" + oldSecret})
+	if response.StatusCode != 401 {
+		t.Fatal("restart revived revoked cookie", response.StatusCode)
+	}
+	response, body = request(client, server.URL, "GET", "/api/v1/auth/bootstrap-status", nil, "", "", nil)
+	var status map[string]any
+	_ = json.Unmarshal(body, &status)
+	if response.StatusCode != 200 || status["initialized"] != true || status["bootstrapAvailable"] != false {
+		t.Fatal(response.StatusCode, string(body))
+	}
+	response, body = request(client, server.URL, "POST", "/api/v1/auth/login", map[string]string{"username": "reader", "password": "long-test-reader-password"}, "", "", nil)
+	if response.StatusCode != 200 {
+		t.Fatal("user not persisted", response.StatusCode, string(body))
+	}
+	response, body = request(client, server.URL, "GET", "/api/v1/users", nil, "", "", nil)
+	if response.StatusCode != 403 {
+		t.Fatal("reader managed accounts", response.StatusCode)
+	}
+	response, body = request(client, server.URL, "GET", "/api/v1/resource-grants", nil, "", "", nil)
+	if response.StatusCode != 200 {
+		t.Fatal(response.StatusCode, string(body))
+	}
+	var grants struct {
+		Items []auth.ResourceGrant `json:"items"`
+	}
+	_ = json.Unmarshal(body, &grants)
+	if len(grants.Items) != 1 || grants.Items[0].PrincipalID != user.UserID {
+		t.Fatal("grant persistence/isolation")
+	}
+}

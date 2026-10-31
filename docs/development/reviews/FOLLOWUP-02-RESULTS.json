@@ -1,0 +1,31 @@
+{
+  "task":"FOLLOWUP02-REVIEW",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"8b2d8aa5b7d249b032d2c64abbbc2f758c739a4a",
+  "testedCodeHead":"c03cdd62bc120b21ff9f70aa99fedf6df3bb89fd",
+  "decisions":[
+    {"task":"TASK-01C","session":"deepseek-01","reportedCommit":"a652696671e718643ab8d80dba58f13e691a521c","reportedCommitIsTaskBase":true,"reviewedHead":"e169afa9e1b8e1277b8b63119c3d7acee6c2851c","verification":"clean assigned branch, one new task-scoped commit, four new internal/tasks files","decision":"ACCEPT","coveragePercent":100,"independentAssertions":165,"nextTask":"READ-PLAN-01"},
+    {"task":"W05-R1","session":"gemini-01","head":"54df33ec4f0bc34e0bce5734d0a769bb0b543baa","originalHead":"0ebe81224e63065d40a608e9eccb15123d9c8d60","decision":"CHANGES_REQUESTED","merged":false,"closed":["W05-R02"],"open":["W05-R01"],"webPassed":177,"nextTask":"W05-R2"}
+  ],
+  "finding":{"id":"W05-R01","priority":"P2","status":"OPEN","file":"apps/web/src/features/nodes/node-loader.tsx","startLine":62,"endLine":67,"behavior":"same exact key, ready -> non-function load -> valid load restores old ready rows/count/detail in first committed DOM because epoch only tracks key"},
+  "checks":{
+    "loaderIndependentProbe":{"status":"FAIL","passed":4,"failed":1,"originalTwoCases":"PASS","latePendingSuccessAndFailure":"PASS","sameKeyReadyRecovery":"FAIL","evidence":"evidence/followup02-loader-probe.log"},
+    "authorWeb":"PASS:177",
+    "authorWebPolicy":"PASS",
+    "npmCi":"PASS",
+    "toolsInstall":"PASS",
+    "combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":200,"goSubtestsPassed":700,"goFailures":0,"webPassed":151},
+    "combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},
+    "g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "originalFilesVerified":69,
+    "byteExactOriginalCandidatesVerified":3
+  },
+  "codexTask":{"id":"N03-A","base":"8b2d8aa5b7d249b032d2c64abbbc2f758c739a4a","scopeChanged":false,"uncommittedFilesInspected":false},
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "notVerified":["real browser or cross-user attack in this review","runtime identity/policy/inventory/output atomicity","HTTP/cache/storage","WSS/mTLS","approval/task execution","Linux race","GitHub CI","1C1G performance"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

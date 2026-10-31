@@ -1,0 +1,12 @@
+import { fileURLToPath } from "node:url";
+import base from "../../../apps/web/vite.config.ts";
+export default {
+  ...base,
+  root: fileURLToPath(new URL("../../../apps/web/", import.meta.url)),
+  test: {
+    ...base.test,
+    include: ["../../reports/_review/followup01/source-return.test.tsx"],
+    reporters: ["default", "junit"],
+    outputFile: { junit: "../../reports/followup01-loader-probe-junit.xml" },
+  },
+};

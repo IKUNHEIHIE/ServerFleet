@@ -1,0 +1,17 @@
+{
+  "task":"W06R1-REVIEW",
+  "reviewerSession":"codex-review-01",
+  "date":"2026-10-29",
+  "timezone":"Asia/Shanghai",
+  "baseMain":"157549e711e018a33e54584373b9c5136d1cf5d3",
+  "author":{"session":"gemini-01","head":"2c1c8bcbfbd71443ae4caed96ad4905e0c820e97","evidenceCodeHead":"99cd6635b3da4739a4e2b30816bb9749d14419ae","trackedFilesChanged":1,"decision":"ACCEPT_WITH_REVIEWER_SUPPLEMENT_AND_DOCUMENT_CLARIFICATION","reportedAssertionPass":25,"fullAuthorBrowserSuiteIndependentlyRerun":false},
+  "findings":{"W06-R01":"CLOSED","W06-R02":"CLOSED"},
+  "evidenceClarification":{"authorC24":"cross-key old scope-b failure, not same-key proof","snapshotSourceKind":"stale initial closure; not relied on as identity evidence","authorArtifactsUnchanged":true,"newScreenshotViews":4,"reviewerSupplementalCasesPassed":3,"reviewerTraceSteps":11,"reviewerUnhandledErrors":0,"reviewerMethod":"Computer Use tab-scoped CDP; fresh independently built local preview; not native keyboard rerun","copiedEvidenceFiles":27},
+  "testedCombinedHead":"4907caf49caf3e0558afa1f9c7f9fd25a59b9285",
+  "checks":{"npmCi":"PASS","toolsInstall":"PASS","previewBuild":"PASS","combinedCheck":{"status":"PASS","suites":["policy","contracts","go","web","git"],"goTopLevelPassed":212,"goSubtestsPassed":805,"goFailures":0,"webPassed":179,"webFailures":0},"combinedSecurity":{"status":"PASS","npmVulnerabilities":0,"govulncheckVulnerabilities":0},"originalFilesVerified":69,"byteExactOriginalCandidatesVerified":3,"g2r03CandidateSha256":"dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd","productionCodeOrCandidateChanged":false},
+  "closeout":{"readPlan":"ACCEPTED_PROPOSAL_DOCUMENTS","readSecurity":"ACCEPTED_EVIDENCE_DOCUMENTS","w06":"ACCEPTED_ISOLATED_BROWSER_EVIDENCE","allCurrentAuthorTasks":"COMPLETE_STOP","ownerChoices":"PENDING_OWNER_CHOICE","recommendedDirections":["A1","B1"],"nextDesignTasksDispatched":false,"newImplementationAuthorized":false},
+  "g2Frozen":false,
+  "openDecisions":["D01","D02","D03","D04","D05","D06","D07","P1-C10"],
+  "automaticallyStartedAgents":0,
+  "pushed":false
+}

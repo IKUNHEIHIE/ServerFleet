@@ -1,0 +1,165 @@
+{
+  "task": "READ-DESIGN-R1-REVIEW",
+  "reviewerSession": "codex-review-01",
+  "date": "2026-10-30",
+  "timezone": "Asia/Shanghai",
+  "baseMain": "3c817f881bd9f96f23f525af50199aa56e3a5291",
+  "authors": [
+    {
+      "task": "READ-HTTP-DESIGN-01-R1",
+      "session": "deepseek-01",
+      "head": "4fbdcf5126b02981f8f3fcf5cb403641693172fb",
+      "prior": "ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734",
+      "decision": "ACCEPT_PROPOSED_WITH_INTEGRATION_CLARIFICATIONS",
+      "cleanAtReview": true,
+      "onlyThreeMarkdownModified": true,
+      "ancestorOfCombinedHead": true
+    },
+    {
+      "task": "READ-WEB-DESIGN-01-R1",
+      "session": "gemini-01",
+      "head": "39b2b7cd1bf047c9691206c08bc489ff4ef112c9",
+      "prior": "63b0feb8dffad7dc88252dd7dd786b80c7e54e7c",
+      "decision": "ACCEPT_PROPOSED_WITH_INTEGRATION_CLARIFICATIONS",
+      "cleanAtReview": true,
+      "onlyThreeMarkdownModified": true,
+      "ancestorOfCombinedHead": true
+    }
+  ],
+  "priorAcceptedAuthHead": "48409bacf4e582f8ab4f196982a5677fa3a21d18",
+  "findings": [
+    {
+      "id": "HD01-R01",
+      "priority": 2,
+      "status": "CLOSED_DOCUMENT_DESIGN_ONLY"
+    },
+    {
+      "id": "HD01-R02",
+      "priority": 2,
+      "status": "CLOSED_DOCUMENT_DESIGN_ONLY"
+    },
+    {
+      "id": "WD01-R01",
+      "priority": 2,
+      "status": "CLOSED_DOCUMENT_DESIGN_ONLY"
+    },
+    {
+      "id": "WD01-R02",
+      "priority": 2,
+      "status": "CLOSED_DOCUMENT_DESIGN_ONLY"
+    }
+  ],
+  "integrationClarifications": {
+    "commit": "1600197342da79c2d9cee209a499ff1f88d32e5c",
+    "files": 6,
+    "items": [
+      "stateful credential authority lookup before validity conclusion",
+      "viewEpoch key participation and terminal-error load gate; onlineOnly request errors"
+    ],
+    "runtimeCodeChanged": false
+  },
+  "documentChecks": [
+    {
+      "task": "READ-HTTP-DESIGN-01-R1",
+      "references": 78,
+      "files": 25,
+      "rangeProblems": 0,
+      "originalDocumentsHashed": 3
+    },
+    {
+      "task": "READ-WEB-DESIGN-01-R1",
+      "references": 25,
+      "files": 12,
+      "rangeProblems": 0,
+      "originalDocumentsHashed": 3
+    }
+  ],
+  "integratedReferenceCheck": "PASS",
+  "semanticReview": "PASS_FOR_PROPOSED_DOCUMENT_RECEIPT",
+  "testedCombinedHead": "1600197342da79c2d9cee209a499ff1f88d32e5c",
+  "checks": {
+    "npmCi": "PASS",
+    "toolsInstall": "PASS",
+    "combined": {
+      "executedAt": "2026-10-29T16:53:09.633Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        },
+        {
+          "name": "contracts",
+          "status": "PASS"
+        },
+        {
+          "name": "go",
+          "status": "PASS"
+        },
+        {
+          "name": "web",
+          "status": "PASS"
+        },
+        {
+          "name": "git",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-10-29T16:53:23.960Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "counts": {
+      "goTopLevel": 212,
+      "goSubtests": 805,
+      "goFailures": 0,
+      "webTests": "179",
+      "webFailures": "0",
+      "webErrors": "0"
+    },
+    "finalPolicy": {
+      "executedAt": "2026-10-29T16:58:11.760Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        }
+      ]
+    },
+    "originalFilesVerified": 69,
+    "byteExactOriginalCandidatesVerified": 3,
+    "g2r03CandidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "productionCodeOrCandidateChanged": false
+  },
+  "evidenceManifest": "evidence/read-design-r1-manifest.json",
+  "coordination": {
+    "allCurrentAuthorTasks": "COMPLETE_STOP",
+    "nextProposal": "W07-LEGACY-VIEW",
+    "nextStatus": "PROPOSED_NOT_AUTHORIZED",
+    "newAuthorWorktreesCreated": 0,
+    "implementationAuthorized": false,
+    "reaskA1B1": false
+  },
+  "runtimeAuthentication": "UNTESTED",
+  "runtimeHTTP": "UNTESTED",
+  "runtimeStorage": "UNTESTED",
+  "newLegacyBrowser": "UNTESTED",
+  "g2Frozen": false,
+  "openDecisions": [
+    "D01",
+    "D02",
+    "D03",
+    "D04",
+    "D05",
+    "D06",
+    "D07",
+    "P1-C10"
+  ],
+  "automaticallyStartedAgents": 0,
+  "pushed": false
+}

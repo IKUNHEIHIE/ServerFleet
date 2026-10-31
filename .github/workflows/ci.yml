@@ -1,0 +1,81 @@
+name: Foundation CI
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  push:
+    branches: [main, 'integration/**']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: foundation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GOPATH: ${{ github.workspace }}/.cache/gopath
+  GOCACHE: ${{ github.workspace }}/.cache/go-build
+  GOTOOLCHAIN: local
+
+jobs:
+  foundation:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: npm ci
+      - run: npm run tools:install -- protoc-gen-go staticcheck actionlint
+      - name: Policy, contracts, generation, Go and Web
+        run: npm run check
+      - name: No generated or lockfile drift
+        run: git diff --exit-code -- gen/go go.mod go.sum package-lock.json
+      - name: Linux Agent cross-build
+        run: |
+          GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -o reports/agent-linux-amd64 ./apps/agent
+          GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -o reports/agent-linux-arm64 ./apps/agent
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: foundation-reports
+          path: |
+            reports/*.log
+            reports/*.json
+            reports/*.xml
+          if-no-files-found: warn
+          retention-days: 7
+  dependencies:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: npm ci
+      - run: npm run tools:install -- govulncheck
+      - run: npm run check:security
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: dependency-reports
+          path: reports/
+          retention-days: 7

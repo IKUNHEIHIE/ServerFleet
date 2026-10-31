@@ -1,0 +1,2139 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet — Xray 节点管理器插件 API
+  version: 0.9.0-draft
+  description: 首版唯一已批准的官方可选插件。API 仅为设计契约，不调用真实 Xray 或云节点。所有写操作由受控 Agent 执行，不能绕过主控 RBAC、AI 会话资源授权、审批、任务幂等、审计与凭据隔离。
+servers:
+- url: https://controller.example.invalid
+  description: 占位符，非真实运行 API
+security:
+- bearerAuth: []
+tags:
+- name: Xray Manager
+  description: Xray-core 节点、模板、配置、用户、流量及批量安装
+paths:
+  /api/v1/plugins/xray-manager/capabilities:
+    get:
+      tags:
+      - Xray Manager
+      summary: 插件能力、支持版本与模板
+      operationId: xrayGetCapabilities
+      description: 返回支持的模板清单、目标版本兼容矩阵、Xray 官方 Release 校验信息。响应类型为示意，正式实现应使用数组容器。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/XrayTemplate'
+                  nextCursor:
+                    type: string
+                required:
+                - items
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+  /api/v1/plugins/xray-manager/nodes:
+    get:
+      tags:
+      - Xray Manager
+      summary: 列出当前用户可管理的 Xray 节点与安装状态
+      operationId: xrayListNodes
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/XrayNodeRef'
+                  nextCursor:
+                    type: string
+                required:
+                - items
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+  /api/v1/plugins/xray-manager/installations/preview:
+    post:
+      tags:
+      - Xray Manager
+      summary: 只读预检批量安装或接管
+      operationId: xrayPreviewInstall
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayPreview'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayInstallationPreviewRequest'
+  /api/v1/plugins/xray-manager/installations:
+    post:
+      tags:
+      - Xray Manager
+      summary: 提交安全安装任务（需审批与幂等）
+      operationId: xrayStartInstallation
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayJobRef'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayInstallRequest'
+      parameters:
+      - &id002
+        name: Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+          description: 唯一操作键；同一用户+动作+参数重复提交返回同一 job
+        description: 高风险异步写入任务必须提供幂等键
+  /api/v1/plugins/xray-manager/nodes/{nodeId}/instance:
+    get:
+      tags:
+      - Xray Manager
+      summary: 查询节点 Xray 实例状态
+      operationId: xrayGetInstance
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayInstance'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - &id001
+        name: nodeId
+        in: path
+        required: true
+        schema:
+          type: string
+  /api/v1/plugins/xray-manager/nodes/{nodeId}/instance/actions:
+    post:
+      tags:
+      - Xray Manager
+      summary: 更新/启停/卸载节点 Xray 实例
+      operationId: xrayInstanceAction
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayJobRef'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayActionRequest'
+      parameters:
+      - *id001
+      - *id002
+  /api/v1/plugins/xray-manager/templates:
+    get:
+      tags:
+      - Xray Manager
+      summary: 获取版本化 Xray 模板
+      operationId: xrayListTemplates
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/XrayTemplate'
+                  nextCursor:
+                    type: string
+                required:
+                - items
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+  /api/v1/plugins/xray-manager/configurations/validate:
+    post:
+      tags:
+      - Xray Manager
+      summary: 按节点实际版本验证模板或自定义 JSON
+      operationId: xrayValidateConfiguration
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayConfigValidation'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayConfigValidateRequest'
+  /api/v1/plugins/xray-manager/deployments/preview:
+    post:
+      tags:
+      - Xray Manager
+      summary: 生成差异、预检查和目标快照
+      operationId: xrayPreviewDeployment
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayDeployPreview'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayDeployPreviewRequest'
+  /api/v1/plugins/xray-manager/deployments:
+    post:
+      tags:
+      - Xray Manager
+      summary: 提交配置发布任务
+      operationId: xrayCreateDeployment
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayJobRef'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayDeployRequest'
+      parameters:
+      - *id002
+  /api/v1/plugins/xray-manager/nodes/{nodeId}/configurations:
+    get:
+      tags:
+      - Xray Manager
+      summary: 查看受管配置修订历史（脱敏）
+      operationId: xrayListConfigRevisions
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/XrayConfigurationRevision'
+                  nextCursor:
+                    type: string
+                required:
+                - items
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - *id001
+  /api/v1/plugins/xray-manager/nodes/{nodeId}/configurations/{revision}:
+    get:
+      tags:
+      - Xray Manager
+      summary: 查询指定配置历史修订（脱敏）
+      operationId: xrayGetConfigRevision
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayConfigurationRevision'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - *id001
+      - name: revision
+        in: path
+        required: true
+        schema:
+          type: integer
+          minimum: 0
+  /api/v1/plugins/xray-manager/nodes/{nodeId}/configurations/rollback:
+    post:
+      tags:
+      - Xray Manager
+      summary: 经过校验的配置恢复任务
+      operationId: xrayRollbackConfiguration
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayJobRef'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayRollbackRequest'
+      parameters:
+      - *id001
+      - *id002
+  /api/v1/plugins/xray-manager/users:
+    get:
+      tags:
+      - Xray Manager
+      summary: 获取管理用户列表（不返回凭证明文）
+      operationId: xrayListUsers
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/XrayManagedUser'
+                  nextCursor:
+                    type: string
+                required:
+                - items
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - name: nodeId
+        in: query
+        schema:
+          type: string
+      - name: inboundTag
+        in: query
+        schema:
+          type: string
+    post:
+      tags:
+      - Xray Manager
+      summary: 创建 Xray 用户并持久写入配置
+      operationId: xrayCreateUser
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayManagedUser'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayUserCreateRequest'
+  /api/v1/plugins/xray-manager/users/{userId}:
+    get:
+      tags:
+      - Xray Manager
+      summary: 查看用户信息（不含凭证明文）
+      operationId: xrayGetUser
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayManagedUser'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - &id003
+        name: userId
+        in: path
+        required: true
+        schema:
+          type: string
+    patch:
+      tags:
+      - Xray Manager
+      summary: 变更/停用/轮换用户凭据（受控）
+      operationId: xrayPatchUser
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayManagedUser'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayUserPatchRequest'
+      parameters:
+      - *id003
+    delete:
+      tags:
+      - Xray Manager
+      summary: 删除代理用户并同步持久配置
+      operationId: xrayDeleteUser
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '202':
+          description: 异步删除任务已接受
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayJobRef'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - *id003
+      - *id002
+  /api/v1/plugins/xray-manager/users/{userId}/client-export:
+    post:
+      tags:
+      - Xray Manager
+      summary: 受控单次导出链接/二维码/客户端 JSON
+      operationId: xrayExportClientConnection
+      description: 敏感操作：仅在显式 credential reveal 权限、确认和短有效期内返回一次性连接信息；浏览器禁缓存，审计不记输出内容。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayClientExportResult'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayClientExportRequest'
+      parameters:
+      - *id003
+  /api/v1/plugins/xray-manager/traffic:
+    get:
+      tags:
+      - Xray Manager
+      summary: 按节点/入站/用户查询代理流量历史
+      operationId: xrayGetTrafficSeries
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayTrafficSeries'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - name: scope
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - node
+          - inbound
+          - user
+      - name: nodeId
+        in: query
+        schema:
+          type: string
+      - name: inboundTag
+        in: query
+        schema:
+          type: string
+      - name: userId
+        in: query
+        schema:
+          type: string
+      - name: from
+        in: query
+        schema:
+          type: string
+          format: date-time
+      - name: to
+        in: query
+        schema:
+          type: string
+          format: date-time
+  /api/v1/plugins/xray-manager/traffic/settings:
+    get:
+      tags:
+      - Xray Manager
+      summary: 读取流量采样与阈值设置
+      operationId: xrayGetTrafficSettings
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayTrafficSettings'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+    put:
+      tags:
+      - Xray Manager
+      summary: 修改统计策略（需受控重载及审计）
+      operationId: xrayPutTrafficSettings
+      description: 仅通过 Server Fleet Controller 后端鉴权和 Agent 受控操作执行；受用户资源权限、AI 会话范围（若适用）、审批、审计与节点状态约束。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayTrafficSettings'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XrayTrafficSettings'
+  /api/v1/plugins/xray-manager/jobs/{jobId}:
+    get:
+      tags:
+      - Xray Manager
+      summary: 查询插件任务对应的主控作业 ID/状态
+      operationId: xrayGetJobLink
+      description: 任务详细信息和取消统一走既有主控作业接口；此接口只作引用映射。
+      responses:
+        '200':
+          description: 成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayJobRef'
+        '400':
+          description: 无效请求
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '401':
+          description: 未认证
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '403':
+          description: 无权限或会话资源范围不包含目标
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '404':
+          description: 资源不存在或不在可见范围
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '409':
+          description: 实例/配置版本冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+        '422':
+          description: 预检查、校验或安全策略拒绝
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XrayError'
+      parameters:
+      - name: jobId
+        in: path
+        required: true
+        schema:
+          type: string
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    XrayNodeRef:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        name:
+          type: string
+        online:
+          type: boolean
+        provider:
+          type: string
+        region:
+          type: string
+        arch:
+          type: string
+        xrayDetected:
+          type: boolean
+        managed:
+          type: boolean
+      additionalProperties: false
+      required:
+      - nodeId
+      - name
+      - online
+      - managed
+    XrayTargetSelector:
+      type: object
+      properties:
+        nodeIds:
+          type: array
+          items:
+            type: string
+        serviceGroupId:
+          type: string
+          description: 可选服务组，提交时必须固化具体节点快照
+        targetNodeIdsSnapshot:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+      required:
+      - nodeIds
+      description: nodeIds 显式数组，允许来自服务组选择器的已解析快照；提交时服务端再次解析、比对和逐目标鉴权。
+    XrayBatchPolicy:
+      type: object
+      properties:
+        mode:
+          type: string
+          enum:
+          - normal
+          - batch
+          - canary
+        batchSize:
+          type: integer
+          minimum: 1
+        concurrency:
+          type: integer
+          minimum: 1
+        maxFailures:
+          type: integer
+          minimum: 0
+        stopOnHealthFailure:
+          type: boolean
+        expiresAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+      required:
+      - mode
+      - concurrency
+      - maxFailures
+    XrayInstance:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        managed:
+          type: boolean
+        adoptionState:
+          type: string
+          enum:
+          - none
+          - detected_unmanaged
+          - pending_approval
+          - managed
+        version:
+          type: string
+        serviceStatus:
+          type: string
+          enum:
+          - not_installed
+          - running
+          - stopped
+          - failed
+          - unknown
+        architecture:
+          type: string
+        configRevision:
+          type: integer
+          minimum: 0
+        configHash:
+          type: string
+        inboundCount:
+          type: integer
+          minimum: 0
+        apiListeningAddress:
+          type: string
+          description: 必须为 127.0.0.1 或 ::1
+        lastHealthCheckAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+      additionalProperties: false
+      required:
+      - nodeId
+      - managed
+      - serviceStatus
+    XrayTemplate:
+      type: object
+      properties:
+        templateId:
+          type: string
+          enum:
+          - vless-tls-vision
+          - vless-reality-vision
+          - custom-json
+        name:
+          type: string
+        flow:
+          type: string
+          description: 标准模板的用户级 flow 通常为 xtls-rprx-vision
+        security:
+          type: string
+          enum:
+          - tls
+          - reality
+          - custom
+        supportedVersions:
+          type: array
+          items:
+            type: string
+        requiredParameters:
+          type: array
+          items:
+            type: string
+        references:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+      required:
+      - templateId
+      - name
+      - security
+    XrayValidationIssue:
+      type: object
+      properties:
+        code:
+          type: string
+        severity:
+          type: string
+          enum:
+          - error
+          - warning
+          - info
+        nodeId:
+          type: string
+        fieldPath:
+          type: string
+        message:
+          type: string
+        suggestion:
+          type: string
+      additionalProperties: false
+      required:
+      - code
+      - severity
+      - message
+    XrayInstallationPreviewRequest:
+      type: object
+      properties:
+        targets:
+          $ref: '#/components/schemas/XrayTargetSelector'
+        targetVersion:
+          type: string
+          description: 固定的具体 Xray release 版本
+        manageExisting:
+          type: boolean
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        batchPolicy:
+          $ref: '#/components/schemas/XrayBatchPolicy'
+      additionalProperties: false
+      required:
+      - targets
+      - targetVersion
+      - batchPolicy
+    XrayNodeCheck:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        eligible:
+          type: boolean
+        existingInstallation:
+          type: boolean
+        hasPortConflict:
+          type: boolean
+        architecture:
+          type: string
+        diskEnough:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/XrayValidationIssue'
+        currentVersion:
+          type: string
+      additionalProperties: false
+      required:
+      - nodeId
+      - eligible
+      - issues
+    XrayPreview:
+      type: object
+      properties:
+        previewId:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+        targetNodeIdsSnapshot:
+          type: array
+          items:
+            type: string
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/XrayNodeCheck'
+        eligible:
+          type: boolean
+        requiresAdoptionApproval:
+          type: boolean
+        planHash:
+          type: string
+      additionalProperties: false
+      required:
+      - previewId
+      - expiresAt
+      - targetNodeIdsSnapshot
+      - checks
+      - eligible
+      - planHash
+    XrayJobRef:
+      type: object
+      properties:
+        jobId:
+          type: string
+        taskId:
+          type: string
+        accepted:
+          type: boolean
+        targetNodeIdsSnapshot:
+          type: array
+          items:
+            type: string
+        status:
+          type: string
+          enum:
+          - queued
+          - running
+          - partial
+          - succeeded
+          - failed
+          - cancelled
+          - expired
+        correlationId:
+          type: string
+      additionalProperties: false
+      required:
+      - jobId
+      - accepted
+      - status
+    XrayInstallRequest:
+      type: object
+      properties:
+        previewId:
+          type: string
+        planHash:
+          type: string
+        approvalId:
+          type: string
+          description: 服务端审批令牌，可缺省但不能绕过需要审批的操作
+        confirmAdoption:
+          type: boolean
+      additionalProperties: false
+      required:
+      - previewId
+      - planHash
+    XrayActionRequest:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+          - start
+          - stop
+          - restart
+          - update
+          - uninstall
+        targetVersion:
+          type: string
+        confirmRemoveNodeXray:
+          type: boolean
+        keepConfig:
+          type: boolean
+        approvalId:
+          type: string
+      additionalProperties: false
+      required:
+      - action
+    XrayTemplateParams:
+      type: object
+      properties:
+        listen:
+          type: string
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        domain:
+          type: string
+        tlsCertificateRef:
+          type: string
+          description: 证书中心引用，非私钥明文
+        realityPrivateKeyRef:
+          type: string
+          description: 安全凭据中心引用，非 REALITY 私钥明文
+        realityTarget:
+          type: string
+          description: target 主机:端口
+        realityServerNames:
+          type: array
+          items:
+            type: string
+        realityShortIds:
+          type: array
+          items:
+            type: string
+        userIds:
+          type: array
+          items:
+            type: string
+        flow:
+          type: string
+          enum:
+          - xtls-rprx-vision
+      additionalProperties: false
+      required:
+      - port
+    XrayConfigDocument:
+      type: object
+      properties:
+        templateId:
+          type: string
+          enum:
+          - vless-tls-vision
+          - vless-reality-vision
+          - custom-json
+        params:
+          $ref: '#/components/schemas/XrayTemplateParams'
+        customJson:
+          type: object
+          description: 仅自定义配置使用。服务器在处理后必须脱敏存储并安全检查；不得允许管理 API 直接暴露公网。
+          additionalProperties: true
+        credentialRefs:
+          type: array
+          items:
+            type: string
+        configLabel:
+          type: string
+      additionalProperties: false
+      required:
+      - templateId
+    XrayConfigValidateRequest:
+      type: object
+      properties:
+        targetNodeIds:
+          type: array
+          items:
+            type: string
+        document:
+          $ref: '#/components/schemas/XrayConfigDocument'
+        targetXrayVersion:
+          type: string
+      additionalProperties: false
+      required:
+      - targetNodeIds
+      - document
+      - targetXrayVersion
+    XrayConfigValidation:
+      type: object
+      properties:
+        valid:
+          type: boolean
+        perNode:
+          type: array
+          items:
+            $ref: '#/components/schemas/XrayNodeCheck'
+        sanitizedDiff:
+          type: string
+          description: 脱敏配置差异
+        supported:
+          type: boolean
+        notes:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+      required:
+      - valid
+      - perNode
+    XrayDeployPreviewRequest:
+      type: object
+      properties:
+        targets:
+          $ref: '#/components/schemas/XrayTargetSelector'
+        document:
+          $ref: '#/components/schemas/XrayConfigDocument'
+        expectedRevisionByNode:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        batchPolicy:
+          $ref: '#/components/schemas/XrayBatchPolicy'
+      additionalProperties: false
+      required:
+      - targets
+      - document
+      - batchPolicy
+    XrayDeployPreview:
+      type: object
+      properties:
+        previewId:
+          type: string
+        targetNodeIdsSnapshot:
+          type: array
+          items:
+            type: string
+        expiresAt:
+          type: string
+          format: date-time
+        sanitizedDiff:
+          type: string
+        checks:
+          type: array
+          items:
+            $ref: '#/components/schemas/XrayNodeCheck'
+        planHash:
+          type: string
+        valid:
+          type: boolean
+      additionalProperties: false
+      required:
+      - previewId
+      - targetNodeIdsSnapshot
+      - checks
+      - planHash
+      - valid
+    XrayDeployRequest:
+      type: object
+      properties:
+        previewId:
+          type: string
+        planHash:
+          type: string
+        approvalId:
+          type: string
+      additionalProperties: false
+      required:
+      - previewId
+      - planHash
+    XrayConfigurationRevision:
+      type: object
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+        nodeId:
+          type: string
+        configHash:
+          type: string
+        summary:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        createdBy:
+          type: string
+        status:
+          type: string
+          enum:
+          - active
+          - archived
+          - failed
+          - restored
+        sanitizedDiff:
+          type: string
+        templateId:
+          type: string
+      additionalProperties: false
+      required:
+      - revision
+      - nodeId
+      - configHash
+      - createdAt
+      - status
+    XrayRollbackRequest:
+      type: object
+      properties:
+        revision:
+          type: integer
+          minimum: 0
+        expectedCurrentRevision:
+          type: integer
+          minimum: 0
+        approvalId:
+          type: string
+      additionalProperties: false
+      required:
+      - revision
+      - expectedCurrentRevision
+    XrayManagedUser:
+      type: object
+      properties:
+        userId:
+          type: string
+        nodeId:
+          type: string
+        inboundTag:
+          type: string
+        displayName:
+          type: string
+        statsIdentifier:
+          type: string
+          description: 唯一 Xray user email，仅用于标识，不要求真实邮箱
+        credentialRef:
+          type: string
+          description: 敏感 UUID 身份仅以安全凭据引用保存
+        flow:
+          type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        totalUplinkBytes:
+          type: integer
+          minimum: 0
+        totalDownlinkBytes:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+      required:
+      - userId
+      - nodeId
+      - inboundTag
+      - displayName
+      - statsIdentifier
+      - enabled
+    XrayUserCreateRequest:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        inboundTag:
+          type: string
+        displayName:
+          type: string
+        flow:
+          type: string
+          enum:
+          - xtls-rprx-vision
+        generateCredential:
+          type: boolean
+        credentialRef:
+          type: string
+      additionalProperties: false
+      required:
+      - nodeId
+      - inboundTag
+      - displayName
+    XrayUserPatchRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+        enabled:
+          type: boolean
+        rotateCredential:
+          type: boolean
+        expectedRevision:
+          type: integer
+          minimum: 0
+      additionalProperties: false
+    XrayClientExportRequest:
+      type: object
+      properties:
+        format:
+          type: string
+          enum:
+          - vless-uri
+          - qrcode
+          - json
+        approvalId:
+          type: string
+      additionalProperties: false
+      required:
+      - format
+    XrayClientExportResult:
+      type: object
+      properties:
+        format:
+          type: string
+        oneTimeValue:
+          type: string
+          description: 敏感连接数据，仅一次性响应，不写入日志或缓存
+        expiresAt:
+          type: string
+          format: date-time
+      additionalProperties: false
+      required:
+      - format
+      - oneTimeValue
+      - expiresAt
+    XrayTrafficSample:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        inboundTag:
+          type: string
+        userId:
+          type: string
+        scope:
+          type: string
+          enum:
+          - node
+          - inbound
+          - user
+        uplinkBytes:
+          type: integer
+          minimum: 0
+        downlinkBytes:
+          type: integer
+          minimum: 0
+        sampledAt:
+          type: string
+          format: date-time
+        counterEpoch:
+          type: string
+        complete:
+          type: boolean
+        gapReason:
+          type: string
+        source:
+          type: string
+          enum:
+          - xray-stats
+        billingEquivalent:
+          type: boolean
+          const: false
+      additionalProperties: false
+      required:
+      - nodeId
+      - scope
+      - uplinkBytes
+      - downlinkBytes
+      - sampledAt
+      - counterEpoch
+      - complete
+      - source
+    XrayTrafficSeries:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/XrayTrafficSample'
+        nextCursor:
+          type: string
+        sourceType:
+          type: string
+          enum:
+          - proxy_only
+        notice:
+          type: string
+      additionalProperties: false
+      required:
+      - items
+      - sourceType
+    XrayTrafficSettings:
+      type: object
+      properties:
+        samplingIntervalSeconds:
+          type: integer
+          minimum: 30
+          maximum: 300
+        enableUserStats:
+          type: boolean
+        enableInboundStats:
+          type: boolean
+        enableOutboundStats:
+          type: boolean
+        thresholdsBytes:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+      additionalProperties: false
+      required:
+      - samplingIntervalSeconds
+    XrayError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              enum:
+              - NOT_AUTHORIZED
+              - NODE_OFFLINE
+              - ALREADY_MANAGED
+              - EXISTING_UNMANAGED_INSTANCE
+              - PORT_CONFLICT
+              - UNSUPPORTED_PLATFORM
+              - UNSUPPORTED_XRAY_VERSION
+              - CONFIG_TEST_FAILED
+              - CONFIG_REVISION_CONFLICT
+              - SECRET_UNAVAILABLE
+              - TASK_EXPIRED
+              - FAILED_SAFETY_CHECK
+              - STATS_UNAVAILABLE
+              - VALIDATION_FAILED
+              - JOB_CONFLICT
+            message:
+              type: string
+            correlationId:
+              type: string
+            nodeId:
+              type: string
+            details:
+              type: object
+              additionalProperties: true
+          additionalProperties: false
+          required:
+          - code
+          - message
+      additionalProperties: false
+      required:
+      - error

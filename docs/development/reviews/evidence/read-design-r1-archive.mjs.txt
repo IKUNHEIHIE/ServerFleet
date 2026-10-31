@@ -1,0 +1,68 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { gzipSync, gunzipSync } from 'node:zlib';
+const technicalHead = '1600197342da79c2d9cee209a499ff1f88d32e5c';
+const baseMain = '3c817f881bd9f96f23f525af50199aa56e3a5291';
+const authors = [
+  {task:'READ-HTTP-DESIGN-01-R1',session:'deepseek-01',head:'4fbdcf5126b02981f8f3fcf5cb403641693172fb',prior:'ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734'},
+  {task:'READ-WEB-DESIGN-01-R1',session:'gemini-01',head:'39b2b7cd1bf047c9691206c08bc489ff4ef112c9',prior:'63b0feb8dffad7dc88252dd7dd786b80c7e54e7c'},
+];
+const evidence='docs/development/reviews/evidence'; mkdirSync(evidence,{recursive:true});
+const parse=p=>JSON.parse(readFileSync(p,'utf8').replace(/^\uFEFF/,''));
+const save=(p,v)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
+const hash=b=>createHash('sha256').update(b).digest('hex');
+for(const a of authors) execFileSync('git',['merge-base','--is-ancestor',a.head,'HEAD']);
+const runtimePaths=['apps','internal','api','proto','gen','tests','scripts','plugins','package.json','package-lock.json','go.mod','go.sum','AGENTS.md','.github'];
+execFileSync('git',['diff','--exit-code',baseMain,'HEAD','--',...runtimePaths]);
+execFileSync('git',['diff','--exit-code','--',...runtimePaths]);
+const combined=parse('reports/check-all.json'), security=parse('reports/check-security.json');
+if([...combined.results,...security.results].some(x=>x.status!=='PASS')) throw new Error('check not PASS');
+const counts=parse('reports/read-design-r1-test-counts.json');
+if(counts.goFailures!==0||Number(counts.webFailures)!==0||Number(counts.webErrors)!==0) throw new Error('test failure');
+const refs=parse('reports/read-design-r1-references.json'), integratedRefs=parse('reports/read-design-r1-integrated-references.json');
+if([...refs,...integratedRefs].some(x=>x.rangeProblems.length||!x.scopeValid)) throw new Error('reference/scope failure');
+const ds='D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-http-design-ds01/reports/';
+const gm='D:/admin/desktop/codex/myproject/ks/.worktrees/docs--node-read-web-design-gm01/reports/';
+const sources=[
+  ['npm-ci','reports/read-design-r1-npm-ci.log'],['tools-install','reports/read-design-r1-tools-install.log'],
+  ['check','reports/read-design-r1-check.log'],['security','reports/read-design-r1-security.log'],
+  ['source-integrity','reports/source-integrity.log'],['check-all','reports/check-all.json'],
+  ['check-security','reports/check-security.json'],['g2r02-results','reports/g2r02-results.json'],
+  ['g2r03-results','reports/g2r03-results.json'],['test-counts','reports/read-design-r1-test-counts.json'],
+  ['web-junit','reports/web-junit.xml'],['author-http-policy',ds+'check-policy.json'],
+  ['author-http-tooling-tests',ds+'tooling-tests.log'],['author-web-policy',gm+'check-policy.json'],
+  ['author-web-junit',gm+'web-junit.xml'],['final-policy','reports/read-design-r1-final-policy.log'],
+  ['final-policy-result','reports/check-policy.json'],
+];
+const manifest=[];
+for(const [label,source] of sources){
+  const raw=readFileSync(source), packed=gzipSync(raw), name=`read-design-r1-${label}.gz.b64`;
+  writeFileSync(`${evidence}/${name}`,packed.toString('base64').match(/.{1,76}/g).join('\n')+'\n');
+  const restored=gunzipSync(Buffer.from(readFileSync(`${evidence}/${name}`,'utf8'),'base64'));
+  if(hash(raw)!==hash(restored)) throw new Error(`archive mismatch: ${label}`);
+  manifest.push({label,source,artifact:name,encoding:'base64(gzip(original bytes))',originalBytes:raw.length,sha256:hash(raw),roundTrip:'PASS'});
+}
+copyFileSync('reports/_review/read-design-r1/review-references.mjs',`${evidence}/read-design-r1-reference-validator.mjs.txt`);
+copyFileSync('reports/_review/read-design-r1/archive.mjs',`${evidence}/read-design-r1-archive.mjs.txt`);
+save(`${evidence}/read-design-r1-references.json`,refs);
+save(`${evidence}/read-design-r1-integrated-references.json`,integratedRefs);
+save(`${evidence}/read-design-r1-manifest.json`,{date:'2026-10-30',timezone:'Asia/Shanghai',technicalHead,
+  note:'UTC check timestamps are 2026-10-29; local Asia/Shanghai date is 2026-10-30. No output trimming or test suppression.',
+  archiveAttempts:[{attempt:1,status:'FAIL',reason:'ENOENT: reviewer expected author reports/check-policy-r1.log; actual author output has per-step logs'},{attempt:2,status:'PASS',correction:'Read existing author tooling-tests.log with policy JSON; no author evidence created or altered'}],artifacts:manifest});
+save('docs/development/reviews/READ-DESIGN-R1-RESULTS.json',{
+  task:'READ-DESIGN-R1-REVIEW',reviewerSession:'codex-review-01',date:'2026-10-30',timezone:'Asia/Shanghai',baseMain,
+  authors:authors.map(a=>({...a,decision:'ACCEPT_PROPOSED_WITH_INTEGRATION_CLARIFICATIONS',cleanAtReview:true,onlyThreeMarkdownModified:true,ancestorOfCombinedHead:true})),
+  priorAcceptedAuthHead:'48409bacf4e582f8ab4f196982a5677fa3a21d18',
+  findings:['HD01-R01','HD01-R02','WD01-R01','WD01-R02'].map(id=>({id,priority:2,status:'CLOSED_DOCUMENT_DESIGN_ONLY'})),
+  integrationClarifications:{commit:technicalHead,files:6,items:['stateful credential authority lookup before validity conclusion','viewEpoch key participation and terminal-error load gate; onlineOnly request errors'],runtimeCodeChanged:false},
+  documentChecks:refs.map(x=>({task:x.task,references:x.referenceCount,files:x.referencedFiles,rangeProblems:x.rangeProblems.length,originalDocumentsHashed:x.documents.length})),
+  integratedReferenceCheck:'PASS',semanticReview:'PASS_FOR_PROPOSED_DOCUMENT_RECEIPT',testedCombinedHead:technicalHead,
+  checks:{npmCi:'PASS',toolsInstall:'PASS',combined,security,counts,finalPolicy:parse('reports/check-policy.json'),originalFilesVerified:69,byteExactOriginalCandidatesVerified:3,
+    g2r03CandidateSha256:hash(readFileSync('api/openapi/revisions/g2-r03/nodes-read-candidate.yaml')),productionCodeOrCandidateChanged:false},
+  evidenceManifest:'evidence/read-design-r1-manifest.json',
+  coordination:{allCurrentAuthorTasks:'COMPLETE_STOP',nextProposal:'W07-LEGACY-VIEW',nextStatus:'PROPOSED_NOT_AUTHORIZED',newAuthorWorktreesCreated:0,implementationAuthorized:false,reaskA1B1:false},
+  runtimeAuthentication:'UNTESTED',runtimeHTTP:'UNTESTED',runtimeStorage:'UNTESTED',newLegacyBrowser:'UNTESTED',
+  g2Frozen:false,openDecisions:['D01','D02','D03','D04','D05','D06','D07','P1-C10'],automaticallyStartedAgents:0,pushed:false
+});
+console.log(JSON.stringify({archives:manifest.length,roundTrips:'PASS',references:refs.map(x=>x.referenceCount),counts,result:'PASS'},null,2));

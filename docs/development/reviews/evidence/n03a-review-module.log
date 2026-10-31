@@ -1,0 +1,3 @@
+ok  	serverfleet.local/serverfleet/internal/nodes	2.272s	coverage: 96.3% of statements
+ok  	serverfleet.local/serverfleet/internal/nodes/testkit	1.916s	coverage: 100.0% of statements
+ok  	serverfleet.local/serverfleet/internal/auth	2.463s	coverage: 98.6% of statements

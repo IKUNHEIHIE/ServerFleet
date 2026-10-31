@@ -1,0 +1,91 @@
+package einopoc
+
+import (
+	"context"
+	"encoding/json"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/cloudwego/eino/components/tool"
+	"github.com/cloudwego/eino/compose"
+	"github.com/cloudwego/eino/schema"
+	"serverfleet.local/serverfleet/internal/ai"
+)
+
+// This is an orchestration/authorization integration experiment with synthetic
+// toolcalls. No ChatModel, BYOK, task scheduler, Agent or real root action exists.
+type guardedTool struct {
+	scope      *ai.Scope
+	definition ai.ToolDefinition
+	current    *ai.CurrentAuthority
+	calls      *atomic.Int32
+}
+
+func (g guardedTool) Info(context.Context) (*schema.ToolInfo, error) {
+	return &schema.ToolInfo{Name: g.definition.ID, Desc: "guarded test capability"}, nil
+}
+func (g guardedTool) InvokableRun(ctx context.Context, arguments string, _ ...tool.Option) (string, error) {
+	var input struct {
+		Node     string `json:"node"`
+		Revision uint64 `json:"revision"`
+	}
+	decoder := json.NewDecoder(strings.NewReader(arguments))
+	decoder.DisallowUnknownFields()
+	if len(arguments) > 1024 || decoder.Decode(&input) != nil {
+		return "", ai.ErrToolDenied
+	}
+	call := ai.ToolCall{ToolID: g.definition.ID, NodeIDs: []string{input.Node}, Parameters: []byte(arguments), ScopeRevision: input.Revision}
+	if err := ai.EvaluateTool(*g.scope, call, g.definition, *g.current, nil, time.Now()); err != nil {
+		return "", err
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	g.calls.Add(1)
+	return `{"testCapabilityInvoked":true}`, nil
+}
+func TestEinoToolNodeCannotBypassServerGate(t *testing.T) {
+	ctx := context.Background()
+	scope, _ := ai.NewScope("test-session", "test-subject")
+	scope.Mode = ai.LowRisk
+	current := ai.CurrentAuthority{SubjectID: "test-subject", AllowedNodes: []string{"node-a"}, AllowedTools: []string{"node_read", "root_shell"}}
+	calls := &atomic.Int32{}
+	read := guardedTool{&scope, ai.ToolDefinition{ID: "node_read", ReadOnly: true, AutoAllowed: true}, &current, calls}
+	root := guardedTool{&scope, ai.ToolDefinition{ID: "root_shell", RootShell: true}, &current, calls}
+	node, err := compose.NewToolNode(ctx, &compose.ToolsNodeConfig{Tools: []tool.BaseTool{read, root}, ExecuteSequentially: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	invoke := func(name, args string) error {
+		_, err := node.Invoke(ctx, &schema.Message{Role: schema.Assistant, ToolCalls: []schema.ToolCall{{ID: "test-call", Type: "function", Function: schema.FunctionCall{Name: name, Arguments: args}}}})
+		return err
+	}
+	args := `{"node":"node-a","revision":1}`
+	if err = invoke("node_read", args); err == nil || calls.Load() != 0 {
+		t.Fatal("zero-resource call bypassed gate", err)
+	}
+	scope.Nodes = []string{"node-a"}
+	scope.NodeActions["node-a"] = []string{"node_read", "root_shell"}
+	if err = invoke("node_read", args); err != nil || calls.Load() != 1 {
+		t.Fatal("permitted test invocation failed", err)
+	}
+	current.AllowedNodes = nil
+	if err = invoke("node_read", args); err == nil || calls.Load() != 1 {
+		t.Fatal("revoked resource bypassed gate", err)
+	}
+	current.AllowedNodes = []string{"node-a"}
+	scope.Mode = ai.FullAccess
+	scope.FullSince = time.Now()
+	scope.FullUntil = scope.FullSince.Add(15 * time.Minute)
+	if err = invoke("root_shell", args); err == nil || calls.Load() != 1 {
+		t.Fatal("full access bypassed root approval", err)
+	}
+	if err = invoke("root_shell", `{"node":"node-a","revision":1,"approved":true}`); err == nil || calls.Load() != 1 {
+		t.Fatal("model forged approval", err)
+	}
+	if err = invoke("unregistered", args); err == nil || calls.Load() != 1 {
+		t.Fatal("unregistered tool invoked", err)
+	}
+}

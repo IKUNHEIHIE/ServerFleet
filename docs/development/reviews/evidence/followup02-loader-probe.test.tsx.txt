@@ -1,0 +1,67 @@
+import { act, render, screen, fireEvent } from "@testing-library/react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { expect, it, vi } from "vitest";
+import { NodeLoader, type NodeSource } from "../../../apps/web/src/features/nodes/node-loader";
+import { readyNodes } from "../../../apps/web/src/features/nodes/test/fixtures";
+import type { NodeListItemView } from "../../../apps/web/src/features/nodes/types";
+
+function deferred() {
+  let resolve!: (nodes: readonly NodeListItemView[]) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<readonly NodeListItemView[]>((done, fail) => { resolve = done; reject = fail; });
+  return { promise, resolve, reject };
+}
+function Probe({ commits, children }: { commits: string[]; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { commits.push(ref.current?.textContent ?? ""); });
+  return <div ref={ref}>{children}</div>;
+}
+
+it("restoring a same-key source after invalid load must hide old rows, count and detail in first commit", async () => {
+  const first = deferred();
+  const second = deferred();
+  const source: NodeSource = { key: "scope-a", load: vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise) };
+  const broken = { key: "scope-a", load: undefined } as unknown as NodeSource;
+  const commits: string[] = [];
+  const view = (next: NodeSource) => <Probe commits={commits}><NodeLoader source={next} /></Probe>;
+  const { rerender } = render(view(source));
+  await act(async () => { first.resolve(readyNodes); });
+  fireEvent.click(screen.getByRole("row", { name: /aws-tokyo-01/ }));
+  expect(screen.getByRole("region", { name: "节点详情" })).toBeVisible();
+  rerender(view(broken));
+  expect(screen.getByRole("alert")).toBeVisible();
+  expect(screen.queryByRole("table")).toBeNull();
+  commits.length = 0;
+  rerender(view(source));
+  expect(source.load).toHaveBeenCalledTimes(2);
+  expect(commits[0]).not.toContain("aws-tokyo-01");
+  expect(commits[0]).not.toContain("共 8 个节点");
+  expect(commits[0]).not.toContain("节点详情");
+  expect(commits[0]).toContain("正在加载节点");
+});
+
+for (const settleOld of ["success", "failure"] as const) {
+  it(`same-key invalid load aborts old pending request and ignores late ${settleOld}`, async () => {
+    const first = deferred();
+    const second = deferred();
+    const signals: AbortSignal[] = [];
+    const source: NodeSource = {
+      key: "scope-a",
+      load: vi.fn(({ signal }: { signal: AbortSignal }) => { signals.push(signal); return signals.length === 1 ? first.promise : second.promise; }),
+    };
+    const broken = { key: "scope-a", load: null } as unknown as NodeSource;
+    const { rerender } = render(<NodeLoader source={source} />);
+    rerender(<NodeLoader source={broken} />);
+    expect(signals[0].aborted).toBe(true);
+    rerender(<NodeLoader source={source} />);
+    await act(async () => {
+      if (settleOld === "success") first.resolve(readyNodes);
+      else first.reject(new Error("late secret token"));
+    });
+    expect(screen.getByRole("status")).toHaveTextContent("正在加载节点");
+    expect(screen.queryByRole("table")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    await act(async () => { second.resolve([]); });
+    expect(document.body.textContent).not.toContain("aws-tokyo-01");
+  });
+}

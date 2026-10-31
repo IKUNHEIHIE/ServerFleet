@@ -1,0 +1,61 @@
+import { readFileSync,writeFileSync,mkdirSync,copyFileSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
+import { gzipSync,gunzipSync } from 'node:zlib';
+const base='6052f5966735b62283876acbd43b78320d0fe60d';
+const tested='98f6d94d94468d390dd76d2744b8f62198dd033c';
+const primary='D:/admin/desktop/codex/myproject/ks';
+const evidence='docs/development/reviews/evidence';mkdirSync(evidence,{recursive:true});
+const read=p=>readFileSync(p,'utf8').replace(/^\uFEFF/,'');
+const parse=p=>JSON.parse(read(p));
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const save=(p,v)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
+const checks=parse('reports/check-all.json'),security=parse('reports/check-security.json'),counts=parse('reports/v09-five-day-test-counts.json');
+if([...checks.results,...security.results].some(x=>x.status!=='PASS')||counts.goFailures||Number(counts.webFailures)) throw new Error('Checks not PASS');
+const packages=[
+  {id:'V09-5D-CX',session:'codex-02',branch:'feature/v09-platform-cx02',directory:`${primary}/.worktrees/feature--v09-platform-cx02`,subtasks:8},
+  {id:'V09-5D-DS',session:'deepseek-02',branch:'feature/v09-services-ds02',directory:`${primary}/.worktrees/feature--v09-services-ds02`,subtasks:9},
+  {id:'V09-5D-GM',session:'gemini-02',branch:'feature/v09-console-gm02',directory:`${primary}/.worktrees/feature--v09-console-gm02`,subtasks:9},
+];
+for(const p of packages){
+  const git=(...a)=>execFileSync('git',['-C',p.directory,...a],{encoding:'utf8'}).trim();
+  if(git('branch','--show-current')!==p.branch||git('status','--porcelain')) throw new Error(`Author checkout changed: ${p.id}`);
+  p.preparedFrom=git('rev-parse','HEAD');
+  p.nodeModulesIndependent=true;p.toolBinIndependent=true;p.dependencyInstall='PASS';p.initialTrackedState='CLEAN';
+  for(const exe of ['protoc-gen-go.exe','staticcheck.exe','govulncheck.exe','actionlint.exe']){
+    if(hash(readFileSync(`${primary}/.tools/bin/${exe}`))!==hash(readFileSync(`${p.directory}/.tools/bin/${exe}`))) throw new Error(`Tool copy mismatch ${p.id}/${exe}`);
+  }
+}
+const sources=[
+  ['npm-ci','reports/v09-five-day-npm-ci.log'],['tools-install','reports/v09-five-day-tools-install.log'],
+  ['initial-check','reports/v09-five-day-check.log'],['initial-security','reports/v09-five-day-security.log'],
+  ['final-check','reports/v09-five-day-final-check.log'],['final-security','reports/v09-five-day-final-security.log'],
+  ['boundaries','reports/v09-five-day-boundaries.log'],['source-integrity','reports/source-integrity.log'],
+  ['check-all','reports/check-all.json'],['check-security','reports/check-security.json'],['counts','reports/v09-five-day-test-counts.json'],
+  ...packages.map(p=>[`${p.session}-setup`,`${p.directory}/reports/v09-sprint-setup.log`]),
+];
+const artifacts=[];
+for(const [label,source] of sources){
+  const raw=readFileSync(source),file=`v09-five-day-${label}.gz.b64`;
+  writeFileSync(`${evidence}/${file}`,gzipSync(raw).toString('base64').match(/.{1,76}/g).join('\n')+'\n');
+  if(hash(gunzipSync(Buffer.from(read(`${evidence}/${file}`),'base64')))!==hash(raw)) throw new Error(`Archive mismatch ${label}`);
+  artifacts.push({label,source,artifact:file,encoding:'base64(gzip(original bytes))',originalBytes:raw.length,sha256:hash(raw),roundTrip:'PASS'});
+}
+copyFileSync('reports/_review/v09-five-day/archive.mjs',`${evidence}/v09-five-day-archive.mjs.txt`);
+save(`${evidence}/v09-five-day-manifest.json`,{date:'2026-10-30',timezone:'Asia/Shanghai',technicalHead:tested,artifacts});
+const coverage=parse(`${evidence}/v09-five-day-coverage.json`);
+save('docs/development/reviews/V09-FIVE-DAY-DISPATCH-RESULTS.json',{
+  task:'V09-5D-DISPATCH',session:'codex-review-01',date:'2026-10-30',timezone:'Asia/Shanghai',baseMain:base,
+  userRequestedScope:'FULL_V0.9',userRequestedDeadline:'five days',plannedDeadline:'2026-11-03T23:59:00+08:00',feasibility:'HIGH_RISK_NOT_GUARANTEED',
+  decision:'AUTHORIZE_AND_PREPARE_THREE_COMPOSITE_LOCAL_IMPLEMENTATION_PACKAGES',packages,
+  authorFinalBaselineRule:'Fast-forward all clean prepared author branches to final reviewed main before handoff; exact SHA recorded in primary reports/v09-five-day-handoff.json and user handoff',
+  coverage,dependencyCoordination:{newDomains:13,newArchitectureTopLevelTests:1,allowedDirectionCases:5,deniedDirectionCases:9,wildcardAllow:false,oldAgentStorageBoundariesPreserved:true},
+  initialTestedHead:'c75bf330e3614cd260111499a6d1eeffc2609646',initialCombinedChecks:'PASS',initialSecurity:'PASS',
+  testedTechnicalHead:tested,checks:{npmCi:'PASS',toolsInstall:'PASS',combined:checks,security,counts,originalFilesVerified:69,byteExactOriginalCandidatesVerified:3,
+    g2r03CandidateSha256:hash(readFileSync('api/openapi/revisions/g2-r03/nodes-read-candidate.yaml'))},
+  changed:'Task ownership/scope, docs/development/dependencies.json, architecture test; no business implementation or immutable source/contract changes',
+  evidenceManifest:'evidence/v09-five-day-manifest.json',
+  completeProductAcceptancePasses:0,g2Frozen:false,productionOrCloudAccessAuthorized:false,agentsAutomaticallyStarted:0,messagesSent:0,pushed:false,
+  conditions:'Authorized Linux/dual architecture/1C1G and third-party tests, applicable missing security originals, G2/PoC evidence remain unresolved; no scope reduction or mock-as-success'
+});
+console.log(JSON.stringify({status:'PASS',packages:packages.length,subtasks:26,ac:coverage.assignedACs,poc:8,archives:artifacts.length,counts},null,2));

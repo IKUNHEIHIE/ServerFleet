@@ -1,0 +1,407 @@
+
+ RUN  v5.0.5 D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-accessibility-gm01/apps/web
+
+ ❯ ../../reports/_review/batch05/repeated-focus.test.tsx (2 tests | 2 failed) 174ms
+   ❯ independent W04 repeated selection regression (2)
+     × keyboard activation of an already pointer-selected row focuses detail immediately 130ms
+     × a background refresh does not perform a delayed focus request after the user moves to search 43ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 2 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  ../../reports/_review/batch05/repeated-focus.test.tsx > independent W04 repeated selection regression > keyboard activation of an already pointer-selected row focuses detail immediately
+Error: expect(element).toHaveFocus()
+
+Expected element with focus:
+  <section
+  aria-labelledby="_r_3_"
+  class="rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  tabindex="-1"
+>
+  <header
+    class="flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4"
+  >
+    <div>
+      <h2
+        class="font-semibold"
+        id="_r_3_"
+      >
+        节点详情
+      </h2>
+      <p
+        class="mt-1 whitespace-nowrap font-medium"
+      >
+        aws-tokyo-01
+      </p>
+      <p
+        class="whitespace-nowrap font-mono text-xs text-muted-foreground"
+      >
+        node-online-01
+      </p>
+    </div>
+    <button
+      class="inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      type="button"
+    >
+      关闭详情
+    </button>
+  </header>
+  <dl
+    class="grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3"
+  >
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        状态
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        <span
+          class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700"
+        >
+          <span
+            aria-hidden="true"
+            class="size-1.5 rounded-full bg-emerald-500"
+          />
+          在线
+        </span>
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        平台
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        Ubuntu 24.04
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        Agent 版本
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        v0.1.0
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        最近在线
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        2026-10-29 02:59 UTC
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        CPU 使用率
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        <span
+          class="inline-flex flex-col gap-0.5"
+        >
+          <span
+            class="tabular-nums"
+          >
+            18%
+          </span>
+        </span>
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        内存使用率
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        <span
+          class="inline-flex flex-col gap-0.5"
+        >
+          <span
+            class="tabular-nums"
+          >
+            46%
+          </span>
+        </span>
+      </dd>
+    </div>
+  </dl>
+  <p
+    class="border-t px-6 py-3 text-xs text-muted-foreground"
+  >
+    只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
+  </p>
+</section>
+Received element with focus:
+  <tr
+  aria-current="true"
+  class="border-t align-top transition-colors cursor-pointer hover:bg-secondary/40 bg-primary/10 ring-1 ring-inset ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+  tabindex="0"
+>
+  <th
+    class="px-4 py-3 text-left font-normal"
+    scope="row"
+  >
+    <span
+      class="whitespace-nowrap font-medium"
+    >
+      aws-tokyo-01
+    </span>
+    <span
+      class="mt-0.5 block whitespace-nowrap font-mono text-xs text-muted-foreground"
+    >
+      node-online-01
+    </span>
+  </th>
+  <td
+    class="px-4 py-3"
+  >
+    <span
+      class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700"
+    >
+      <span
+        aria-hidden="true"
+        class="size-1.5 rounded-full bg-emerald-500"
+      />
+      在线
+    </span>
+  </td>
+  <td
+    class="px-4 py-3"
+  >
+    Ubuntu 24.04
+  </td>
+  <td
+    class="px-4 py-3"
+  >
+    v0.1.0
+  </td>
+  <td
+    class="px-4 py-3 text-right"
+  >
+    <span
+      class="inline-flex flex-col gap-0.5 items-end"
+    >
+      <span
+        class="tabular-nums"
+      >
+        18%
+      </span>
+    </span>
+  </td>
+  <td
+    class="px-4 py-3 text-right"
+  >
+    <span
+      class="inline-flex flex-col gap-0.5 items-end"
+    >
+      <span
+        class="tabular-nums"
+      >
+        46%
+      </span>
+    </span>
+  </td>
+  <td
+    class="px-4 py-3 whitespace-nowrap"
+  >
+    2026-10-29 02:59 UTC
+  </td>
+</tr>
+ ❯ ../../reports/_review/batch05/repeated-focus.test.tsx:21:58
+     19|     render(<NodeListWorkspace state={readyState} />);
+     20|     selectThenActivateSameRow();
+     21|     expect(screen.getByRole("region", { name: "节点详情" })).toHaveFocus();
+       |                                                          ^
+     22|   });
+     23|
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/2]⎯
+
+ FAIL  ../../reports/_review/batch05/repeated-focus.test.tsx > independent W04 repeated selection regression > a background refresh does not perform a delayed focus request after the user moves to search
+Error: expect(element).toHaveFocus()
+
+Expected element with focus:
+  <input
+  class="mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full"
+  id="_r_4_"
+  placeholder="输入名称或节点 ID"
+  type="search"
+  value=""
+/>
+Received element with focus:
+  <section
+  aria-labelledby="_r_7_"
+  class="rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+  tabindex="-1"
+>
+  <header
+    class="flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4"
+  >
+    <div>
+      <h2
+        class="font-semibold"
+        id="_r_7_"
+      >
+        节点详情
+      </h2>
+      <p
+        class="mt-1 whitespace-nowrap font-medium"
+      >
+        aws-tokyo-01-updated
+      </p>
+      <p
+        class="whitespace-nowrap font-mono text-xs text-muted-foreground"
+      >
+        node-online-01
+      </p>
+    </div>
+    <button
+      class="inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+      type="button"
+    >
+      关闭详情
+    </button>
+  </header>
+  <dl
+    class="grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3"
+  >
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        状态
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        <span
+          class="inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700"
+        >
+          <span
+            aria-hidden="true"
+            class="size-1.5 rounded-full bg-emerald-500"
+          />
+          在线
+        </span>
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        平台
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        Ubuntu 24.04
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        Agent 版本
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        v0.1.0
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        最近在线
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        2026-10-29 02:59 UTC
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        CPU 使用率
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        <span
+          class="inline-flex flex-col gap-0.5"
+        >
+          <span
+            class="tabular-nums"
+          >
+            18%
+          </span>
+        </span>
+      </dd>
+    </div>
+    <div>
+      <dt
+        class="text-xs text-muted-foreground"
+      >
+        内存使用率
+      </dt>
+      <dd
+        class="mt-1 text-sm"
+      >
+        <span
+          class="inline-flex flex-col gap-0.5"
+        >
+          <span
+            class="tabular-nums"
+          >
+            46%
+          </span>
+        </span>
+      </dd>
+    </div>
+  </dl>
+  <p
+    class="border-t px-6 py-3 text-xs text-muted-foreground"
+  >
+    只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
+  </p>
+</section>
+ ❯ ../../reports/_review/batch05/repeated-focus.test.tsx:31:20
+     29|     expect(search).toHaveFocus();
+     30|     rerender(<NodeListWorkspace state={{ status: "ready", nodes: ready…
+     31|     expect(search).toHaveFocus();
+       |                    ^
+     32|   });
+     33| });
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[2/2]⎯
+
+
+ Test Files  1 failed (1)
+      Tests  2 failed (2)
+   Start at  12:58:02
+   Duration  1.19s (environment 45%, import 20%, tests 16%, transform 10%, setup 9%)
+
+JUNIT report written to D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-accessibility-gm01/reports/batch05-focus-probe-junit.xml

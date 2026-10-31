@@ -1,0 +1,13 @@
+# 持久工作流编排候选
+
+workflows.Engine与SQLWorkflowBackend保存版本化Definition、匹配事件的冻结Plan、稳定step幂等键和RunView中的统一taskId。支持manual/schedule/monitor.alert/task.completed可信事件、相等条件、固定注册action规范参数、顺序步骤、统一任务审批等待、失败终止、UNKNOWN永久暂停。没有插件/SSH/Agent直连、执行器或第二套任务队列；通知也必须成为已注册受控动作，不能凭模型输入发信。
+
+Save(ctx,WorkflowOperation,Definition)以当前可信Web actor为owner，expected0创建或CAS更新；客户端SubjectID不能换主体。Trigger只记录planned，不宣称执行；同eventId改事件内容409，不因修订重跑旧事件。Advance每次检查definition.enabled/revision、当前owner权限，再SubmitTask；仅查询权威task state确认前一步succeeded后推进，awaiting_approval保持等待，unknown进入paused_unknown不自动恢复。CheckDispatch/纯CheckDispatchState供唯一任务每次派发/重试检查，禁止停用/修订/撤权后的旧快照。执行已开始仍按真实可取消性处理，不声称可回滚副作用。
+
+精确新接缝：WorkflowTx.Read/Write、Admit、SubmitTask(ctx,TaskIntent,WorkflowBinding)→TaskReceipt、TaskState→WorkflowTaskState、Audit；所有写/提交/审批消费/审计必须同一DS Tx。WorkflowBinding包含workflowId/runId/revision/step，需要随tasks保存且execute-time调用本域checker。SQLWorkflowStore.InTx映射DS InTx和这些同Tx服务方法，View只读，调度已有Tx可直接读取领域仓储并调用CheckDispatchState，不能嵌套第二个writer。仅workflow域解释自己的payload；CX不读tasks/nodes私表。
+
+已只读核对pin bb8954988fe7b2f832edf291803529d7745e4f0a的DS Service：Submit内部独立开启事务，尚无SubmitTx；Command亦未携带完整executionId/plan摘要/权限世代。因此当前**不能**把该Submit在WorkflowTx内调用，也不重写一份Submit到本域。请DS/总控在S03接收中增加同Tx提交或回提经过审查的幂等交接协议、WorkflowBinding持久和派发检查；当前缺项明确返回ErrWorkflowUnavailable，不产生虚构taskId/成功run。
+
+WorkflowSchemaStatements提供cx_workflows业务表语句，编号/迁移注册由总控接收。aggregate8MiB、1000 definitions/10000 runs、32步、参数64KiB、事件128KiB；耗尽失败关闭，无历史自动删导致重放。持久记录校验计划摘要/长度/状态及revision，损坏拒绝，不把读取错误当空集。无性能/1C1G验收结论。
+
+验证分层：单元用明确事务/任务double测试串行推进、幂等、不重播UNKNOWN、审批等待、停用/撤权、提交失败整体回滚；隔离真实SQLite/DS SQLRecorder验证Save/Trigger/重启持久及域+audit同Tx回滚，SubmitTask缺失时确实不可推进。后者不是实际DS任务/Agent/通知/页面完整验收。未改公共API/Proto/锁/迁移台账，不冻结G2。

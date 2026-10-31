@@ -1,0 +1,35 @@
+[
+  {
+    "name": "auth",
+    "head": "48409bacf4e582f8ab4f196982a5677fa3a21d18",
+    "clean": true,
+    "onlyThreeAddedMarkdown": true,
+    "changed": [
+      "A\tdocs/contracts/decisions/node-read-auth-01/ACCEPTANCE.md",
+      "A\tdocs/contracts/decisions/node-read-auth-01/DESIGN.md",
+      "A\tdocs/contracts/decisions/node-read-auth-01/HANDOFF.md"
+    ]
+  },
+  {
+    "name": "http",
+    "head": "ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734",
+    "clean": true,
+    "onlyThreeAddedMarkdown": true,
+    "changed": [
+      "A\tdocs/contracts/decisions/node-read-http-01/ACCEPTANCE.md",
+      "A\tdocs/contracts/decisions/node-read-http-01/DESIGN.md",
+      "A\tdocs/contracts/decisions/node-read-http-01/HANDOFF.md"
+    ]
+  },
+  {
+    "name": "web",
+    "head": "63b0feb8dffad7dc88252dd7dd786b80c7e54e7c",
+    "clean": true,
+    "onlyThreeAddedMarkdown": true,
+    "changed": [
+      "A\tdocs/contracts/decisions/node-read-web-01/ACCEPTANCE.md",
+      "A\tdocs/contracts/decisions/node-read-web-01/DESIGN.md",
+      "A\tdocs/contracts/decisions/node-read-web-01/HANDOFF.md"
+    ]
+  }
+]

@@ -1,0 +1,25 @@
+{
+  "task": "G2-R02A",
+  "executedAt": "2026-10-29T08:01:56.587Z",
+  "node": "v24.22.1",
+  "candidateSha256": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+  "runtimeHTTP": "UNTESTED",
+  "runtimeAuthentication": "UNTESTED",
+  "results": [
+    {
+      "name": "structure",
+      "status": "PASS",
+      "paths": 2,
+      "operations": 2
+    },
+    {
+      "name": "candidate-lint-and-examples",
+      "status": "PASS"
+    },
+    {
+      "name": "source-matrix-and-real-negative-contract-checks",
+      "status": "FAIL",
+      "error": "g2r03-contract-tests failed (exit 1)"
+    }
+  ]
+}

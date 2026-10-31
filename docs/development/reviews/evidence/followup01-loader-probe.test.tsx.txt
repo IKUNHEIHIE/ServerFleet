@@ -1,0 +1,52 @@
+import { act, render } from "@testing-library/react";
+import { useLayoutEffect, useRef, type ReactNode } from "react";
+import { expect, it, vi } from "vitest";
+import { NodeLoader, type NodeSource } from "../../../apps/web/src/features/nodes/node-loader";
+import { readyNodes } from "../../../apps/web/src/features/nodes/test/fixtures";
+import type { NodeListItemView } from "../../../apps/web/src/features/nodes/types";
+
+function deferred() {
+  let resolve!: (nodes: readonly NodeListItemView[]) => void;
+  const promise = new Promise<readonly NodeListItemView[]>(done => { resolve = done; });
+  return { promise, resolve };
+}
+function Probe({ commits, children }: { commits: string[]; children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => { commits.push(ref.current?.textContent ?? ""); });
+  return <div ref={ref}>{children}</div>;
+}
+
+it("restoring the same source after null must hide old ready data in the first commit", async () => {
+  const first = deferred();
+  const second = deferred();
+  const load = vi.fn().mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+  const source: NodeSource = { key: "scope-a", load };
+  const commits: string[] = [];
+  const view = (next: NodeSource | null) => <Probe commits={commits}><NodeLoader source={next} /></Probe>;
+  const { rerender } = render(view(source));
+  await act(async () => { first.resolve(readyNodes); });
+  expect(document.body.textContent).toContain("aws-tokyo-01");
+  rerender(view(null));
+  expect(document.body.textContent).not.toContain("aws-tokyo-01");
+  commits.length = 0;
+  rerender(view(source));
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(commits[0]).not.toContain("aws-tokyo-01");
+  expect(commits[0]).not.toContain("共 8 个节点");
+  expect(commits[0]).toContain("正在加载节点");
+});
+
+it("changing the exact scope key must not collapse padded identities", async () => {
+  const first = deferred();
+  const second = deferred();
+  const a: NodeSource = { key: "scope-a", load: () => first.promise };
+  const b: NodeSource = { key: " scope-a ", load: vi.fn(() => second.promise) };
+  const commits: string[] = [];
+  const view = (source: NodeSource) => <Probe commits={commits}><NodeLoader source={source} /></Probe>;
+  const { rerender } = render(view(a));
+  await act(async () => { first.resolve(readyNodes); });
+  commits.length = 0;
+  rerender(view(b));
+  expect(commits[0]).not.toContain("aws-tokyo-01");
+  expect(commits[0]).not.toContain("共 8 个节点");
+});

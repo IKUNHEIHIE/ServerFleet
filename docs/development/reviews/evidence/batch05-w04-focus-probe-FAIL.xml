@@ -1,0 +1,749 @@
+<?xml version="1.0" encoding="UTF-8" ?>
+<testsuites name="vitest tests" tests="2" failures="2" errors="0" time="0.1744675">
+    <testsuite name="../../reports/_review/batch05/repeated-focus.test.tsx" timestamp="2026-10-29T04:58:03.813Z" hostname="DESKTOP-6A2IJTG" tests="2" failures="2" errors="0" skipped="0" time="0.1744675">
+        <testcase classname="../../reports/_review/batch05/repeated-focus.test.tsx" name="independent W04 repeated selection regression &gt; keyboard activation of an already pointer-selected row focuses detail immediately" time="0.1302026">
+            <failure message="expect(element).toHaveFocus()
+
+Expected element with focus:
+  &lt;section
+  aria-labelledby=&quot;_r_3_&quot;
+  class=&quot;rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+  tabindex=&quot;-1&quot;
+&gt;
+  &lt;header
+    class=&quot;flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;h2
+        class=&quot;font-semibold&quot;
+        id=&quot;_r_3_&quot;
+      &gt;
+        节点详情
+      &lt;/h2&gt;
+      &lt;p
+        class=&quot;mt-1 whitespace-nowrap font-medium&quot;
+      &gt;
+        aws-tokyo-01
+      &lt;/p&gt;
+      &lt;p
+        class=&quot;whitespace-nowrap font-mono text-xs text-muted-foreground&quot;
+      &gt;
+        node-online-01
+      &lt;/p&gt;
+    &lt;/div&gt;
+    &lt;button
+      class=&quot;inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+      type=&quot;button&quot;
+    &gt;
+      关闭详情
+    &lt;/button&gt;
+  &lt;/header&gt;
+  &lt;dl
+    class=&quot;grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        状态
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700&quot;
+        &gt;
+          &lt;span
+            aria-hidden=&quot;true&quot;
+            class=&quot;size-1.5 rounded-full bg-emerald-500&quot;
+          /&gt;
+          在线
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        平台
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        Ubuntu 24.04
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        Agent 版本
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        v0.1.0
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        最近在线
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        2026-10-29 02:59 UTC
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        CPU 使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            18%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        内存使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            46%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+  &lt;/dl&gt;
+  &lt;p
+    class=&quot;border-t px-6 py-3 text-xs text-muted-foreground&quot;
+  &gt;
+    只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
+  &lt;/p&gt;
+&lt;/section&gt;
+Received element with focus:
+  &lt;tr
+  aria-current=&quot;true&quot;
+  class=&quot;border-t align-top transition-colors cursor-pointer hover:bg-secondary/40 bg-primary/10 ring-1 ring-inset ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset&quot;
+  tabindex=&quot;0&quot;
+&gt;
+  &lt;th
+    class=&quot;px-4 py-3 text-left font-normal&quot;
+    scope=&quot;row&quot;
+  &gt;
+    &lt;span
+      class=&quot;whitespace-nowrap font-medium&quot;
+    &gt;
+      aws-tokyo-01
+    &lt;/span&gt;
+    &lt;span
+      class=&quot;mt-0.5 block whitespace-nowrap font-mono text-xs text-muted-foreground&quot;
+    &gt;
+      node-online-01
+    &lt;/span&gt;
+  &lt;/th&gt;
+  &lt;td
+    class=&quot;px-4 py-3&quot;
+  &gt;
+    &lt;span
+      class=&quot;inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700&quot;
+    &gt;
+      &lt;span
+        aria-hidden=&quot;true&quot;
+        class=&quot;size-1.5 rounded-full bg-emerald-500&quot;
+      /&gt;
+      在线
+    &lt;/span&gt;
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3&quot;
+  &gt;
+    Ubuntu 24.04
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3&quot;
+  &gt;
+    v0.1.0
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3 text-right&quot;
+  &gt;
+    &lt;span
+      class=&quot;inline-flex flex-col gap-0.5 items-end&quot;
+    &gt;
+      &lt;span
+        class=&quot;tabular-nums&quot;
+      &gt;
+        18%
+      &lt;/span&gt;
+    &lt;/span&gt;
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3 text-right&quot;
+  &gt;
+    &lt;span
+      class=&quot;inline-flex flex-col gap-0.5 items-end&quot;
+    &gt;
+      &lt;span
+        class=&quot;tabular-nums&quot;
+      &gt;
+        46%
+      &lt;/span&gt;
+    &lt;/span&gt;
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3 whitespace-nowrap&quot;
+  &gt;
+    2026-10-29 02:59 UTC
+  &lt;/td&gt;
+&lt;/tr&gt;" type="Error">
+Error: expect(element).toHaveFocus()
+
+Expected element with focus:
+  &lt;section
+  aria-labelledby=&quot;_r_3_&quot;
+  class=&quot;rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+  tabindex=&quot;-1&quot;
+&gt;
+  &lt;header
+    class=&quot;flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;h2
+        class=&quot;font-semibold&quot;
+        id=&quot;_r_3_&quot;
+      &gt;
+        节点详情
+      &lt;/h2&gt;
+      &lt;p
+        class=&quot;mt-1 whitespace-nowrap font-medium&quot;
+      &gt;
+        aws-tokyo-01
+      &lt;/p&gt;
+      &lt;p
+        class=&quot;whitespace-nowrap font-mono text-xs text-muted-foreground&quot;
+      &gt;
+        node-online-01
+      &lt;/p&gt;
+    &lt;/div&gt;
+    &lt;button
+      class=&quot;inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+      type=&quot;button&quot;
+    &gt;
+      关闭详情
+    &lt;/button&gt;
+  &lt;/header&gt;
+  &lt;dl
+    class=&quot;grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        状态
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700&quot;
+        &gt;
+          &lt;span
+            aria-hidden=&quot;true&quot;
+            class=&quot;size-1.5 rounded-full bg-emerald-500&quot;
+          /&gt;
+          在线
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        平台
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        Ubuntu 24.04
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        Agent 版本
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        v0.1.0
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        最近在线
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        2026-10-29 02:59 UTC
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        CPU 使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            18%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        内存使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            46%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+  &lt;/dl&gt;
+  &lt;p
+    class=&quot;border-t px-6 py-3 text-xs text-muted-foreground&quot;
+  &gt;
+    只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
+  &lt;/p&gt;
+&lt;/section&gt;
+Received element with focus:
+  &lt;tr
+  aria-current=&quot;true&quot;
+  class=&quot;border-t align-top transition-colors cursor-pointer hover:bg-secondary/40 bg-primary/10 ring-1 ring-inset ring-primary/30 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset&quot;
+  tabindex=&quot;0&quot;
+&gt;
+  &lt;th
+    class=&quot;px-4 py-3 text-left font-normal&quot;
+    scope=&quot;row&quot;
+  &gt;
+    &lt;span
+      class=&quot;whitespace-nowrap font-medium&quot;
+    &gt;
+      aws-tokyo-01
+    &lt;/span&gt;
+    &lt;span
+      class=&quot;mt-0.5 block whitespace-nowrap font-mono text-xs text-muted-foreground&quot;
+    &gt;
+      node-online-01
+    &lt;/span&gt;
+  &lt;/th&gt;
+  &lt;td
+    class=&quot;px-4 py-3&quot;
+  &gt;
+    &lt;span
+      class=&quot;inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700&quot;
+    &gt;
+      &lt;span
+        aria-hidden=&quot;true&quot;
+        class=&quot;size-1.5 rounded-full bg-emerald-500&quot;
+      /&gt;
+      在线
+    &lt;/span&gt;
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3&quot;
+  &gt;
+    Ubuntu 24.04
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3&quot;
+  &gt;
+    v0.1.0
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3 text-right&quot;
+  &gt;
+    &lt;span
+      class=&quot;inline-flex flex-col gap-0.5 items-end&quot;
+    &gt;
+      &lt;span
+        class=&quot;tabular-nums&quot;
+      &gt;
+        18%
+      &lt;/span&gt;
+    &lt;/span&gt;
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3 text-right&quot;
+  &gt;
+    &lt;span
+      class=&quot;inline-flex flex-col gap-0.5 items-end&quot;
+    &gt;
+      &lt;span
+        class=&quot;tabular-nums&quot;
+      &gt;
+        46%
+      &lt;/span&gt;
+    &lt;/span&gt;
+  &lt;/td&gt;
+  &lt;td
+    class=&quot;px-4 py-3 whitespace-nowrap&quot;
+  &gt;
+    2026-10-29 02:59 UTC
+  &lt;/td&gt;
+&lt;/tr&gt;
+ ❯ ../../reports/_review/batch05/repeated-focus.test.tsx:21:58
+            </failure>
+        </testcase>
+        <testcase classname="../../reports/_review/batch05/repeated-focus.test.tsx" name="independent W04 repeated selection regression &gt; a background refresh does not perform a delayed focus request after the user moves to search" time="0.0432612">
+            <failure message="expect(element).toHaveFocus()
+
+Expected element with focus:
+  &lt;input
+  class=&quot;mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full&quot;
+  id=&quot;_r_4_&quot;
+  placeholder=&quot;输入名称或节点 ID&quot;
+  type=&quot;search&quot;
+  value=&quot;&quot;
+/&gt;
+Received element with focus:
+  &lt;section
+  aria-labelledby=&quot;_r_7_&quot;
+  class=&quot;rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+  tabindex=&quot;-1&quot;
+&gt;
+  &lt;header
+    class=&quot;flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;h2
+        class=&quot;font-semibold&quot;
+        id=&quot;_r_7_&quot;
+      &gt;
+        节点详情
+      &lt;/h2&gt;
+      &lt;p
+        class=&quot;mt-1 whitespace-nowrap font-medium&quot;
+      &gt;
+        aws-tokyo-01-updated
+      &lt;/p&gt;
+      &lt;p
+        class=&quot;whitespace-nowrap font-mono text-xs text-muted-foreground&quot;
+      &gt;
+        node-online-01
+      &lt;/p&gt;
+    &lt;/div&gt;
+    &lt;button
+      class=&quot;inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+      type=&quot;button&quot;
+    &gt;
+      关闭详情
+    &lt;/button&gt;
+  &lt;/header&gt;
+  &lt;dl
+    class=&quot;grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        状态
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700&quot;
+        &gt;
+          &lt;span
+            aria-hidden=&quot;true&quot;
+            class=&quot;size-1.5 rounded-full bg-emerald-500&quot;
+          /&gt;
+          在线
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        平台
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        Ubuntu 24.04
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        Agent 版本
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        v0.1.0
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        最近在线
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        2026-10-29 02:59 UTC
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        CPU 使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            18%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        内存使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            46%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+  &lt;/dl&gt;
+  &lt;p
+    class=&quot;border-t px-6 py-3 text-xs text-muted-foreground&quot;
+  &gt;
+    只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
+  &lt;/p&gt;
+&lt;/section&gt;" type="Error">
+Error: expect(element).toHaveFocus()
+
+Expected element with focus:
+  &lt;input
+  class=&quot;mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50 w-full&quot;
+  id=&quot;_r_4_&quot;
+  placeholder=&quot;输入名称或节点 ID&quot;
+  type=&quot;search&quot;
+  value=&quot;&quot;
+/&gt;
+Received element with focus:
+  &lt;section
+  aria-labelledby=&quot;_r_7_&quot;
+  class=&quot;rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+  tabindex=&quot;-1&quot;
+&gt;
+  &lt;header
+    class=&quot;flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;h2
+        class=&quot;font-semibold&quot;
+        id=&quot;_r_7_&quot;
+      &gt;
+        节点详情
+      &lt;/h2&gt;
+      &lt;p
+        class=&quot;mt-1 whitespace-nowrap font-medium&quot;
+      &gt;
+        aws-tokyo-01-updated
+      &lt;/p&gt;
+      &lt;p
+        class=&quot;whitespace-nowrap font-mono text-xs text-muted-foreground&quot;
+      &gt;
+        node-online-01
+      &lt;/p&gt;
+    &lt;/div&gt;
+    &lt;button
+      class=&quot;inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring&quot;
+      type=&quot;button&quot;
+    &gt;
+      关闭详情
+    &lt;/button&gt;
+  &lt;/header&gt;
+  &lt;dl
+    class=&quot;grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3&quot;
+  &gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        状态
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex items-center rounded-md border px-2 py-1 text-xs font-medium gap-1.5 whitespace-nowrap border-emerald-600/30 bg-emerald-50 text-emerald-700&quot;
+        &gt;
+          &lt;span
+            aria-hidden=&quot;true&quot;
+            class=&quot;size-1.5 rounded-full bg-emerald-500&quot;
+          /&gt;
+          在线
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        平台
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        Ubuntu 24.04
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        Agent 版本
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        v0.1.0
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        最近在线
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        2026-10-29 02:59 UTC
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        CPU 使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            18%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+    &lt;div&gt;
+      &lt;dt
+        class=&quot;text-xs text-muted-foreground&quot;
+      &gt;
+        内存使用率
+      &lt;/dt&gt;
+      &lt;dd
+        class=&quot;mt-1 text-sm&quot;
+      &gt;
+        &lt;span
+          class=&quot;inline-flex flex-col gap-0.5&quot;
+        &gt;
+          &lt;span
+            class=&quot;tabular-nums&quot;
+          &gt;
+            46%
+          &lt;/span&gt;
+        &lt;/span&gt;
+      &lt;/dd&gt;
+    &lt;/div&gt;
+  &lt;/dl&gt;
+  &lt;p
+    class=&quot;border-t px-6 py-3 text-xs text-muted-foreground&quot;
+  &gt;
+    只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
+  &lt;/p&gt;
+&lt;/section&gt;
+ ❯ ../../reports/_review/batch05/repeated-focus.test.tsx:31:20
+            </failure>
+        </testcase>
+    </testsuite>
+</testsuites>

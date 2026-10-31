@@ -1,0 +1,500 @@
+{
+  "page": "http://127.0.0.1:8462/index.html",
+  "codeHead": "99cd6635b3da4739a4e2b30816bb9749d14419ae",
+  "browser": {
+    "protocolVersion": "1.3",
+    "product": "Chrome/156.0.8078.49",
+    "revision": "@29eb03535d5f2f4f899b95f22a92413ffde5284e",
+    "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/156.0.0.0 Safari/537.36",
+    "jsVersion": "15.6.75.19"
+  },
+  "keyMechanism": "Chrome DevTools Protocol. Tab/Shift+Tab/Escape/Space: Input.dispatchKeyEvent with type=rawKeyDown + keyUp. Enter: type=keyDown with text=\"\\r\" (rawKeyDown does not activate native buttons) + keyUp. Clicks: Input.dispatchMouseEvent mousePressed/mouseReleased.",
+  "tabStops": [
+    {
+      "step": 1,
+      "tag": "INPUT",
+      "heading": null,
+      "text": ""
+    },
+    {
+      "step": 2,
+      "tag": "SELECT",
+      "heading": null,
+      "text": "全部状态在线离线已暂停已吊销未知"
+    },
+    {
+      "step": 3,
+      "tag": "TR",
+      "heading": "节点列表",
+      "text": "aws-tokyo-01node-online-01在线Ubun"
+    }
+  ],
+  "results": [
+    {
+      "name": "C1 首次加载显示 loading，无表格",
+      "pass": true,
+      "details": {
+        "hasLoading": true,
+        "hasTable": false
+      }
+    },
+    {
+      "name": "C2 成功后展示节点与计数",
+      "pass": true,
+      "details": {
+        "hasTable": true
+      }
+    },
+    {
+      "name": "C3 固定时钟下指标质量（真实 0% 与陈旧可见时间）",
+      "pass": true,
+      "details": {
+        "has0": true,
+        "hasStale": true
+      }
+    },
+    {
+      "name": "C4 真实 Tab：搜索框 → 状态筛选 → 表格行（禁用的清空按钮被跳过）",
+      "pass": true,
+      "details": "1:<INPUT> 2:<SELECT> 3:<TR>"
+    },
+    {
+      "name": "C5 Enter 激活行后焦点进入详情区",
+      "pass": true,
+      "details": "<SECTION>"
+    },
+    {
+      "name": "C6 Tab/Shift+Tab/Escape：详情内只有关闭按钮，可离开可返回，Escape 回到来源行",
+      "pass": true,
+      "details": {
+        "tab": {
+          "tag": "BUTTON",
+          "heading": "节点详情",
+          "text": "关闭详情"
+        },
+        "out": {
+          "tag": "BODY",
+          "heading": null,
+          "text": "(body)"
+        },
+        "back": {
+          "tag": "BUTTON",
+          "heading": "节点详情",
+          "text": "关闭详情"
+        },
+        "esc": {
+          "tag": "TR",
+          "heading": "节点列表",
+          "text": "aws-tokyo-01node-online-01在线Ubun"
+        }
+      }
+    },
+    {
+      "name": "C7 关闭后 Space 重开（未选中→新选中，非重复激活）",
+      "pass": true,
+      "details": "<SECTION>"
+    },
+    {
+      "name": "C8 真实鼠标点击行打开详情且不搬动焦点",
+      "pass": true,
+      "details": {
+        "focus": {
+          "tag": "TR",
+          "heading": "节点列表",
+          "text": "aws-tokyo-01node-online-01在线Ubun"
+        }
+      }
+    },
+    {
+      "name": "C9 失败显示固定安全提示（无异常原文）",
+      "pass": true,
+      "details": {
+        "hasAlert": true
+      }
+    },
+    {
+      "name": "C10 鼠标点击重新加载立即回到 loading，无节点/计数/详情",
+      "pass": true,
+      "details": {
+        "hasLoading": true
+      }
+    },
+    {
+      "name": "C11 键盘 Tab+Enter 触发重试同样进入 loading",
+      "pass": true,
+      "details": {
+        "button": {
+          "tag": "BUTTON",
+          "heading": "节点列表",
+          "text": "重新加载"
+        },
+        "hasLoading": true
+      }
+    },
+    {
+      "name": "C12 A→B 首个提交即为 loading，不含旧节点/计数",
+      "pass": true,
+      "details": {
+        "firstCommitChars": 67,
+        "hasTable": false
+      }
+    },
+    {
+      "name": "C13 B 成功后展示 B 的节点",
+      "pass": true,
+      "details": {}
+    },
+    {
+      "name": "C14 旧请求迟到成功不覆盖 B，且不抢走搜索框焦点",
+      "pass": true,
+      "details": {
+        "focusBefore": {
+          "tag": "INPUT",
+          "heading": null,
+          "text": ""
+        },
+        "focusAfter": {
+          "tag": "INPUT",
+          "heading": null,
+          "text": ""
+        },
+        "oldAborted": true
+      }
+    },
+    {
+      "name": "C15 A→null→A：无效期隐藏，恢复首个提交即 loading（旧详情不复活）",
+      "pass": true,
+      "details": {
+        "nullAlert": true,
+        "firstCommitChars": 67
+      }
+    },
+    {
+      "name": "C16 同 key 无效 load → 恢复有效来源：首个提交即 loading，无旧节点/计数/详情",
+      "pass": true,
+      "details": {
+        "brokenAlert": true,
+        "firstCommitChars": 67
+      }
+    },
+    {
+      "name": "C17 pending 请求在失效时被 abort，迟到成功不覆盖恢复后的 loading",
+      "pass": true,
+      "details": {
+        "aborted": true
+      }
+    },
+    {
+      "name": "C18 详情打开时切换来源：旧详情隐藏，焦点不残留旧详情、不被后台更新抢走",
+      "pass": true,
+      "details": {
+        "before": {
+          "tag": "SECTION",
+          "heading": "节点详情",
+          "text": "节点详情gcp-singapore-01node-online-"
+        },
+        "after": {
+          "tag": "BODY",
+          "heading": null,
+          "text": "(body)"
+        },
+        "later": {
+          "tag": "BODY",
+          "heading": null,
+          "text": "(body)"
+        }
+      }
+    },
+    {
+      "name": "C19 窄屏 420px：页面不横向滚动，表格在卡片内滚动",
+      "pass": true,
+      "details": {
+        "innerWidth": 420,
+        "htmlScroll": 420,
+        "bodyScroll": 420,
+        "boxClient": 386,
+        "boxScroll": 801
+      }
+    },
+    {
+      "name": "C20 R01 详情保持打开、同 ID 保持选中时，Shift+Tab 回行后 Enter 重复激活立即聚焦详情",
+      "pass": true,
+      "details": {
+        "opened": {
+          "tag": "SECTION",
+          "heading": "节点详情",
+          "text": "节点详情aws-tokyo-01node-online-01关闭"
+        },
+        "rowFocus": {
+          "tag": "TR",
+          "heading": "节点列表",
+          "text": "aws-tokyo-01node-online-01在线Ubun"
+        },
+        "selectedRowId": "aws-tokyo-01",
+        "repeatEnter": {
+          "tag": "SECTION",
+          "heading": "节点详情",
+          "text": "节点详情aws-tokyo-01node-online-01关闭"
+        },
+        "detailAfter": true
+      }
+    },
+    {
+      "name": "C21 R01 同一保持选中状态下，Shift+Tab 回行后 Space 重复激活同样立即聚焦详情",
+      "pass": true,
+      "details": {
+        "rowFocus": {
+          "tag": "TR",
+          "heading": "节点列表",
+          "text": "aws-tokyo-01node-online-01在线Ubun"
+        },
+        "repeatSpace": {
+          "tag": "SECTION",
+          "heading": "节点详情",
+          "text": "节点详情aws-tokyo-01node-online-01关闭"
+        }
+      }
+    },
+    {
+      "name": "C22 R01 键盘 Enter/Space 激活“关闭详情”：详情消失并把焦点送回来源行（两次独立重开验证）",
+      "pass": true,
+      "details": {
+        "closeButton": {
+          "tag": "BUTTON",
+          "heading": "节点详情",
+          "text": "关闭详情"
+        },
+        "afterCloseEnter": {
+          "tag": "TR",
+          "heading": "节点列表",
+          "text": "aws-tokyo-01node-online-01在线Ubun"
+        },
+        "reopened": {
+          "tag": "SECTION",
+          "heading": "节点详情",
+          "text": "节点详情aws-tokyo-01node-online-01关闭"
+        },
+        "afterCloseSpace": {
+          "tag": "TR",
+          "heading": "节点列表",
+          "text": "aws-tokyo-01node-online-01在线Ubun"
+        }
+      }
+    },
+    {
+      "name": "C23 R02 来源切换后旧请求迟到失败：不产生错误态、不覆盖新结果、不抢焦点",
+      "pass": true,
+      "details": {
+        "hasAlert": false,
+        "focus": {
+          "tag": "INPUT",
+          "heading": null,
+          "text": ""
+        },
+        "oldAborted": true
+      }
+    },
+    {
+      "name": "C24 R02 同 key 失效恢复后旧请求迟到失败：仍保持 loading，不变成错误态",
+      "pass": true,
+      "details": {
+        "hasLoading": true,
+        "hasAlert": false
+      }
+    },
+    {
+      "name": "C25 R02 pending 卸载：请求被 abort，迟到成功/失败均无渲染变化、无未处理拒绝、无抢焦点",
+      "pass": true,
+      "details": {
+        "aborted": true,
+        "errorsBeforeUnmount": 0,
+        "errorsAfterLateSuccess": 0,
+        "errorsFinal": 0
+      }
+    }
+  ],
+  "traces": {
+    "firstCommitC12": "搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…",
+    "firstCommitC15": "搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…",
+    "firstCommitC16": "搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…",
+    "r01": {
+      "opened": {
+        "tag": "SECTION",
+        "heading": "节点详情",
+        "text": "节点详情aws-tokyo-01node-online-01关闭"
+      },
+      "rowFocus": {
+        "tag": "TR",
+        "heading": "节点列表",
+        "text": "aws-tokyo-01node-online-01在线Ubun"
+      },
+      "beforeRepeat": {
+        "hasTable": true,
+        "hasAlert": false,
+        "hasDetail": true,
+        "hasLoading": false,
+        "selectedRowId": "aws-tokyo-01",
+        "detailName": "aws-tokyo-01",
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-2"
+      },
+      "repeatEnter": {
+        "tag": "SECTION",
+        "heading": "节点详情",
+        "text": "节点详情aws-tokyo-01node-online-01关闭"
+      },
+      "afterRepeatEnter": {
+        "hasTable": true,
+        "hasAlert": false,
+        "hasDetail": true,
+        "hasLoading": false,
+        "selectedRowId": "aws-tokyo-01",
+        "detailName": "aws-tokyo-01",
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-2"
+      }
+    },
+    "r01Space": {
+      "rowFocus2": {
+        "tag": "TR",
+        "heading": "节点列表",
+        "text": "aws-tokyo-01node-online-01在线Ubun"
+      },
+      "repeatSpace": {
+        "tag": "SECTION",
+        "heading": "节点详情",
+        "text": "节点详情aws-tokyo-01node-online-01关闭"
+      }
+    },
+    "r01Close": {
+      "closeButton": {
+        "tag": "BUTTON",
+        "heading": "节点详情",
+        "text": "关闭详情"
+      },
+      "afterCloseEnter": {
+        "tag": "TR",
+        "heading": "节点列表",
+        "text": "aws-tokyo-01node-online-01在线Ubun"
+      },
+      "stateAfterCloseEnter": {
+        "hasTable": true,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": false,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-2"
+      },
+      "reopened": {
+        "tag": "SECTION",
+        "heading": "节点详情",
+        "text": "节点详情aws-tokyo-01node-online-01关闭"
+      },
+      "afterCloseSpace": {
+        "tag": "TR",
+        "heading": "节点列表",
+        "text": "aws-tokyo-01node-online-01在线Ubun"
+      },
+      "stateAfterCloseSpace": {
+        "hasTable": true,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": false,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-2"
+      }
+    },
+    "lateFailureSwitch": {
+      "focusBeforeLateFail": {
+        "tag": "INPUT",
+        "heading": null,
+        "text": ""
+      },
+      "focusAfterLateFail": {
+        "tag": "INPUT",
+        "heading": null,
+        "text": ""
+      },
+      "afterLateFail": {
+        "hasTable": true,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": false,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选共 8 个节点筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表4 个在线 · 4 个未在线8 个节点节点状态平台Agent 版本CPU 使用率内存使用率最近在线aws-tokyo-01node-online-01在线Ubuntu 24.04v0.1.018%46%2026-10-29 02:59 UTCgcp-singapore-01node-online-02在线Debian 13v0.1.00%59%2026-10-29 02:59 UTCgcp-frankfurt-01node-online-03在线Debian 12v0.1.0100%12%2026-10-29 02:59 UTClegacy-berlin-01node-stale-01在线Ubuntu 22.04v0.1.055%陈旧 · 采样于 2026-10-29 02:41 UTC70%陈旧 · 采样于 2026-10-2"
+      }
+    },
+    "lateFailureSameKey": {
+      "afterStaleFail": {
+        "hasTable": false,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": true,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。搜索节点状态筛选全部状态在线离线已暂停已吊销未知清空筛选筛选只作用于当前已加载的节点，不改变任何授权范围。节点列表加载中正在加载节点…\n  \n\n"
+      }
+    },
+    "unmount": {
+      "afterUnmount": {
+        "hasTable": false,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": false,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n"
+      },
+      "afterUnmountLateSuccess": {
+        "hasTable": false,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": false,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n"
+      },
+      "afterUnmountLateFailure": {
+        "hasTable": false,
+        "hasAlert": false,
+        "hasDetail": false,
+        "hasLoading": false,
+        "selectedRowId": null,
+        "detailName": null,
+        "sourceKind": "a",
+        "body": "\n    W06-R1 · 加载容器浏览器补验合成数据、固定时钟、可控 Promise；仅 127.0.0.1 临时预览，无真实网络。（组件已卸载，用于 pending 卸载用例）\n  \n\n"
+      },
+      "errorsBeforeUnmount": 0,
+      "errorsAfterLateSuccess": 0,
+      "errorsFinal": 0
+    }
+  },
+  "screenshots": [
+    "reports/_review/w06r1/loading-state.png",
+    "reports/_review/w06r1/error-state.png",
+    "reports/_review/w06r1/focus-detail-1280.png",
+    "reports/_review/w06r1/focus-row-1280.png",
+    "reports/_review/w06r1/wide-1280.png",
+    "reports/_review/w06r1/narrow-420.png",
+    "reports/_review/w06r1/r01-repeat-enter-1280.png",
+    "reports/_review/w06r1/r01-close-return-1280.png",
+    "reports/_review/w06r1/r02-late-failure-1280.png",
+    "reports/_review/w06r1/r02-unmounted.png"
+  ],
+  "narrowMetrics": {
+    "innerWidth": 420,
+    "htmlScroll": 420,
+    "bodyScroll": 420,
+    "boxClient": 386,
+    "boxScroll": 801
+  }
+}

@@ -1,0 +1,22 @@
+=== RUN   TestActualVisibleFiltersOnlyDenied
+--- PASS: TestActualVisibleFiltersOnlyDenied (0.00s)
+=== RUN   TestActualVisibleAbortsWithoutPartialList
+=== RUN   TestActualVisibleAbortsWithoutPartialList/auth:_policy_unavailable
+=== RUN   TestActualVisibleAbortsWithoutPartialList/auth:_invalid_check
+=== RUN   TestActualVisibleAbortsWithoutPartialList/context_canceled
+=== RUN   TestActualVisibleAbortsWithoutPartialList/context_deadline_exceeded
+=== RUN   TestActualVisibleAbortsWithoutPartialList/unknown_failure
+--- PASS: TestActualVisibleAbortsWithoutPartialList (0.00s)
+    --- PASS: TestActualVisibleAbortsWithoutPartialList/auth:_policy_unavailable (0.00s)
+    --- PASS: TestActualVisibleAbortsWithoutPartialList/auth:_invalid_check (0.00s)
+    --- PASS: TestActualVisibleAbortsWithoutPartialList/context_canceled (0.00s)
+    --- PASS: TestActualVisibleAbortsWithoutPartialList/context_deadline_exceeded (0.00s)
+    --- PASS: TestActualVisibleAbortsWithoutPartialList/unknown_failure (0.00s)
+=== RUN   TestActualEmptyInventoryDoesNotReadPolicy
+    read_boundary_test.go:53: LIMITATION: empty inventory bypasses policy reads; future HTTP must preflight trusted subject/policy
+--- PASS: TestActualEmptyInventoryDoesNotReadPolicy (0.00s)
+=== RUN   TestActualPolicyIsReadPerNodeNotOneListSnapshot
+    read_boundary_test.go:70: LIMITATION: per-node current checks do not establish an atomic list-wide policy snapshot
+--- PASS: TestActualPolicyIsReadPerNodeNotOneListSnapshot (0.00s)
+PASS
+ok  	serverfleet.local/serverfleet/tests/contracts/g2r03	1.804s

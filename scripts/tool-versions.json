@@ -1,0 +1,10 @@
+{
+  "go": "1.27.3",
+  "node": "24.22.1",
+  "goTools": {
+    "protoc-gen-go": "google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.12",
+    "staticcheck": "honnef.co/go/tools/cmd/staticcheck@v0.8.2",
+    "govulncheck": "golang.org/x/vuln/cmd/govulncheck@v1.9.0",
+    "actionlint": "github.com/rhysd/actionlint/cmd/actionlint@v1.7.12"
+  }
+}

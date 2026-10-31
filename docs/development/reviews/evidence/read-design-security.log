@@ -1,0 +1,8 @@
+
+> serverfleet@0.0.0 check:security
+> node scripts/check.mjs security
+
+> npm-audit: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js audit --audit-level=high
+found 0 vulnerabilities
+> govulncheck: ./...
+No vulnerabilities found.

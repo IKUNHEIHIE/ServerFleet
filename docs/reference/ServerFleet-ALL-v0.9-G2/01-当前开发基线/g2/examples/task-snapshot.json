@@ -1,0 +1,12 @@
+{
+  "taskId": "task_123",
+  "state": "paused",
+  "createdAt": "2026-10-29T00:00:00Z",
+  "targetNodeIdsSnapshot": [
+    "node_01",
+    "node_02",
+    "node_03"
+  ],
+  "revision": 2,
+  "planDigest": "sha256:demo-not-a-real-hash"
+}

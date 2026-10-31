@@ -1,0 +1,8 @@
+{
+  "type": "about:blank",
+  "title": "Forbidden",
+  "status": 403,
+  "detail": "目标资源不在当前授权范围",
+  "code": "SCOPE_DENIED",
+  "requestId": "req_demo_001"
+}

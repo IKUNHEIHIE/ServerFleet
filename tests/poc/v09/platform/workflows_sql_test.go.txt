@@ -1,0 +1,145 @@
+package persistencepoc
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"serverfleet.local/serverfleet/internal/workflows"
+	audit "serverfleet.local/serverfleet/persistence-poc/dsaudit"
+	ds "serverfleet.local/serverfleet/persistence-poc/dsstore"
+)
+
+func TestWorkflowRealSQLitePlanRestartAuditAndMissingTaskPort(t *testing.T) {
+	ctx := context.Background()
+	path := filepath.Join(t.TempDir(), "workflows.db")
+	db := newDB(t, path, true)
+	defer db.Close()
+	for _, statement := range workflows.WorkflowSchemaStatements() {
+		if _, err := db.Exec(ctx, statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, migration := range audit.Migrations() {
+		for _, statement := range migration.Statements {
+			if _, err := db.Exec(ctx, statement); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	validator, err := audit.NewValidator([]string{"workflows.save", "workflows.trigger", "workflows.invalidated", "workflows.task.submit", "workflows.complete", "workflows.failed", "workflows.paused_unknown"}, audit.DefaultLimits())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fail := false
+	engine := func(db *ds.DB) *workflows.Engine {
+		recorder, err := audit.NewSQLRecorder(db, validator, time.Now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		read := func(q ds.Queryer) func(context.Context, string, ...any) ([]byte, error) {
+			return func(ctx context.Context, sql string, args ...any) ([]byte, error) {
+				var b []byte
+				err := q.QueryRow(ctx, sql, args...).Scan(&b)
+				return b, err
+			}
+		}
+		admit := func(_ context.Context, op workflows.WorkflowOperation) error {
+			if op.ActorID != "owner" {
+				return workflows.ErrWorkflowDenied
+			}
+			return nil
+		} // Explicit fixture.
+		backend, err := workflows.NewSQLWorkflowBackend(workflows.SQLWorkflowStore{View: func(ctx context.Context, fn func(workflows.SQLWorkflowReadTx) error) error {
+			return fn(workflows.SQLWorkflowReadTx{Read: read(db), Admit: admit})
+		}, InTx: func(ctx context.Context, fn func(workflows.SQLWorkflowTx) error) error {
+			return db.InTx(ctx, func(ctx context.Context, tx ds.Tx) error {
+				ops := workflows.SQLWorkflowTx{Read: read(tx), Exec: func(ctx context.Context, sql string, args ...any) (int64, error) {
+					r, err := tx.Exec(ctx, sql, args...)
+					if err != nil {
+						return 0, err
+					}
+					return r.RowsAffected()
+				}, Admit: admit,
+					// The accepted DS Service has no SubmitTx. Fail closed here; do not
+					// fabricate task IDs or claim the workflow executed successfully.
+					SubmitTask: func(context.Context, workflows.TaskIntent, workflows.WorkflowBinding) (workflows.TaskReceipt, error) {
+						return workflows.TaskReceipt{}, workflows.ErrWorkflowUnavailable
+					},
+					TaskState: func(context.Context, string) (workflows.WorkflowTaskState, error) {
+						return workflows.WorkflowTaskState{}, workflows.ErrWorkflowUnavailable
+					},
+					Audit: func(ctx context.Context, e workflows.WorkflowAudit) error {
+						return recorder.AppendTx(ctx, tx, audit.Event{SubjectID: e.ActorID, Action: e.Action, Result: e.Result, RequestID: "workflow-sql-test", TaskID: e.TaskID, Source: audit.SourceSystem, At: e.At})
+					},
+				}
+				if err := fn(ops); err != nil {
+					return err
+				}
+				if fail {
+					return errors.New("injected after domain and audit write")
+				}
+				return nil
+			})
+		}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		service, err := workflows.NewEngine(backend, []workflows.ActionDefinition{{ID: "fixed.read", Canonicalize: func(raw json.RawMessage) (json.RawMessage, error) {
+			if string(raw) != "{}" {
+				return nil, workflows.ErrWorkflowDenied
+			}
+			return raw, nil
+		}}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return service
+	}
+	service := engine(db)
+	op := workflows.WorkflowOperation{ActorID: "owner", Action: "workflows.save", WorkflowID: "workflow-1"}
+	def := workflows.Definition{ID: op.WorkflowID, Enabled: true, Trigger: "manual", Steps: []workflows.Step{{ActionID: "fixed.read", NodeIDs: []string{"node-a"}, Parameters: []byte(`{}`)}}}
+	fail = true
+	if _, err = service.Save(ctx, op, def); err != workflows.ErrWorkflowUnavailable {
+		t.Fatal(err)
+	}
+	fail = false
+	var count int
+	if err = db.QueryRow(ctx, "SELECT COUNT(*) FROM audit_events").Scan(&count); err != nil || count != 0 {
+		t.Fatal("audit not rolled back", count, err)
+	}
+	if _, err = service.Save(ctx, op, def); err != nil {
+		t.Fatal("failed save left partial revision", err)
+	}
+	op.Action = "workflows.trigger"
+	op.EventID = "event-1"
+	event := workflows.TriggerEvent{ID: op.EventID, Kind: "manual"}
+	first, err := service.Trigger(ctx, op, event)
+	if err != nil || first.State != "planned" {
+		t.Fatal(first, err)
+	}
+	_ = db.Close()
+	db = newDB(t, path, false)
+	defer db.Close()
+	service = engine(db)
+	op.Action = "workflows.read"
+	run, err := service.GetRun(ctx, op)
+	if err != nil || run.ID != first.ID || run.Steps[0].TaskID != "" {
+		t.Fatal(run, err)
+	}
+	op.Action = "workflows.advance"
+	if _, err = service.Advance(ctx, op); err != workflows.ErrWorkflowUnavailable {
+		t.Fatal("missing shared task port became success", err)
+	}
+	op.Action = "workflows.read"
+	run, err = service.GetRun(ctx, op)
+	if err != nil || run.State != "planned" || run.Steps[0].TaskID != "" {
+		t.Fatal("failed submission changed run", run, err)
+	}
+	if err = db.QueryRow(ctx, "SELECT COUNT(*) FROM audit_events").Scan(&count); err != nil || count != 2 {
+		t.Fatal("fake task audit", count, err)
+	}
+}

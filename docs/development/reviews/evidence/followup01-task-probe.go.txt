@@ -1,0 +1,73 @@
+package main
+
+import (
+ "encoding/json"
+ "errors"
+ "fmt"
+ "os"
+ "reflect"
+
+ "serverfleet.local/serverfleet/internal/tasks"
+)
+
+func main() {
+ checks := 0
+ assert := func(ok bool, label string) { if !ok { panic(label) }; checks++ }
+ for _, class := range []tasks.OperationClass{tasks.OperationClassStandard, tasks.OperationClassRoot, tasks.OperationClassModifying} {
+  for _, count := range []int{1,5,6,11,12,13} {
+   ids := make([]string, count)
+   for i := range ids { ids[i] = fmt.Sprintf("node-%d", count-i) }
+   snapshot, err := tasks.NewTargetSnapshot(ids)
+   if err != nil { panic(err) }
+   plan, err := tasks.NewDefaultBatchPlan(snapshot, class)
+   if err != nil { panic(err) }
+   var flat []string
+   batches := plan.Batches()
+   for i, batch := range batches {
+    limit := 5
+    if class != tasks.OperationClassStandard && i == 0 { limit = 1 }
+    if len(batch) < 1 || len(batch) > limit { panic("batch size") }
+    flat = append(flat, batch...)
+   }
+   assert(reflect.DeepEqual(flat,ids), "ordered exact partition")
+   batches[0][0] = "changed"
+   assert(plan.Batches()[0][0] == ids[0], "deep copied plan")
+  }
+ }
+ snap, _ := tasks.NewTargetSnapshot([]string{"first","b","c","d","e","f","last"})
+ plan, _ := tasks.NewDefaultBatchPlan(snap,tasks.OperationClassRoot)
+ for index, batch := range plan.Batches() {
+  success := make([]tasks.NodeResult,len(batch))
+  for i,id := range batch { success[i] = tasks.NodeResult{NodeID:id,Code:tasks.NodeResultSucceeded} }
+  got,err := plan.EvaluateBatch(index,success)
+  expected := tasks.BatchOutcomeAdvance
+  if index == plan.BatchCount()-1 { expected = tasks.BatchOutcomeComplete }
+  assert(err == nil && got == expected, "successful current batch")
+  for _, code := range []tasks.NodeResultCode{tasks.NodeResultFailed,tasks.NodeResultCanceled,tasks.NodeResultTimedOut,tasks.NodeResultRunning,tasks.NodeResultUnknown} {
+   results := append([]tasks.NodeResult(nil),success...)
+   results[len(results)-1].Code = code
+   got,err := plan.EvaluateBatch(index,results)
+   want := tasks.BatchOutcomeBlocked
+   if code == tasks.NodeResultRunning || code == tasks.NodeResultUnknown { want = tasks.BatchOutcomeIncomplete }
+   assert(err == nil && got == want, "non-success cannot advance")
+  }
+  got,err = plan.EvaluateBatch(index,success[:len(success)-1])
+  assert(err == nil && got == tasks.BatchOutcomeIncomplete,"missing evidence")
+  duplicate := append(append([]tasks.NodeResult(nil),success...),success[0])
+  got,err = plan.EvaluateBatch(index,duplicate)
+  assert(errors.Is(err,tasks.ErrDuplicateResult) && got == "", "duplicate rejected")
+  foreign := append(append([]tasks.NodeResult(nil),success...),tasks.NodeResult{NodeID:"private-foreign-id",Code:tasks.NodeResultSucceeded})
+  got,err = plan.EvaluateBatch(index,foreign)
+  assert(errors.Is(err,tasks.ErrOutOfBatchResult) && got == "", "foreign evidence rejected")
+  success[0].Code = tasks.NodeResultCode("ack")
+  got,err = plan.EvaluateBatch(index,success)
+  assert(errors.Is(err,tasks.ErrUnknownResultCode) && got == "", "ACK not success")
+ }
+ _,err := tasks.NewDefaultBatchPlan(tasks.TargetSnapshot{},tasks.OperationClassStandard)
+ assert(errors.Is(err,tasks.ErrEmptyTargets), "zero snapshot refused")
+ _,err = tasks.NewDefaultBatchPlan(snap,"")
+ assert(errors.Is(err,tasks.ErrUnknownOperationClass),"zero class refused")
+ _,err = (tasks.BatchPlan{}).EvaluateBatch(0,nil)
+ assert(errors.Is(err,tasks.ErrInvalidBatchIndex),"zero plan refused")
+ if err := json.NewEncoder(os.Stdout).Encode(map[string]any{"status":"PASS","assertions":checks,"scope":"actual task pure functions; not a scheduler or execution authorization"}); err != nil { panic(err) }
+}

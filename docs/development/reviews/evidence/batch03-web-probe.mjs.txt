@@ -1,0 +1,16 @@
+import { filterNodes, hasActiveFilter, summariseVisible } from "../../../apps/web/src/features/nodes/node-filters.ts";
+import assert from "node:assert/strict";
+const nodes = Object.freeze([
+  Object.freeze({ id: "node-3", name: "HongKong", status: "online" }),
+  Object.freeze({ id: "node-1", name: "HONGKONG-2", status: "offline" }),
+  Object.freeze({ id: "node-2", name: "香港入口", status: "online" }),
+]);
+const cases = [];
+function check(name, fn) { fn(); cases.push({ name, status: "PASS" }); }
+check("search trims and folds case, preserves order", () => assert.deepEqual(filterNodes(nodes, { query: "  HONGKONG  ", status: "all" }).map(n => n.id), ["node-3", "node-1"]));
+check("combined status and ID search", () => assert.deepEqual(filterNodes(nodes, { query: "node-1", status: "online" }), []));
+check("Chinese substring search", () => assert.equal(filterNodes(nodes, { query: "香港", status: "all" })[0], nodes[2]));
+check("whitespace input is clearable without excluding rows", () => { assert.equal(filterNodes(nodes, { query: "  ", status: "all" }).length, 3); assert.equal(hasActiveFilter({ query: "  ", status: "all" }), true); });
+check("no source mutation, same element identities", () => { assert.equal(nodes[0].name, "HongKong"); assert.equal(filterNodes(nodes, { query: "", status: "online" })[0], nodes[0]); });
+check("loaded count distinguishes no matches and empty input", () => { assert.equal(summariseVisible(0, 3), "显示 0 / 共 3 个节点"); assert.equal(summariseVisible(0, 0), null); });
+console.log(JSON.stringify(cases, null, 2));

@@ -1,0 +1,161 @@
+syntax = "proto3";
+
+package serverfleet.agent.v1;
+
+// G2 CANDIDATE, NOT FROZEN. Each binary WebSocket frame transports one Envelope.
+// Transport: Agent-initiated WSS, with mandatory mutual TLS after enrollment.
+// Peer identity comes from validated mTLS certificates and Controller node records;
+// node_id, task IDs and messages are never independent authorization proofs.
+// No gRPC service is declared: the approved transport is WSS carrying Protobuf.
+
+message Envelope {
+  uint32 protocol_major = 1;
+  uint32 protocol_minor = 2;
+  string message_id = 3;
+  string connection_id = 4;
+  string node_id = 5;
+  uint64 sequence = 6;
+  int64 sent_at_unix_ms = 7;
+  oneof message {
+    AgentHello agent_hello = 20;
+    ControllerHello controller_hello = 21;
+    Heartbeat heartbeat = 22;
+    MetricsBatch metrics = 23;
+    TaskOffer task_offer = 24;
+    TaskAck task_ack = 25;
+    TaskStarted task_started = 26;
+    TaskOutput task_output = 27;
+    TaskFinished task_finished = 28;
+    TaskCancel task_cancel = 29;
+    StateSyncRequest state_sync_request = 30;
+    StateSyncReply state_sync_reply = 31;
+    ControlError control_error = 32;
+  }
+}
+
+message AgentHello {
+  string agent_version = 1;
+  string platform = 2;
+  string architecture = 3;
+  repeated string capability_ids = 4;
+  uint32 min_protocol_major = 5;
+  uint32 max_protocol_major = 6;
+  uint64 last_acked_controller_sequence = 7;
+  string boot_id = 8;
+}
+message ControllerHello {
+  bool accepted = 1;
+  string reason_code = 2;
+  uint32 selected_protocol_major = 3;
+  uint32 selected_protocol_minor = 4;
+  repeated string granted_capability_ids = 5;
+  uint32 heartbeat_interval_seconds = 6;
+  uint32 max_frame_bytes = 7;
+  int64 server_time_unix_ms = 8;
+}
+message Heartbeat {
+  uint64 uptime_seconds = 1;
+  uint64 last_applied_task_sequence = 2;
+  uint32 running_executions = 3;
+  string connectivity_status = 4;
+}
+message MetricPoint {
+  string name = 1;
+  double value = 2;
+  string unit = 3;
+  int64 observed_at_unix_ms = 4;
+}
+message MetricsBatch {
+  repeated MetricPoint points = 1;
+  string batch_id = 2;
+}
+
+enum Privilege {
+  PRIVILEGE_UNSPECIFIED = 0;
+  PRIVILEGE_NORMAL = 1;
+  PRIVILEGE_ROOT = 2;
+}
+
+// Controller must perform all authorization + approval checks BEFORE sending TaskOffer.
+// action_id and parameters must match a server-registered, typed action schema.
+// The Agent must perform a second capability/path check and durable execution-ID dedupe.
+message TaskOffer {
+  string task_id = 1;
+  string execution_id = 2;
+  string plan_digest_sha256 = 3;
+  string action_id = 4;
+  bytes canonical_parameters_json = 5;
+  Privilege privilege = 6;
+  int64 expires_at_unix_ms = 7;
+  uint32 timeout_seconds = 8;
+  uint64 scope_revision = 9;
+  string plugin_id = 10;
+  string action_schema_version = 11;
+}
+message TaskAck {
+  string task_id = 1;
+  string execution_id = 2;
+  bool accepted = 3;
+  string reason_code = 4;
+  bool previously_seen = 5;
+}
+message TaskStarted {
+  string task_id = 1;
+  string execution_id = 2;
+  int64 started_at_unix_ms = 3;
+}
+message TaskOutput {
+  string task_id = 1;
+  string execution_id = 2;
+  uint64 stream_sequence = 3;
+  enum Stream { STREAM_UNSPECIFIED = 0; STREAM_STDOUT = 1; STREAM_STDERR = 2; }
+  Stream stream = 4;
+  bytes chunk = 5;
+  bool truncated = 6;
+}
+enum ExecutionResult {
+  EXECUTION_RESULT_UNSPECIFIED = 0;
+  EXECUTION_RESULT_SUCCEEDED = 1;
+  EXECUTION_RESULT_FAILED = 2;
+  EXECUTION_RESULT_CANCELED = 3;
+  EXECUTION_RESULT_TIMED_OUT = 4;
+  EXECUTION_RESULT_UNKNOWN = 5;
+}
+message TaskFinished {
+  string task_id = 1;
+  string execution_id = 2;
+  ExecutionResult result = 3;
+  int32 exit_code = 4;
+  string error_code = 5;
+  int64 finished_at_unix_ms = 6;
+  bool output_truncated = 7;
+}
+message TaskCancel {
+  string task_id = 1;
+  string execution_id = 2;
+  string reason_code = 3;
+  int64 requested_at_unix_ms = 4;
+}
+message StateSyncRequest {
+  string sync_id = 1;
+  uint32 max_executions = 2;
+  int64 since_unix_ms = 3;
+}
+message ExecutionSnapshot {
+  string task_id = 1;
+  string execution_id = 2;
+  ExecutionResult result = 3;
+  bool started = 4;
+  uint64 last_output_sequence = 5;
+  int64 updated_at_unix_ms = 6;
+}
+message StateSyncReply {
+  string sync_id = 1;
+  repeated ExecutionSnapshot executions = 2;
+  bool truncated = 3;
+}
+message ControlError {
+  string code = 1;
+  string message = 2;
+  string related_message_id = 3;
+}

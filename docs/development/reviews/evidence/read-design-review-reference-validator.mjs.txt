@@ -1,0 +1,31 @@
+import { execFileSync } from 'node:child_process';
+import { writeFileSync } from 'node:fs';
+const baseline = '4196b2e8ab9c389ae0830bf56f905d9bafa00d05';
+const read = (ref, file) => execFileSync('git', ['show', `${ref}:${file}`], {encoding:'utf8'});
+const summaries = [];
+for (const [task, dir, head] of [
+  ['READ-HTTP-DESIGN-01','node-read-http-01','ece5efd77e8c99fb9a9d1f19eb31db5bd78b3734'],
+  ['READ-WEB-DESIGN-01','node-read-web-01','63b0feb8dffad7dc88252dd7dd786b80c7e54e7c'],
+]) {
+  let references=0;
+  const files=new Set(), problems=[];
+  for (const name of ['DESIGN.md','ACCEPTANCE.md','HANDOFF.md']) {
+    const document=`docs/contracts/decisions/${dir}/${name}`;
+    for (const match of read(head,document).matchAll(/`([^`\r\n]+?\.(?:md|go|ts|tsx|yaml)):(\d+(?:-\d+)?(?:,\d+(?:-\d+)?)*)`/g)) {
+      const [, file, ranges]=match;
+      if (!file.includes('/')) continue;
+      references++; files.add(file);
+      try {
+        const length=read(baseline,file).split('\n').length;
+        for (const range of ranges.split(',')) {
+          const [start,end=start]=range.split('-').map(Number);
+          if(start<1 || end<start || end>length) problems.push({document,file,range,length});
+        }
+      } catch {problems.push({document,file,missing:true});}
+    }
+  }
+  summaries.push({task,head,baseline,references,referencedFiles:files.size,rangeProblems:problems,semanticReviewRequired:true});
+}
+writeFileSync('reports/read-design-review-references.json',JSON.stringify(summaries,null,2)+'\n');
+console.log(JSON.stringify(summaries,null,2));
+if(summaries.some(x=>x.rangeProblems.length)) process.exitCode=1;

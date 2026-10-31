@@ -1,0 +1,79 @@
+{
+  "page": "file:///D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-accessibility-gm01/reports/_preview/dist/index.html",
+  "tabStops": [
+    {
+      "step": 1,
+      "tag": "INPUT",
+      "role": null,
+      "ariaLabel": null,
+      "heading": null,
+      "text": ""
+    },
+    {
+      "step": 2,
+      "tag": "SELECT",
+      "role": null,
+      "ariaLabel": null,
+      "heading": null,
+      "text": "全部状态在线离线已暂停已吊销未知"
+    },
+    {
+      "step": 3,
+      "tag": "TR",
+      "role": null,
+      "ariaLabel": null,
+      "heading": "节点列表",
+      "text": "aws-tokyo-01node-online-01在线Ubun"
+    }
+  ],
+  "opened": {
+    "tag": "SECTION",
+    "role": null,
+    "ariaLabel": null,
+    "heading": "节点详情",
+    "text": "节点详情aws-tokyo-01node-online-01关闭",
+    "detailExists": true
+  },
+  "tabAfterOpen": {
+    "tag": "BUTTON",
+    "role": null,
+    "ariaLabel": null,
+    "heading": "节点详情",
+    "text": "关闭详情"
+  },
+  "tabOut": {
+    "tag": "BODY",
+    "text": "(body)"
+  },
+  "shiftTabBack": {
+    "tag": "BUTTON",
+    "role": null,
+    "ariaLabel": null,
+    "heading": "节点详情",
+    "text": "关闭详情"
+  },
+  "escaped": {
+    "tag": "TR",
+    "role": null,
+    "ariaLabel": null,
+    "heading": "节点列表",
+    "text": "aws-tokyo-01node-online-01在线Ubun",
+    "detailExists": false
+  },
+  "screenshots": [
+    {
+      "file": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--web-node-accessibility-gm01\\reports\\_review\\narrow-420.png",
+      "width": 420,
+      "height": 900,
+      "innerWidth": 420,
+      "scrollWidth": 420
+    },
+    {
+      "file": "D:\\admin\\desktop\\codex\\myproject\\ks\\.worktrees\\feature--web-node-accessibility-gm01\\reports\\_review\\wide-1280.png",
+      "width": 1280,
+      "height": 900,
+      "innerWidth": 1280,
+      "scrollWidth": 1280
+    }
+  ]
+}

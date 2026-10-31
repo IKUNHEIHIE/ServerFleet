@@ -1,0 +1,14 @@
+.tools/
+.cache/
+node_modules/
+dist/
+coverage/
+reports/
+.worktrees/
+*.tsbuildinfo
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal

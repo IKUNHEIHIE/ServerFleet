@@ -1,0 +1,48 @@
+
+> serverfleet@0.0.0 check:web
+> node scripts/check.mjs web
+
+> web-typecheck: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js run typecheck --workspace @serverfleet/web
+
+> @serverfleet/web@0.0.0 typecheck
+> tsc --noEmit
+> web-tests: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js test --workspace @serverfleet/web
+
+> @serverfleet/web@0.0.0 test
+> vitest run
+
+
+ RUN  v5.0.5 D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-loader-gm01/apps/web
+
+ ✓ src/features/nodes/node-filters.test.ts (15 tests) 6ms
+ ✓ src/features/nodes/candidate-adapter.test.ts (19 tests) 6ms
+ ✓ src/features/nodes/view-model.test.ts (12 tests) 4ms
+ ✓ src/App.test.tsx (3 tests) 129ms
+ ✓ src/features/nodes/node-detail.test.tsx (11 tests) 205ms
+ ✓ src/features/nodes/node-loader.test.tsx (18 tests) 422ms
+ ✓ src/features/nodes/node-list-panel.test.tsx (23 tests) 592ms
+ ✓ src/features/nodes/node-list-workspace.test.tsx (16 tests) 614ms
+ ✓ src/features/nodes/node-focus.test.tsx (18 tests) 694ms
+ ✓ src/features/nodes/node-list.test.tsx (34 tests) 734ms
+
+ Test Files  10 passed (10)
+      Tests  169 passed (169)
+   Start at  16:58:47
+   Duration  2.01s (environment 56%, tests 23%, setup 11%, import 5%, transform 4%)
+
+JUNIT report written to D:/admin/desktop/codex/myproject/ks/.worktrees/feature--web-node-loader-gm01/reports/web-junit.xml
+> web-build: D:\admin\desktop\codex\myproject\ks\.tools\node-v24.22.1-win-x64\node_modules\npm\bin\npm-cli.js run build --workspace @serverfleet/web
+
+> @serverfleet/web@0.0.0 build
+> tsc --noEmit && vite build
+
+vite v8.3.5 building client environment for production...
+transforming...
+✓ 21 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:  0.31 kB
+dist/assets/index-ZGybvyGf.css   17.48 kB │ gzip:  4.27 kB
+dist/assets/index-DhifIrbU.js   249.13 kB │ gzip: 77.99 kB
+
+✓ built in 165ms
