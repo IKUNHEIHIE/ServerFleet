@@ -153,3 +153,25 @@
 - `npm run check`（2026-10-31T09:58:45Z）→ `policy` PASS、`contracts` PASS、`go` PASS、`web` PASS、`git` PASS；`reports/go-tests.log` 中 `tests/integration/v09/services` 为 PASS，新增 `TestWave3ServiceHTTPEndToEnd` 已执行。
 - `npm run check:security` → `npm audit` 0 漏洞，`govulncheck ./...` 无漏洞。
 - 本地提交未推送、未合并；收件与后续接线由总控 `agy-review-01` 按 [HANDOFF-WAVE3.md](HANDOFF-WAVE3.md) 处理。
+
+## 检查点 C11 · V09-5D-DS Wave 4（deepseek-04：探测历史/按需探测、上传字节闭环、发布执行与补偿）
+
+- 分支 `feature/v09-services-ds02`；起始基线 `0f9a75e416a82a9589a29d4d9cf8a52bf0266066`（Wave 1/2/3 已合入 main）。
+- 会话：`deepseek-04`；代码提交：`bfe3b93`（monitoring）、`238ef81`（files）、`fcc7390`（publishing）、`22fe183`（集成测试）；交接 [HANDOFF-WAVE4.md](HANDOFF-WAVE4.md)、证据 [AC-EVIDENCE-WAVE4.md](AC-EVIDENCE-WAVE4.md)。
+- **DS-W4-01 监控探测历史与按需探测**：
+  - `GET /api/v1/monitoring/availability-monitors/{monitorId}/history`（+ 无前缀别名）：查询真实持久表 `monitor_checks`（`ds/0050_monitoring`），`limit` 1–500 缺省 50，按 `checked_at DESC, id DESC`；校验 `monitoring.read` 与 monitor 存在性，不再返回 501。
+  - `POST .../{monitorId}/probe`：`monitoring.write` + SSRF/Allowlist 校验后调用注入 `Prober`，持久化样本/状态/连续失败/迁移告警，审计 `monitoring.check`；未注入 Prober 返回 `503 prober_unavailable`。
+- **DS-W4-02 文件分阶段上传字节闭环**：
+  - 新增 `PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content`：原始字节按 `?offset=`/`X-Upload-Offset` 续写 `stagingDir`，受声明大小与 `MaxUploadBytes` 双重限制，超限 `413` 并截回、进度不变；同名 upload 的内容写入/完成/中止进程内串行化。
+  - `POST .../complete` 端到端校验暂存文件真实字节数与 SHA-256：一致→推送注入 transport→`completed`+审计；不一致→删除暂存、`failed`、`422 checksum_mismatch`+审计；未上传字节→`400`；transport 失败保留 `open` 可重试。
+- **DS-W4-03 发布适配与 HTTP 集成**：
+  - `internal/publishing/bridge.go` 新增可组合 `LocalBridge`/`NewLocalBridge`（DNS/证书/网关三端口由组合层函数注入，nil 失败关闭，绝不假成功）。
+  - 新增 `POST /api/v1/publishing/publications/{id}/run` 与 `.../rollback`（+ `/api/v1/publications/...` 别名），响应携带真实持久阶段状态；失败返回对应状态码 + 稳定 `error.code`（不泄露 provider 原文）；新增 `RunDetail`/`RollbackDetail` 避免执行后额外要求读权限，拒绝时不回显计划数据。
+  - `tests/integration/v09/services/wave4_http_test.go`：真实文件 SQLite WAL + HTTP 覆盖监控探测/历史、文件分块上传/SHA 完成/负向、发布三阶段执行/失败重试/逐阶段回滚/审计；Wave 3 集成环境扩展文件服务与可观测 publisher。
+- 验证（本机，固定 Go 1.27.3 / Node 24.22.1）：
+  - `go test ./...` → 全部 PASS（含 architecture/contracts/integration/POC）；`go test ./internal/monitoring ./internal/files ./internal/publishing ./tests/integration/v09/services -count=1` → PASS。
+  - `TestWave4ServiceHTTPEndToEnd` PASS（4 子测试：monitoring probe history / file upload bytes and checksum / publication execution and rollback / audit）。
+- 边界与剩余风险：
+  - 未改 `apps/controller/**`、`apps/web/**`、公共契约/锁/根文件；**未新增迁移**（保持 19 项基线）。monitor 的 `sourceNodeId` 未持久化，history/probe 无法按关联节点过滤可见性（需契约/迁移决策）。
+  - 文件 `UploadTransport`、监控 `Prober`、发布 publisher 仍由组合层注入；`server.go` 当前未注入 Uploads、Prober/publisher 为 fail-closed，故真实进程下 content 可暂存但 complete/run 诚实返回 503/502。
+  - 真实 Agent 字节通道、真实 HTTP/TCP/TLS 公网目标、Cloudflare/ACME/Nginx、QQ/SMTP 投递仍未实测：UNTESTED/BLOCKED，详见 AC-EVIDENCE-WAVE4。
