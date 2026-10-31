@@ -9,6 +9,7 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/audit"
@@ -103,6 +104,8 @@ type Service struct {
 	stagingDir     string
 	maxUploadBytes int64
 	now            func() time.Time
+
+	uploadLocks sync.Map
 }
 
 func NewService(options Options) (*Service, error) {
@@ -488,6 +491,23 @@ func (s *Service) requireRequest(requestID string) error {
 		return ErrRequestIDRequired
 	}
 	return nil
+}
+
+// UploadLimit returns the configured per-upload byte ceiling.
+func (s *Service) UploadLimit() int64 {
+	if s == nil {
+		return 0
+	}
+	return s.maxUploadBytes
+}
+
+// lockUpload serializes staging mutations for one upload so a content write
+// cannot race a completion digest or an abort cleanup.
+func (s *Service) lockUpload(uploadID string) func() {
+	value, _ := s.uploadLocks.LoadOrStore(uploadID, &sync.Mutex{})
+	mutex := value.(*sync.Mutex)
+	mutex.Lock()
+	return mutex.Unlock
 }
 
 func (s *Service) stagingPath(name string) (string, error) {

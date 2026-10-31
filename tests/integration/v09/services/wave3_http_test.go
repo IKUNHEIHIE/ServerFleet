@@ -18,6 +18,7 @@ import (
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/certificates"
+	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/gateway"
 	"serverfleet.local/serverfleet/internal/monitoring"
 	"serverfleet.local/serverfleet/internal/nodes"
@@ -139,8 +140,27 @@ func (g *waveGroupLookup) LookupGroup(_ context.Context, id string) (publishing.
 	return g.ref, true, nil
 }
 
+type waveCallLog struct {
+	mu    sync.Mutex
+	kinds []publishing.StageKind
+}
+
+func (l *waveCallLog) add(kind publishing.StageKind) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	l.kinds = append(l.kinds, kind)
+}
+
+func (l *waveCallLog) snapshot() []publishing.StageKind {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return append([]publishing.StageKind(nil), l.kinds...)
+}
+
 type waveStage struct {
 	mu        sync.Mutex
+	kind      publishing.StageKind
+	log       *waveCallLog
 	publishes int
 	rollbacks int
 	fail      error
@@ -150,6 +170,9 @@ func (s *waveStage) publish() (publishing.StageResult, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.publishes++
+	if s.log != nil {
+		s.log.add(s.kind)
+	}
 	if s.fail != nil {
 		return publishing.StageResult{}, s.fail
 	}
@@ -161,6 +184,18 @@ func (s *waveStage) rollback() error {
 	defer s.mu.Unlock()
 	s.rollbacks++
 	return nil
+}
+
+func (s *waveStage) setFail(err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.fail = err
+}
+
+func (s *waveStage) counts() (publishes, rollbacks int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.publishes, s.rollbacks
 }
 
 type waveDNS struct{ *waveStage }
@@ -188,6 +223,38 @@ func (p *waveGateway) Publish(context.Context, publishing.GatewayRequest) (publi
 }
 func (p *waveGateway) Rollback(context.Context, string, publishing.StageResult) error {
 	return p.rollback()
+}
+
+// waveUploadTransport records the bytes handed to the node transport port.
+type waveUploadTransport struct {
+	mu     sync.Mutex
+	data   []byte
+	size   int64
+	digest string
+	path   string
+	calls  int
+	err    error
+}
+
+func (u *waveUploadTransport) PushFile(_ context.Context, _ string, destinationPath string, content io.Reader, size int64, digest string) error {
+	body, readErr := io.ReadAll(content)
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.calls++
+	if u.err != nil {
+		return u.err
+	}
+	if readErr != nil {
+		return readErr
+	}
+	u.data, u.size, u.digest, u.path = body, size, digest, destinationPath
+	return nil
+}
+
+func (u *waveUploadTransport) snapshot() ([]byte, int64, string, int) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return append([]byte(nil), u.data...), u.size, u.digest, u.calls
 }
 
 type waveGatewayNodes struct{ online map[string]bool }
@@ -245,6 +312,12 @@ type waveEnv struct {
 	certSvc    *certificates.Service
 	pubSvc     *publishing.Service
 	gwSvc      *gateway.Service
+	fileSvc    *files.Service
+	upload     *waveUploadTransport
+	pubDNS     *waveStage
+	pubCert    *waveStage
+	pubGateway *waveStage
+	callLog    *waveCallLog
 	issuer     *waveIssuer
 	server     *httptest.Server
 }
@@ -269,6 +342,7 @@ func newWaveEnv(t *testing.T) *waveEnv {
 		nodes.ServiceActions(), tasks.ServiceActions()...), monitoring.ServiceActions()...),
 		quota.ServiceActions()...), certificates.ServiceActions()...), publishing.ServiceActions()...),
 		gateway.ServiceActions()...)
+	actions = append(actions, files.ServiceActions()...)
 	actions = append(actions, "host.patch")
 	limits := audit.DefaultLimits()
 	limits.RequireSource = true
@@ -364,10 +438,14 @@ func newWaveEnv(t *testing.T) *waveEnv {
 	if err != nil {
 		t.Fatal(err)
 	}
+	stageLog := &waveCallLog{}
+	dnsStage := &waveStage{kind: publishing.StageDNS, log: stageLog}
+	certStage := &waveStage{kind: publishing.StageCertificate, log: stageLog}
+	gatewayStage := &waveStage{kind: publishing.StageGateway, log: stageLog}
 	pubSvc, err := publishing.NewService(publishing.Options{
 		DB: db, Repo: pubRepo,
 		Groups: &waveGroupLookup{ref: publishing.GroupRef{ID: "sg1", Revision: 1, NodeIDs: []string{"n1", "n2"}}},
-		DNS:    &waveDNS{&waveStage{}}, Certificates: &waveCertificate{&waveStage{}}, Gateway: &waveGateway{&waveStage{}},
+		DNS:    &waveDNS{dnsStage}, Certificates: &waveCertificate{certStage}, Gateway: &waveGateway{gatewayStage},
 		Audit: recorder, Authorizer: waveAuthorizer{}, Now: time.Now,
 	})
 	if err != nil {
@@ -381,6 +459,19 @@ func newWaveEnv(t *testing.T) *waveEnv {
 		DB: db, Repo: gwRepo, Nodes: &waveGatewayNodes{online: map[string]bool{"n1": true}},
 		ServiceGroups: waveGatewayGroups{}, Tasks: &waveGatewayTasks{},
 		Audit: recorder, Authorizer: waveAuthorizer{},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	filesRepo, err := files.NewRepo(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uploadTransport := &waveUploadTransport{}
+	fileSvc, err := files.NewService(files.Options{
+		DB: db, Repo: filesRepo, Audit: recorder, Authorizer: waveAuthorizer{},
+		Uploads: uploadTransport, StagingDir: filepath.Join(t.TempDir(), "staging"),
+		MaxUploadBytes: 1 << 20,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -450,12 +541,23 @@ func newWaveEnv(t *testing.T) *waveEnv {
 	}); err != nil {
 		t.Fatal(err)
 	}
+	if err := files.RegisterHTTP(mux, fileSvc, func(r *http.Request) (files.Principal, error) {
+		subject, requestID, ok := waveSubject(r)
+		if !ok {
+			return files.Principal{}, errors.New("no session")
+		}
+		return files.Principal{SubjectID: subject, RequestID: requestID}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	return &waveEnv{
 		db: db, recorder: recorder, nodeRepo: nodeRepo, groupRepo: groupRepo,
 		nodeSvc: nodeSvc, taskSvc: taskSvc, taskRepo: taskRepo, monitorSvc: monitorSvc,
 		quotaSvc: quotaSvc, certSvc: certSvc, pubSvc: pubSvc, gwSvc: gwSvc,
+		fileSvc: fileSvc, upload: uploadTransport,
+		pubDNS: dnsStage, pubCert: certStage, pubGateway: gatewayStage, callLog: stageLog,
 		issuer: issuer, server: server,
 	}
 }

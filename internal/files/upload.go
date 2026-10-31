@@ -81,6 +81,8 @@ func (s *Service) CreateUpload(ctx context.Context, subjectID, requestID, nodeID
 // conflict rather than a silent overwrite, so a resumed client can trust the
 // reported byte count.
 func (s *Service) AppendChunk(ctx context.Context, subjectID, uploadID string, offset int64, data []byte) (Upload, error) {
+	unlock := s.lockUpload(uploadID)
+	defer unlock()
 	upload, err := s.repo.GetUpload(ctx, uploadID)
 	if err != nil {
 		return Upload{}, err
@@ -128,6 +130,99 @@ func (s *Service) AppendChunk(ctx context.Context, subjectID, uploadID string, o
 	return upload, nil
 }
 
+// WriteUploadContent streams a request body into the staging file at exactly the
+// recorded offset. The body is capped by both the per-upload limit and the
+// declared size; an oversized or interrupted write leaves the recorded progress
+// unchanged so the client can safely retry the same offset.
+func (s *Service) WriteUploadContent(ctx context.Context, subjectID, uploadID string, offset int64, content io.Reader) (Upload, error) {
+	if content == nil {
+		return Upload{}, fmt.Errorf("%w: content", ErrInvalidTransfer)
+	}
+	if !validToken(subjectID, 128) || !validToken(uploadID, 128) {
+		return Upload{}, fmt.Errorf("%w: subject/upload", ErrInvalidTransfer)
+	}
+	unlock := s.lockUpload(uploadID)
+	defer unlock()
+	upload, err := s.repo.GetUpload(ctx, uploadID)
+	if err != nil {
+		return Upload{}, err
+	}
+	if upload.SubjectID != subjectID {
+		return Upload{}, ErrSubjectMismatch
+	}
+	if upload.Status != UploadOpen {
+		return Upload{}, ErrUploadClosed
+	}
+	if offset < 0 || offset != upload.BytesReceived {
+		return Upload{}, ErrOffsetConflict
+	}
+	remaining := s.maxUploadBytes - offset
+	if upload.ExpectedSize != nil && *upload.ExpectedSize-offset < remaining {
+		remaining = *upload.ExpectedSize - offset
+	}
+	if remaining < 0 {
+		return Upload{}, ErrUploadTooLarge
+	}
+	staging, err := s.stagingPath(upload.StagingName)
+	if err != nil {
+		return Upload{}, err
+	}
+	file, err := os.OpenFile(staging, os.O_WRONLY, 0o600)
+	if err != nil {
+		return Upload{}, fmt.Errorf("files: open staging file: %w", err)
+	}
+	info, err := file.Stat()
+	if err != nil {
+		_ = file.Close()
+		return Upload{}, err
+	}
+	if info.Size() != offset {
+		_ = file.Close()
+		return Upload{}, fmt.Errorf("files: staged bytes are inconsistent with the recorded offset")
+	}
+	if _, err := file.Seek(offset, io.SeekStart); err != nil {
+		_ = file.Close()
+		return Upload{}, err
+	}
+	written, copyErr := io.Copy(file, io.LimitReader(content, remaining+1))
+	if copyErr != nil {
+		_ = file.Truncate(offset)
+		_ = file.Close()
+		if ctx.Err() != nil {
+			return Upload{}, ctx.Err()
+		}
+		return Upload{}, fmt.Errorf("files: write staging content: %w", copyErr)
+	}
+	if written > remaining {
+		_ = file.Truncate(offset)
+		_ = file.Sync()
+		_ = file.Close()
+		return Upload{}, ErrUploadTooLarge
+	}
+	if written == 0 {
+		_ = file.Close()
+		return Upload{}, fmt.Errorf("%w: empty content", ErrInvalidTransfer)
+	}
+	if err := file.Sync(); err != nil {
+		_ = file.Truncate(offset)
+		_ = file.Close()
+		return Upload{}, err
+	}
+	next := offset + written
+	if err := s.repo.UpdateUploadProgress(ctx, s.db, upload.ID, next); err != nil {
+		_ = file.Truncate(offset)
+		_ = file.Sync()
+		_ = file.Close()
+		return Upload{}, err
+	}
+	if err := file.Close(); err != nil {
+		return Upload{}, err
+	}
+	upload.BytesReceived = next
+	upload.UpdatedAt = s.now()
+	return upload, nil
+}
+
 // CompleteUpload verifies the staged digest and streams the file through the
 // transport. A transport failure keeps the upload open for a safe retry because
 // the staged bytes are unchanged.
@@ -135,6 +230,8 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 	if err := s.requireRequest(requestID); err != nil {
 		return Upload{}, err
 	}
+	unlock := s.lockUpload(uploadID)
+	defer unlock()
 	upload, err := s.repo.GetUpload(ctx, uploadID)
 	if err != nil {
 		return Upload{}, err
@@ -200,6 +297,8 @@ func (s *Service) AbortUpload(ctx context.Context, subjectID, requestID, uploadI
 	if err := s.requireRequest(requestID); err != nil {
 		return err
 	}
+	unlock := s.lockUpload(uploadID)
+	defer unlock()
 	upload, err := s.repo.GetUpload(ctx, uploadID)
 	if err != nil {
 		return err

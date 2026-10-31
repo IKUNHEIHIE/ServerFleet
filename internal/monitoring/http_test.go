@@ -29,6 +29,11 @@ func newMonitorServer(t *testing.T, authorizer interface {
 }, risks monitoring.TrafficRiskSource) *httptest.Server {
 	t.Helper()
 	h := newFixture(t, authorizer, &fakeProber{result: healthyResult()}, &fakeNotifier{})
+	return serveMonitorFixture(t, h, risks)
+}
+
+func serveMonitorFixture(t *testing.T, h fixture, risks monitoring.TrafficRiskSource) *httptest.Server {
+	t.Helper()
 	mux := http.NewServeMux()
 	if err := monitoring.RegisterHTTP(mux, h.service, risks, func(*http.Request) (monitoring.Principal, error) {
 		return monitoring.Principal{SubjectID: "admin", RequestID: "req-http"}, nil
@@ -38,6 +43,148 @@ func newMonitorServer(t *testing.T, authorizer interface {
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)
 	return server
+}
+
+func TestHTTPMonitorProbeAndHistory(t *testing.T) {
+	h := newFixture(t, nil, &fakeProber{result: healthyResult()}, &fakeNotifier{})
+	server := serveMonitorFixture(t, h, &fakeRiskSource{})
+
+	create := doJSON(t, server.URL+"/api/v1/monitoring/availability-monitors", http.MethodPost, map[string]any{
+		"name": "Public API", "type": "http", "target": "https://example.com/health",
+		"intervalSeconds": 60, "timeoutSeconds": 5,
+	})
+	if create.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.StatusCode, create.Body)
+	}
+	var monitor struct {
+		ID string `json:"id"`
+	}
+	decode(t, create.Body, &monitor)
+	if monitor.ID == "" {
+		t.Fatalf("created monitor = %+v", monitor)
+	}
+
+	probe := doJSON(t, server.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/probe", http.MethodPost, nil)
+	if probe.StatusCode != http.StatusOK {
+		t.Fatalf("probe status = %d body=%s", probe.StatusCode, probe.Body)
+	}
+	var probeBody struct {
+		MonitorID           string   `json:"monitorId"`
+		Status              string   `json:"status"`
+		State               string   `json:"state"`
+		LatencyMs           *float64 `json:"latencyMs"`
+		StatusCode          *int     `json:"statusCode"`
+		Error               string   `json:"error"`
+		CheckedAt           string   `json:"checkedAt"`
+		ConsecutiveFailures int      `json:"consecutiveFailures"`
+	}
+	decode(t, probe.Body, &probeBody)
+	if probeBody.MonitorID != monitor.ID || probeBody.Status != "up" || probeBody.State != "up" ||
+		probeBody.LatencyMs == nil || *probeBody.LatencyMs != 25 || probeBody.StatusCode == nil ||
+		*probeBody.StatusCode != 200 || probeBody.CheckedAt == "" || probeBody.ConsecutiveFailures != 0 {
+		t.Fatalf("probe = %+v", probeBody)
+	}
+
+	h.prober.set(monitoring.ProbeResult{Healthy: false, Reason: "connection refused"}, nil)
+	down := doJSON(t, server.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/probe", http.MethodPost, nil)
+	if down.StatusCode != http.StatusOK {
+		t.Fatalf("down probe status = %d body=%s", down.StatusCode, down.Body)
+	}
+	decode(t, down.Body, &probeBody)
+	if probeBody.Status != "down" || probeBody.State != "down" || probeBody.ConsecutiveFailures != 1 || probeBody.Error == "" {
+		t.Fatalf("down probe = %+v", probeBody)
+	}
+
+	history := get(t, server.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/history?limit=1")
+	if history.StatusCode != http.StatusOK {
+		t.Fatalf("history status = %d body=%s", history.StatusCode, history.Body)
+	}
+	var page struct {
+		MonitorID string `json:"monitorId"`
+		Items     []struct {
+			ID        int64  `json:"id"`
+			Status    string `json:"status"`
+			CheckedAt string `json:"checkedAt"`
+		} `json:"items"`
+		Limit int `json:"limit"`
+	}
+	decode(t, history.Body, &page)
+	if page.MonitorID != monitor.ID || page.Limit != 1 || len(page.Items) != 1 || page.Items[0].Status != "down" {
+		t.Fatalf("history = %+v", page)
+	}
+
+	full := get(t, server.URL+"/api/v1/availability-monitors/"+monitor.ID+"/history")
+	if full.StatusCode != http.StatusOK {
+		t.Fatalf("alias history status = %d", full.StatusCode)
+	}
+	decode(t, full.Body, &page)
+	if len(page.Items) != 2 || page.Items[0].Status != "down" || page.Items[1].Status != "up" {
+		t.Fatalf("full history = %+v", page)
+	}
+
+	if badLimit := get(t, server.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/history?limit=0"); badLimit.StatusCode != http.StatusBadRequest {
+		t.Fatalf("invalid limit status = %d", badLimit.StatusCode)
+	}
+	if missing := doJSON(t, server.URL+"/api/v1/monitoring/availability-monitors/missing/probe", http.MethodPost, nil); missing.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing probe status = %d", missing.StatusCode)
+	}
+	if missingHistory := get(t, server.URL+"/api/v1/monitoring/availability-monitors/missing/history"); missingHistory.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing history status = %d", missingHistory.StatusCode)
+	}
+}
+
+func TestHTTPMonitorProbeDeniedAndFailsClosed(t *testing.T) {
+	allowed := true
+	deniable := authorizerFunc(func(context.Context, auth.Check) error {
+		if allowed {
+			return nil
+		}
+		return auth.ErrDenied
+	})
+	h := newFixture(t, deniable, &fakeProber{result: healthyResult()}, &fakeNotifier{})
+	server := serveMonitorFixture(t, h, &fakeRiskSource{})
+	create := doJSON(t, server.URL+"/api/v1/monitoring/availability-monitors", http.MethodPost, map[string]any{
+		"name": "Public API", "type": "http", "target": "https://example.com/health",
+		"intervalSeconds": 60, "timeoutSeconds": 5,
+	})
+	if create.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.StatusCode, create.Body)
+	}
+	var monitor struct {
+		ID string `json:"id"`
+	}
+	decode(t, create.Body, &monitor)
+	allowed = false
+	if denied := doJSON(t, server.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/probe", http.MethodPost, nil); denied.StatusCode != http.StatusForbidden {
+		t.Fatalf("denied probe status = %d body=%s", denied.StatusCode, denied.Body)
+	}
+	if deniedHistory := get(t, server.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/history"); deniedHistory.StatusCode != http.StatusForbidden {
+		t.Fatalf("denied history status = %d body=%s", deniedHistory.StatusCode, deniedHistory.Body)
+	}
+
+	unconfigured := newFixture(t, nil, nil, nil)
+	unconfiguredServer := serveMonitorFixture(t, unconfigured, &fakeRiskSource{})
+	create = doJSON(t, unconfiguredServer.URL+"/api/v1/monitoring/availability-monitors", http.MethodPost, map[string]any{
+		"name": "No prober", "type": "http", "target": "https://example.com/health",
+		"intervalSeconds": 60, "timeoutSeconds": 5,
+	})
+	if create.StatusCode != http.StatusCreated {
+		t.Fatalf("create status = %d body=%s", create.StatusCode, create.Body)
+	}
+	decode(t, create.Body, &monitor)
+	unavailable := doJSON(t, unconfiguredServer.URL+"/api/v1/monitoring/availability-monitors/"+monitor.ID+"/probe", http.MethodPost, nil)
+	if unavailable.StatusCode != http.StatusServiceUnavailable {
+		t.Fatalf("unconfigured probe status = %d body=%s", unavailable.StatusCode, unavailable.Body)
+	}
+	var failure struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	decode(t, unavailable.Body, &failure)
+	if failure.Error.Code != "prober_unavailable" {
+		t.Fatalf("unconfigured probe error = %+v", failure)
+	}
 }
 
 func TestHTTPAvailabilityMonitorsAndTrafficRisks(t *testing.T) {

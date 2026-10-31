@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
@@ -39,6 +40,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/transfers/{transferId}", api.get)
 	mux.HandleFunc("POST /api/v1/transfers/{transferId}/cancel", api.cancel)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads", api.createUpload)
+	mux.HandleFunc("PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content", api.uploadContent)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete", api.completeUpload)
 	return nil
 }
@@ -201,6 +203,73 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, r.PathValue("uploadId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if upload.NodeID != r.PathValue("nodeId") {
+		writeFixed(w, http.StatusNotFound, "not_found", "upload was not found")
+		return
+	}
+	offset, ok := uploadOffset(w, r)
+	if !ok {
+		return
+	}
+	if offset != upload.BytesReceived {
+		writeFixed(w, http.StatusConflict, "conflict", "upload offset does not match the received byte count")
+		return
+	}
+	if r.ContentLength > 0 {
+		remaining := api.service.UploadLimit() - offset
+		if upload.ExpectedSize != nil && *upload.ExpectedSize-offset < remaining {
+			remaining = *upload.ExpectedSize - offset
+		}
+		if remaining < 0 || r.ContentLength > remaining {
+			writeFixed(w, http.StatusRequestEntityTooLarge, "upload_too_large", "content exceeds the declared upload size")
+			return
+		}
+	}
+	updated, err := api.service.WriteUploadContent(r.Context(), principal.SubjectID, upload.ID, offset, r.Body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, uploadProgressDTO(updated))
+}
+
+func uploadOffset(w http.ResponseWriter, r *http.Request) (int64, bool) {
+	raw := r.URL.Query().Get("offset")
+	if raw == "" {
+		raw = r.Header.Get("X-Upload-Offset")
+	}
+	if raw == "" {
+		return 0, true
+	}
+	offset, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil || offset < 0 {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "offset must be a non-negative integer")
+		return 0, false
+	}
+	return offset, true
+}
+
+func uploadProgressDTO(upload Upload) map[string]any {
+	var expected any
+	if upload.ExpectedSize != nil {
+		expected = *upload.ExpectedSize
+	}
+	return map[string]any{
+		"uploadId": upload.ID, "status": "awaiting_data", "bytesReceived": upload.BytesReceived,
+		"expectedSize": expected,
+	}
+}
+
 func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
 	principal, ok := api.principal(w, r)
 	if !ok {
@@ -318,10 +387,12 @@ func writeError(w http.ResponseWriter, err error) {
 		writeFixed(w, http.StatusConflict, "conflict", "upload state changed")
 	case errors.Is(err, ErrChecksumMismatch):
 		writeFixed(w, http.StatusUnprocessableEntity, "checksum_mismatch", "uploaded file failed verification")
+	case errors.Is(err, ErrUploadTooLarge):
+		writeFixed(w, http.StatusRequestEntityTooLarge, "upload_too_large", "upload exceeds the size limit")
 	case errors.Is(err, ErrTransportAbsent), errors.Is(err, ErrTaskSubmitter), errors.Is(err, ErrCancellerAbsent):
 		writeFixed(w, http.StatusServiceUnavailable, "unavailable", "file transport is unavailable")
 	case errors.Is(err, ErrInvalidPath), errors.Is(err, ErrSymlinkForbidden), errors.Is(err, ErrInvalidTransfer),
-		errors.Is(err, ErrUploadTooLarge), errors.Is(err, ErrRequestIDRequired), errors.Is(err, ErrMissingAuthorizer):
+		errors.Is(err, ErrRequestIDRequired), errors.Is(err, ErrMissingAuthorizer):
 		writeFixed(w, http.StatusBadRequest, "invalid_request", "request is invalid")
 	case errors.Is(err, ErrTransportFailure):
 		writeFixed(w, http.StatusBadGateway, "transport_failure", "node file transport failed")

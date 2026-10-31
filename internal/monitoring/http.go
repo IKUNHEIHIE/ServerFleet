@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
@@ -66,11 +67,15 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, risks TrafficRiskSource,
 	mux.HandleFunc("GET /api/v1/monitoring/availability-monitors", api.listMonitors)
 	mux.HandleFunc("POST /api/v1/monitoring/availability-monitors", api.createMonitor)
 	mux.HandleFunc("PATCH /api/v1/monitoring/availability-monitors/{monitorId}", api.updateMonitor)
+	mux.HandleFunc("GET /api/v1/monitoring/availability-monitors/{monitorId}/history", api.monitorHistory)
+	mux.HandleFunc("POST /api/v1/monitoring/availability-monitors/{monitorId}/probe", api.probeMonitor)
 	mux.HandleFunc("GET /api/v1/monitoring/traffic-risks", api.trafficRisks)
 	// The v0.9 candidate contract and the web client use the unprefixed paths.
 	mux.HandleFunc("GET /api/v1/availability-monitors", api.listMonitors)
 	mux.HandleFunc("POST /api/v1/availability-monitors", api.createMonitor)
 	mux.HandleFunc("PATCH /api/v1/availability-monitors/{monitorId}", api.updateMonitor)
+	mux.HandleFunc("GET /api/v1/availability-monitors/{monitorId}/history", api.monitorHistory)
+	mux.HandleFunc("POST /api/v1/availability-monitors/{monitorId}/probe", api.probeMonitor)
 	mux.HandleFunc("GET /api/v1/traffic-risks", api.trafficRisks)
 	return nil
 }
@@ -231,6 +236,110 @@ func (api *httpAPI) updateMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, monitorFromRecord(updated))
+}
+
+type checkDTO struct {
+	ID         int64    `json:"id"`
+	MonitorID  string   `json:"monitorId"`
+	Status     string   `json:"status"`
+	LatencyMs  *float64 `json:"latencyMs,omitempty"`
+	StatusCode *int     `json:"statusCode,omitempty"`
+	Error      string   `json:"error,omitempty"`
+	CheckedAt  string   `json:"checkedAt"`
+}
+
+func checkFromRecord(check Check) checkDTO {
+	dto := checkDTO{
+		ID: check.ID, MonitorID: check.MonitorID, Status: string(check.Status),
+		StatusCode: check.StatusCode, Error: check.Error,
+		CheckedAt: formatOptionalTime(check.CheckedAt),
+	}
+	if check.Latency != nil {
+		milliseconds := float64(*check.Latency) / float64(time.Millisecond)
+		dto.LatencyMs = &milliseconds
+	}
+	return dto
+}
+
+// monitorHistory returns persisted probe samples newest first. The read grant is
+// checked by the service before any stored row is loaded.
+func (api *httpAPI) monitorHistory(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	limit, ok := parseHistoryLimit(w, r)
+	if !ok {
+		return
+	}
+	monitorID := r.PathValue("monitorId")
+	checks, err := api.service.ListChecks(r.Context(), principal.SubjectID, monitorID, limit)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	items := make([]checkDTO, 0, len(checks))
+	for _, check := range checks {
+		items = append(items, checkFromRecord(check))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{
+		"monitorId": monitorID, "items": items, "limit": limit,
+	})
+}
+
+type probeDTO struct {
+	MonitorID           string   `json:"monitorId"`
+	Status              string   `json:"status"`
+	State               string   `json:"state"`
+	LatencyMs           *float64 `json:"latencyMs,omitempty"`
+	StatusCode          *int     `json:"statusCode,omitempty"`
+	Error               string   `json:"error,omitempty"`
+	CheckedAt           string   `json:"checkedAt"`
+	ConsecutiveFailures int      `json:"consecutiveFailures"`
+}
+
+// probeMonitor runs one explicit, authorized probe through the SSRF/allowlist
+// policed service and persists the sample. A missing Prober fails closed.
+func (api *httpAPI) probeMonitor(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	monitorID := r.PathValue("monitorId")
+	check, monitor, err := api.service.RunCheckNow(r.Context(), principal.SubjectID, principal.RequestID, monitorID)
+	if err != nil {
+		if errors.Is(err, ErrProberUnavailable) {
+			writeFixed(w, http.StatusServiceUnavailable, "prober_unavailable", "monitoring prober is not configured")
+			return
+		}
+		writeError(w, err)
+		return
+	}
+	dto := probeDTO{
+		MonitorID: monitor.ID, Status: string(check.Status), State: string(monitor.State),
+		StatusCode: check.StatusCode, Error: check.Error,
+		CheckedAt:           formatOptionalTime(check.CheckedAt),
+		ConsecutiveFailures: monitor.ConsecutiveFailures,
+	}
+	if check.Latency != nil {
+		milliseconds := float64(*check.Latency) / float64(time.Millisecond)
+		dto.LatencyMs = &milliseconds
+	}
+	writeJSON(w, http.StatusOK, dto)
+}
+
+func parseHistoryLimit(w http.ResponseWriter, r *http.Request) (int, bool) {
+	raw := r.URL.Query().Get("limit")
+	if raw == "" {
+		return DefaultCheckLimit, true
+	}
+	limit, err := strconv.Atoi(raw)
+	if err != nil || limit < 1 || limit > MaxCheckLimit {
+		writeFixed(w, http.StatusBadRequest, "invalid_request",
+			"limit must be an integer between 1 and "+strconv.Itoa(MaxCheckLimit))
+		return 0, false
+	}
+	return limit, true
 }
 
 func (api *httpAPI) trafficRisks(w http.ResponseWriter, r *http.Request) {
