@@ -1,4 +1,16 @@
-# V09-5D-CX / codex-03（接续codex-02）
+# V09-5D-CX / codex-04（接续 codex-03）
+
+## V09-5D-CX Wave 4（codex-04，2026-10-31）
+
+- 任务 `V09-5D-CX`（Wave 4）；唯一会话 `codex-04`；分支 `feature/v09-platform-cx02`；工作目录 `D:\admin\desktop\codex\myproject\ks\.worktrees\feature--v09-platform-cx02`；起始基线 `0f9a75e416a82a9589a29d4d9cf8a52bf0266066`（Wave 1/2/3 与 DS 四域组合接线已合入 main）。本轮本地提交，未推送、未合并 main。
+- **CX-W4-01（工作流 HTTP 管理与受控执行）**：新增 `internal/workflows/read.go` 与 `internal/workflows/http.go`，提供 `GET/POST /api/v1/workflows`、`GET/PATCH /api/v1/workflows/{workflowId}`、`POST /api/v1/workflows/{workflowId}/runs`。定义按所有者隔离，`workflows.read`（只读）与 `workflows.write`（operator/administrator）权限键已注册；触发只记录冻结计划并调用 `Engine.Advance`，每步经组合 `SubmitTask` 进入唯一 `tasks.Service.Submit`，修改类/root 动作落 `awaiting_approval`，任务自批 `409`，重复触发由任务幂等键去重。`apps/controller/server/workflows.go` 提供 SQL 后端、审计（`workflows.*` 8 个动作）与路由挂载。测试：`internal/workflows` 9 项 PASS，含 `TestWorkflowHTTPCreateReadPatchAndOwnerRules`、`TestWorkflowHTTPTriggerEntersTaskServiceAtMostOnce`、`TestWorkflowReadOwnerIsolation`；`TestWave4WorkflowHTTPManagementApprovalAndAudit` 在真实 HTTPS+SQLite WAL 上验证 CRUD、reader 403、审批门控、自批 409、任务不重复与审计落盘。
+- **CX-W4-02（CLI 自包含连接）**：新增 `apps/controller/localpki`（本地 ECDSA P-256 Agent CA，0600、部分/损坏状态失败关闭、30 天 CA/12 小时证书）与 `apps/controller/bootstrap`（CLI 参数、`-db` 默认初始化数据库旁 `pki/`、推导 `AgentAuthority/AgentServerName`、TLS1.3 + `VerifyClientCertIfGiven`）。`apps/controller/main.go` 改为使用该组合：无 `-db` 仍为 M0-P1 空壳；有 `-db` 时 enrollment/WSS 路由默认挂载，不再 503。Agent 侧新增 `apps/agent/runtime` CLI（无参保持原骨架输出并退出 0；`-status` 自检；`-enroll-token/-controller-url/-root-cert` 执行一次入网），`apps/agent/identity_store.go` 增加只读 `Status`。测试：`apps/controller/{bootstrap,localpki}`、`apps/agent/{,runtime}` 全部 PASS；`TestWave4ControllerCLILocalPKIEnrollment` 覆盖 CLI 默认组合的 token→pending→批准→issued 与重启根指纹稳定。
+- **CX-W4-03（证据盘点）**：新增 [AC-EVIDENCE-WAVE4.md](AC-EVIDENCE-WAVE4.md)，逐条映射 `AC-01, 08, 10, 11, 12, 13, 14, 18, 19, 21, 22, 23, 24` 与 `POC-01, 02, 03, 04, 06, 08` 的实现文件、测试与外部边界；全部 AC 仍为 `NOT_ACCEPTED`。
+- **本机验证（2026-10-31，Windows）**：`go test ./... -count=1 -timeout 20m` 全部包 `ok`、0 FAIL；Wave4 专项输出已记录于 AC-EVIDENCE-WAVE4。`npm run check` 与 `npm run check:security` 的最终结果与 HEAD 在提交后补记于本文件末尾。
+- **剩余风险**：工作流状态写入与任务创建为两个独立持久事务（任务幂等键收敛，失败窗口未隐藏）；多步骤仅由显式 `POST /runs` 重放推进，无可信外部事件生产端；本地 PKI 仅供本机开发，不是 PKI-OPS/生产轮换方案；未在真实 Linux/arm64/1C1G 安装 Agent 或 Xray，未接外部模型/ACME/云资源。G2、D01–D07、P1-C10 未冻结。
+
+---
+
 
 ## V09-5D-CX Wave 3（codex-03，2026-10-31）
 
