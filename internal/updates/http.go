@@ -234,9 +234,17 @@ func (h *HTTP) job(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *HTTP) rollback(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Reason string `json:"reason"`
+	}
 	if r.ContentLength > 0 || len(r.TransferEncoding) != 0 {
-		writeUpdateProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
-		return
+		if !decodeUpdateBody(w, r, &body) {
+			return
+		}
+		if strings.TrimSpace(body.Reason) == "" || len(body.Reason) > 1024 {
+			writeUpdateProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
+			return
+		}
 	}
 	writeUpdateProblem(w, http.StatusNotFound, "UPDATE_JOB_NOT_FOUND")
 }

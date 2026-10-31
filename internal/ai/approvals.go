@@ -117,11 +117,6 @@ func validateApprovals(record sessionRecord) error {
 	return nil
 }
 
-func cloneApproval(record approvalRecord) approvalRecord {
-	record.NodeIDs = slices.Clone(record.NodeIDs)
-	return record
-}
-
 // RequestApproval records a human-created pending request bound to the exact
 // canonical tool invocation, target snapshot and scope revision.
 func (s *SessionService) RequestApproval(ctx context.Context, sessionID string, input ApprovalInput) (ApprovalRequest, error) {
@@ -163,7 +158,7 @@ func (s *SessionService) RequestApproval(ctx context.Context, sessionID string, 
 			return ErrScopeConflict
 		}
 		for _, existing := range record.Approvals {
-			if existing.Digest == assessment.Digest && existing.ScopeRevision == input.ScopeRevision && slices.Equal(existing.NodeIDs, nodes) && (existing.State == "pending" || existing.State == "approved") {
+			if existing.Digest == assessment.Digest && existing.ScopeRevision == input.ScopeRevision && slices.Equal(existing.NodeIDs, nodes) && (existing.State == "pending" || existing.State == "approved") && now.Before(existing.ExpiresAt) {
 				result = approvalRequestView(existing, now)
 				return nil
 			}

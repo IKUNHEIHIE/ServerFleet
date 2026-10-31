@@ -88,8 +88,15 @@ func newAISessionStore(db *storage.DB, recorder *audit.SQLRecorder) (*ai.SQLSess
 					AppendAudit: func(auditCtx context.Context, events []ai.SessionAuditEvent) error {
 						for _, event := range events {
 							result := event.Result
-							if result == "" {
-								result = "success"
+							switch result {
+							case "", "success", "allowed", "denied", "partial":
+								if result == "" {
+									result = "success"
+								}
+							case "unknown":
+								result = "partial"
+							default:
+								result = "failure"
 							}
 							if err := recorder.AppendTx(auditCtx, tx, audit.Event{
 								SubjectID: event.SubjectID,

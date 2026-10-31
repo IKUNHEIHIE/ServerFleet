@@ -170,7 +170,7 @@ func (h *EnrollmentManagementHTTP) issueToken(w http.ResponseWriter, r *http.Req
 		writeEnrollmentError(w, err)
 		return
 	}
-	writeManagementJSON(w, http.StatusCreated, enrollmentTokenResponse{ID: token.ID, Token: token.Token, ExpiresAt: token.ExpiresAt})
+	writeManagementJSON(w, http.StatusCreated, enrollmentTokenResponse(token))
 }
 
 func (h *EnrollmentManagementHTTP) list(w http.ResponseWriter, r *http.Request) {
