@@ -2,6 +2,7 @@
 
 - 任务：`V09-5D-DS` Wave 4；会话 `deepseek-04`；分支 `feature/v09-services-ds02`；基线 `0f9a75e`
 - 代码提交：`bfe3b93`、`238ef81`、`fcc7390`、`22fe183`
+- Wave 5 增量（会话 `deepseek-05`，基线 `3adf891`，代码提交 `d475c8a`/`f2f7b9e`/`506c977`/`25939d8`）见第 4 节。
 - 口径：本表只登记 **DS（数据与核心业务服务）侧** 的代码、自动化测试与可复现命令。`docs/development/sprints/v09-five-day/ACCEPTANCE.json` 中的条目仍为 `NOT_ACCEPTED`；下表状态表示 DS 侧证据成熟度，不等于完整 v0.9 验收通过。
 - 状态图例：`LOCAL-PASS` 本机真实 SQLite 文件库/HTTP 自动化通过；`PARTIAL` 另有隔离 VM/真实第三方只读证据但缺关键闭环；`BLOCKED` 需未授权的真实节点/供应商环境；`UNTESTED` 未执行。
 - 统一命令（本分支，固定 Go 1.27.3 / Node 24.22.1）：
@@ -45,6 +46,25 @@
 ## 3. 跨条目剩余风险
 
 1. **无迁移新增**：为保持 Wave 2 集成测试的 19 项迁移断言，本轮未新增迁移；monitor 的 `sourceNodeId` 未持久化，因此 AC-16 的“按关联节点可见性”无法在服务层实现，history/probe 仅强制 `monitoring.read`/`monitoring.write`。需契约/迁移决策后补。
-2. **端口未生产实现**：文件 `UploadTransport`、监控 `Prober`、发布三阶段 publisher 均需组合层注入；未注入时相关端点失败关闭（503/502），不伪造成功。
+2. **端口未生产实现**：文件 `UploadTransport`、监控 `Prober`、发布三阶段 publisher 均需组合层注入；未注入时相关端点失败关闭（503/502），不伪造成功。Wave 5 已提供 `monitoring.NewNetProber` 与 `files.NewLocalStagingTransport` 两个**本地可用实现**供总控回退接线（见第 4 节与 `HANDOFF-WAVE5.md`），但生产 Agent 通道与 publisher 仍属 CX/后续任务。
 3. **provider 错误脱敏**：publishing 只回稳定错误码；files/monitoring 同样不返回原始上游文本。
 4. **外部环境清单**：真实 Linux 双架构/1C1G、Cloudflare 多账号、ACME 生产、QQ/SMTP 实际投递、Nginx 受控接管、真实 Agent WSS/mTLS 与文件字节通道 → 未授权/未执行，保持 BLOCKED/UNTESTED。
+
+## 4. Wave 5 增量证据（DS-W5-01/02，会话 deepseek-05）
+
+- 分支 `feature/v09-services-ds02`；起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`
+- 代码提交：`d475c8a`（`feat(monitoring): add ssrf-revalidating net prober`）、`f2f7b9e`（`feat(files): add local staging upload and download transport`）、`506c977`（`test(services): exercise real prober and local staging transport over http`）、`25939d8`（`fix(monitoring): keep probe failures classified when context is intact`）
+- 未新增迁移；未修改 `apps/**`、公共契约/Proto/生成代码/根锁文件；HTTP 路由与 `RegisterHTTP` 签名未变。
+
+| AC | Wave 5 子项 | 代码（本包） | 自动化测试（代表性） | 本轮证据 | 状态 | 未覆盖的外部边界 |
+|---|---|---|---|---|---|---|
+| AC-03 | 文件互传（受控本地暂存通道） | `internal/files/local_transport.go`：`NewLocalStagingTransport(rootDir)` 实现 `UploadTransport`+`DownloadTransport`；原子写入、字节数/SHA-256 核对、符号链接与路径逃逸拒绝 | `TestLocalStagingPushPullRoundTrip`、`TestLocalStagingRejectsInvalidInputs`、`TestLocalStagingRejectsSymlinkedDirectories`、`TestLocalStagingRejectsSymlinkedTargetFile`、`TestLocalStagingPullRejections`、`TestLocalStagingHonorsCancellation`、`TestNewLocalStagingTransportRejectsBadRoot`、`TestLocalStagingWindowsReservedNames`；`TestWave5RealProberAndLocalStagingTransport/real_local_staging_upload_and_download` | 真实 `t.TempDir()` 磁盘：HTTP 创建上传 → PUT 字节 → complete（真实 SHA-256）→ 磁盘文件一致 → `Download` 读回一致；逃逸/符号链接/大小/摘要负向全部拒绝 | LOCAL-PASS（受控本地目录闭环）；真实节点字节 BLOCKED | 两个真实 Linux 节点间复制、节点掉线/部分失败、节点端权限与磁盘配额仍依赖 CX Agent 通道；本实现仅作本地闭环，不得冒充生产 Agent |
+| AC-16 | 服务可用性监控（真实探测器） | `internal/monitoring/prober.go`：`NewNetProber` 实现 HTTP/TCP/TLS；自定义 `DialContext` 对每个解析 IP 二次 SSRF 校验；代理禁用、重定向逐跳复检；稳定错误码 + 固定摘要 | `TestNetProberHTTPHealthyUsesRealTransport`、`TestNetProberHTTPStatusFailureDoesNotEchoBody`、`TestNetProberRejectsDNSRebindingToLoopback`、`TestNetProberRejectsMixedPublicAndPrivateAnswers`、`TestNetProberLoopbackAllowedOnlyForExplicitHost`、`TestNetProberRejectsMetadataAndLocalhostNames`、`TestNetProberTCPProbe`、`TestNetProberTLSProbeVerifiesCertificate`、`TestNetProberHTTPRespectsTimeout`、`TestNetProberDNSFailureIsClassified`；`TestWave5RealProberAndLocalStagingTransport/real_http_probe_persists_history` | 真实 `httptest.Server` HTTP 探测 → `/probe` 200/up/latency/statusCode 落库 → `/history` 读回；404 目标 → down + `http_status_404` 且响应体不回显；TLS 正向使用注入 RootCAs，未信任与明文端口均失败关闭 | LOCAL-PASS（真实本地网络 + 注入解析器）；公网目标 UNTESTED | 真实公网 HTTP/TCP/TLS、IPv6-only、证书异常主机、真实 DNS TTL 切换（DNS Rebinding 仅用注入 `HostResolver` 验证解析后拦截）；健康口径固定 2xx/3xx |
+
+### 4.1 统一验证（本分支）
+
+- `go test ./internal/monitoring/... ./internal/files/... ./tests/integration/v09/services/... -count=1` → PASS（monitoring 0.613s / files 0.402s / services 0.669s）。
+- `TestWave5RealProberAndLocalStagingTransport` → PASS（`real_http_probe_persists_history`、`real_local_staging_upload_and_download`）。
+- `npm run check` → PASS（policy、contracts、go、web、git；新增测试在 `reports/go-tests.log` 中执行）。
+- `npm run check:security` → PASS（`npm audit` 0 漏洞；`govulncheck ./...` 无漏洞）。
+- 接线参数与行为变化见 [HANDOFF-WAVE5.md](HANDOFF-WAVE5.md)；总控未接线前 `server.go` 仍保持原有失败关闭语义，本包不修改 `apps/controller`。
