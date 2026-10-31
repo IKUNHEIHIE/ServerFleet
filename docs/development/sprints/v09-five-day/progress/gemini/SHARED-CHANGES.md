@@ -83,3 +83,30 @@
 - 桩的目的是在 Controller 管理 API 缺失时验证**正式前端**的真实交互（登录/CSRF/401/403/503/SSE/迟到响应等）。它不是后端实现，也不能作为后端验收证据。
 - 本机没有 Go 工具链，未运行 `apps/controller` 骨架；“仅 healthz”场景用同路由集的 `--healthz-only` 桩复现。
 - 若总控不希望仓库内保留验收桩，可整体删除 `apps/web/acceptance/`，`ACCEPTANCE.md` 中的步骤与截图仍可复核当时行为。
+
+## 12. GM-W3-01/02 · 真实 Go Controller 适配结果与后端协调建议（Wave 3）
+
+Wave 3 已对照 `main` 上真实 Controller（`internal/{auth,nodes,servicegroups,tasks,files,audit,dns,notifications,gateway}/http.go`）完成前端双兼容适配，并用 Headless Edge 跑通真实 SQLite WAL 端到端验收（`tests/browser/v09/run-live-controller-acceptance.mjs`）。以下差异**全部已在 `apps/web/src/lib/api/` 兼容层消化**，无一处伪造数据；需要后端/契约 owner 知悉或跟进的项如下：
+
+### 12.1 已在前端消化的真实响应差异（无需后端改动）
+- 分页元数据：真实 `tasks`/`audit`/`transfers` 列表为 `{items, nextCursor}` 平铺（候选契约为 `{items, page:{nextCursor,limit,hasMore}}`）。`compat.ts` 双兼容；`page.limit` 在平铺形状下为 `null`（不编造）。
+- 任务详情双形状：真实 `GET /api/v1/tasks/{jobId}` 返回 batch 形状（`jobId`，无 `planDigest`）；候选契约与真实 `approve` 响应返回 summary 形状。`requireTaskIdentifier` 兼容二者；详情页在缺失 `planDigest` 时从服务端任务列表补齐（均为服务端签发数据，不本地计算）。
+- 逐节点执行条目：真实实现只返回 `nodeId/state/error`；候选的 `executionId/exitCode/lastSequence` 等在真实响应中缺失时界面显示"—"。
+- DNS：providers 真实返回 `{code,name}`（无 `supported/capabilities`，界面显示“未声明”）；zone sync 返回单对象；凭据只接受 `credentialRef` 引用（`apiToken` 明文字段已移除出请求体）；设默认为 `POST …/default`；换凭据走 `PATCH` 账号 `credentialRef`。
+- 通知：凭据为 `POST …/credentials {secretRef}`（候选为 PUT `{secret}`）；测试发送幂等键在请求体 `{idempotencyKey}`；真实 Controller 未配置渠道时返回空列表，界面如实显示空态。
+- 用户/授权：`PATCH /users/{id}` 强制 `If-Match`（前端已带 `expectedRevision`）；`POST /users`、`POST /resource-grants` 强制 16–128 字符 `Idempotency-Key`（前端自动生成）；用户列表解析仅接受已知字段。
+- UI 权限键与真实权限目录键（`nodes.read/tasks.approve/groups.write/...`）通过 `lib/permissions/backend-aliases.ts` 显式映射；仅按服务端显式授予判定，不推断，`host.root`（AdminOnly）不映射到任何 UI 管理键。
+
+### 12.2 前端已适配、建议契约跟进的差异
+- **网关路由归属**：真实创建路由强制 `gatewayId`（`internal/gateway/http.go` 校验非空），候选契约 `GatewayRouteInput` 无此字段。前端已补“所属网关”选择器并在创建请求携带；`GatewayRoute` DTO 增加可选 `gatewayId`。建议修订候选契约对齐。
+- **服务组按成员授权**：真实 `servicegroups.Service.Create/Update` 以成员节点集合为授权范围，空成员集合一律 403。前端服务组编辑器已补成员节点勾选（创建即选成员）。候选契约未声明该约束，建议在契约描述中注明。
+- **通知渠道从零创建**：真实后端渠道由 `PUT …/channels/{channel}` upsert，但设置页只能编辑服务端已返回的渠道；未配置时 UI 无法从零创建渠道（设置页显示“服务端未返回通知渠道”）。建议确认是否提供“新建渠道”入口或由后端预置渠道行。
+
+### 12.3 后端行为观察（建议 owner 评审，前端已诚实呈现）
+- **任务 command 非法值返回 500**：`POST /api/v1/tasks(/preview)` 的 `command` 是动作 ID（`host.root` 等）；含空格/冒注的自由文本（如 `host.root: apply patch`）会穿透 `validPolicyID` 校验并最终命中 `writeError` 默认分支返回 **500 internal_error**（已用直连探针复现：`host.root` 200、`host.root: xxx` 500）。前端已加客户端校验（单一动作 ID，不含空白）；建议后端把非法 action ID 映射为 400 invalid_request 并在 `tasks.writeError` 中显式分类。
+- **路由健康检查依赖**：组合运行时（`apps/controller/main.go`）未注入 `GatewayChecker`，创建网关路由真实返回 **503 gateway_unavailable**。前端如实显示“Controller 暂时不可用”；验收脚本接受该诚实结果。若 Wave 3 集成注入 Checker 后行为变化，前端无需改动。
+- **`PrepareSetup` 无 HTTP 路径**（设计使然）：真实启动后的首个 setup token 只能由“本机安装器”生成。live 验收脚本以 `node:sqlite` 直写 `cx_auth_identity.SetupDigest/SetupExpires`（与 `internal/auth.credentialDigest` 同算法）承担安装器角色，Bootstrap HTTP 流程本身全部走真实 Controller。建议总控确认正式安装器形态（CLI 子命令或受保护本地端点），前端 Bootstrap 页面已就绪。
+
+### 12.4 验收桩损坏修复（需总控知悉）
+- `tests/browser/v09/stub-server.mjs` 在 Wave 1 集成移动目录时发生**双重编码损坏**（中文注释/字符串乱码且部分字符串字面量闭引号被吞），Node 无法解析（SyntaxError），桩验收自 Wave 1 合入后实际不可运行。本轮已按原逻辑以干净 UTF-8 重写修复；`run-acceptance.mjs` 16/16 步骤通过。
+- `tests/browser/v09/fixtures.mjs` 同样存在**有损**乱码（路由/ID/数值完好，仅人读文案为乱码，可解析、不影响断言）。原中文无法机械恢复；是否由作者重写文案交总控决定，本轮未改动其字节。

@@ -2,7 +2,8 @@
 
 export interface PageMeta {
   readonly nextCursor: string | null;
-  readonly limit: number;
+  /** 服务端声明的页大小；真实 Controller 的平铺分页未声明时为 null，不得编造。 */
+  readonly limit: number | null;
   readonly hasMore: boolean;
 }
 
@@ -208,16 +209,20 @@ export interface TaskSummary {
   readonly expiresAt?: string;
 }
 
+/**
+ * 逐节点执行条目。真实 Controller（`internal/tasks/http.go` executions）只提供
+ * `nodeId`/`state`/`error`；候选契约另有 executionId/exitCode 等扩展字段。缺失字段保持缺失。
+ */
 export interface TaskExecution {
-  readonly executionId: string;
-  readonly taskId: string;
+  readonly executionId?: string;
+  readonly taskId?: string;
   readonly nodeId: string;
   readonly state: string;
   readonly startedAt?: string;
   readonly finishedAt?: string;
   readonly exitCode?: number | null;
   readonly outputTruncated?: boolean;
-  readonly lastSequence: number;
+  readonly lastSequence?: number;
 }
 
 export interface BatchTaskPreview {
@@ -451,11 +456,16 @@ export interface NotificationSettings {
   readonly deduplicationWindowSeconds?: number;
 }
 
+/**
+ * DNS 供应商。真实实现（`internal/dns/http.go`）返回 `{code, name}`；
+ * 候选契约返回 `displayName`/`supported`/`capabilities`。`displayName` 由兼容层归一化；
+ * 未声明的能力保持缺失，界面必须显示“未声明”，不得推断。
+ */
 export interface DNSProvider {
   readonly code: "cloudflare";
   readonly displayName: string;
-  readonly supported: boolean;
-  readonly capabilities: {
+  readonly supported?: boolean;
+  readonly capabilities?: {
     readonly supportsProxy?: boolean;
     readonly supportsZoneSync?: boolean;
     readonly supportedRecordTypes?: readonly string[];
@@ -549,6 +559,8 @@ export interface GatewayRouteInput {
 
 export interface GatewayRoute extends GatewayRouteInput {
   readonly id: string;
+  /** 真实 Controller（internal/gateway/http.go）的路由对象与创建请求都带网关归属；候选契约省略。 */
+  readonly gatewayId?: string;
 }
 
 export interface CertificateNodeResult {

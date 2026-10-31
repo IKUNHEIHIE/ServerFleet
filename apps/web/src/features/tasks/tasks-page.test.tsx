@@ -53,7 +53,7 @@ describe("task center", () => {
     fireEvent.click(screen.getByRole("button", { name: "创建任务" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText("任务名称"), { target: { value: "patch" } });
-    fireEvent.change(within(dialog).getByLabelText("命令或脚本"), { target: { value: "apt-get update" } });
+    fireEvent.change(within(dialog).getByLabelText("命令或脚本"), { target: { value: "host.patch" } });
     await within(dialog).findByText("Tokyo");
     fireEvent.click(within(dialog).getByLabelText(/Tokyo/));
     fireEvent.click(within(dialog).getByRole("button", { name: "预演目标" }));
@@ -64,7 +64,7 @@ describe("task center", () => {
       expect(create).toBeDefined();
       expect(JSON.parse(String(create?.init?.body))).toMatchObject({
         name: "patch",
-        command: "apt-get update",
+        command: "host.patch",
         target: { type: "node_ids", nodeIds: ["n-1"] },
         dryRun: true,
       });

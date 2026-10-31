@@ -46,12 +46,14 @@ function RouteEditor({
   open,
   route,
   serviceGroups,
+  gateways,
   onClose,
   onSaved,
 }: {
   readonly open: boolean;
   readonly route: GatewayRoute | null;
   readonly serviceGroups: readonly ServiceGroup[];
+  readonly gateways: readonly GatewayNode[];
   readonly onClose: () => void;
   readonly onSaved: () => void;
 }) {
@@ -60,11 +62,13 @@ function RouteEditor({
   const [domain, setDomain] = useState("");
   const [upstream, setUpstream] = useState("");
   const [serviceGroupId, setServiceGroupId] = useState("");
+  // 真实 Controller 的路由创建强制要求 gatewayId（internal/gateway/http.go 校验非空）。
+  const [gatewayId, setGatewayId] = useState("");
   const [https, setHttps] = useState(true);
   const [enabled, setEnabled] = useState(true);
   const [localError, setLocalError] = useState<string | null>(null);
   const action = useAction((body: GatewayRouteInput) =>
-    route ? gatewaysApi.updateRoute(route.id, body) : gatewaysApi.createRoute(body),
+    route ? gatewaysApi.updateRoute(route.id, body) : gatewaysApi.createRoute({ ...body, gatewayId }),
   );
 
   useEffect(() => {
@@ -73,6 +77,7 @@ function RouteEditor({
     setDomain(route?.domain ?? "");
     setUpstream(route?.upstream ?? "");
     setServiceGroupId(route?.serviceGroupId ?? "");
+    setGatewayId(route?.gatewayId ?? "");
     setHttps(route?.https ?? true);
     setEnabled(route?.enabled ?? true);
     setLocalError(null);
@@ -80,6 +85,7 @@ function RouteEditor({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (!route && !gatewayId) return setLocalError("必须选择所属网关（真实 Controller 按网关归属校验路由）。");
     if (!domain.trim()) return setLocalError("域名不能为空。");
     if (mode === "upstream" && !upstream.trim()) return setLocalError("上游地址不能为空。");
     if (mode === "serviceGroup" && !serviceGroupId) return setLocalError("必须选择服务组。");
@@ -111,6 +117,16 @@ function RouteEditor({
       <form id="route-editor" onSubmit={submit} className="space-y-4">
         {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
         {action.error ? <Notice tone="error" title="保存失败">{describeApiError(action.error)}</Notice> : null}
+        {!route ? (
+          <Field label="所属网关" hint="真实 Controller 的路由创建按网关归属校验；编辑时不可更换。">
+            {ids => (
+              <Select id={ids.inputId} value={gatewayId} onChange={event => setGatewayId(event.target.value)} required disabled={disabled}>
+                <option value="">请选择网关</option>
+                {gateways.map(gateway => <option key={gateway.id} value={gateway.id}>{gateway.name.trim() || gateway.id}</option>)}
+              </Select>
+            )}
+          </Field>
+        ) : null}
         <Field label="访问域名">{ids => <TextInput id={ids.inputId} value={domain} onChange={event => setDomain(event.target.value)} required disabled={disabled} />}</Field>
         <Field label="后端类型">
           {ids => (
@@ -389,6 +405,7 @@ export function GatewaysPage() {
         open={routeEditor.open}
         route={routeEditor.route}
         serviceGroups={groupItems}
+        gateways={gatewayItems}
         onClose={() => setRouteEditor({ open: false, route: null })}
         onSaved={() => {
           setRouteEditor({ open: false, route: null });

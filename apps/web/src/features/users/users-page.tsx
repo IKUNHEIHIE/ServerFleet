@@ -46,7 +46,8 @@ function UserEditor({
     enabled: boolean;
   }) =>
     user
-      ? usersApi.patch(user.userId, { displayName: body.displayName, roleIds: body.roleIds, enabled: body.enabled })
+      // 真实 Controller 的用户修改强制 If-Match 乐观锁（缺失返回 428 PRECONDITION_REQUIRED）。
+      ? usersApi.patch(user.userId, { displayName: body.displayName, roleIds: body.roleIds, enabled: body.enabled }, user.revision)
       : usersApi.create(body),
   );
 

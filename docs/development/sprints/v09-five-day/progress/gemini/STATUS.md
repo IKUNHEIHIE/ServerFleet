@@ -97,3 +97,27 @@
 ## 下一步
 
 GM-01—GM-09 全部检查点已提交。最终 HEAD 与未完成清单见 `ACCEPTANCE.md`；后续工作取决于总控是否接收共享接口提案（`SHARED-CHANGES.md`）以及 Controller 管理 API 的实现进度。
+
+## Wave 3 检查点（gemini-02 · 起始基线 `98f39e0` · 检查点提交见 `git log` 本节末）
+
+| 任务 | 内容 | 结果 |
+|---|---|---|
+| GM-W3-01 | 对照真实 Controller 9 个域的 `http.go` 响应结构，在 `apps/web/src/lib/api/compat.ts` 实现双兼容解析（分页平铺 `nextCursor`、任务 `taskId/jobId` 双形状、executions 精简条目、DNS providers `{code,name}`、zone sync 单对象、transfer items 字段别名）；严格校验：未知形状/缺失必需字段抛 `ApiError(kind:"invalid")`，`page.limit` 缺失为 `null`，绝不伪造默认成功 | 306 项单测 PASS（新增 compat 23 项） |
+| GM-W3-01 | 请求侧对齐真实后端：users PATCH 带 `If-Match` 乐观锁；users/grants 创建带 `Idempotency-Key`；DNS 凭据改 `credentialRef` 引用（去除明文 apiToken）、setDefault 改 POST；notifications 凭据改 `POST {secretRef}`、test 幂等键入 body；UI 权限键经 `lib/permissions/backend-aliases.ts` 显式映射到真实权限目录（`tasks.approve`/`nodes.write` 等，AdminOnly 的 `host.root` 不映射） | typecheck/build PASS |
+| GM-W3-01 | 前端补齐真实契约能力：服务组编辑器增加成员节点选择（真实后端按成员集合授权，空集合 403）；网关路由编辑器增加“所属网关”选择（真实创建强制 `gatewayId`）；任务命令字段客户端校验单一动作 ID（自由文本触发后端 500）；audit 的 `actorType` 过滤映射为后端 `source` | 见 SHARED-CHANGES §12 |
+| GM-W3-02 | 新增 `tests/browser/v09/run-acceptance.mjs`（自动化桩验收，等价 Wave 1 GM-09 手工流程）：登录→概览→刷新 CSRF 锁定→重新登录→节点 0%/离线规则→任务 SSE（游标推进、秘密不渲染）→503 保会话→403 不登出→会话撤销 401→移动视口截图；`--out` 指定证据目录 | **16/16 PASS** |
+| GM-W3-02 | 新增 `tests/browser/v09/run-live-controller-acceptance.mjs`：构建并启动真实 `apps/controller`（`-db 临时 SQLite WAL -listen 127.0.0.1:<port> -origin https://... -tls-cert/-tls-key`；后端强制直连 HTTPS），同源 TLS 托管 `apps/web/dist` 并原样转发 `/api/*`（SSE 流式透传）；以 node:sqlite 承担本机安装器（PrepareSetup 同算法写入 setup token 摘要、播种 2 个节点夹具）；Headless Edge 跑通：Bootstrap 初始化→自动登录→刷新 `/auth/me` 恢复 CSRF→零范围隔离→创建操作员+双人授权→分组/服务组与 expectedRevision 成员更新→root 任务预演/提交/自批 409/异人审批 200/SSE→DNS（providers/credentialRef 建号）→网关（安装任务 202、路由创建按服务端 Checker 缺口诚实 503）→通知（空态诚实 + 通知策略真实 PUT）→审计（bootstrap/user.create/grant.create/tasks.submit） | **32/32 PASS** |
+| GM-W3-02 | 修复 `tests/browser/v09/stub-server.mjs`：Wave 1 集成移动目录时双重编码损坏（Node SyntaxError，桩验收不可运行），已按原逻辑以干净 UTF-8 重写；`fixtures.mjs` 有损乱码登记待总控决策 | 见 SHARED-CHANGES §12.4 |
+
+### Wave 3 证据
+
+- 桩验收截图：`evidence/stub/stub-01..09*.png`（登录、概览、写锁定、节点、SSE、503、403、会话撤销、移动端）。
+- 真实后端截图：`evidence/live/live-01..15*.png`（bootstrap、概览、零范围、授权、分组、服务组、任务等待审批、自批 409、异人审批+SSE、DNS、网关、监控、审计）。
+- 后端协调建议与诚实缺口：`SHARED-CHANGES.md` §12（任务 command 500、路由 Checker 503、服务组成员授权、路由 gatewayId、渠道从零创建、PrepareSetup 安装器形态）。
+
+### Wave 3 边界说明
+
+- 真实后端验收未注入 `Dispatcher`/`GatewayChecker`/`DNSProvider`（`apps/controller/main.go` 组合即如此）：任务审批后停留在 queued（无 Agent 派发）、路由创建诚实 503、DNS 账号 credentialStatus 为待验证。均为组合运行时的真实行为，界面如实呈现，未伪造。
+- 监控可用性探测（`/api/v1/availability-monitors`）与任务 `resume` 在当前 `main` 基线尚未挂载（DS-W3/CX-W3 范围），界面显示诚实错误分类；不阻塞本轮验收。
+
+Wave 3 全部工作收束于基线 `98f39e0` 之上的单一提交 `feat(web): adapt console to real controller contract and add live browser acceptance`（分支 feature/v09-console-gm02 HEAD，本文件与该提交同时落盘，故不写自身 SHA）；工作树干净，未修改任何 Go 源码、`package.json`、`vite.config.ts` 或公共契约文件。
