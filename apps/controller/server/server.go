@@ -90,6 +90,7 @@ type Server struct {
 	TasksRepo         *tasks.Repo
 	Tasks             *tasks.Service
 	Files             *files.Service
+	FilesTransport    *files.LocalStagingTransport
 	DNS               *dns.Service
 	Notifications     *notifications.Service
 	Gateway           *gateway.Service
@@ -611,6 +612,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	taskBridge := &composedTaskBridge{tasks: tasksService}
+	uploads := cfg.UploadTransport
+	if uploads == nil {
+		localTransport, err := files.NewLocalStagingTransport(filepath.Join(stagingDir, "nodes"))
+		if err != nil {
+			return cleanup(err)
+		}
+		s.FilesTransport = localTransport
+		uploads = localTransport
+	}
 	filesService, err := files.NewService(files.Options{
 		DB:         db,
 		Repo:       filesRepo,
@@ -618,7 +628,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Authorizer: authorizer,
 		Submitter:  taskBridge,
 		Canceller:  taskBridge,
-		Uploads:    cfg.UploadTransport,
+		Uploads:    uploads,
 		StagingDir: stagingDir,
 		Now:        now,
 	})
@@ -665,12 +675,21 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	prober := cfg.MonitoringProber
+	if prober == nil {
+		prober, err = monitoring.NewNetProber(monitoring.NetProberConfig{
+			AllowedHosts: cfg.MonitoringAllowedHosts,
+		})
+		if err != nil {
+			return cleanup(err)
+		}
+	}
 	monitoringService, err := monitoring.NewService(monitoring.Options{
 		DB:           db,
 		Repo:         monitoringRepo,
 		Audit:        auditRecorder,
 		Authorizer:   authorizer,
-		Prober:       cfg.MonitoringProber,
+		Prober:       prober,
 		AllowedHosts: cfg.MonitoringAllowedHosts,
 		Now:          now,
 	})
@@ -785,7 +804,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (s *Server) registerRoutes() error {
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave4"})
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave5"})
 	})
 
 	for _, pattern := range []string{

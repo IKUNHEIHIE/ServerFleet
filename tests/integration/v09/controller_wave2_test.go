@@ -3,6 +3,8 @@ package v09_test
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -219,6 +221,9 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 			"servicegroups.write",
 			"tasks.submit",
 			"tasks.read",
+			"tasks.command",
+			"files.read",
+			"files.write",
 			"monitoring.read",
 			"monitoring.write",
 			"quota.read",
@@ -227,6 +232,8 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 			"publishing.read",
 			"publishing.write",
 			"publishing.plan_create",
+			"workflows.read",
+			"workflows.write",
 		},
 	}, adminLogin.CSRF, "wave2-grant-admin-0001")
 	if resp.StatusCode != http.StatusOK {
@@ -522,7 +529,92 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		t.Fatalf("list publications = %d: %s", resp.StatusCode, data)
 	}
 
-	// 6. Verify durable audit query over HTTPS
+	// 6. Verify Wave 5 composed defaults: NetProber, LocalStagingTransport, and Workflows
+	if composed.FilesTransport == nil {
+		t.Fatal("expected default FilesTransport (LocalStagingTransport) to be wired on composed Server")
+	}
+	uploadContent := []byte("wave5-composed-local-staging-payload")
+	uploadDigest := sha256.Sum256(uploadContent)
+	resp, data = doReq(adminClient, "POST", "/api/v1/nodes/node-tokyo/files/uploads", map[string]any{
+		"destinationDir": "/srv/app",
+		"conflictPolicy": "overwrite",
+		"files": []map[string]any{
+			{
+				"name":      "release.txt",
+				"sizeBytes": len(uploadContent),
+				"sha256":    hex.EncodeToString(uploadDigest[:]),
+			},
+		},
+	}, adminLogin.CSRF, "wave5-upload-create-0001")
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create upload = %d: %s", resp.StatusCode, data)
+	}
+	var createdUpload struct {
+		UploadID string `json:"uploadId"`
+	}
+	if err := json.Unmarshal(data, &createdUpload); err != nil || createdUpload.UploadID == "" {
+		t.Fatalf("decode upload: %v (%s)", err, data)
+	}
+	rawReq, err := http.NewRequest("PUT", origin+"/api/v1/nodes/node-tokyo/files/uploads/"+createdUpload.UploadID+"/content?offset=0", bytes.NewReader(uploadContent))
+	if err != nil {
+		t.Fatal(err)
+	}
+	rawReq.Header.Set("Origin", origin)
+	rawReq.Header.Set("X-Requested-With", "ServerFleetWeb")
+	rawReq.Header.Set("X-CSRF-Token", adminLogin.CSRF)
+	rawReq.Header.Set("Content-Type", "application/octet-stream")
+	rawResp, err := adminClient.Do(rawReq)
+	if err != nil {
+		t.Fatalf("PUT upload content: %v", err)
+	}
+	rawData, _ := io.ReadAll(rawResp.Body)
+	_ = rawResp.Body.Close()
+	if rawResp.StatusCode != http.StatusOK {
+		t.Fatalf("PUT upload content = %d: %s", rawResp.StatusCode, rawData)
+	}
+	resp, data = doReq(adminClient, "POST", "/api/v1/nodes/node-tokyo/files/uploads/"+createdUpload.UploadID+"/complete", map[string]any{}, adminLogin.CSRF, "wave5-upload-complete-0001")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("complete upload = %d: %s", resp.StatusCode, data)
+	}
+	var pulled bytes.Buffer
+	if n, err := composed.FilesTransport.PullFile(ctx, "node-tokyo", "/srv/app/release.txt", &pulled); err != nil || int(n) != len(uploadContent) || !bytes.Equal(pulled.Bytes(), uploadContent) {
+		t.Fatalf("PullFile = (%d, %v, %q), want %q", n, err, pulled.String(), string(uploadContent))
+	}
+
+	resp, data = doReq(adminClient, "POST", "/api/v1/monitoring/availability-monitors", map[string]any{
+		"name":            "wave5-http-monitor",
+		"type":            "http",
+		"target":          "https://status.edge.example.com/healthz",
+		"intervalSeconds": 60,
+		"timeoutSeconds":  2,
+	}, adminLogin.CSRF, "wave5-monitor-create-0001")
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("create monitor = %d: %s", resp.StatusCode, data)
+	}
+	var createdMon struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(data, &createdMon); err != nil || createdMon.ID == "" {
+		t.Fatalf("decode monitor: %v (%s)", err, data)
+	}
+	resp, data = doReq(adminClient, "POST", "/api/v1/monitoring/availability-monitors/"+createdMon.ID+"/probe", map[string]any{}, adminLogin.CSRF, "wave5-monitor-probe-0001")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("probe monitor = %d: %s", resp.StatusCode, data)
+	}
+	resp, data = doReq(adminClient, "GET", "/api/v1/monitoring/availability-monitors/"+createdMon.ID+"/history", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("monitor history = %d: %s", resp.StatusCode, data)
+	}
+	var monHist struct {
+		Items []struct {
+			Status string `json:"status"`
+		} `json:"items"`
+	}
+	if err := json.Unmarshal(data, &monHist); err != nil || len(monHist.Items) != 1 {
+		t.Fatalf("expected 1 persisted monitor check sample, got %+v (%v) raw=%s", monHist, err, string(data))
+	}
+
+	// 7. Verify durable audit query over HTTPS
 	resp, data = doReq(adminClient, "GET", "/api/v1/audit/events?limit=50", nil, "", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("audit events = %d: %s", resp.StatusCode, data)

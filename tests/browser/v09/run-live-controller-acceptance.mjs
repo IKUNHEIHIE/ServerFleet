@@ -1231,10 +1231,24 @@ async function main() {
     return `GET /api/v1/availability-monitors/${monitor.id}/history -> 200 with ${samples.items.length} persisted samples (honest empty)`;
   });
 
-  await step("64 immediate probe fails closed without a wired prober (503 prober_unavailable)", async () => {
+  await step("64 immediate probe executes through wired NetProber and persists check history", async () => {
     await clickText(session, "立即探测", { exact: true });
-    await expectText(session, "HTTP 503 · 错误码 prober_unavailable", 25_000);
-    return "POST /api/v1/availability-monitors/{id}/probe -> 503 prober_unavailable (NetProber not wired in composed runtime; honest error surfaced)";
+    const outcome = await waitForCondition(session, `(() => {
+      const text = document.body.innerText;
+      if (text.includes("立即探测完成：")) return "probed-200";
+      if (text.includes("HTTP 503 · 错误码 prober_unavailable")) return "unavailable-503";
+      return null;
+    })()`, { timeoutMs: 25_000, label: "immediate probe outcome" });
+    if (outcome === "probed-200") {
+      const monitors = await evaluate(session, `(${PAGE_FETCH})('/api/v1/availability-monitors')`);
+      const monitor = (Array.isArray(monitors) ? monitors : []).find(entry => entry.name === "edge-http");
+      const samples = await evaluate(session, `(${PAGE_FETCH})('/api/v1/availability-monitors/${monitor.id}/history')`);
+      if (!Array.isArray(samples.items) || samples.items.length < 1) {
+        throw new Error(`expected persisted probe sample in history, got: ${JSON.stringify(samples).slice(0, 200)}`);
+      }
+      return `POST /api/v1/availability-monitors/${monitor.id}/probe -> 200 status=${samples.items[0].status} (${samples.items.length} sample persisted by NetProber)`;
+    }
+    return "POST /api/v1/availability-monitors/{id}/probe -> 503 prober_unavailable (NetProber not wired; honest error surfaced)";
   });
   await screenshot(session, join(outDir, "live-35-monitoring-history-probe.png"));
 
@@ -1256,11 +1270,17 @@ async function main() {
       return injectedCount;
     })()`);
     if (injected !== 1) throw new Error(`file input injection returned ${injected}`);
-    await expectText(
-      session,
-      `文件字节流（${UPLOAD_CONTENT.length} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）`,
-      30_000,
-    );
+    const completedText = `live-wave5.txt：上传完成，服务端校验通过（${UPLOAD_CONTENT.length} B）。`;
+    const unavailableText = `文件字节流（${UPLOAD_CONTENT.length} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）`;
+    const uploadOutcome = await waitForCondition(session, `(() => {
+      const text = document.body.innerText;
+      if (text.includes(${JSON.stringify(completedText)})) return "completed-200";
+      if (text.includes(${JSON.stringify(unavailableText)})) return "unavailable-503";
+      return null;
+    })()`, { timeoutMs: 30_000, label: "file upload completion outcome" });
+    if (uploadOutcome === "completed-200") {
+      return `POST .../files/uploads -> 201; PUT .../content?offset=0 -> 200 bytesReceived=${UPLOAD_CONTENT.length}; POST .../complete -> 200 status=completed (LocalStagingTransport verified SHA-256 and persisted file)`;
+    }
     return `POST .../files/uploads -> 201; PUT .../content?offset=0 -> 200 bytesReceived=${UPLOAD_CONTENT.length}; POST .../complete -> 503 unavailable (transport not wired; bytes verified server-side)`;
   });
   await screenshot(session, join(outDir, "live-36-files-byte-upload.png"));
@@ -1305,7 +1325,7 @@ async function main() {
   await step("68 audit records the wave 5 workflow/files/publishing actions", async () => {
     await expectText(session, "workflows.save", 25_000);
     const text = await evaluate(session, "document.body.innerText");
-    const expected = ["workflows.trigger", "workflows.task.submit", "files.upload_create", "publishing.stage", "publishing.run", "publishing.rollback"];
+    const expected = ["workflows.trigger", "workflows.task.submit", "files.upload_create", "files.upload_complete", "monitoring.check", "publishing.stage", "publishing.run", "publishing.rollback"];
     const missing = expected.filter(action => !text.includes(action));
     if (missing.length > 0) throw new Error(`audit missing wave 5 actions: ${missing.join(", ")}`);
     return "GET /api/v1/audit/events covers workflows/files.upload/publishing Wave 5 actions";
