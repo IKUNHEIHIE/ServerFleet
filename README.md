@@ -40,10 +40,11 @@ HTTP返修4fbdcf5与Web返修39b2b7c现已接收为PROPOSED，原四个P2关闭�
 
 2026-10-30负责人要求五天完成**完整v0.9**，现切换为[三位复合实施包](docs/development/sprints/v09-five-day/PLAN.md)：Codex平台安全/Agent、DeepSeek数据业务、Gemini完整管理台与浏览器验收，各包连续多子项，检查点增量集成；W07并入GM，不再单项等待。新本地实施授权不代表已有实现、G2冻结、生产/VPS/云或远程准入；24项真实验收均须证据，五日全量目标风险高，未完成项如实保留。最新授权和唯一会话/目录以任务板及本计划为准。
 
-2026-10-31 **Wave 1（`4f5a459`）、Wave 2（`a9a76d7`）、Wave 3（`9453718`）与 Wave 4 三线复合实施及主控集成均已通过审查验证并合入 `main`**：
+2026-10-31 **Wave 1（`4f5a459`）、Wave 2（`a9a76d7`）、Wave 3（`9453718`）、Wave 4（`f4609f5`）与 Wave 5 三线复合实施及主控集成均已通过审查验证并合入 `main`**：
 - **Wave 1 & Wave 2**：完成 13 领域基础实现、`apps/controller` 19 项 SQLite WAL 迁移与跨模块 HTTP/RBAC/审计事务组合接线、Web S01 CSRF 恢复与 Bootstrap 登录衔接，详见[Wave 1 审查报告](docs/development/reviews/V09-WAVE1-REVIEW.md)与[Wave 2 集成报告](docs/development/reviews/V09-WAVE2-REVIEW.md)。
 - **Wave 3**：完成全量路由补齐（入网管理、Agent RFC6455 WSS+mTLS 回路、AI 会话与审批门控、插件中心与 Xray 门控、更新与恢复、可用性监控、流量配额、内部 PKI 证书分发、发布向导）与 32 步真实 Go Controller 浏览器验收，详见[Wave 3 审查报告](docs/development/reviews/V09-WAVE3-REVIEW.md)。
-- **Wave 4**：完成自动化工作流 HTTP API、Controller/Agent CLI 自包含本地 PKI 双进程连接、监控历史与真实本地 HTTP/TCP/TLS 探测、文件互传字节流上传与 SHA-256 校验、发布向导本地阶段编排与逆序回滚、**58 步真实 Go Controller + SQLite WAL + HTTPS 浏览器端到端验收**及三线 AC-01~24 / PoC-01~08 证据盘点（`V09-5D-CX` `b02b157`、`V09-5D-DS` `122506d`、`V09-5D-GM` `9b32a5b`、总控接线 `0d762f0`：Go 602 顶层 + 1,132 子测试 = 1,734 PASS、Web 36 文件 / 316 单测 PASS、Stub 16/16 + Live Controller 58/58 浏览器验收 PASS、安全扫描 0 漏洞），详见[Wave 4 审查报告](docs/development/reviews/V09-WAVE4-REVIEW.md)，现已登记派发 [Wave 5 任务单](docs/development/sprints/v09-five-day/WAVE5.md)。G2 及 D01–D07/P1-C10 仍 OPEN。
+- **Wave 4**：完成自动化工作流 HTTP API、Controller/Agent CLI 自包含本地 PKI 双进程连接、监控历史与真实本地 HTTP/TCP/TLS 探测端点、文件互传字节流上传与 SHA-256 校验端点、发布向导本地阶段编排与逆序回滚、58 步真实 Go Controller 浏览器端到端验收及三线 AC-01~24 / PoC-01~08 证据盘点，详见[Wave 4 审查报告](docs/development/reviews/V09-WAVE4-REVIEW.md)。
+- **Wave 5**：完成 Agent CLI `-connect-once` 受控单次 WSS+mTLS 连接与双进程任务执行闭环（WSL Ubuntu 24.04 amd64 复验 PASS）、受二次 SSRF 复核保护的真实标准库 `NetProber` 与受控本地目录 `LocalStagingTransport` 默认主控接线、工作流/文件字节上传/监控历史与立即探测/发布执行与回滚 Web 全页面打通，以及 **70 步真实 Go Controller + SQLite WAL + HTTPS 浏览器端到端验收**（`V09-5D-CX` `cad136b`、`V09-5D-DS` `df8eebd`、`V09-5D-GM` `639eff2`、总控接线 `aef21ae`：Go 636 顶层 + 1,134 子测试 = 1,770 PASS、Web 37 文件 / 329 单测 PASS、Stub 16/16 + Live Controller 70/70 浏览器验收 PASS、安全扫描 0 漏洞），详见[Wave 5 审查报告](docs/development/reviews/V09-WAVE5-REVIEW.md)。G2 及 D01–D07/P1-C10 仍 OPEN。
 
 ## 快速验证
 
