@@ -12,6 +12,19 @@ const (
 
 func (k Kind) valid() bool { return k == KindInternal || k == KindACME }
 
+// CredentialType is the internal PKI distribution mode requested for one
+// distribution job. Key material never enters this package.
+type CredentialType string
+
+const (
+	CredentialTrustBundle     CredentialType = "trust_bundle"
+	CredentialPerNodeIdentity CredentialType = "per_node_identity"
+)
+
+func (t CredentialType) valid() bool {
+	return t == CredentialTrustBundle || t == CredentialPerNodeIdentity
+}
+
 // CertificateStatus is the stored lifecycle state.
 type CertificateStatus string
 
@@ -133,6 +146,7 @@ type CreateInternalDistributionInput struct {
 	ExpectedGroupRevision uint64
 	KeyRef                KeyRef
 	Validity              Validity
+	CredentialType        CredentialType
 	Confirm               bool
 }
 
