@@ -50,6 +50,8 @@ type Config struct {
 	MonitoringProber       monitoring.Prober
 	MonitoringAllowedHosts []string
 	CertificateIssuer      certificates.Issuer
+	PublishingBridge       publishing.LocalBridgeConfig
+	UploadTransport        files.UploadTransport
 	Now                    func() time.Time
 
 	// Agent transport composition. Enrollment and the Agent WSS link stay
@@ -616,6 +618,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Authorizer: authorizer,
 		Submitter:  taskBridge,
 		Canceller:  taskBridge,
+		Uploads:    cfg.UploadTransport,
 		StagingDir: stagingDir,
 		Now:        now,
 	})
@@ -702,13 +705,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	pubBridge := publishing.NewLocalBridge(cfg.PublishingBridge)
 	publishingService, err := publishing.NewService(publishing.Options{
 		DB:           db,
 		Repo:         publishingRepo,
 		Groups:       sgLookup,
-		DNS:          failClosedPublisher{},
-		Certificates: failClosedCertPublisher{},
-		Gateway:      failClosedGatewayPublisher{},
+		DNS:          pubBridge.DNS,
+		Certificates: pubBridge.Certificates,
+		Gateway:      pubBridge.Gateway,
 		Audit:        auditRecorder,
 		Authorizer:   authorizer,
 		Now:          now,
@@ -1347,36 +1351,6 @@ func (b *composedCertTaskBridge) Submit(ctx context.Context, req certificates.Di
 		return "", err
 	}
 	return task.ID, nil
-}
-
-type failClosedPublisher struct{}
-
-func (failClosedPublisher) Publish(context.Context, publishing.DNSPublishRequest) (publishing.StageResult, error) {
-	return publishing.StageResult{}, publishing.ErrPublisherUnavailable
-}
-
-func (failClosedPublisher) Rollback(context.Context, string, publishing.StageResult) error {
-	return publishing.ErrPublisherUnavailable
-}
-
-type failClosedCertPublisher struct{}
-
-func (failClosedCertPublisher) Publish(context.Context, publishing.CertificateRequest) (publishing.StageResult, error) {
-	return publishing.StageResult{}, publishing.ErrPublisherUnavailable
-}
-
-func (failClosedCertPublisher) Rollback(context.Context, string, publishing.StageResult) error {
-	return publishing.ErrPublisherUnavailable
-}
-
-type failClosedGatewayPublisher struct{}
-
-func (failClosedGatewayPublisher) Publish(context.Context, publishing.GatewayRequest) (publishing.StageResult, error) {
-	return publishing.StageResult{}, publishing.ErrPublisherUnavailable
-}
-
-func (failClosedGatewayPublisher) Rollback(context.Context, string, publishing.StageResult) error {
-	return publishing.ErrPublisherUnavailable
 }
 
 type composedTaskBridge struct {
