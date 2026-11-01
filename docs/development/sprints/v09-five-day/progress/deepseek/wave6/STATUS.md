@@ -19,6 +19,7 @@
 | `80d6918` | `docs(deepseek): record wave6 ds evidence and awskr handoff` |
 | `7699b4e` | `feat(dns): add acme challenge publisher and provider consistency guards` |
 | `eeabb99` | `feat(files): report transfer terminal results to unified tasks` |
+| `9d25dc1` | `fix(gateway): bound nginx task parameters` |
 
 以上均在作者分支本地；未推送、未合并 main。
 
@@ -69,8 +70,9 @@
 
 - `npm run check:go`（build/test/vet/staticcheck）→ PASS（最终代码 `814f1db`）。
 - `npm run check:policy` → PASS；`npm run check:security` → npm audit 0、govulncheck 无已知漏洞。
-- `npm run check` 完整运行（2026-11-01T06:12:23Z，最终代码 `eeabb99`）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
-- `npm run check:security`（同 HEAD）：npm audit 0，govulncheck 无已知漏洞。
+- `npm run check` 完整运行（2026-11-01T06:12:23Z，代码 `eeabb99`）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
+- `npm run check:security`（`eeabb99`）：npm audit 0，govulncheck 无已知漏洞。
+- `9d25dc1` 仅收紧 Nginx 任务参数边界（gateway），随后 `npm run check:go` PASS；web/contracts 未变。最终 HEAD 以 `git log -1` 为准。
 - `go test -race`：**UNTESTED**，本机 CGO_ENABLED=0 且无 gcc；不能声称 race 通过。
 - 迁移：**未新增**；AMCE/Nginx/文件通道均不依赖新表。`publishing.rollback-all` HTTP 路由为候选，未改 OpenAPI/Proto/gen。
 
