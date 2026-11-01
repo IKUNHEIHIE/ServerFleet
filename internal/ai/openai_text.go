@@ -29,6 +29,7 @@ type OpenAITextProvider struct {
 	resolve     CredentialResolver
 	client      *http.Client
 	endpoint    string
+	stream      bool
 }
 
 func NewOpenAITextProvider(credentials *auth.CredentialService, resolve CredentialResolver) (*OpenAITextProvider, error) {
@@ -45,7 +46,18 @@ func NewOpenAITextProvider(credentials *auth.CredentialService, resolve Credenti
 		// a POST on a pooled connection. No SDK retry policy is involved.
 		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
 	}
-	return &OpenAITextProvider{credentials, resolve, &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, "https://api.openai.com/v1/responses"}, nil
+	return &OpenAITextProvider{credentials: credentials, resolve: resolve, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, endpoint: "https://api.openai.com/v1/responses"}, nil
+}
+
+// NewOpenAIStreamingTextProvider consumes actual upstream SSE. Deltas remain
+// private until terminal-response, secret and post-borrow checks succeed; partial
+// upstream text is never disclosed on a revoked/failed/unknown operation.
+func NewOpenAIStreamingTextProvider(credentials *auth.CredentialService, resolve CredentialResolver) (*OpenAITextProvider, error) {
+	p, err := NewOpenAITextProvider(credentials, resolve)
+	if err == nil {
+		p.stream = true
+	}
+	return p, err
 }
 func (p *OpenAITextProvider) Close() {
 	if p != nil && p.client != nil {
@@ -97,7 +109,7 @@ func validateProviderJSON(d *json.Decoder, depth int, budget *int) error {
 					return ErrGenerationUnknown
 				}
 				switch strings.ToLower(key) {
-				case "id", "object", "status", "model", "store", "error", "incomplete_details", "output", "type", "role", "phase", "content", "text":
+				case "id", "object", "status", "model", "store", "error", "incomplete_details", "output", "type", "role", "phase", "content", "text", "sequence_number", "delta", "response":
 					if key != strings.ToLower(key) {
 						return ErrGenerationUnknown
 					}
@@ -226,7 +238,7 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		}
 		input = append(input, item)
 	}
-	body, err := json.Marshal(map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": false, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": 8192})
+	body, err := json.Marshal(map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": p.stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": 8192})
 	if err != nil || len(body) > 512<<10 {
 		return ErrToolDenied
 	}
@@ -249,6 +261,9 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		defer request.Header.Del("Authorization")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Accept", "application/json")
+		if p.stream {
+			request.Header.Set("Accept", "text/event-stream")
+		}
 		response, err := p.client.Do(request)
 		if err != nil {
 			return ErrGenerationUnknown
@@ -258,15 +273,19 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 			return ErrGenerationUnknown
 		}
 		media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-		if err != nil || media != "application/json" || response.ContentLength > 1<<20 {
+		if err != nil || (!p.stream && media != "application/json") || (p.stream && media != "text/event-stream") || response.ContentLength > 1<<20 {
 			return ErrGenerationUnknown
 		}
-		raw, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
-		if err != nil {
-			return ErrGenerationUnknown
+		if p.stream {
+			text, err = decodeProviderStream(ctx, response.Body, r.Profile.Model)
+		} else {
+			raw, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+			defer clear(raw)
+			if readErr != nil {
+				return ErrGenerationUnknown
+			}
+			text, err = decodeProviderText(raw, r.Profile.Model)
 		}
-		defer clear(raw)
-		text, err = decodeProviderText(raw, r.Profile.Model)
 		if err != nil || strings.Contains(text, string(secret)) {
 			text = ""
 			return ErrGenerationUnknown

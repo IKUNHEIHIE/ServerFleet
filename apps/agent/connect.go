@@ -71,6 +71,7 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 	result.NodeName = request.NodeName
 	result.WaitTaskMillis = request.WaitTaskMillis
 	var facts agentIdentityFacts
+	var linkErr error
 	err = store.WithCertificate(ctx,
 		func(ctx context.Context, observed agentIdentityFacts) error {
 			if !executionIDPattern.MatchString(observed.NodeID) || !time.Now().Add(time.Minute).Before(observed.ExpiresAt) {
@@ -80,10 +81,11 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 			return nil
 		},
 		func(ctx context.Context, certificate tls.Certificate) error {
-			return runOneShotLink(ctx, request, endpoint, roots, pin, certificate, facts, &result)
+			linkErr = runOneShotLink(ctx, request, endpoint, roots, pin, certificate, facts, &result)
+			return linkErr
 		})
 	if err != nil {
-		if errors.Is(err, errAgentWorkersUnknown) {
+		if errors.Is(linkErr, errAgentWorkersUnknown) {
 			return result, errAgentWorkersUnknown
 		}
 		return result, errAgentConnect

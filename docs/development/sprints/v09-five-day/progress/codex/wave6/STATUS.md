@@ -20,4 +20,16 @@ Agent `-serve`、有界重连/退避、持续心跳指标、信号取消及 work
 
 Windows `go test ./apps/agent/...` 首次 FAIL：文件最终目录同步在 Windows 不受支持；修正为 Linux 专属能力并明确 SKIP 后 PASS。不是放宽 Linux 持久化门。WSL 初验 38 顶层 PASS、0 SKIP，后续最终复验另记。`AGENT-LINUX.md` 含启动/停止/安装候选、Proto 接收/兼容/DS 接缝与未测项目。共享 Proto 只交 patch，未生成/接线，不声称跨机功能完成。
 
-AI / Xray / 更新 / 恢复继续包内推进。G2 和发布准入不变。
+增量 2 SHA：9d63de015a2411df67801da60c71bcd80b1a931e。
+
+## 增量 3：AI BYOK、配置及真实 HTTP SSE 消费
+
+NewBYOKRuntime 绑定已有持久 ModelSettings、owner 精确凭据元数据、Conversation 和 OpenAI 文本适配；强制注入配额适配，无默认无限配额；凭据独立 gate 仍要求私有 generating 观察。新增 owner 配置 GET/PUT 与显式 generate 候选 HTTP 入口，CAS、会话/作用域/密钥版本、取消和 UNKNOWN 不重试不变。上游 stream=true，消费有界 SSE，严格序号/终端文本一致性，拒绝工具/失败/断流；终端及借用后复核前不披露部分文本，因此**不是浏览器逐 token 流式展示**。
+
+Windows AI 模块 PASS；WSL 初验 32 顶层 PASS、0 SKIP。新增受控 TLS 成功/配额零 I/O/撤权/断流负向及 owner 切换、CAS HTTP 用例。测试供应商不是外部模型服务。Context7 OpenAI resolve 超时，按 OpenAI Docs 使用官方 Responses streaming-events 页面核对事件；Go 文件安全及 HTTP 取消文档由 Context7 返回。
+
+controller-ai-keyring.patch **取代** controller-keyring.patch，proposed.txt 是它的完整拟议文件供 overlay 编译；共享目录未改。`go test -overlay reports/wave6-linux/controller-overlay.json ./apps/controller/server -run '^$'` 编译 PASS。此项仅编译，不是补丁已接收或主控集成成功。总控需注册配额、模型审计 sink、UI 路由/API 审查及新私有密钥配置，真实外部模型 UNTESTED。
+
+代码复核同时修正 Agent 身份借用包装会隐藏 worker UNKNOWN 的问题，避免未停止 worker 后重连。
+
+Xray / 更新 / 恢复继续包内推进。G2 和发布准入不变。

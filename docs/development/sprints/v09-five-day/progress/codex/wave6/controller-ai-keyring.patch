@@ -1,0 +1,114 @@
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -42,6 +42,8 @@
+ // Config configures the composed Controller management runtime.
+ type Config struct {
+ 	DBPath                 string
++	CredentialKeyDir       string
++	AIGenerationQuota      ai.GenerationQuota
+ 	Origin                 string
+ 	StagingDir             string
+ 	Dispatcher             tasks.Dispatcher
+@@ -107,6 +109,9 @@
+ 
+ 	AI             *ai.SessionService
+ 	AIConversation *ai.ConversationService
++	AIRuntime *ai.BYOKRuntime
++	AIModelsHTTP *ai.ModelSettingsHTTP
++	AIGenerationHTTP *ai.GenerationHTTP
+ 	AIManagement   *ai.ManagementHTTP
+ 	AIMessagesHTTP *ai.MessagesHTTP
+ 	AIEventsHTTP   *ai.MessageEventsHTTP
+@@ -501,11 +506,13 @@
+ 	if err != nil {
+ 		return cleanup(err)
+ 	}
+-	credentialsService, err := auth.NewCredentialService(
+-		identityService,
+-		"local-default",
+-		map[string][]byte{"local-default": []byte("0123456789abcdef0123456789abcdef")},
+-		func(context.Context, auth.CredentialOperation) error { return auth.ErrDenied },
++	var aiConversation *ai.ConversationService
++	credentialsService, err := auth.NewPersistentCredentialService(
++		ctx, identityService, cfg.CredentialKeyDir,
++		func(ctx context.Context, op auth.CredentialOperation) error {
++			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" { return auth.ErrDenied }
++			return aiConversation.CheckCredentialOperation(ctx, op)
++		},
+ 		func(context.Context, string, string) ([]string, error) { return []string{}, nil },
+ 	)
+ 	if err != nil {
+@@ -601,9 +608,10 @@
+ 	if err := s.setupWorkflows(); err != nil {
+ 		return cleanup(err)
+ 	}
+-	if err := s.setupAI(); err != nil {
+-		return cleanup(err)
+-	}
++	if err := s.setupAI(cfg); err != nil {
++		return cleanup(err)
++	}
++	aiConversation = s.AIConversation
+ 	if err := s.setupPlugins(cfg); err != nil {
+ 		return cleanup(err)
+ 	}
+@@ -781,6 +789,7 @@
+ 		}
+ 		s.runCancel = nil
+ 	}
++	if s.AIRuntime != nil { s.AIRuntime.Close() }
+ 	if s.PluginVault != nil {
+ 		_ = s.PluginVault.Close()
+ 		s.PluginVault = nil
+@@ -997,6 +1006,11 @@
+ 			s.mux.Handle(pattern, s.AIManagement)
+ 		}
+ 	}
++	if s.AIModelsHTTP != nil {
++		s.mux.Handle("GET /api/v1/ai/model-settings", s.AIModelsHTTP)
++		s.mux.Handle("PUT /api/v1/ai/model-settings", s.AIModelsHTTP)
++	}
++	if s.AIGenerationHTTP != nil { s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate", s.AIGenerationHTTP) }
+ 	if s.AIMessagesHTTP != nil {
+ 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+ 		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+--- a/apps/controller/server/ai.go
++++ b/apps/controller/server/ai.go
+@@ -16,7 +16,7 @@
+ 	"serverfleet.local/serverfleet/internal/tasks"
+ )
+ 
+-func (s *Server) setupAI() error {
++func (s *Server) setupAI(cfg Config) error {
+ 	store, err := newAISessionStore(s.DB, s.Audit)
+ 	if err != nil {
+ 		return err
+@@ -30,18 +30,16 @@
+ 	if err != nil {
+ 		return err
+ 	}
+-	conversation, err := ai.NewConversationService(sessions, ai.ConversationConfig{
+-		Profile: func(context.Context, string) (ai.ModelProfile, error) {
+-			return ai.ModelProfile{}, ai.ErrModelUnavailable
+-		},
+-		Filter: s.aiContentFilter,
+-		Generate: func(context.Context, ai.GenerationRequest, func(string) error) error {
+-			return ai.ErrModelUnavailable
+-		},
+-	})
+-	if err != nil {
+-		return err
+-	}
++	quota := cfg.AIGenerationQuota
++	if quota == nil { quota = func(context.Context, ai.GenerationRequest) error { return ai.ErrModelUnavailable } }
++	backend, err := ai.NewBYOKRuntime(sessions, s.Credentials, s.aiContentFilter, quota)
++	if err != nil { return err }
++	conversation := backend.Conversation
++	modelsHTTP, err := ai.NewModelSettingsHTTP(backend.Models, s.aiAuthenticate)
++	if err != nil { backend.Close(); return err }
++	generationHTTP, err := ai.NewGenerationHTTP(conversation, s.aiActorContext, s.aiCommitGate)
++	if err != nil { backend.Close(); return err }
++	s.AIRuntime, s.AIModelsHTTP, s.AIGenerationHTTP = backend, modelsHTTP, generationHTTP
+ 	messages, err := ai.NewMessagesHTTP(conversation, s.aiActorContext, s.aiCommitGate)
+ 	if err != nil {
+ 		return err
