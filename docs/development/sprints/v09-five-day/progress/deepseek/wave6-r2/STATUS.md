@@ -44,7 +44,7 @@
 
 ## 门禁与阻塞
 
-- `npm run check`（2026-11-01T15:58:36Z，HEAD `cde4a21`）：policy/contracts/go/web/git 全部 PASS；`npm run check:security`：npm audit 0、govulncheck 无已知漏洞。
+- `npm run check`（2026-11-01T16:04:17Z，代码 `3c3c4ef` / 文档 HEAD `3a29d79`）：policy/contracts/go/web/git 全部 PASS；`npm run check:security`：npm audit 0、govulncheck 无已知漏洞。
 - `go test ./... -count=1`：全部 PASS（含 architecture/contracts/integration/POC）。
 - `go test -race`：UNTESTED（CGO_ENABLED=0，无 gcc）。
 - 阻塞：Controller `server.go` 发布桥/清理 journal/borrower 注入与迁移登记、Agent/Controller Nginx action 注册、文件端到端仍是共享 patch/实机；真实 DNS/证书/网关/Nginx Agent 生产执行、外部账号、awskr、双机、1C1G、arm64 未授权/未验收。
