@@ -20,11 +20,12 @@ const (
 	ActionRun         = "publishing.run"
 	ActionRollback    = "publishing.rollback"
 	ActionRollbackAll = "publishing.rollback_all"
+	ActionCancel      = "publishing.cancel"
 )
 
 // ServiceActions returns the audit action catalog this domain emits.
 func ServiceActions() []string {
-	return []string{ActionCreate, ActionRead, ActionRollback, ActionRollbackAll, ActionRun, ActionStage, ActionWrite}
+	return []string{ActionCancel, ActionCreate, ActionRead, ActionRollback, ActionRollbackAll, ActionRun, ActionStage, ActionWrite}
 }
 
 // AuditSink is the durable audit port. Final mutations append in the same
@@ -149,6 +150,57 @@ func (s *Service) Create(ctx context.Context, subjectID, requestID string, input
 				return existing, nil
 			}
 		}
+		return Plan{}, err
+	}
+	return plan, nil
+}
+
+// Cancel stops a plan that has not produced any external stage effect. A plan
+// with executed stages must be compensated explicitly; Cancel never claims a
+// rollback and never interrupts a provider call in another process.
+func (s *Service) Cancel(ctx context.Context, subjectID, requestID, planID string) (Plan, error) {
+	if err := s.requireRequest(requestID); err != nil {
+		return Plan{}, err
+	}
+	if !validID(planID) {
+		return Plan{}, ErrPlanNotFound
+	}
+	unlock := s.lockPlan(planID)
+	defer unlock()
+	plan, stages, err := s.repo.Get(ctx, planID)
+	if err != nil {
+		return Plan{}, err
+	}
+	group, err := s.lookupGroup(ctx, plan.ServiceGroupID)
+	if err != nil {
+		return Plan{}, err
+	}
+	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, group.NodeIDs, "publishing_cancel"); err != nil {
+		return Plan{}, err
+	}
+	if plan.Status == PlanCanceled {
+		return plan, nil
+	}
+	if plan.Status == PlanCompleted {
+		return plan, ErrPlanCompleted
+	}
+	for _, stage := range stages {
+		if stage.Status == StageRunning {
+			return plan, ErrStageAlreadyRunning
+		}
+		if stage.Status.Executed() {
+			return plan, ErrPlanNotRunnable
+		}
+	}
+	plan.Status = PlanCanceled
+	plan.UpdatedAt = s.now().UTC()
+	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		if err := s.repo.UpdatePlan(txCtx, tx, plan); err != nil {
+			return err
+		}
+		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionCancel, "success", requestID, group.NodeIDs, "plan_canceled"))
+	})
+	if err != nil {
 		return Plan{}, err
 	}
 	return plan, nil

@@ -51,6 +51,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/run", api.run)
 	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/rollback", api.rollback)
 	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/rollback-all", api.rollbackAll)
+	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/cancel", api.cancel)
 	// The v0.9 candidate contract and the web client use the unprefixed paths.
 	mux.HandleFunc("POST /api/v1/publications/preview", api.preview)
 	mux.HandleFunc("GET /api/v1/publications", api.list)
@@ -59,6 +60,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("POST /api/v1/publications/{publicationId}/run", api.run)
 	mux.HandleFunc("POST /api/v1/publications/{publicationId}/rollback", api.rollback)
 	mux.HandleFunc("POST /api/v1/publications/{publicationId}/rollback-all", api.rollbackAll)
+	mux.HandleFunc("POST /api/v1/publications/{publicationId}/cancel", api.cancel)
 	return nil
 }
 
@@ -263,6 +265,25 @@ func (api *httpAPI) rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, publicationErrorStatus(err), operationWithError(detail, err))
+}
+
+// cancel stops a plan with no executed stages; it never claims compensation.
+func (api *httpAPI) cancel(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	plan, err := api.service.Cancel(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("publicationId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	_, stages, getErr := api.service.Get(r.Context(), principal.SubjectID, plan.ID)
+	if getErr != nil {
+		writeError(w, getErr)
+		return
+	}
+	writeJSON(w, http.StatusOK, operationFromDetail(PlanDetail{Plan: plan, Stages: stages}))
 }
 
 // rollbackAll compensates every executed stage in reverse order. A failure stops
