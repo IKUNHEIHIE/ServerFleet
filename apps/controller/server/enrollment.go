@@ -73,10 +73,15 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		return nil, err
 	}
 	bridge := newAgentLinkBridge(s.NodesRepo, nodesService, tasksRepo, s.now)
+	semantic, minor := agentValidationLimits(), uint32(0)
+	if cfg.AgentFileGate != nil {
+		semantic.AllowFileFrames = true
+		minor = 1
+	}
 	links, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{
 		ProtocolMajor:     1,
-		ProtocolMinor:     0,
-		Semantic:          agentValidationLimits(),
+		ProtocolMinor:     minor,
+		Semantic:          semantic,
 		Frames:            agentFrameLimits(),
 		HeartbeatInterval: 15 * time.Second,
 		MaxConnections:    100,
@@ -89,6 +94,13 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		return nil, err
 	}
 	bridge.links = links
+	if cfg.AgentFileGate != nil {
+		client, err := transport.NewFileClient(links, cfg.AgentFileGate, 32)
+		if err != nil {
+			return nil, err
+		}
+		bridge.files, s.AgentFiles = client, client
+	}
 	linkHTTP, err := transport.NewAgentLinkHTTP(links, cfg.AgentAuthority, cfg.AgentServerName, transport.WebSocketConfig{MaxFrameBytes: frameBytes})
 	if err != nil {
 		return nil, err

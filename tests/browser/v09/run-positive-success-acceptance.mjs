@@ -33,9 +33,10 @@
  * 用法：
  *   node tests/browser/v09/run-positive-success-acceptance.mjs [--out <目录>] [--skip-build] [--keep]
  *   [--require-complete]（需 WSL 默认发行版可用；--distro 显式指定发行版名）
+ *   [--attempt-file-flow] 仅在完整文件测试宿主已配置后尝试B01；否则明确HARNESS_INCOMPLETE。
  */
 import { spawn } from "node:child_process";
-import { expectedUnavailable } from "./probe-status.mjs";
+import { expectedUnavailable, recoveryPreviewReady } from "./probe-status.mjs";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
@@ -935,8 +936,8 @@ async function main() {
 
   await stepPass("P13 real failed task page: peer-approved host.patch is rejected by the agent", async () => {
     // 真实失败链路（全部 UI 驱动，与 70 步 S06-S21 同一已验证路径）：
-    // 创建审批人（administrator；operator+资源授权的节点读取被服务端拒绝——
-    // 见 wave6-r1 SHARED-CHANGES 的精确取证，属总控 Go 域核查项）→ UI 资源授权
+    // 创建operator审批人，以精确资源授权验证节点交集；读取异常必须FAIL。
+    // UI 资源授权
     // tasks.approve/tasks.read → host.patch 提交 → 异人批准 → 派发到在线 Agent →
     // Agent 只接受 tasks.command，ack CAPABILITY_REJECTED → 服务端记 target
     // failed，页面渲染真实失败。
@@ -946,7 +947,7 @@ async function main() {
     await fillField(session, "用户名", "approver-02");
     await fillField(session, "显示名称（可选）", "Approver Two");
     await fillField(session, "初始密码", "positive-approver-strong-02");
-    await setCheckbox(session, "Administrator", true);
+    await setCheckbox(session, "Operator", true);
     await clickText(session, "保存用户", { exact: true });
     await expectText(session, "approver-02", 20_000);
     const approverId = await evaluate(session, `(${PAGE_FETCH})('/api/v1/users').then(data => { const found = (data.items ?? []).find(user => user.username === "approver-02"); return found ? found.userId : null; })`);
@@ -987,8 +988,7 @@ async function main() {
     await waitForUrl(session, "#/tasks/");
     await expectText(session, "等待审批", 30_000);
     failedTaskId = decodeURIComponent(((await evaluate(session, "location.hash")).split("#/tasks/")[1] ?? "").replace(/\//, ""));
-    // 切换审批人（异人审批）；带重试：任务读取可能与主控写入竞争，服务端把
-    // 瞬态错误也映射为 403，重载后应恢复；持续 403 才是真实拒绝。
+    // 切换审批人；等待页面完成加载，任何持续拒绝均保留为失败供定位。
     await clickText(session, "退出", { exact: true });
     await expectText(session, "登录", 15_000);
     await fillField(session, "用户名", "approver-02");
@@ -1006,9 +1006,8 @@ async function main() {
     if (!approved) {
       // 失败取证：直接读身份存储真值（user 记录 + 全部 grants），区分状态错误与校验错误。
       const dump = await runCommand("wsl.exe", ["-d", distro, "--", "node", `${workDir}/identity-dump.mjs`, workDir, approverId, nodeId]).catch(error => ({ stdout: "", failed: error }));
-      // 状态真值正确（角色 + 资源授权存在）而服务端持续 403：登记为精确 BLOCKED
-      // 移交总控核查（Go 域），不伪造批准，也不把套件打 FAIL。
-      throw blocked(`approver task view persistently 403 while the identity store shows the correct grant — state dump: ${cleanWslOutput(dump.stdout).slice(0, 600)}；已登记 SHARED-CHANGES 供总控核查服务端授权路径`);
+      // 预期授权下的持续403是产品/夹具故障，不能降为环境阻塞。
+      throw new Error(`approver task read failed; this is not an environmental blocker — state dump: ${cleanWslOutput(dump.stdout).slice(0, 600)}`);
     }
     await clickText(session, "批准", { exact: true });
     await fillField(session, "原因（可选）", "peer approved for rejection probe");
@@ -1058,15 +1057,18 @@ async function main() {
   });
 
   await attemptPositive("B01 cross-node byte transfer between real agents", async () => {
+    if (!hasFlag("attempt-file-flow")) {
+      throw blocked("HARNESS_INCOMPLETE: 当前CLI未装配统一文件worker、显式路径映射及Agent file-root；双在线Agent和SHA夹具不等于字节链路。配置完整测试宿主后用--attempt-file-flow执行，失败或超时将判FAIL。");
+    }
     const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
       sourceNodeId: ${JSON.stringify(nodeId)},
-      sourcePaths: ["/opt/serverfleet-qa/transfer-sample.txt"],
+      sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/transfer-sample.txt")}],
       destinationNodeId: ${JSON.stringify(nodeId2)},
-      destinationDir: "/opt/serverfleet-qa/dst",
-      conflictPolicy: "overwrite",
+      destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+      conflictPolicy: "skip",
     }, { "Idempotency-Key": "positive-w6-transfer-02" })`);
-    if ([400, 401, 403, 404, 500, 501, 502, 503].includes(created.status)) {
-      throw blocked(`POST /api/v1/transfers -> ${created.status} ${JSON.stringify(created.body).slice(0, 220)}：两个真实在线 Agent（P17）与双端 SHA 夹具（P18）已就绪，但 WSS 文件字节链路仍未接线（CX File* 帧/CLI 能力与 DS 协调器默认拒绝 File*，见 WAVE6-SHARED 文件链路下一检查点）；本步不发送同节点伪跨机请求，也不以任务 completed 状态关闭字节/SHA 验收`);
+    if (![200, 201, 202].includes(created.status)) {
+      throw new Error(`transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
     }
     const transferId = created.body?.id ?? created.body?.transferId;
     if (!transferId) throw new Error(`transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 200)}`);
@@ -1082,10 +1084,10 @@ async function main() {
         return `transfer ${transferId} completed; destination sha256 matches source (${sourceSha256.slice(0, 16)}…)`;
       }
       if (status === "failed" || status === "canceled" || status === "unknown" || job?.error) {
-        throw blocked(`transfer ${transferId} did not complete (status=${status}, error=${JSON.stringify(job?.error ?? null).slice(0, 180)})：Agent 运行时当前只接受 tasks.command 自检动作；files.transfer 执行能力属 CX Wave6-R1 交付范围`);
+        throw new Error(`transfer ${transferId} failed: ${status} ${JSON.stringify(job?.error ?? null).slice(0, 180)}`);
       }
     }
-    throw blocked(`transfer ${transferId} not completed within 60s：字节链路未在本基线打通（诚实未完成）`);
+    throw new Error(`transfer ${transferId} did not complete within 60s`);
   });
 
   await attemptPositive("B02 AI generation reaches a terminal assistant message", async () => {
@@ -1123,7 +1125,7 @@ async function main() {
       scopeRevision: ${JSON.stringify(created.body?.scopeRevision ?? 0)},
     }, { "Idempotency-Key": "positive-w6r1-ai-msg-01" })`);
     if (![200, 201].includes(sent.status)) {
-      if (sent.status === 503) throw blocked(`model unavailable at message time: ${sent.status} ${JSON.stringify(sent.body).slice(0, 200)}`);
+      if (expectedUnavailable(sent, [[503,"MESSAGE_SOURCE_UNAVAILABLE"]])) throw blocked(`model unavailable at message time: ${sent.status} ${JSON.stringify(sent.body).slice(0, 200)}`);
       throw new Error(`ai message ${sent.status}: ${JSON.stringify(sent.body).slice(0, 200)}`);
     }
     const userMessageId = sent.body?.messageId;
@@ -1140,8 +1142,8 @@ async function main() {
       if (!assistant) throw new Error("assistant message not persisted after generate");
       return `generation reached terminal assistant message for session ${sessionId}`;
     }
-    if ([403, 501, 503].includes(generated.status)) {
-      throw blocked(`POST …/generate -> ${generated.status} ${JSON.stringify(generated.body).slice(0, 200)}：模型设置与凭据已保存并通过校验（read-back ok），但组合运行时默认配额拒绝且上游端点固定为 api.openai.com——本地 TLS 供应商注入属 CX Wave6-R1 + 总控组合范围；用户消息已入队但入队不等于生成`);
+    if (expectedUnavailable(generated, [[503,"AI_SOURCE_UNAVAILABLE"],[503,"GENERATION_OUTCOME_UNKNOWN"]])) {
+      throw blocked(`POST …/generate -> ${generated.status} ${JSON.stringify(generated.body).slice(0, 200)}：CLI夹具没有配置预算策略及本地TLS供应商；主控程序注入接缝已接收，但本浏览器套件未配置它们。消息入队不等于生成，unknown不自动重试。`);
     }
     throw new Error(`generate ${generated.status}: ${JSON.stringify(generated.body).slice(0, 200)}`);
   });
@@ -1182,7 +1184,7 @@ async function main() {
       loadBalancing: { enabled: false, strategy: "none" },
     })`);
     if (![200, 201].includes(group.status)) {
-      throw blocked(`service group create -> ${group.status} ${JSON.stringify(group.body).slice(0, 200)}：发布结构未能在本基线建立`);
+      throw new Error(`service group create ${group.status}: ${JSON.stringify(group.body).slice(0, 200)}`);
     }
     const groupId = group.body?.id;
     if (!groupId) throw new Error("service group id missing");
@@ -1190,6 +1192,7 @@ async function main() {
       nodeId: ${JSON.stringify(nodeId)}, acknowledgeInstallImpact: true, installIfMissing: true, preserveExistingConfig: false,
     })`);
     if (![200, 201, 202].includes(gateway.status)) {
+      expectedUnavailable(gateway, [[409,"takeover_approval_required"]]);
       throw blocked(`gateway create -> ${gateway.status} ${JSON.stringify(gateway.body).slice(0, 200)}：网关安装任务未受理`);
     }
     // 网关安装任务会被派发给在线 Agent；Agent 只接受 tasks.command，安装将诚实失败。
@@ -1203,9 +1206,10 @@ async function main() {
       https: true,
     })`);
     if (![200].includes(preview.status)) {
-      throw blocked(`publishing preview -> ${preview.status} ${JSON.stringify(preview.body).slice(0, 200)}：调度资格由服务端声明；网关安装未实现（Agent apply/reload/restore 属 DS/CX Wave6-R1）`);
+      throw new Error(`publishing preview ${preview.status}: ${JSON.stringify(preview.body).slice(0, 200)}`);
     }
-    if (preview.body?.eligible !== true) {
+    if (typeof preview.body?.eligible !== "boolean") throw new Error("publishing preview missing eligibility");
+    if (!preview.body.eligible) {
       throw blocked(`publishing preview not eligible: ${JSON.stringify(preview.body).slice(0, 220)}——网关健康/调度资格不足（安装任务未实现，诚实门控）`);
     }
     const publication = await evaluate(session, `(${PAGE_WRITE})('/api/v1/publishing/publications', 'POST', {
@@ -1219,11 +1223,11 @@ async function main() {
     const publicationId = publication.body?.id;
     if (!publicationId) throw new Error("publication id missing");
     const run = await evaluate(session, `(${PAGE_WRITE})('/api/v1/publications/${publicationId}/run', 'POST', {})`);
-    if ([501, 502, 503].includes(run.status)) {
+    if (expectedUnavailable(run, [[502,"publisher_unavailable"]])) {
       throw blocked(`publication run -> ${run.status} ${JSON.stringify(run.body).slice(0, 200)}：外部发布器未接线；publication ${publicationId} 已创建但 202/queued 不算发布完成`);
     }
     const rollbackAll = await evaluate(session, `(${PAGE_WRITE})('/api/v1/publications/${publicationId}/rollback-all', 'POST', {})`);
-    if ([501, 502, 503].includes(rollbackAll.status)) {
+    if (expectedUnavailable(rollbackAll, [[502,"publisher_unavailable"]])) {
       throw blocked(`rollback-all -> ${rollbackAll.status} ${JSON.stringify(rollbackAll.body).slice(0, 200)}：补偿端口未接线；发布/补偿终态待 DS Wave6-R1 + 供应商`);
     }
     throw new Error(`run ${run.status} rollback-all ${rollbackAll.status}: ${JSON.stringify({ run: run.body, rollbackAll: rollbackAll.body }).slice(0, 240)}`);
@@ -1247,19 +1251,18 @@ async function main() {
       oldControllerFenced: true,
       recoveryKeyReference: "qa-key-ref-positive",
     })`);
-    if ([404, 503].includes(preview.status)) {
+    if (expectedUnavailable(preview, [[404,"BACKUP_NOT_FOUND"],[503,"RECOVERY_SOURCE_UNAVAILABLE"]])) {
       throw blocked(`recovery preview -> ${preview.status} ${JSON.stringify(preview.body).slice(0, 220)}：备份/恢复执行需要真实备份可见性与第二隔离主控（POC-08/总控 awskr 范围）`);
     }
     const checks = preview.body?.checks ?? [];
-    const failedChecks = checks.filter(entry => entry.status !== "passed");
-    if (![200, 201].includes(preview.status) || failedChecks.length > 0 || checks.length === 0) {
+    if (!recoveryPreviewReady(preview)) {
       throw blocked(`recovery preview not passed: status=${preview.status}, checks=${JSON.stringify(checks).slice(0, 260)}——预演成功也不代表恢复；实际恢复需第二隔离 Controller、真实 fence 与撤销不复活证据`);
     }
     const job = await evaluate(session, `(${PAGE_WRITE})('/api/v1/disaster-recovery/jobs', 'POST', {
       backupId: ${JSON.stringify(backupId)}, targetControllerId: "controller-positive-02",
       oldControllerFenced: true, recoveryKeyReference: "qa-key-ref-positive",
     })`);
-    if ([501, 503].includes(job.status)) {
+    if (expectedUnavailable(job, [[501,"RECOVERY_EXECUTOR_UNAVAILABLE"],[503,"RECOVERY_EXECUTOR_UNAVAILABLE"]])) {
       throw blocked(`recovery job -> ${job.status} ${JSON.stringify(job.body).slice(0, 200)}：恢复执行器未接线`);
     }
     throw new Error(`recovery job accepted ${job.status}: ${JSON.stringify(job.body).slice(0, 200)}`);

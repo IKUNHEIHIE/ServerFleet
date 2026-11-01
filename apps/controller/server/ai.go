@@ -32,9 +32,20 @@ func (s *Server) setupAI(cfg Config) error {
 	}
 	quota := cfg.AIGenerationQuota
 	if quota == nil {
-		quota = func(context.Context, ai.GenerationRequest) error { return ai.ErrModelUnavailable }
+		quota = func(ctx context.Context, request ai.GenerationRequest) error {
+			if s.AIBudget == nil {
+				return ai.ErrModelUnavailable
+			}
+			return s.AIBudget.Admit(ctx, request)
+		}
 	}
-	backend, err := ai.NewBYOKRuntime(sessions, s.Credentials, s.aiContentFilter, quota)
+	factory := ai.NewBYOKRuntime
+	if cfg.LocalAIProvider != nil {
+		factory = func(sessions *ai.SessionService, credentials *auth.CredentialService, filter func(context.Context, ai.SessionView, string, string) (string, error), quota ai.GenerationQuota) (*ai.BYOKRuntime, error) {
+			return ai.NewLocalTLSBYOKRuntime(sessions, credentials, filter, quota, *cfg.LocalAIProvider)
+		}
+	}
+	backend, err := factory(sessions, s.Credentials, s.aiContentFilter, quota)
 	if err != nil {
 		return err
 	}
@@ -50,6 +61,19 @@ func (s *Server) setupAI(cfg Config) error {
 		return err
 	}
 	s.AIRuntime, s.AIModelsHTTP, s.AIGenerationHTTP = backend, modelsHTTP, generationHTTP
+	budgetStore, err := newAIBudgetStore(s.DB, s.Audit)
+	if err != nil {
+		return err
+	}
+	s.AIBudget, err = ai.NewPersistentGenerationBudget(budgetStore, func(ctx context.Context, actor string, policy ai.GenerationBudgetPolicy) error {
+		if actor != policy.OwnerID || s.Identity.AuthorizeAdministrator(ctx, actor) != nil {
+			return ai.ErrToolDenied
+		}
+		return backend.Models.CheckBudgetProfile(ctx, actor, policy.ProfileID)
+	}, conversation.CheckGenerationBudget)
+	if err != nil {
+		return err
+	}
 	messages, err := ai.NewMessagesHTTP(conversation, s.aiActorContext, s.aiCommitGate)
 	if err != nil {
 		return err
@@ -83,6 +107,24 @@ func newAISessionStore(db *storage.DB, recorder *audit.SQLRecorder) (*ai.SQLSess
 		InTx: func(ctx context.Context, fn func(ai.SessionSQLStatements) error) error {
 			return db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 				statements := ai.SessionSQLStatements{
+					AppendModelAudit: func(ctx context.Context, events []ai.ModelSettingsAuditEvent) error {
+						exec := func(ctx context.Context, q string, args ...any) (int64, error) {
+							r, err := tx.Exec(ctx, q, args...)
+							if err != nil {
+								return 0, err
+							}
+							return r.RowsAffected()
+						}
+						if err := ai.AppendModelSettingsAudit(ctx, exec, events); err != nil {
+							return err
+						}
+						for _, event := range events {
+							if err := recorder.AppendTx(ctx, tx, audit.Event{SubjectID: event.SubjectID, Action: event.Action, Result: "success", RequestID: newRequestID(), NodeIDs: []string{}, Source: audit.SourceAI, At: event.At.UTC()}); err != nil {
+								return err
+							}
+						}
+						return nil
+					},
 					Read: func(readCtx context.Context, query string, args ...any) ([]byte, error) {
 						return read(readCtx, tx, query, args...)
 					},

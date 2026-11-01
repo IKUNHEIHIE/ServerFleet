@@ -1,5 +1,3 @@
-//go:build cx_r1_controller
-
 package platform_test
 
 import (
@@ -24,8 +22,8 @@ import (
 	"serverfleet.local/serverfleet/internal/ai"
 )
 
-// Uses only the minimal proposed Controller patch through Go overlay. The test
-// is explicitly tagged until the integration owner adopts the shared Config.
+// Exercises the adopted Controller composition, registered migrations and
+// default persistent budget, with no overlay or manually created schema.
 func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
 	ctx := context.Background()
 	const key = "synthetic-r1-local-provider-key"
@@ -48,22 +46,11 @@ func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
 	host := httptest.NewUnstartedServer(nil)
 	port := strconv.Itoa(host.Listener.Addr().(*net.TCPAddr).Port)
 	origin := "https://localhost:" + port
-	var budget *ai.PersistentGenerationBudget
-	composed, err := server.New(ctx, server.Config{DBPath: filepath.Join(t.TempDir(), "controller.db"), Origin: origin, AITypedAudit: true, LocalAIProvider: &ai.LocalTLSProviderConfig{Origin: provider.URL, Roots: roots}, AIGenerationQuota: func(ctx context.Context, r ai.GenerationRequest) error {
-		if budget == nil {
-			return ai.ErrModelUnavailable
-		}
-		return budget.Admit(ctx, r)
-	}})
+	composed, err := server.New(ctx, server.Config{DBPath: filepath.Join(t.TempDir(), "controller.db"), Origin: origin, LocalAIProvider: &ai.LocalTLSProviderConfig{Origin: provider.URL, Roots: roots}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer composed.Close()
-	for _, q := range append(ai.GenerationBudgetSchemaStatements(), ai.ModelSettingsAuditSchemaStatements()...) {
-		if _, err = composed.DB.Exec(ctx, q); err != nil {
-			t.Fatal(err)
-		}
-	}
 	host.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{pki.serverCert}}
 	host.Config.Handler = composed
 	host.StartTLS()
@@ -153,17 +140,18 @@ func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
 	if login.Identity.UserID == "" || model.ID == "" {
 		t.Fatal("fixture metadata identity/profile missing")
 	}
-	budget, err = ai.NewPersistentGenerationBudget(newSQLBudget(t, composed.DB, new(atomic.Bool), new(atomic.Bool)), func(ctx context.Context, actor string, p ai.GenerationBudgetPolicy) error {
-		if actor != p.OwnerID {
-			return ai.ErrToolDenied
-		}
-		return composed.Identity.AuthorizeAdministrator(ctx, actor)
-	}, composed.AIConversation.CheckGenerationBudget)
-	if err != nil {
-		t.Fatal(err)
-	}
+	budget := composed.AIBudget
 	now := time.Now().UTC()
-	if err = budget.Configure(ctx, login.Identity.UserID, 0, ai.GenerationBudgetPolicy{OwnerID: login.Identity.UserID, ProfileID: model.ID, WindowID: "local-verified-window", Revision: 1, StartsAt: now.Add(-time.Minute), EndsAt: now.Add(time.Hour), RequestLimit: 1, InputByteLimit: 256000, OutputTokenLimit: 8192}); err != nil {
+	policy := ai.GenerationBudgetPolicy{OwnerID: login.Identity.UserID, ProfileID: model.ID, WindowID: "local-verified-window", Revision: 1, StartsAt: now.Add(-time.Minute), EndsAt: now.Add(time.Hour), RequestLimit: 1, InputByteLimit: 256000, OutputTokenLimit: 8192}
+	wrongProfile := policy
+	wrongProfile.ProfileID = "nonexistent-profile"
+	if budget.Configure(ctx, login.Identity.UserID, 0, wrongProfile) == nil {
+		t.Fatal("budget accepted another profile")
+	}
+	if budget.Configure(ctx, "another-actor", 0, policy) == nil {
+		t.Fatal("budget accepted another owner")
+	}
+	if err = budget.Configure(ctx, login.Identity.UserID, 0, policy); err != nil {
 		t.Fatal(err)
 	}
 	status, raw = request("POST", "/api/v1/ai/sessions", map[string]any{}, login.CSRF)

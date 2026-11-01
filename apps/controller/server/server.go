@@ -44,6 +44,7 @@ type Config struct {
 	DBPath                 string
 	CredentialKeyDir       string
 	AIGenerationQuota      ai.GenerationQuota
+	LocalAIProvider        *ai.LocalTLSProviderConfig
 	Origin                 string
 	StagingDir             string
 	Dispatcher             tasks.Dispatcher
@@ -65,6 +66,7 @@ type Config struct {
 	AgentServerName  string
 	EnrollmentIssuer *transport.CertificateIssuer
 	AgentFrameBytes  int
+	AgentFileGate    transport.FileFrameGate
 
 	// Optional signed plugin package trust. Empty maps keep installation closed.
 	PluginTrustKeys         map[string]ed25519.PublicKey
@@ -114,9 +116,11 @@ type Server struct {
 	EnrollmentHTTP       *transport.EnrollmentHTTP
 	EnrollmentManagement *transport.EnrollmentManagementHTTP
 	Links                *transport.ControllerLinks
+	AgentFiles           *transport.FileClient
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
 	AI               *ai.SessionService
+	AIBudget         *ai.PersistentGenerationBudget
 	AIConversation   *ai.ConversationService
 	AIRuntime        *ai.BYOKRuntime
 	AIModelsHTTP     *ai.ModelSettingsHTTP
@@ -183,6 +187,7 @@ func Migrations() [][]storage.Migration {
 			Name:       "persistent workflow state",
 			Statements: workflows.WorkflowSchemaStatements(),
 		},
+		aiR1Migration("cx/0007_ai_budgets_and_model_audit"),
 	}
 	return [][]storage.Migration{
 		cxMigrations,
@@ -197,6 +202,7 @@ func Migrations() [][]storage.Migration {
 		certificates.Migrations(),
 		gateway.Migrations(),
 		publishing.Migrations(),
+		publishing.TargetMigrations(),
 		audit.Migrations(),
 	}
 }
@@ -231,6 +237,8 @@ func AuditActions() []string {
 		"host.patch",
 		"host.root",
 		"files.transfer",
+		"ai.budget.configure",
+		"ai.budget.reserve",
 		"gateway.provision",
 		"enrollment.issue",
 		"enrollment.token.issue",

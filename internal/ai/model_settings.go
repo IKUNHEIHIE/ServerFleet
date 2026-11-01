@@ -174,6 +174,26 @@ func (m *ModelSettingsService) Profile(ctx context.Context, owner string) (Model
 	return ModelProfile{cfg.ID, cfg.Model, cfg.CredentialRef, cfg.Revision}, nil
 }
 
+// CheckBudgetProfile is a read-only composition gate. The caller separately
+// proves the current administrator identity; this port binds the saved owner
+// profile without opening a nested writer inside budget configuration.
+func (m *ModelSettingsService) CheckBudgetProfile(ctx context.Context, owner, profile string) error {
+	if m == nil || ctx == nil || !exactID(owner) || !exactID(profile) {
+		return ErrToolDenied
+	}
+	return m.sessions.store.View(ctx, func(raw []byte) error {
+		state, err := decodeSessions(raw)
+		if err != nil {
+			return err
+		}
+		model, ok := state.Models[owner]
+		if !ok || model.OwnerID != owner || model.ID != profile || !model.Enabled {
+			return ErrToolDenied
+		}
+		return nil
+	})
+}
+
 // ResolveCredential supplies metadata only. The credential service MUST also
 // run ConversationService.CheckCredentialOperation on the private live ctx.
 func (m *ModelSettingsService) ResolveCredential(ctx context.Context, r GenerationRequest, digest string) (auth.CredentialOperation, error) {

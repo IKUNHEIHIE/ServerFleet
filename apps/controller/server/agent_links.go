@@ -21,9 +21,10 @@ import (
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
 	return map[string]string{
-		"tasks.command": "1",
-		"host.patch":    "1",
-		"host.root":     "1",
+		"tasks.command":          "1",
+		transport.FileCapability: "1",
+		"host.patch":             "1",
+		"host.root":              "1",
 	}
 }
 
@@ -52,6 +53,7 @@ type agentLinkBridge struct {
 	tasksRepo    *tasks.Repo
 	tasks        *tasks.Service
 	links        *transport.ControllerLinks
+	files        *transport.FileClient
 	now          func() time.Time
 
 	seqMu     sync.Mutex
@@ -73,7 +75,7 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	allowed := agentAllowedActions()
 	granted := make([]string, 0, len(hello.CapabilityIds))
 	for _, capability := range hello.CapabilityIds {
-		if allowed[capability] != "" {
+		if allowed[capability] != "" && (capability != transport.FileCapability || b.files != nil) {
 			granted = append(granted, capability)
 		}
 	}
@@ -85,6 +87,12 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 }
 
 func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkObservation, envelope *agentv1.Envelope) error {
+	if transport.FileEnvelope(envelope) || envelope.GetTaskOffer() != nil && envelope.GetTaskOffer().ActionId == transport.FileCapability {
+		if b.files == nil {
+			return transport.ErrLinkRejected
+		}
+		return b.files.AuthorizeFrame(ctx, observation, envelope)
+	}
 	offer := envelope.GetTaskOffer()
 	if offer == nil {
 		return nil
@@ -123,6 +131,21 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkObservation, envelope *agentv1.Envelope) error {
 	if b == nil || envelope == nil || envelope.GetNodeId() != observation.Identity.NodeID {
 		return transport.ErrLinkRejected
+	}
+	if b.files != nil {
+		consumed, err := b.files.Deliver(ctx, observation, envelope)
+		if err != nil {
+			return err
+		}
+		if consumed && transport.FileEnvelope(envelope) {
+			return nil
+		}
+	}
+	if output := envelope.GetTaskOutput(); output != nil {
+		task, err := b.tasksRepo.Get(ctx, output.TaskId)
+		if err != nil || task.ActionID == transport.FileCapability {
+			return transport.ErrLinkRejected
+		}
 	}
 	requestID := envelope.GetMessageId()
 	switch {
