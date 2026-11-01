@@ -1,0 +1,58 @@
+import { execFileSync } from 'node:child_process';
+import { readFileSync,writeFileSync,mkdirSync,copyFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { gzipSync,gunzipSync } from 'node:zlib';
+const target='2da203cac40ccc2bfc4c7bb644978005cd99dab1';
+const root='D:/admin/desktop/codex/myproject/ks';
+const evidence='docs/development/reviews/evidence';mkdirSync(evidence,{recursive:true});
+const read=p=>readFileSync(p,'utf8').replace(/^\uFEFF/,'');
+const parse=p=>JSON.parse(read(p));
+const save=(p,v)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
+const sha=b=>createHash('sha256').update(b).digest('hex');
+const git=(...args)=>execFileSync('git',args,{encoding:'utf8'}).trim();
+const initial=parse('reports/check-all.json'),retry=parse('reports/check-go.json'),security=parse('reports/check-security.json');
+if(retry.results.some(x=>x.status!=='PASS')||security.results.some(x=>x.status!=='PASS'))throw new Error('Retry/security not PASS');
+const live=read('reports/completion-audit-live.log');if(!live.includes('live controller acceptance: 70/70 steps passed'))throw new Error('Live did not pass');
+const events=read('reports/go-tests.log').split(/\r?\n/).flatMap(x=>{try{return[JSON.parse(x)];}catch{return[];}});
+const skipped=events.filter(x=>x.Action==='skip'&&x.Test).map(({Package,Test})=>({Package,Test}));
+git('diff','--exit-code',target,'HEAD','--','apps','internal','api','proto','gen','tests','scripts','go.mod','go.sum','package.json','package-lock.json','AGENTS.md','docs/reference');
+if(git('-C',root,'rev-parse','HEAD')!==target||git('-C',root,'status','--porcelain'))throw new Error('Original main changed');
+const findings=[
+  {id:'AUD-01',priority:1,title:'Default composed credential encryption key is hardcoded',file:'apps/controller/server/server.go',line:504},
+  {id:'AUD-02',priority:1,title:'Agent public CLI is single-shot and only accepts fixed self-check task',file:'apps/agent/connect.go',line:214},
+  {id:'AUD-03',priority:1,title:'File byte transport is local staging, not remote multi-node transport',file:'internal/files/local_transport.go',line:19},
+  {id:'AUD-04',priority:1,title:'Composed AI profile and generation always return unavailable',file:'apps/controller/server/ai.go',line:33},
+  {id:'AUD-05',priority:1,title:'Xray installation/deployment/user mutation/export handlers remain unavailable',file:'internal/plugins/xray_http.go',line:34},
+  {id:'AUD-06',priority:1,title:'Update apply hardcodes 501 and recovery executor is not composed',file:'internal/updates/http.go',line:207},
+  {id:'AUD-07',priority:1,title:'Publication run/rollback currently validate 502 rather than actual successful publishing',file:'tests/browser/v09/run-live-controller-acceptance.mjs',line:1295},
+  {id:'AUD-08',priority:2,title:'Full 24-item acceptance and G2/runtime/external test gates are not closed',file:'docs/development/sprints/v09-five-day/ACCEPTANCE.json',line:1},
+];
+const sources=[
+ ['initial-check','reports/completion-audit-check.log'],['go-retry','reports/completion-audit-go-retry.log'],
+ ['security','reports/completion-audit-security.log'],['live-browser','reports/completion-audit-live.log'],
+ ['test-counts','reports/completion-audit-test-counts.json'],['npm-ci','reports/completion-audit-npm-ci.log'],
+ ['initial-check-result','reports/check-all.json'],['go-retry-result','reports/check-go.json'],['security-result','reports/check-security.json'],
+];
+const artifacts=[];
+for(const[label,source]of sources){const raw=readFileSync(source),name=`v09-completion-audit-${label}.gz.b64`;
+ writeFileSync(`${evidence}/${name}`,gzipSync(raw).toString('base64').match(/.{1,76}/g).join('\n')+'\n');
+ if(sha(gunzipSync(Buffer.from(read(`${evidence}/${name}`),'base64')))!==sha(raw))throw new Error('Archive round trip failed');
+ artifacts.push({source,artifact:name,encoding:'base64(gzip(original bytes))',bytes:raw.length,sha256:sha(raw),roundTrip:'PASS'});
+}
+const ac=parse('docs/development/sprints/v09-five-day/ACCEPTANCE.json');
+save('docs/development/reviews/V09-INDEPENDENT-COMPLETION-AUDIT.json',{
+ task:'V09-INDEPENDENT-COMPLETION-AUDIT',reviewer:'codex-review-01',date:'2026-11-01',timezone:'Asia/Shanghai',targetMain:target,
+ verdict:'NOT_COMPLETE_FULL_V0_9',stageConfirmed:'LOCAL_WAVES_1_TO_5_INTEGRATION_AND_TESTS_REPRODUCED',productionReleaseConfirmed:false,
+ conversation:{id:'0814494e-ab0a-4ec0-b1be-89fc17c58623',access:'User-specified local Antigravity SQLite, readOnly',relevantReplyIndices:[1012,1010],fullConversationArchived:false},
+ cleanExportHead:git('-C','D:/admin/desktop/codex/myproject/ks-clean','rev-parse','HEAD'),
+ checks:{npmCi:'PASS',initialFullCheck:initial,goRetry:retry,security,testCounts:parse('reports/completion-audit-test-counts.json'),skipped,
+  initialFailure:'Go proxy connection timeout; no Go test was run in that initial suite',retryMethod:'Existing local module download cache as file GOPROXY; verification retained',
+  effectiveSuites:{policy:'PASS',contracts:'PASS',go:'PASS_AFTER_ENVIRONMENT_RETRY',web:'PASS',git:'PASS'},
+  liveBrowser:{passed:70,failed:0,includedUnavailableAssertions:[48,49,50,51,54,55,66,67],screenshots:'reports/completion-audit-live'},
+  WSLCLI:'Historical report only, not rerun in this audit',xrayExternalBinary:'Not rerun; current repository artifact-security document records FAIL'},
+ acceptanceRegistry:{total:ac.items.length,notAccepted:ac.items.filter(x=>x.status==='NOT_ACCEPTED').length,note:'Registry can lag partial implementation; code and runtime gaps independently verified'},
+ findings,artifacts,initialWorktreeRegistrationRetry:'Waited for checkout completion after index.lock; no lock deletion/reset',
+ originalMainUnchanged:true,businessCodeChanged:false,realCredentialsUsed:false,agentsStarted:0,messagesSent:0
+});
+copyFileSync('reports/_review/completion-audit/archive-summary.mjs',`${evidence}/v09-completion-audit-summary.mjs.txt`);
+console.log(JSON.stringify({verdict:'NOT_COMPLETE_FULL_V0_9',sourceHead:target,counts:parse('reports/completion-audit-test-counts.json'),browser:'70/70 PASS (mixed success and failure checks)',findings:findings.length,archivedLogs:artifacts.length,mainUnchanged:true},null,2));
