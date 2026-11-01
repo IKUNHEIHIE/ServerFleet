@@ -330,8 +330,8 @@ server.listen(Number(process.env.WEB_PORT), "0.0.0.0", () => console.log("webhos
 const PKI_SCRIPT = `
 set -eu
 work="$1"
-mkdir -p "$work/pki" "$work/db" "$work/logs" "$work/fixtures/src" "$work/fixtures/dst" "$work/agent-state-01" "$work/agent-state-02"
-chmod 700 "$work/agent-state-01" "$work/agent-state-02"
+mkdir -p "$work/pki" "$work/db" "$work/logs" "$work/fixtures/src" "$work/fixtures/dst" "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02"
+chmod 700 "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02"
 # localpki load() 兼容的本地 Agent CA：EC P-256、PKCS8 私钥、自签 CA（>12h 有效）。
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$work/pki/local-agent-ca-key.pem" 2>/dev/null
 openssl req -x509 -new -key "$work/pki/local-agent-ca-key.pem" -sha256 \\
