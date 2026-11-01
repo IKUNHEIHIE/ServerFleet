@@ -148,9 +148,9 @@ describe("AI model settings (GM-W6-R1)", () => {
     expect(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }).textContent).toContain("cred-ai-1");
     expect(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }).textContent).not.toContain("cred-cf-1");
     expect(screen.queryByLabelText("秘密值")).toBeNull();
-    fireEvent.change(screen.getByLabelText("模型标识"), { target: { value: "gpt-test" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /启用本用户的模型生成/ }));
+    fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "PUT" && call.url === "/api/v1/ai/model-settings");
@@ -172,9 +172,9 @@ describe("AI model settings (GM-W6-R1)", () => {
       "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "MODEL_REVISION_CONFLICT", status: 409 }, 409),
     }, ADMIN_IDENTITY);
     await screen.findByText("AI 模型设置（当前用户）");
-    fireEvent.change(screen.getByLabelText("模型标识"), { target: { value: "gpt-test" } });
-    fireEvent.change(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
-    fireEvent.click(screen.getByRole("checkbox", { name: /启用本用户的模型生成/ }));
+    fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
     expect(await screen.findByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
     await waitFor(() => expect(calls.filter(call => call.url === "/api/v1/ai/model-settings" && call.method === "GET").length).toBeGreaterThanOrEqual(2));
