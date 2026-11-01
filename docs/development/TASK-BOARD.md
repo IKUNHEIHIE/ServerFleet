@@ -1,10 +1,13 @@
 # 任务登记板
 
-更新：2026-10-31。Wave 1（`4f5a459`）、Wave 2（`a9a76d7`）、Wave 3（`9453718`）、Wave 4（`f4609f5`）与 **Wave 5** 均已通过独立审查、主控组合接线、全量门禁、安全扫描、WSL Ubuntu 双进程 CLI 闭环复验与 **70 步真实 Go Controller 浏览器端到端验收**并合入 `main`（详见 `reviews/V09-WAVE5-REVIEW.md`）。三线 Wave 1–5 授权子项已完成停止，等待项目负责人审阅与下一阶段指令；G2/D01–D07/P1-C10 仍 OPEN。
+更新：2026-11-01。负责人明确由codex-review-02接回总控，并授权仅SSH别名awskr作Controller隔离测试节点。已独立确认Wave1—5本地阶段与70步测试可复现，但完整v0.9仍有实际功能缺口；独立报告已接收。下一步按WAVE6.md三线补真实执行/适配与正向验收，旧作者任务保持完成。G2/D01—D07/P1-C10仍OPEN，不把原“本地收官”当全量交付；现有awskr服务/业务不改动。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
 | V09-CONTROL-RESUME | 用户明确由codex重新总控，并授权使用SSH别名awskr作Controller测试节点；接管登记/隔离实机验证与后续功能补齐 | codex-review-02 | integration/v09-control-resume-cx01 / `.worktrees/integration--v09-control-resume-cx01` | 独立审查接收、当前授权/任务/证据、隔离测试部署与必要集成接线；仅awskr指定主机，不改其既有服务/数据库/站点/防火墙，不创建云资源或扩展其他主机 | 项目负责人；起始2da203c；保留安全约束，完成本次交接/实机基线验证后报告 |
+| V09-R6-CX | READY，待负责人交给作者，不自动启动 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6.md的凭据密钥/Agent常驻与能力/AI模型/Xray及更新恢复平台，专用测试/progress；apps/controller及共享契约总控接线 | codex-review-02+安全/契约；共同精确基线随最终交接给出 |
+| V09-R6-DS | READY，待负责人交给作者，不自动启动 | deepseek-06 | feature/v09-r6-services-ds06 / `.worktrees/feature--v09-r6-services-ds06` | WAVE6.md的真实文件通道/供应商与发布补偿/任务数据接缝、专用测试/progress；不改CX/GM目录/主控入口 | codex-review-02+安全/契约；共同精确基线随最终交接给出 |
+| V09-R6-GM | READY，待负责人交给作者，不自动启动 | gemini-06 | feature/v09-r6-console-gm06 / `.worktrees/feature--v09-r6-console-gm06` | WAVE6.md的全量正向成功验收/后端接缝前端适配/AC证据分层、专用浏览器测试/progress；不改Go | codex-review-02+UI/安全；共同精确基线随最终交接给出 |
 | V09-INDEPENDENT-COMPLETION-AUDIT | 独立核验完成：本地70步及根检查可复现；完整v0.9未完成/尚不可发布，报告后停止 | codex-review-01 | integration/v09-independent-completion-audit-cx01 / `.worktrees/integration--v09-independent-completion-audit-cx01` | 仅审查登记/报告/证据；不修业务、不改主线或作者目录；原始Go代理失败和9项SKIP保留 | 项目负责人；精确代码基线2da203cac40ccc2bfc4c7bb644978005cd99dab1；见reviews/V09-INDEPENDENT-COMPLETION-AUDIT.md |
 | V09-WAVE5-REVIEW | 三线Wave 5独立审查/NetProber与LocalStagingTransport默认主控接线/WSL双进程CLI闭环与70步真后端浏览器验收通过（Go 636+1134、Web 329、Live 70/70、0漏洞），合入main | agy-review-01 | integration/v09-wave5-review / `.worktrees/integration--v09-wave1-review` | 三线Wave 5审查、apps/controller默认探测与暂存传输接线、审查报告/任务板/README | 项目负责人；起始3adf891；代码aef21ae；见reviews/V09-WAVE5-REVIEW.md |
 | V09-WAVE5-DISPATCH | Wave 5本地全栈收官/Wave 4新接口前后端打通/双进程CLI连接任务单已登记，三作者目录已快进同步至最新main；交接后等待Wave 5检查点 | agy-review-01 | integration/v09-wave5-dispatch / `.worktrees/integration--v09-wave1-review` | sprints/v09-five-day/WAVE5.md、任务板、README及三干净作者目录快进同步 | 项目负责人；起始f4609f5；见sprints/v09-five-day/WAVE5.md |

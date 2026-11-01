@@ -25,6 +25,8 @@ P1 工程基础已完成。G0 产品已确认、G1 架构获批，G2 未冻结�
 
 ## 修改和验证
 
+2026-11-01负责人最新授权：由codex-review-02重新总控，并可使用Windows已保存SSH别名`awskr`作Controller测试节点。仅总控可在该主机普通用户私有目录开展隔离测试，不触碰其已有服务/站点/数据库/防火墙，不扩展其他主机/云API或使用真实外部秘密。该具体授权优先于上文P1对指定主机测试访问的限制，其他安全/架构约束保持；详见`docs/development/sprints/v09-five-day/CONTROL-RESUME.md`。
+
 使用库、框架、SDK、API 或 CLI 时先用 Context7 `resolve-library-id`，再查当前文档；普通业务逻辑/脚本/代码审查无需调用。优先 `rg` 检索。保持简单、仅做任务范围内改动。
 
 提交遵循 `type(scope): 描述`；分支为 `feature/`、`fix/`、`contract/`、`integration/`、`docs/` 或 `chore/`。合并前 `npm ci`、`npm run tools:install`、`npm run check`、`npm run check:security`；根据模块再跑专用检查和负向测试。任何 FAIL/BLOCKED/UNTESTED 如实记录，不得删除测试或伪造成功。

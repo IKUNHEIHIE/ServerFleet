@@ -1,8 +1,8 @@
 # Server Fleet · M0-P1 工程基础
 
-Go 模块化单体 Controller、独立 Go Agent、React + TypeScript + Vite Monorepo。已包含可构建骨架、模块端口、测试/契约工具链，以及离线授权/节点/审计/通信规则和隔离Web组件；尚未形成真实管理API、节点执行或生产发布能力。
+Go模块化单体Controller、独立Go Agent、React/TypeScript/Vite工程。当前已实现SQLite持久化、REST/SSE管理接口及本地WSS+mTLS任务/浏览器组合；真实跨节点文件、通用受控执行、模型/插件/更新恢复等仍有代码和验收缺口，不能称完整v0.9可发布。
 
-**状态：G0 产品已确认；G1 方向已批准；G2 仍为候选，未冻结。P1 完成后暂停，后续开发需负责人明确分配新任务。**
+**状态：2026-11-01负责人明确由codex重新总控，完整v0.9功能补齐继续；awskr获指定隔离测试授权。G0/G1有效，G2及发布准入未冻结。最新范围见[接管记录](docs/development/sprints/v09-five-day/CONTROL-RESUME.md)与[Wave6](docs/development/sprints/v09-five-day/WAVE6.md)。**
 
 首批 G2-R01/N01/W01 的独立审查与下一批分工见 [首批审查报告](docs/development/reviews/BATCH-01-REVIEW.md) 和 [第二批任务单](docs/development/SECOND-BATCH-WORK-PACKAGES.md)。以任务登记板为准；原始 P1 报告是当时的验证快照。
 
