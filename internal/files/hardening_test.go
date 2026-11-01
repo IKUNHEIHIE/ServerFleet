@@ -292,7 +292,7 @@ func TestTransferReportsToRealTaskService(t *testing.T) {
 			return files.NodeTransport{Upload: transport, Download: transport}, nil
 		}),
 		Authorizer: authorizerFunc(func(context.Context, auth.Check) error { return nil }),
-		Admission:  allowAdmission{}, Audit: recorder, SpoolDir: t.TempDir(),
+		Admission:  allowAdmission{}, Audit: recorder, SpoolDir: privateSpool(t),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -335,7 +335,7 @@ func TestCoordinatorSpoolCapAndPrivateDirectory(t *testing.T) {
 			return files.NodeTransport{Upload: transport, Download: transport}, nil
 		}),
 		Authorizer: authorizerFunc(func(context.Context, auth.Check) error { return nil }),
-		Admission:  allowAdmission{}, Audit: f.audit, SpoolDir: t.TempDir(), MaxFileBytes: 1024,
+		Admission:  allowAdmission{}, Audit: f.audit, SpoolDir: privateSpool(t), MaxFileBytes: 1024,
 	})
 	if err != nil {
 		t.Fatal(err)

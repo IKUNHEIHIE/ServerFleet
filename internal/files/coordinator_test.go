@@ -24,6 +24,15 @@ type reporterCall struct {
 	message string
 }
 
+func privateSpool(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	return dir
+}
+
 type fakeTaskReporter struct {
 	mu    sync.Mutex
 	calls []reporterCall
@@ -89,7 +98,7 @@ func newCoordinatorFixture(t *testing.T, authorizer auth.Authorizer) *coordinato
 	}
 	agent := newFakeAgent()
 	transport := testChannel(t, agent)
-	spool := t.TempDir()
+	spool := privateSpool(t)
 	execAuthorizer := authorizer
 	if execAuthorizer == nil {
 		execAuthorizer = allow
