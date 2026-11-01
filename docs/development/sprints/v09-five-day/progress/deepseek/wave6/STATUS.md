@@ -2,7 +2,7 @@
 
 - 任务：`V09-R6-DS`；会话唯一 ID `deepseek-06`；分支 `feature/v09-r6-services-ds06`；起点 `73d5dd46fb29b3cf4a445b43b48186d5938fe781`；审查 `codex-review-02`。
 - 工作目录：`.worktrees/feature--v09-r6-services-ds06`；允许目录内修改；未改 `apps/**`、`auth/transport`、Web、Proto/gen、根锁/依赖、迁移公共编号或原始资料。
-- 本包完成 5 个可运行增量并逐项提交；真实双机/外部供应商/awskr 仍由总控执行，未据此宣称完整验收。
+- 本包按子项提交多个可运行增量；真实双机/外部供应商/awskr 仍由总控执行，未据此宣称完整验收。
 
 ## 提交
 
@@ -18,6 +18,7 @@
 | `d70321f` | `feat(gateway): add configurable nginx listen addresses`（隔离测试 127.0.0.1 高位端口） |
 | `80d6918` | `docs(deepseek): record wave6 ds evidence and awskr handoff` |
 | `7699b4e` | `feat(dns): add acme challenge publisher and provider consistency guards` |
+| `eeabb99` | `feat(files): report transfer terminal results to unified tasks` |
 
 以上均在作者分支本地；未推送、未合并 main。
 
@@ -68,7 +69,8 @@
 
 - `npm run check:go`（build/test/vet/staticcheck）→ PASS（最终代码 `814f1db`）。
 - `npm run check:policy` → PASS；`npm run check:security` → npm audit 0、govulncheck 无已知漏洞。
-- `npm run check` 完整运行（最终代码 `7699b4e`）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
+- `npm run check` 完整运行（2026-11-01T06:12:23Z，最终代码 `eeabb99`）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
+- `npm run check:security`（同 HEAD）：npm audit 0，govulncheck 无已知漏洞。
 - `go test -race`：**UNTESTED**，本机 CGO_ENABLED=0 且无 gcc；不能声称 race 通过。
 - 迁移：**未新增**；AMCE/Nginx/文件通道均不依赖新表。`publishing.rollback-all` HTTP 路由为候选，未改 OpenAPI/Proto/gen。
 
