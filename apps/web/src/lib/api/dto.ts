@@ -312,6 +312,8 @@ export interface CredentialMetadata {
   readonly lastValidatedAt?: string;
   readonly expiresAt?: string;
   readonly createdAt?: string;
+  /** 服务端元数据修订号；模型设置绑定的是这个修订，不是凭据内容。 */
+  readonly revision: number;
 }
 
 export interface ServiceGroupDispatchPreview {
@@ -809,6 +811,18 @@ export interface AIMessage {
   readonly redactedContent?: string;
   readonly createdAt: string;
   readonly taskIds?: readonly string[];
+}
+
+export interface AIModelSettings {
+  readonly id?: string;
+  readonly ownerId: string;
+  readonly revision: number;
+  readonly updatedAt?: string;
+  readonly enabled: boolean;
+  readonly provider: string;
+  readonly model: string;
+  readonly credentialRef: string;
+  readonly credentialRevision: number;
 }
 
 export interface PluginRepository {

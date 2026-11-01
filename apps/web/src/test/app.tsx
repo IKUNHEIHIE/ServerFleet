@@ -12,6 +12,8 @@ export async function renderAuthenticated(
   let meCalls = 0;
   const merged: FetchRoutes = {
     ...coreRoutes(),
+    "POST /api/v1/auth/login": () =>
+      jsonResponse({ identity, sessionExpiresAt: "2026-12-31T23:59:59Z", csrfToken: "csrf-test" }),
     "GET /api/v1/auth/me": () => {
       meCalls += 1;
       return meCalls === 1
