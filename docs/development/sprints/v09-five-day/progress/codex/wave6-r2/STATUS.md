@@ -21,3 +21,13 @@ Separate `controller-ai-budget.patch` and `redocly-ai-budget.patch` apply cleanl
 
 Remaining: central route/lint registration acceptance, GM UI integration and real external supplier acceptance. Continue file cancel/revocation and platform work; this checkpoint does not claim the full package complete.
 
+# Checkpoint 3 — cancellation and real grant revocation
+
+Budget runnable checkpoint: `6f10bc5fb5f19aa24d7c512304c91a2946c65ab7`.
+
+CancelTransfer requires source read/destination write and delegates to unified task cancellation. Its conditional transaction preserves any concurrently finalized worker result and item evidence; cancelling has no premature completedAt. Restart fences both running and cancelling without replay. Execution bindings validate state/result/offset/hash, and started/terminal child events recheck live authority. Known cancellation/checksum/current permission failure before any destination reservation is reported as known canceled/failed; uncertain writes stay UNKNOWN.
+
+Module checks files/tasks/transport/Agent PASS. Actual non-root WSL Controller + two resident Agent processes PASS: real source frame persisted, then HTTP cancel or DELETE resource grant; no destination file, parent canceled/failed, revoked transfer HTTP read remains 403. The initial revocation test incorrectly expected a readable transfer after write permission was removed; this correctly failed `auth: denied`, fixture corrected to assert 403 and inspect repository evidence through the test's trusted port. Log preserved `reports/wave6-r2/file-revocation-view-first-fail.log`. Existing multi-item/SHA/skip/audit-acceptance/UNKNOWN/restart checks retained. Added actual checksum mismatch before destination write; final fixed-SHA rerun recorded at handoff.
+
+Remaining: central files registration/0008 acceptance, true ENOSPC capacity fixture, physical two-machine/ARM runtime and production admission. Continue independent updates/recovery/Xray review; no awskr or other service touched.
+

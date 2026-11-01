@@ -410,7 +410,7 @@ func (s *Service) CancelTransfer(ctx context.Context, subjectID, requestID, id s
 	if transfer.Status.Terminal() {
 		return Transfer{}, fmt.Errorf("%w: transfer is terminal", ErrInvalidTransfer)
 	}
-	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, transfer.SourceNodeID, "file_source_read"); err != nil {
+	if err := s.authorizeNode(ctx, subjectID, ActionRead, requestID, transfer.SourceNodeID, "file_source_read"); err != nil {
 		return Transfer{}, err
 	}
 	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, transfer.DestinationNodeID, "file_destination_write"); err != nil {
@@ -426,11 +426,16 @@ func (s *Service) CancelTransfer(ctx context.Context, subjectID, requestID, id s
 	}
 	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		status := TransferCancelling
+		completed := time.Time{}
 		if transfer.TaskID == "" {
 			status = TransferCanceled
+			completed = s.now()
 		}
-		if err := s.repo.ApplyTaskUpdate(txCtx, tx, transfer.ID, status, transfer.Progress,
-			transfer.TotalBytes, nil, "canceled by operator", nil, time.Time{}, s.now()); err != nil {
+		// The worker may finalize between CancelTask and this transaction. Never
+		// overwrite its terminal result, item evidence or progress with a stale row.
+		if _, err := tx.Exec(txCtx, `UPDATE file_transfers SET status=?, error_message=?, completed_at=?, updated_at=? WHERE id=? AND status IN (?,?,?)`,
+			string(status), "canceled by operator", encodeTime(completed), encodeTime(s.now()), transfer.ID,
+			string(TransferQueued), string(TransferRunning), string(TransferCancelling)); err != nil {
 			return err
 		}
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionTransferCancel, "success", requestID,

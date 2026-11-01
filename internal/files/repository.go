@@ -344,7 +344,7 @@ func (r *Repo) ClaimTransfer(ctx context.Context, taskID string, now time.Time) 
 func (r *Repo) RecoverRunningTransfers(ctx context.Context, now time.Time) (int, error) {
 	recovered := 0
 	err := r.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
-		rows, err := tx.Query(txCtx, `SELECT id FROM file_transfers WHERE status = ?`, string(TransferRunning))
+		rows, err := tx.Query(txCtx, `SELECT id FROM file_transfers WHERE status IN (?,?)`, string(TransferRunning), string(TransferCancelling))
 		if err != nil {
 			return err
 		}
@@ -364,10 +364,10 @@ func (r *Repo) RecoverRunningTransfers(ctx context.Context, now time.Time) (int,
 			result, err := tx.Exec(txCtx, `UPDATE file_transfers SET
 				status = CASE WHEN copied_bytes > 0 THEN ? ELSE ? END,
 				error_message = ?, completed_at = ?, updated_at = ?
-				WHERE id = ? AND status = ?`,
+				WHERE id = ? AND status IN (?,?)`,
 				string(TransferPartialFailure), string(TransferFailed),
 				"controller restarted during transfer; result unknown",
-				encodeTime(now), encodeTime(now), id, string(TransferRunning))
+				encodeTime(now), encodeTime(now), id, string(TransferRunning), string(TransferCancelling))
 			if err != nil {
 				return err
 			}

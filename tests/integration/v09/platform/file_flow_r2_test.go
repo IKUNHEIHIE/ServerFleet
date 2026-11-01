@@ -93,7 +93,17 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 	origin := "https://" + authority
 	paths := &r2FilePaths{roots: map[string]string{}}
 	var denyPublished atomic.Bool
-	cfg := server.Config{DBPath: filepath.Join(dir, "controller.db"), Origin: origin, AgentAuthority: authority, AgentServerName: "localhost", EnrollmentIssuer: managerIssuer(t, pki), FileExecution: &server.FileExecutionConfig{Paths: paths, SpoolDir: filepath.Join(dir, "spool"), ScopeGate: func(context.Context, tasks.Task) error {
+	var pauseMu sync.Mutex
+	var pause func(context.Context, tasks.Task) error
+	cfg := server.Config{DBPath: filepath.Join(dir, "controller.db"), Origin: origin, AgentAuthority: authority, AgentServerName: "localhost", EnrollmentIssuer: managerIssuer(t, pki), FileExecution: &server.FileExecutionConfig{Paths: paths, SpoolDir: filepath.Join(dir, "spool"), ScopeGate: func(ctx context.Context, task tasks.Task) error {
+		pauseMu.Lock()
+		hook := pause
+		pauseMu.Unlock()
+		if hook != nil {
+			if err := hook(ctx, task); err != nil {
+				return err
+			}
+		}
 		if denyPublished.Load() {
 			if _, err := os.Stat(filepath.Join(targetRoot, "out", "uncertain.bin")); err == nil {
 				return auth.ErrDenied
@@ -167,6 +177,7 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 		state, node string
 	}
 	processes := []process{}
+	grantIDs := []string{}
 	t.Cleanup(func() {
 		for _, p := range processes {
 			_ = p.command.Process.Signal(os.Interrupt)
@@ -216,7 +227,15 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 		paths.mu.Lock()
 		paths.roots[node] = logical
 		paths.mu.Unlock()
-		must("POST", "/api/v1/resource-grants", map[string]any{"principalId": login.Identity.ID, "resourceType": "node", "resourceId": node, "permissions": []string{"nodes.read", "tasks.submit", "tasks.read", "tasks.cancel", "files.read", "files.write", "files.transfer"}}, 200)
+		raw = must("POST", "/api/v1/resource-grants", map[string]any{"principalId": login.Identity.ID, "resourceType": "node", "resourceId": node, "permissions": []string{"nodes.read", "tasks.submit", "tasks.read", "tasks.cancel", "files.read", "files.write", "files.transfer"}}, 200)
+		var grant struct {
+			ID string `json:"grantId"`
+		}
+		json.Unmarshal(raw, &grant)
+		if grant.ID == "" {
+			t.Fatal("missing grant", string(raw))
+		}
+		grantIDs = append(grantIDs, grant.ID)
 		logFile, e := os.Create(filepath.Join(dir, fmt.Sprintf("agent-%d.log", i)))
 		if e != nil {
 			t.Fatal(e)
@@ -271,10 +290,18 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 					t.Fatalf("parent terminal %s want %s; transfer %+v", task.Status, expected, tr)
 				}
 				tr, e := composed.Files.GetTransfer(ctx, login.Identity.ID, id)
+				if e != nil && expected == tasks.StatusFailed {
+					// Revoked writers must also lose the transfer HTTP view. The
+					// test's trusted repository inspection verifies terminal evidence.
+					must("GET", "/api/v1/transfers/"+id, nil, 403)
+					repo, _ := files.NewRepo(composed.DB)
+					tr, e = repo.GetTransfer(ctx, id)
+				} else if e == nil {
+					must("GET", "/api/v1/transfers/"+id, nil, 200)
+				}
 				if e != nil {
 					t.Fatal(e)
 				}
-				must("GET", "/api/v1/transfers/"+id, nil, 200)
 				must("GET", "/api/v1/tasks/"+taskID, nil, 200)
 				return tr
 			}
@@ -314,7 +341,76 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 	invalid := body(sourcePaths)
 	invalid["conflictPolicy"] = "overwrite"
 	must("POST", "/api/v1/transfers", invalid, 400)
+	// Pause only after a real source read frame has persisted. Use normal HTTP
+	// cancel/revoke; the extra fixture gate never authorizes a denied request.
+	for _, action := range []string{"cancel", "revoke"} {
+		name := action + ".bin"
+		os.WriteFile(filepath.Join(sourceRoot, name), bytes.Repeat([]byte(action), 30000), 0600)
+		entered, release := make(chan struct{}), make(chan struct{})
+		var once sync.Once
+		pauseMu.Lock()
+		pause = func(gateCtx context.Context, task tasks.Task) error {
+			var n int
+			err := composed.DB.QueryRow(gateCtx, `SELECT count(*) FROM cx_file_execution_bindings WHERE task_id=? AND json_extract(payload,'$.Direction')='read' AND json_extract(payload,'$.Offset')>0`, task.ID).Scan(&n)
+			if err != nil {
+				return err
+			}
+			if n > 0 {
+				once.Do(func() { close(entered) })
+				select {
+				case <-release:
+				case <-gateCtx.Done():
+					return gateCtx.Err()
+				}
+			}
+			return nil
+		}
+		pauseMu.Unlock()
+		input := body([]string{"/source/" + name})
+		delete(input, "checksums")
+		id, taskID = create(input)
+		select {
+		case <-entered:
+		case <-ctx.Done():
+			t.Fatal("source read pause not reached")
+		}
+		current, _ := composed.Tasks.Get(ctx, taskID)
+		if current.Status != tasks.StatusRunning {
+			t.Fatal("source child finished parent early", current.Status)
+		}
+		if action == "cancel" {
+			must("POST", "/api/v1/transfers/"+id+"/cancel", nil, 202)
+		} else {
+			must("DELETE", "/api/v1/resource-grants/"+grantIDs[1], nil, 204)
+			// Keep node/task metadata permissions while genuinely removing files.write.
+			must("POST", "/api/v1/resource-grants", map[string]any{"principalId": login.Identity.ID, "resourceType": "node", "resourceId": processes[1].node, "permissions": []string{"nodes.read", "tasks.read", "tasks.submit", "tasks.cancel", "files.read", "files.transfer"}}, 200)
+		}
+		close(release)
+		pauseMu.Lock()
+		pause = nil
+		pauseMu.Unlock()
+		expected := tasks.StatusCanceled
+		if action == "revoke" {
+			expected = tasks.StatusFailed
+		}
+		wait(id, taskID, expected)
+		if _, e := os.Stat(filepath.Join(targetRoot, "out", name)); !os.IsNotExist(e) {
+			t.Fatal(action+" wrote destination", e)
+		}
+		if action == "revoke" {
+			must("POST", "/api/v1/resource-grants", map[string]any{"principalId": login.Identity.ID, "resourceType": "node", "resourceId": processes[1].node, "permissions": []string{"files.write"}}, 200)
+		}
+		t.Log("actual HTTP " + action + " after real source frame stopped before destination write")
+	}
 	// SQLite rejects durable acceptance: no Open and no destination effects.
+	os.WriteFile(filepath.Join(sourceRoot, "checksum.bin"), []byte("actual checksum rejection"), 0600)
+	wrongChecksum := body([]string{"/source/checksum.bin"})
+	wrongChecksum["checksums"] = map[string]string{"/source/checksum.bin": sha256Hex([]byte("different"))}
+	id, taskID = create(wrongChecksum)
+	wait(id, taskID, tasks.StatusFailed)
+	if _, e := os.Stat(filepath.Join(targetRoot, "out", "checksum.bin")); !os.IsNotExist(e) {
+		t.Fatal("checksum mismatch wrote destination", e)
+	}
 	os.WriteFile(filepath.Join(sourceRoot, "audit.bin"), []byte("acceptance must persist first"), 0600)
 	_, err = composed.DB.Exec(ctx, `CREATE TRIGGER reject_file_accept BEFORE UPDATE ON cx_file_execution_bindings WHEN json_extract(NEW.payload,'$.State')='accepted' BEGIN SELECT RAISE(ABORT,'forced acceptance audit boundary'); END`)
 	if err != nil {

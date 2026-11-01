@@ -29,6 +29,22 @@ func ExecutionBindingsMigration() storage.Migration {
 	}}
 }
 func validExecutionBinding(b ExecutionBinding) bool {
+	if b.Offset > b.Size || b.SHA256 != "" && !sha256Pattern.MatchString(b.SHA256) {
+		return false
+	}
+	switch b.State {
+	case "reserved", "offered", "accepted", "opened", "done":
+	default:
+		return false
+	}
+	switch b.Result {
+	case "", "EXECUTION_RESULT_SUCCEEDED", "EXECUTION_RESULT_FAILED", "EXECUTION_RESULT_CANCELED", "EXECUTION_RESULT_TIMED_OUT", "EXECUTION_RESULT_UNKNOWN":
+	default:
+		return false
+	}
+	if (b.State == "done") != (b.Result != "") {
+		return false
+	}
 	return validChannelID(b.ExecutionID) && validChannelID(b.TaskID) && validChannelID(b.TransferID) && validChannelID(b.SubjectID) && validChannelID(b.NodeID) && sha256Pattern.MatchString(b.ParentPlan) && (b.Direction == "read" || b.Direction == "write") && b.Sequence >= 0 && b.Sequence < 16 && len(b.Observation) > 0 && len(b.Observation) < 2048 && len(b.Offer) > 0 && len(b.Offer) <= 8192 && b.Size <= DefaultChannelFileBytes
 }
 func (r *Repo) ReserveExecution(ctx context.Context, b ExecutionBinding, sink AuditSink) error {

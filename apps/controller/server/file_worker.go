@@ -315,6 +315,10 @@ func (w *FileExecutionWorker) Observe(ctx context.Context, o transport.LinkObser
 	if e.GetTaskAck() != nil {
 		return true, w.Gate(ctx, o, offer, e)
 	}
+	p, err := decodeFileTask(t)
+	if err != nil || w.live(ctx, t, p) != nil {
+		return true, files.ErrTransferExecution
+	}
 	if f := e.GetTaskFinished(); f != nil {
 		return true, w.repo.ObserveExecution(ctx, execution, "terminal", w.server.Audit, func(b *files.ExecutionBinding) error {
 			result := f.Result.String()
@@ -522,6 +526,20 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 			status = files.TransferFailed
 			errorCode = "agent_unknown"
 			message = "file execution uncertain; reconcile without replay"
+			// No destination reservation means this item never issued a write.
+			// Only positive known failures/cancellation use known terminal results.
+			var bindings int
+			checkCtx, done := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+			checkErr := w.server.DB.QueryRow(checkCtx, `SELECT count(*) FROM cx_file_execution_bindings WHERE execution_id=?`, childExecutionID(t, p.DestinationNode, i)).Scan(&bindings)
+			current, taskErr := w.server.TasksRepo.Get(checkCtx, t.ID)
+			if checkErr == nil && bindings == 0 {
+				if taskErr == nil && current.CancelRequested {
+					state, code, status, errorCode, message = files.ItemCancelled, tasks.NodeResultCanceled, files.TransferCanceled, "cancelled_before_write", "cancelled before destination write"
+				} else if e == files.ErrAgentChecksum || w.authorizer.Authorize(checkCtx, auth.Check{SubjectID: t.SubmitterID, Action: files.ActionRead, NodeIDs: []string{p.SourceNode}}) != nil || w.authorizer.Authorize(checkCtx, auth.Check{SubjectID: t.SubmitterID, Action: files.ActionWrite, NodeIDs: []string{p.DestinationNode}}) != nil {
+					code, errorCode, message = tasks.NodeResultFailed, "denied_before_write", "checksum or current permission rejected before destination write"
+				}
+			}
+			done()
 		}
 		updates = append(updates, files.ItemUpdate{SourcePath: item.Source, DestinationPath: item.Destination, Status: state, BytesCopied: n, ErrorCode: errorCode, ErrorMessage: message})
 		total += n
@@ -540,7 +558,7 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 	}
 	finishCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
-	_, err = w.server.Files.ApplyTaskUpdate(finishCtx, t.ID, files.TaskUpdate{Status: status, Progress: 1, Items: updates, TotalBytes: &total, CopiedBytes: &total, StartedAt: started, CompletedAt: time.Now().UTC()})
+	_, err = w.server.Files.ApplyTaskUpdate(finishCtx, t.ID, files.TaskUpdate{Status: status, Progress: 100, Items: updates, TotalBytes: &total, CopiedBytes: &total, StartedAt: started, CompletedAt: time.Now().UTC()})
 	if err != nil {
 		return nil, err
 	}
