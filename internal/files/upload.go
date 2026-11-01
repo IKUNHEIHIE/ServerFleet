@@ -352,7 +352,9 @@ func (s *Service) GetUpload(ctx context.Context, subjectID, requestID, uploadID 
 	if upload.SubjectID != subjectID {
 		return Upload{}, ErrSubjectMismatch
 	}
-	if err := s.authorizeNode(ctx, subjectID, ActionRead, requestID, upload.NodeID, "file_upload_read"); err != nil {
+	// Upload status is an owner-bound write workflow, not a remote file read.
+	// Content/complete handlers use this precheck before their own write gate.
+	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_status"); err != nil {
 		return Upload{}, err
 	}
 	return upload, nil
