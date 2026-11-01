@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"net"
 	"path"
 	"sort"
 	"strconv"
@@ -17,6 +18,8 @@ const (
 	DefaultNginxSiteDir     = "/etc/nginx/conf.d"
 	DefaultNginxArtifactDir = "/var/lib/serverfleet/staging/nginx"
 	DefaultNginxACMERoot    = "/var/lib/serverfleet/acme"
+	DefaultNginxHTTPListen  = "80"
+	DefaultNginxHTTPSListen = "443"
 	maxNginxConfigBytes     = 32 << 10
 	maxNginxUpstreamHosts   = 64
 	NginxActionApply        = "gateway.nginx.site_apply"
@@ -46,6 +49,8 @@ type NginxSiteRequest struct {
 	ApprovalRef          string
 	SiteDir              string
 	ArtifactDir          string
+	HTTPListen           string
+	HTTPSListen          string
 }
 
 // NginxSite is the deterministic rendered file and its digest.
@@ -93,6 +98,14 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 	if err := validateNginxPath(artifactDir, false); err != nil {
 		return NginxSite{}, err
 	}
+	httpListen, err := normalizeNginxListen(request.HTTPListen, DefaultNginxHTTPListen)
+	if err != nil {
+		return NginxSite{}, err
+	}
+	httpsListen, err := normalizeNginxListen(request.HTTPSListen, DefaultNginxHTTPSListen)
+	if err != nil {
+		return NginxSite{}, err
+	}
 	certificatePath, keyPath := request.CertificatePath, request.PrivateKeyPath
 	if request.HTTPS {
 		if err := validateNginxPath(certificatePath, true); err != nil {
@@ -132,7 +145,7 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 	}
 	if request.HTTPS {
 		config.WriteString("server {\n")
-		config.WriteString("    listen 80;\n")
+		config.WriteString("    listen " + httpListen + ";\n")
 		config.WriteString("    server_name " + domain + ";\n")
 		config.WriteString("    location /.well-known/acme-challenge/ {\n")
 		config.WriteString("        root " + DefaultNginxACMERoot + ";\n")
@@ -142,7 +155,7 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 		config.WriteString("    }\n")
 		config.WriteString("}\n\n")
 		config.WriteString("server {\n")
-		config.WriteString("    listen 443 ssl;\n")
+		config.WriteString("    listen " + httpsListen + " ssl;\n")
 		config.WriteString("    server_name " + domain + ";\n")
 		config.WriteString("    ssl_certificate " + certificatePath + ";\n")
 		config.WriteString("    ssl_certificate_key " + keyPath + ";\n")
@@ -154,7 +167,7 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 		config.WriteString("}\n")
 	} else {
 		config.WriteString("server {\n")
-		config.WriteString("    listen 80;\n")
+		config.WriteString("    listen " + httpListen + ";\n")
 		config.WriteString("    server_name " + domain + ";\n")
 		config.WriteString("    location /.well-known/acme-challenge/ {\n")
 		config.WriteString("        root " + DefaultNginxACMERoot + ";\n")
@@ -232,6 +245,41 @@ func nginxUpstreamHosts(request NginxSiteRequest) ([]string, error) {
 	}
 	sort.Strings(hosts)
 	return hosts, nil
+}
+
+func normalizeNginxListen(value, fallback string) (string, error) {
+	if value == "" {
+		return fallback, nil
+	}
+	if len(value) > 128 || strings.TrimSpace(value) != value ||
+		strings.ContainsAny(value, " \t\r\n;{}\\") ||
+		strings.ContainsFunc(value, unicode.IsControl) {
+		return "", fmt.Errorf("%w: listen", ErrInvalidNginx)
+	}
+	if port, err := strconv.Atoi(value); err == nil {
+		if port < 1 || port > 65535 {
+			return "", fmt.Errorf("%w: listen port", ErrInvalidNginx)
+		}
+		return strconv.Itoa(port), nil
+	}
+	host, portText, err := net.SplitHostPort(value)
+	if err != nil {
+		return "", fmt.Errorf("%w: listen", ErrInvalidNginx)
+	}
+	port, err := strconv.Atoi(portText)
+	if err != nil || port < 1 || port > 65535 {
+		return "", fmt.Errorf("%w: listen port", ErrInvalidNginx)
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		return net.JoinHostPort(host, strconv.Itoa(port)), nil
+	}
+	labels := strings.Split(strings.ToLower(host), ".")
+	for _, label := range labels {
+		if !validHostLabel(label) {
+			return "", fmt.Errorf("%w: listen host", ErrInvalidNginx)
+		}
+	}
+	return net.JoinHostPort(strings.ToLower(host), strconv.Itoa(port)), nil
 }
 
 func validateNginxPath(value string, required bool) error {

@@ -222,3 +222,34 @@ func TestBuildNginxTaskRejectsMismatchedIdentity(t *testing.T) {
 		t.Fatal("missing node accepted")
 	}
 }
+
+func TestRenderNginxSiteCustomListenForIsolation(t *testing.T) {
+	request := directHTTPRequest()
+	request.HTTPListen = "127.0.0.1:18080"
+	site, err := gateway.RenderNginxSite(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(site.Config), "listen 127.0.0.1:18080;") {
+		t.Fatalf("config:\n%s", site.Config)
+	}
+	request.HTTPS = true
+	request.CertificatePath = "/etc/serverfleet/fullchain.pem"
+	request.PrivateKeyPath = "/etc/serverfleet/privkey.pem"
+	request.HTTPListen = "18080"
+	request.HTTPSListen = "127.0.0.1:18443"
+	site, err = gateway.RenderNginxSite(request)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := string(site.Config)
+	if !strings.Contains(config, "listen 18080;") || !strings.Contains(config, "listen 127.0.0.1:18443 ssl;") {
+		t.Fatalf("config:\n%s", config)
+	}
+	for _, listen := range []string{"80; include", "127.0.0.1:18080;}", "0", "70000"} {
+		request.HTTPListen = listen
+		if _, err := gateway.RenderNginxSite(request); err == nil {
+			t.Fatalf("listen %q accepted", listen)
+		}
+	}
+}
