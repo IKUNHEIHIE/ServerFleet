@@ -168,7 +168,7 @@ describe("workflows console (GM-W5-01a)", () => {
     // 无任何路由桩：GET /api/v1/workflows 404 → 页面显示加载失败，不再有静态 BLOCKED 页。
     await renderAuthenticated("/workflows", {});
     expect(await screen.findByRole("heading", { level: 1, name: "自动化工作流" })).toBeVisible();
-    expect(screen.getByText("工作流列表加载失败")).toBeVisible();
+    expect(await screen.findByText("工作流列表加载失败")).toBeVisible();
     expect(screen.queryByText("BLOCKED：无工作流接口")).not.toBeInTheDocument();
   });
 });

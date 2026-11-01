@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/storage"
 )
@@ -239,6 +240,9 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 	if upload.SubjectID != subjectID {
 		return Upload{}, ErrSubjectMismatch
 	}
+	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_complete"); err != nil {
+		return Upload{}, err
+	}
 	if upload.Status == UploadCompleted {
 		return upload, nil
 	}
@@ -265,10 +269,19 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 		return Upload{}, ErrChecksumMismatch
 	}
 	if s.uploads == nil {
+		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
+		defer cancel()
+		if err := s.audit.Append(auditCtx, s.event(subjectID, ActionUploadComplete, "failure", requestID, []string{upload.NodeID}, "transport_unavailable")); err != nil {
+			return Upload{}, err
+		}
 		return Upload{}, ErrTransportAbsent
 	}
 	file, err := os.Open(staging)
 	if err != nil {
+		return Upload{}, err
+	}
+	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_complete"); err != nil {
+		_ = file.Close()
 		return Upload{}, err
 	}
 	pushErr := s.uploads.PushFile(ctx, upload.NodeID, upload.DestinationPath, file, upload.BytesReceived, digest)
