@@ -587,13 +587,13 @@ async function main() {
     return "POST /api/v1/auth/bootstrap (204) + auto-login completed against the real controller";
   });
 
-  await stepPass("P02 reload restores CSRF so writes stay unlocked", async () => {
+  await stepPass("P02 navigation preserves the authenticated writable session", async () => {
     await goto(session, `${base}/#/overview`);
     await expectText(session, "概览");
     await waitForCondition(session, "!document.body.innerText.includes('安全写入已锁定')", {
       timeoutMs: 10_000, label: "no write-lock banner",
     });
-    return "GET /api/v1/auth/me returned csrfToken";
+    return "navigation preserves the current writable session; this step does not prove full-reload CSRF recovery";
   });
 
   let enrollmentToken = null;
@@ -765,6 +765,7 @@ async function main() {
     if (!agentResult) {
       throw new Error("agent one-shot result JSON never reported tasksExecuted=1");
     }
+    await waitForCondition(session, `document.querySelector('h1')?.textContent === ${JSON.stringify(`任务 ${taskId}`)}`, { timeoutMs: 20_000, label: "real task identifier in heading" });
     await screenshot(session, join(outDir, "positive-10-task-completed.png"));
     return `task ${taskId} -> completed; execution state=${item.state}; agent one-shot reports tasksExecuted=1 (real TaskOffer/TaskFinished over the link)`;
   });

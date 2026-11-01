@@ -237,7 +237,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                       { key: "start", header: "开始", render: execution => formatDateTime(execution.startedAt) ?? "—" },
                       { key: "finish", header: "结束", render: execution => formatDateTime(execution.finishedAt) ?? "—" },
                       { key: "seq", header: "最后序号", align: "right", render: execution => execution.lastSequence ?? "—" },
-                      { key: "error", header: "错误", render: execution => execution.error ?? "—" },
+                      { key: "error", header: "执行说明", render: execution => execution.error ?? "—" },
                       { key: "truncated", header: "输出截断", render: execution => (execution.outputTruncated === undefined ? "—" : execution.outputTruncated ? "是" : "否") },
                     ]}
                   />

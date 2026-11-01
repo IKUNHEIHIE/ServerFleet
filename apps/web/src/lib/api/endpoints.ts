@@ -296,8 +296,8 @@ export const tasksApi = {
       .then(result => {
         // 真实 GET /api/v1/tasks/{jobId} 返回 batch 形状（jobId/results）；
         // 候选契约与真实 approve 响应返回 summary 形状（taskId/planDigest）。两者都接受。
-        requireTaskIdentifier(result.data, "task detail");
-        return { ...result, data: result.data as TaskSummary & BatchTaskJob };
+        const taskId = requireTaskIdentifier(result.data, "task detail");
+        return { ...result, data: { ...(result.data as TaskSummary & BatchTaskJob), taskId } };
       }),
   executions: (jobId: string, query: { cursor?: string; limit?: number } = {}, signal?: AbortSignal) =>
     apiClient

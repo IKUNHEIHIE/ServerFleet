@@ -37,6 +37,23 @@ function detailRoutes(executions: readonly unknown[], state = "completed"): Fetc
 }
 
 describe("task detail · real execution results (GM-W6)", () => {
+  it("normalizes the real batch jobId and labels successful result messages as execution notes", async () => {
+    const routes = detailRoutes([{ nodeId: "n-real-1", state: "succeeded", error: "agent reported succeeded" }]);
+    renderAuthenticated("/tasks/tsk-done-1", {
+      ...routes,
+      "GET /api/v1/tasks/tsk-done-1": () => jsonResponse({
+        jobId: "tsk-done-1", name: "Real batch response", state: "completed",
+        createdAt: COMPLETED_TASK.createdAt, targetNodeIdsSnapshot: ["n-real-1"], revision: 1,
+      }),
+    });
+    await screen.findByText("已完成", {}, { timeout: 20_000 });
+    expect(screen.getByRole("heading", { name: "任务 tsk-done-1" })).toBeTruthy();
+    const table = await screen.findByRole("table", { name: "任务执行结果" });
+    expect(screen.getByRole("columnheader", { name: "执行说明" })).toBeTruthy();
+    expect(table.textContent).toContain("agent reported succeeded");
+    expect(table.textContent).not.toContain("undefined");
+  });
+
   it("renders a completed task with its succeeded execution and omits audit fields the controller does not return", async () => {
     renderAuthenticated("/tasks/tsk-done-1", detailRoutes([
       // 真实组合运行时的 executions 条目形状：只有 nodeId/state/error。
