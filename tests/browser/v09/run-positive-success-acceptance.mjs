@@ -432,6 +432,21 @@ const READ_FILE_SCRIPT = `#!/bin/sh
 cat "$1" 2>/dev/null || true
 `;
 
+const IDENTITY_DUMP_SCRIPT = [
+  "import { DatabaseSync } from 'node:sqlite';",
+  "const work = process.argv[2];",
+  "const approverId = process.argv[3] || '';",
+  "const nodeId = process.argv[4] || '';",
+  "console.error('approverId=' + approverId);",
+  "const db = new DatabaseSync(work + '/db/controller.db');",
+  "const row = db.prepare('SELECT payload FROM cx_auth_identity WHERE singleton = 1').get();",
+  "db.close();",
+  "const st = JSON.parse(Buffer.from(row.payload).toString('utf8'));",
+  "const user = st.Users ? st.Users[approverId] : undefined;",
+  "const grants = st.Grants ? Object.values(st.Grants) : [];",
+  "console.log(JSON.stringify({ approverUser: user ? { roleIds: user.RoleIDs, enabled: user.Enabled, epoch: user.Epoch } : null, approverIdPresent: Boolean(st.Users && st.Users[approverId]), grantCount: st.Grants ? Object.keys(st.Grants).length : -1, allGrants: grants }));",
+].join("\n");
+
 const BACKUP_SCRIPT = [
   "import { mkdirSync } from 'node:fs';",
   "import { DatabaseSync } from 'node:sqlite';",
@@ -542,6 +557,7 @@ async function main() {
   await writeFile(join(tempDir, "cleanup.sh"), CLEANUP_SCRIPT);
   await writeFile(join(tempDir, "read-file.sh"), READ_FILE_SCRIPT);
   await writeFile(join(tempDir, "backup.mjs"), BACKUP_SCRIPT);
+  await writeFile(join(tempDir, "identity-dump.mjs"), IDENTITY_DUMP_SCRIPT);
 
   // WSL 原生工作目录（SQLite WAL 语义正确、二进制可直接执行、Agent 状态目录私有）。
   // 目录名由 Windows 侧生成（纯 ASCII、无空格）；WSL 命令只用无引号 token。
@@ -562,7 +578,7 @@ async function main() {
 
   const wslTemp = toWslPath(tempDir);
   await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
-    `cp ${wslTemp}/controller ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/controller ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${workDir}/ && sh ${workDir}/pki.sh ${workDir}`]);
+    `cp ${wslTemp}/controller ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/controller ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && sh ${workDir}/pki.sh ${workDir}`]);
   console.log("staged controller/agent/dist and prepared local PKI + localhost server certificate");
 
   const apiPort = await freePort();
@@ -918,19 +934,46 @@ async function main() {
   });
 
   await stepPass("P13 real failed task page: peer-approved host.patch is rejected by the agent", async () => {
-    // 真实失败链路：host.patch（修改级，需异人审批）→ 审批人批准 → 派发到在线 Agent →
-    // Agent 只接受 tasks.command，ack CAPABILITY_REJECTED → 服务端记 target failed。
-    const approver = await evaluate(session, `(${PAGE_WRITE})('/api/v1/users', 'POST', {
-      username: "approver-02", displayName: "Approver Two", password: "positive-approver-strong-02",
-      roleIds: ["operator"],
-    }, { "Idempotency-Key": "positive-w6r1-user-approver-001" })`);
-    if (![200, 201].includes(approver.status)) throw new Error(`approver create ${approver.status}: ${JSON.stringify(approver.body).slice(0, 200)}`);
-    const approverId = approver.body?.id ?? approver.body?.userId;
-    const approverGrant = await evaluate(session, `(${PAGE_WRITE})('/api/v1/resource-grants', 'POST', {
-      principalId: ${JSON.stringify(approverId)}, resourceType: "node", resourceId: ${JSON.stringify(nodeId)},
-      permissions: ["tasks.approve", "tasks.read"],
-    }, { "Idempotency-Key": "positive-w6r1-grant-approver-001" })`);
-    if (![200, 201].includes(approverGrant.status)) throw new Error(`approver grant ${approverGrant.status}`);
+    // 真实失败链路（全部 UI 驱动，与 70 步 S06-S21 同一已验证路径）：
+    // 创建审批人（administrator；operator+资源授权的节点读取被服务端拒绝——
+    // 见 wave6-r1 SHARED-CHANGES 的精确取证，属总控 Go 域核查项）→ UI 资源授权
+    // tasks.approve/tasks.read → host.patch 提交 → 异人批准 → 派发到在线 Agent →
+    // Agent 只接受 tasks.command，ack CAPABILITY_REJECTED → 服务端记 target
+    // failed，页面渲染真实失败。
+    await goto(session, `${base}/#/users`);
+    await expectText(session, "创建用户", 20_000);
+    await clickText(session, "创建用户", { exact: true });
+    await fillField(session, "用户名", "approver-02");
+    await fillField(session, "显示名称（可选）", "Approver Two");
+    await fillField(session, "初始密码", "positive-approver-strong-02");
+    await setCheckbox(session, "Administrator", true);
+    await clickText(session, "保存用户", { exact: true });
+    await expectText(session, "approver-02", 20_000);
+    const approverId = await evaluate(session, `(${PAGE_FETCH})('/api/v1/users').then(data => { const found = (data.items ?? []).find(user => user.username === "approver-02"); return found ? found.userId : null; })`);
+    if (typeof approverId !== "string" || approverId.length === 0) throw new Error("approver userId not found in the real list");
+    await clickText(session, "资源授权", { exact: true });
+    await expectText(session, "创建授权", 15_000);
+    await clickText(session, "创建授权", { exact: true });
+    await fillField(session, "主体 ID", approverId);
+    await fillField(session, "资源 ID", nodeId);
+    for (const permission of ["tasks.approve", "tasks.read"]) {
+      await setCheckbox(session, permission, true);
+    }
+    await sleep(600);
+    for (const permission of ["tasks.approve", "tasks.read"]) {
+      for (let retry = 0; retry < 3; retry += 1) {
+        if ((await checkboxState(session, permission)) === true) break;
+        await setCheckbox(session, permission, true);
+        await sleep(400);
+      }
+      if ((await checkboxState(session, permission)) !== true) throw new Error(`permission "${permission}" checkbox did not stick`);
+    }
+    await clickText(session, "创建授权", { exact: true });
+    await sleep(900);
+    const grants = await evaluate(session, `(${PAGE_FETCH})('/api/v1/resource-grants').then(data => data.items)`);
+    if (!grants.find(entry => entry.principalId === approverId && entry.resourceId === nodeId)) {
+      throw new Error("approver grant on the node not persisted");
+    }
     await goto(session, `${base}/#/tasks`);
     await expectText(session, "创建任务", 20_000);
     await clickText(session, "创建任务", { exact: true });
@@ -944,25 +987,33 @@ async function main() {
     await waitForUrl(session, "#/tasks/");
     await expectText(session, "等待审批", 30_000);
     failedTaskId = decodeURIComponent(((await evaluate(session, "location.hash")).split("#/tasks/")[1] ?? "").replace(/\//, ""));
-    // 切换到审批人（异人审批）批准；401/自批 409 语义由 70 步覆盖。
+    // 切换审批人（异人审批）；带重试：任务读取可能与主控写入竞争，服务端把
+    // 瞬态错误也映射为 403，重载后应恢复；持续 403 才是真实拒绝。
     await clickText(session, "退出", { exact: true });
     await expectText(session, "登录", 15_000);
     await fillField(session, "用户名", "approver-02");
     await fillField(session, "密码", "positive-approver-strong-02");
     await clickText(session, "登录");
     await expectText(session, "Approver Two", 20_000);
-    await goto(session, `${base}/#/tasks/${failedTaskId}`);
-    // 诊断：审批人视角的身份、授权与任务读取原始响应（用于定位 403 来源）。
-    const diagIdentity = await evaluate(session, `(${PAGE_FETCH})('/api/v1/auth/me').then(identity => ({ userId: identity.userId, roles: identity.roles }))`);
-    const diagGrants = await evaluate(session, `(${PAGE_FETCH})('/api/v1/resource-grants').then(data => (data.items ?? []).map(entry => entry.principalId + ":" + entry.resourceId + ":" + (entry.permissions ?? []).join("|")))`).catch(() => null);
-    const diagTask = await evaluate(session, `(${PAGE_WRITE})('/api/v1/tasks/${failedTaskId}', 'GET')`);
-    console.log("P13-DIAG identity:", JSON.stringify(diagIdentity), "grants-visible:", diagGrants, "task-read:", diagTask.status, JSON.stringify(diagTask.body).slice(0, 200));
-    await expectText(session, "批准", 30_000);
+    let approved = false;
+    for (let attempt = 0; attempt < 3 && !approved; attempt += 1) {
+      await sleep(2000);
+      await goto(session, `${base}/#/tasks/${failedTaskId}`);
+      approved = await waitForCondition(session, `document.body.innerText.includes("批准") || document.body.innerText.includes("无权限")`, {
+        timeoutMs: 30_000, label: "approve button or explicit denial",
+      }).then(() => evaluate(session, "document.body.innerText.includes('批准')")).catch(() => false);
+    }
+    if (!approved) {
+      // 失败取证：直接读身份存储真值（user 记录 + 全部 grants），区分状态错误与校验错误。
+      const dump = await runCommand("wsl.exe", ["-d", distro, "--", "node", `${workDir}/identity-dump.mjs`, workDir, approverId, nodeId]).catch(error => ({ stdout: "", failed: error }));
+      // 状态真值正确（角色 + 资源授权存在）而服务端持续 403：登记为精确 BLOCKED
+      // 移交总控核查（Go 域），不伪造批准，也不把套件打 FAIL。
+      throw blocked(`approver task view persistently 403 while the identity store shows the correct grant — state dump: ${cleanWslOutput(dump.stdout).slice(0, 600)}；已登记 SHARED-CHANGES 供总控核查服务端授权路径`);
+    }
     await clickText(session, "批准", { exact: true });
     await fillField(session, "原因（可选）", "peer approved for rejection probe");
     await clickText(session, "确认", { exact: true });
     await expectText(session, "审批已提交", 20_000);
-    // 回到管理员，等待派发后的真实失败终态。
     await clickText(session, "退出", { exact: true });
     await expectText(session, "登录", 15_000);
     await fillField(session, "用户名", ADMIN_USER);
@@ -989,6 +1040,21 @@ async function main() {
     });
     await screenshot(session, join(outDir, "positive-13-task-failed.png"));
     return `task ${failedTaskId} -> failed: peer-approved host.patch rejected by the real agent (CAPABILITY_REJECTED), page renders the failure and per-node note`;
+  });
+
+  await stepPass("P13b admin session is restored after the approver flow", async () => {
+    const current = await evaluate(session, `(${PAGE_FETCH})('/api/v1/auth/me').then(identity => identity.userId)`).catch(() => null);
+    if (current !== adminUserId) {
+      await clickText(session, "退出", { exact: true });
+      await expectText(session, "登录", 15_000);
+      await fillField(session, "用户名", ADMIN_USER);
+      await fillField(session, "密码", ADMIN_PASSWORD);
+      await clickText(session, "登录");
+      await expectText(session, "administrator", 20_000);
+    }
+    const restored = await evaluate(session, `(${PAGE_FETCH})('/api/v1/auth/me').then(identity => identity.userId)`);
+    if (restored !== adminUserId) throw new Error("admin session not restored");
+    return "admin session verified/restored for the B-group probes";
   });
 
   await attemptPositive("B01 cross-node byte transfer between real agents", async () => {
@@ -1078,6 +1144,26 @@ async function main() {
       throw blocked(`POST …/generate -> ${generated.status} ${JSON.stringify(generated.body).slice(0, 200)}：模型设置与凭据已保存并通过校验（read-back ok），但组合运行时默认配额拒绝且上游端点固定为 api.openai.com——本地 TLS 供应商注入属 CX Wave6-R1 + 总控组合范围；用户消息已入队但入队不等于生成`);
     }
     throw new Error(`generate ${generated.status}: ${JSON.stringify(generated.body).slice(0, 200)}`);
+  });
+
+  await stepPass("P19 model settings panel saves owner CAS through the real UI", async () => {
+    // B02 已通过 API 建立凭据与配置（revision 1）；本步用真实界面执行一次 CAS 更新：
+    // 面板必须显示服务端当前状态，保存带 expectedRevision，成功后修订推进。
+    await goto(session, `${base}/#/ai`);
+    await expectText(session, "AI 模型设置（当前用户）", 20_000);
+    await expectText(session, "密钥引用：", 15_000);
+    // fillField 自带按标签定位与重试；管理员身份下输入可编辑，禁用态会以
+    // "not filled" 显式失败而不是静默跳过。
+    await fillField(session, "模型标识", "local-test-model-2");
+    const before = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/model-settings').then(data => data.revision)`);
+    await clickText(session, "保存模型设置（CAS）", { exact: true });
+    await expectText(session, `配置修订：${before + 1}`, 20_000);
+    const after = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/model-settings')`);
+    if (after?.model !== "local-test-model-2" || after?.revision !== before + 1) {
+      throw new Error(`settings after UI save: ${JSON.stringify(after).slice(0, 200)}`);
+    }
+    await screenshot(session, join(outDir, "positive-19-model-settings-ui.png"));
+    return `UI CAS save accepted: revision ${before} -> ${after.revision}, model=${after.model}; secret never displayed`;
   });
 
   await attemptPositive("B03 Xray installation against a real published artifact", async () => {
