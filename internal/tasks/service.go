@@ -92,6 +92,7 @@ type Options struct {
 	Audit           AuditSink
 	Authorizer      auth.Authorizer
 	Dispatcher      Dispatcher
+	Workers         map[string]Worker
 	Approvals       ApprovalConsumer
 	Nodes           NodeLookup
 	Now             func() time.Time
@@ -119,8 +120,11 @@ type Service struct {
 	requireApproval func(OperationClass) bool
 	onError         func(error)
 
-	runMu     sync.Mutex
-	taskLocks sync.Map
+	runMu      sync.Mutex
+	taskLocks  sync.Map
+	workers    map[string]Worker
+	workerMu   sync.Mutex
+	workerRuns map[string]*workerRun
 }
 
 func NewService(options Options) (*Service, error) {
@@ -164,11 +168,19 @@ func NewService(options Options) (*Service, error) {
 	if onError == nil {
 		onError = func(error) {}
 	}
+	workers := make(map[string]Worker, len(options.Workers))
+	for action, worker := range options.Workers {
+		if !validToken(action, 128) || worker == nil {
+			return nil, ErrInvalidTask
+		}
+		workers[action] = worker
+	}
 	return &Service{
 		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
 		dispatcher: options.Dispatcher, approvals: options.Approvals, nodes: options.Nodes, now: now,
 		approvalTTL: approvalTTL, unstartedTTL: unstartedTTL, interval: interval,
 		concurrency: concurrency, requireApproval: require, onError: onError,
+		workers: workers, workerRuns: map[string]*workerRun{},
 	}, nil
 }
 
@@ -647,6 +659,14 @@ func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID strin
 	})
 	if err != nil {
 		return Task{}, err
+	}
+	if s.workers[task.ActionID] != nil {
+		s.workerMu.Lock()
+		if run := s.workerRuns[taskID]; run != nil {
+			run.cancel()
+		}
+		s.workerMu.Unlock()
+		return s.repo.Get(ctx, taskID)
 	}
 	for _, nodeID := range dispatched {
 		if s.dispatcher == nil {

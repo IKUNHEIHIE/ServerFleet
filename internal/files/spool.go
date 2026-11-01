@@ -10,6 +10,14 @@ import (
 
 var ErrSpoolInsecure = errors.New("files: transfer spool directory is not private")
 
+func CheckExecutionSpool(dir string) error { return secureSpoolDirectory(dir) }
+func NewExecutionSpool(dir string) (*os.File, error) {
+	if err := secureSpoolDirectory(dir); err != nil {
+		return nil, err
+	}
+	return os.CreateTemp(dir, "file-execution-*")
+}
+
 // secureSpoolDirectory creates the spool root if needed and rejects a symlink or
 // a directory readable by other users. The spool holds actual file bytes, so it
 // must not be shared.

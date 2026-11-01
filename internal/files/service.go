@@ -52,6 +52,7 @@ type AuditSink interface {
 
 // TransferCommand is the exact payload submitted to the unified task pipeline.
 type TransferCommand struct {
+	TransferID        string
 	SubjectID         string
 	RequestID         string
 	SourceNodeID      string
@@ -87,19 +88,20 @@ type DownloadTransport interface {
 }
 
 type Options struct {
-	DB             *storage.DB
-	Repo           *Repo
-	Audit          AuditSink
-	Authorizer     auth.Authorizer
-	Submitter      TaskSubmitter
-	Canceller      TaskCanceller
-	Uploads        UploadTransport
-	Downloads      DownloadTransport
-	Coordinator    *TransferCoordinator
-	Tasks          TaskReporter
-	StagingDir     string
-	MaxUploadBytes int64
-	Now            func() time.Time
+	DB               *storage.DB
+	Repo             *Repo
+	Audit            AuditSink
+	Authorizer       auth.Authorizer
+	Submitter        TaskSubmitter
+	Canceller        TaskCanceller
+	Uploads          UploadTransport
+	Downloads        DownloadTransport
+	Coordinator      *TransferCoordinator
+	Tasks            TaskReporter
+	StagingDir       string
+	MaxUploadBytes   int64
+	Now              func() time.Time
+	ValidateTransfer func(context.Context, TransferCommand) error
 }
 
 type Service struct {
@@ -117,7 +119,8 @@ type Service struct {
 	maxUploadBytes int64
 	now            func() time.Time
 
-	uploadLocks sync.Map
+	uploadLocks      sync.Map
+	validateTransfer func(context.Context, TransferCommand) error
 }
 
 func NewService(options Options) (*Service, error) {
@@ -146,6 +149,7 @@ func NewService(options Options) (*Service, error) {
 		submitter: options.Submitter, canceller: options.Canceller, uploads: options.Uploads,
 		downloads: options.Downloads, coordinator: options.Coordinator, tasks: options.Tasks,
 		stagingDir: options.StagingDir, maxUploadBytes: maxUpload, now: now,
+		validateTransfer: options.ValidateTransfer,
 	}, nil
 }
 
@@ -172,6 +176,12 @@ func (s *Service) CreateTransfer(ctx context.Context, input CreateTransferInput)
 	if err := s.authorizeNode(ctx, input.SubjectID, ActionTransfer, input.RequestID, input.DestinationNodeID, "file_transfer"); err != nil {
 		return Transfer{}, err
 	}
+	command := TransferCommand{TransferID: transfer.ID, SubjectID: input.SubjectID, RequestID: input.RequestID, SourceNodeID: input.SourceNodeID, DestinationNodeID: input.DestinationNodeID, SourcePaths: snapshots(transfer.Items), DestinationDir: input.DestinationDir, ConflictPolicy: input.ConflictPolicy, Checksums: input.Checksums}
+	if s.validateTransfer != nil {
+		if err := s.validateTransfer(ctx, command); err != nil {
+			return Transfer{}, err
+		}
+	}
 	if input.DryRun {
 		return transfer, nil
 	}
@@ -195,12 +205,7 @@ func (s *Service) CreateTransfer(ctx context.Context, input CreateTransferInput)
 	if err != nil {
 		return Transfer{}, err
 	}
-	taskID, submitErr := s.submitter.SubmitTransfer(ctx, TransferCommand{
-		SubjectID: input.SubjectID, RequestID: input.RequestID,
-		SourceNodeID: input.SourceNodeID, DestinationNodeID: input.DestinationNodeID,
-		SourcePaths: snapshots(transfer.Items), DestinationDir: input.DestinationDir,
-		ConflictPolicy: input.ConflictPolicy, Checksums: input.Checksums,
-	})
+	taskID, submitErr := s.submitter.SubmitTransfer(ctx, command)
 	if submitErr != nil {
 		failure := "task submission failed"
 		_ = s.db.InTx(context.WithoutCancel(ctx), func(txCtx context.Context, tx storage.Tx) error {

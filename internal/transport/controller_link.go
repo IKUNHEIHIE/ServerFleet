@@ -49,6 +49,8 @@ type ControllerLinks struct {
 	links    map[string]*controllerLink
 	verifier *PeerVerifier
 	cfg      ControllerLinkConfig
+	closed   bool
+	all      map[*controllerLink]struct{}
 }
 type controllerLink struct {
 	hub             *ControllerLinks
@@ -60,6 +62,7 @@ type controllerLink struct {
 	sequence        uint64
 	active          bool // guarded by hub.mu
 	granted         map[string]bool
+	done            chan struct{}
 }
 
 func NewControllerLinks(verifier *PeerVerifier, cfg ControllerLinkConfig) (*ControllerLinks, error) {
@@ -74,12 +77,12 @@ func NewControllerLinks(verifier *PeerVerifier, cfg ControllerLinkConfig) (*Cont
 		actions[k] = v
 	}
 	cfg.Semantic.AllowedActions = actions
-	return &ControllerLinks{links: map[string]*controllerLink{}, verifier: verifier, cfg: cfg}, nil
+	return &ControllerLinks{links: map[string]*controllerLink{}, all: map[*controllerLink]struct{}{}, verifier: verifier, cfg: cfg}, nil
 }
 func (h *ControllerLinks) current(l *controllerLink) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return l.active && h.links[l.observed.Identity.NodeID] == l
+	return !h.closed && l.active && h.links[l.observed.Identity.NodeID] == l
 }
 func (h *ControllerLinks) validation(direction Direction, phase HandshakePhase) ValidationContext {
 	return ValidationContext{Direction: direction, Phase: phase, ProtocolMajor: h.cfg.ProtocolMajor, ProtocolMinor: h.cfg.ProtocolMinor, Now: time.Now()}
@@ -110,7 +113,15 @@ func (h *ControllerLinks) Serve(ctx context.Context, socket FrameSocket, state t
 		return ErrLinkRejected
 	}
 	defer guard.Close()
-	l := &controllerLink{hub: h, socket: socket, tls: state, observed: LinkObservation{identity, connectionID}, incoming: guard}
+	l := &controllerLink{hub: h, socket: socket, tls: state, observed: LinkObservation{identity, connectionID}, incoming: guard, done: make(chan struct{})}
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return ErrLinkRejected
+	}
+	h.all[l] = struct{}{}
+	h.mu.Unlock()
+	defer func() { h.mu.Lock(); delete(h.all, l); close(l.done); h.mu.Unlock() }()
 	handshakeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	binary, raw, err := socket.Read(handshakeCtx)
 	if err != nil || !binary {
@@ -199,9 +210,13 @@ func (h *ControllerLinks) activate(ctx context.Context, l *controllerLink, hello
 		}
 		l.sendMu.Lock()
 		h.mu.Lock()
-		if old == nil && len(h.links) >= h.cfg.MaxConnections {
+		if h.closed || old == nil && len(h.links) >= h.cfg.MaxConnections {
 			h.mu.Unlock()
 			l.sendMu.Unlock()
+			if old != nil {
+				old.sendMu.Unlock()
+				old.eventMu.Unlock()
+			}
 			return ErrLinkRejected
 		}
 		if h.links[l.observed.Identity.NodeID] != old {

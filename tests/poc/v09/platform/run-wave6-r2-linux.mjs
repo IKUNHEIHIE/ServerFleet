@@ -1,0 +1,12 @@
+// Cross-compile with fixed project Go, execute only in existing non-root WSL.
+import fs from 'node:fs';import path from 'node:path';import {spawnSync}from'node:child_process';import{createHash}from'node:crypto';import{root,go,env}from'../../../../scripts/lib.mjs';
+const folder=path.join(root,'reports/wave6-r2');fs.mkdirSync(folder,{recursive:true});
+function run(name,exe,args,options={}){const r=spawnSync(exe,args,{cwd:root,env,encoding:'utf8',windowsHide:true,timeout:180000,maxBuffer:16<<20,...options});fs.writeFileSync(path.join(folder,name+'.log'),(r.stdout??'')+(r.stderr??'')+(r.error?.message??''));if(r.status!==0)throw new Error(name+' failed; inspect reports/wave6-r2/'+name+'.log');return r.stdout;}
+const uid=run('uid','wsl.exe',['-d','Ubuntu','--exec','id','-u']).trim();if(uid==='0'||!/^\d+$/.test(uid))throw new Error('Non-root WSL required');
+run('overlay',process.execPath,['tests/poc/v09/platform/prepare-wave6-r2-overlays.mjs']);
+const agent=path.join(folder,'agent-linux-amd64'),test=path.join(folder,'file-flow.test');const linux=p=>'/mnt/'+p[0].toLowerCase()+'/'+p.slice(3).replaceAll('\\','/');
+const cross={env:{...env,GOOS:'linux',GOARCH:'amd64',CGO_ENABLED:'0'}};
+run('agent-build',go,['build','-mod=readonly','-o',agent,'./apps/agent'],cross);
+run('file-flow-build',go,['test','-mod=readonly','-c','-tags=cx_r2_controller','-overlay=reports/wave6-r2/files-overlay.json','-o',test,'./tests/integration/v09/platform'],cross);
+const output=run('file-flow-native','wsl.exe',['-d','Ubuntu','--exec','env','-u','TMPDIR','-u','TMP','-u','TEMP','SF_R2_AGENT_BINARY='+linux(agent),linux(test),'-test.v','-test.timeout=130s','-test.run=TestR2HTTPUnifiedWorker']);
+const hash=p=>createHash('sha256').update(fs.readFileSync(p)).digest('hex');const evidence={head:run('head','git',['rev-parse','HEAD']).trim(),workingTree:run('tree','git',['status','--short']).trim(),uid,status:'PASS',passed:(output.match(/^--- PASS:/gm)??[]).length,skipped:(output.match(/^--- SKIP:/gm)??[]).length,agentSHA256:hash(agent),testSHA256:hash(test),logSHA256:hash(path.join(folder,'file-flow-native.log')),limits:'Actual local Controller HTTPS plus two actual Agent processes using candidate central registration/DDL overlay. No physical two-machine, awskr or production admission claim.'};fs.writeFileSync(path.join(folder,'file-flow.json'),JSON.stringify(evidence,null,2)+'\n');console.log(JSON.stringify({...evidence,workingTree:evidence.workingTree?'DIRTY':'CLEAN'}));

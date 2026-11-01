@@ -1,0 +1,165 @@
+diff --git a/apps/controller/server/server.go b/apps/controller/server/server.go
+index 8a66314..d63315b 100644
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -67,6 +67,7 @@ type Config struct {
+ 	EnrollmentIssuer *transport.CertificateIssuer
+ 	AgentFrameBytes  int
+ 	AgentFileGate    transport.FileFrameGate
++	FileExecution    *FileExecutionConfig
+ 
+ 	// Optional signed plugin package trust. Empty maps keep installation closed.
+ 	PluginTrustKeys         map[string]ed25519.PublicKey
+@@ -117,6 +118,7 @@ type Server struct {
+ 	EnrollmentManagement *transport.EnrollmentManagementHTTP
+ 	Links                *transport.ControllerLinks
+ 	AgentFiles           *transport.FileClient
++	FileWorker           *FileExecutionWorker
+ 	AgentLinkHTTP        *transport.AgentLinkHTTP
+ 
+ 	AI               *ai.SessionService
+@@ -195,6 +197,7 @@ func Migrations() [][]storage.Migration {
+ 		servicegroups.Migrations(),
+ 		tasks.Migrations(),
+ 		files.Migrations(),
++		{files.ExecutionBindingsMigration()},
+ 		monitoring.Migrations(),
+ 		notifications.Migrations(),
+ 		quota.Migrations(),
+@@ -594,6 +597,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
+ 		return cleanup(err)
+ 	}
+ 	s.Nodes = nodesService
++	if cfg.FileExecution != nil {
++		if cfg.AgentFileGate != nil || cfg.EnrollmentIssuer == nil || cfg.AgentAuthority == "" {
++			return cleanup(files.ErrTransferExecution)
++		}
++		s.FileWorker, err = newFileExecutionWorker(s, filesRepo, authorizer, *cfg.FileExecution)
++		if err != nil {
++			return cleanup(err)
++		}
++		cfg.AgentFileGate = s.FileWorker.Gate
++	}
+ 	agentBridge, err := s.setupAgentTransport(cfg, nodesService, tasksRepo)
+ 	if err != nil {
+ 		return cleanup(err)
+@@ -621,7 +634,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
+ 	if dispatcher == nil && agentBridge != nil {
+ 		dispatcher = agentBridge
+ 	}
++	workers := map[string]tasks.Worker{}
++	if s.FileWorker != nil {
++		workers[files.ActionTransfer] = s.FileWorker
++		agentBridge.fileWorker = s.FileWorker
++	}
+ 	tasksService, err := tasks.NewService(tasks.Options{
++		Workers:    workers,
+ 		DB:         db,
+ 		Repo:       tasksRepo,
+ 		Audit:      auditRecorder,
+@@ -661,17 +680,24 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
+ 	if downloads == nil {
+ 		downloads, _ = uploads.(files.DownloadTransport)
+ 	}
++	var fileSubmitter files.TaskSubmitter = taskBridge
++	var validateTransfer func(context.Context, files.TransferCommand) error
++	if s.FileWorker != nil {
++		fileSubmitter = s.FileWorker
++		validateTransfer = s.FileWorker.ValidateTransfer
++	}
+ 	filesService, err := files.NewService(files.Options{
+-		DB:         db,
+-		Repo:       filesRepo,
+-		Audit:      auditRecorder,
+-		Authorizer: authorizer,
+-		Submitter:  taskBridge,
+-		Canceller:  taskBridge,
+-		Uploads:    uploads,
+-		Downloads:  downloads,
+-		StagingDir: stagingDir,
+-		Now:        now,
++		ValidateTransfer: validateTransfer,
++		DB:               db,
++		Repo:             filesRepo,
++		Audit:            auditRecorder,
++		Authorizer:       authorizer,
++		Submitter:        fileSubmitter,
++		Canceller:        taskBridge,
++		Uploads:          uploads,
++		Downloads:        downloads,
++		StagingDir:       stagingDir,
++		Now:              now,
+ 	})
+ 	if err != nil {
+ 		return cleanup(err)
+@@ -785,6 +811,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
+ 
+ 	s.ServiceGroups = serviceGroupsService
+ 	s.Files = filesService
++	if s.FileWorker != nil {
++		if _, err := s.Files.RecoverTransfers(ctx); err != nil {
++			return cleanup(err)
++		}
++		if _, err := s.Tasks.Recover(ctx); err != nil {
++			return cleanup(err)
++		}
++	}
+ 	s.DNS = dnsService
+ 	s.Notifications = notificationsService
+ 	s.Gateway = gatewayService
+@@ -815,6 +849,14 @@ func (s *Server) Close() error {
+ 	if s == nil {
+ 		return nil
+ 	}
++	if s.Links != nil {
++		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
++		err := s.Links.Close(closeCtx)
++		cancel()
++		if err != nil {
++			return err
++		}
++	}
+ 	if s.runCancel != nil {
+ 		s.runCancel()
+ 		select {
+diff --git a/apps/controller/server/agent_links.go b/apps/controller/server/agent_links.go
+index 8cd2b18..05c5c71 100644
+--- a/apps/controller/server/agent_links.go
++++ b/apps/controller/server/agent_links.go
+@@ -54,6 +54,7 @@ type agentLinkBridge struct {
+ 	tasks        *tasks.Service
+ 	links        *transport.ControllerLinks
+ 	files        *transport.FileClient
++	fileWorker   *FileExecutionWorker
+ 	now          func() time.Time
+ 
+ 	seqMu     sync.Mutex
+@@ -132,6 +133,14 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
+ 	if b == nil || envelope == nil || envelope.GetNodeId() != observation.Identity.NodeID {
+ 		return transport.ErrLinkRejected
+ 	}
++	fileChild := false
++	if b.fileWorker != nil {
++		var err error
++		fileChild, err = b.fileWorker.Observe(ctx, observation, envelope)
++		if err != nil {
++			return err
++		}
++	}
+ 	if b.files != nil {
+ 		consumed, err := b.files.Deliver(ctx, observation, envelope)
+ 		if err != nil {
+@@ -141,9 +150,12 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
+ 			return nil
+ 		}
+ 	}
++	if fileChild {
++		return nil
++	}
+ 	if output := envelope.GetTaskOutput(); output != nil {
+ 		task, err := b.tasksRepo.Get(ctx, output.TaskId)
+-		if err != nil || task.ActionID == transport.FileCapability {
++		if err != nil || (task.ActionID == transport.FileCapability || task.ActionID == "files.transfer") {
+ 			return transport.ErrLinkRejected
+ 		}
+ 	}
