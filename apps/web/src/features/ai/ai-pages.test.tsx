@@ -145,11 +145,12 @@ describe("AI model settings (GM-W6-R1)", () => {
     const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), ADMIN_IDENTITY);
     expect(await screen.findByText("AI 模型设置（当前用户）")).toBeVisible();
     // 凭据只显示引用/状态/修订号；凭据下拉不包含 dns 作用域的其他类型。
-    expect(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }).textContent).toContain("cred-ai-1");
-    expect(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }).textContent).not.toContain("cred-cf-1");
+    const credentialSelect = await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" });
+    expect(credentialSelect.textContent).toContain("cred-ai-1");
+    expect(credentialSelect.textContent).not.toContain("cred-cf-1");
     expect(screen.queryByLabelText("秘密值")).toBeNull();
     fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
-    fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
+    fireEvent.change(credentialSelect, { target: { value: "cred-ai-1" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
     await waitFor(() => {
