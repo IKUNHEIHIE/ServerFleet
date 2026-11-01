@@ -33,7 +33,7 @@ const (
 
 func ServiceActions() []string {
 	return []string{ActionDownload, ActionRead, ActionTransfer, ActionTransferCancel, ActionTransferCreate,
-		ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite}
+		ActionTransferExecute, ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite}
 }
 
 var (
@@ -87,6 +87,7 @@ type Options struct {
 	Canceller      TaskCanceller
 	Uploads        UploadTransport
 	Downloads      DownloadTransport
+	Coordinator    *TransferCoordinator
 	StagingDir     string
 	MaxUploadBytes int64
 	Now            func() time.Time
@@ -101,6 +102,7 @@ type Service struct {
 	canceller      TaskCanceller
 	uploads        UploadTransport
 	downloads      DownloadTransport
+	coordinator    *TransferCoordinator
 	stagingDir     string
 	maxUploadBytes int64
 	now            func() time.Time
@@ -132,8 +134,8 @@ func NewService(options Options) (*Service, error) {
 	return &Service{
 		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
 		submitter: options.Submitter, canceller: options.Canceller, uploads: options.Uploads,
-		downloads: options.Downloads, stagingDir: options.StagingDir, maxUploadBytes: maxUpload,
-		now: now,
+		downloads: options.Downloads, coordinator: options.Coordinator,
+		stagingDir: options.StagingDir, maxUploadBytes: maxUpload, now: now,
 	}, nil
 }
 
@@ -311,6 +313,24 @@ func (s *Service) ApplyTaskUpdate(ctx context.Context, taskID string, update Tas
 		return Transfer{}, err
 	}
 	return s.repo.GetTransfer(ctx, transfer.ID)
+}
+
+// ExecuteTransferTask is the unified task pipeline seam for the files.transfer
+// action. It runs the cross-node coordinator and persists the reconciled result;
+// per-item failures are stored on the transfer while setup errors are returned.
+func (s *Service) ExecuteTransferTask(ctx context.Context, taskID string, execution TransferExecution) (Transfer, error) {
+	if s == nil || s.coordinator == nil {
+		return Transfer{}, ErrCoordinatorUnavailable
+	}
+	outcome, runErr := s.coordinator.ExecuteTask(ctx, taskID, execution, nil)
+	if outcome.TaskID == "" {
+		return Transfer{}, runErr
+	}
+	transfer, applyErr := s.ApplyTaskUpdate(context.WithoutCancel(ctx), taskID, outcome.TaskUpdate())
+	if applyErr != nil {
+		return Transfer{}, applyErr
+	}
+	return transfer, runErr
 }
 
 func (s *Service) CancelTransfer(ctx context.Context, subjectID, requestID, id string) (Transfer, error) {
