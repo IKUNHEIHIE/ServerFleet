@@ -15,6 +15,9 @@
 | `a764306` | `test(files,notifications): remove unused fault-injection fields` |
 | `da0eff5` | `feat(certificates): add acme dns-01 client with remote signer` |
 | `814f1db` | `fix(certificates): use modern ec public key encoding` |
+| `d70321f` | `feat(gateway): add configurable nginx listen addresses`（隔离测试 127.0.0.1 高位端口） |
+| `80d6918` | `docs(deepseek): record wave6 ds evidence and awskr handoff` |
+| `7699b4e` | `feat(dns): add acme challenge publisher and provider consistency guards` |
 
 以上均在作者分支本地；未推送、未合并 main。
 
@@ -35,7 +38,8 @@
 - 代码：`internal/dns/cloudflare.go`；测试 `cloudflare_test.go`、`cloudflare_service_test.go`；`dns.SecretResolver` 端口。
 - 能力：v4 API verify/zones 分页/dns_records CRUD；Bearer 令牌仅按请求解析；拒绝重定向；TLS≥1.2；无环境代理；1MiB 响应上限；401/403/9109 凭据状态；错误不含 provider 文本或令牌。
 - 命令/结果：`go test ./internal/dns/ -count=1` → PASS；本地 TLS fake Cloudflare 全流程（verify→TestAccount→CreateZone→CreateRecord→ListRecords）PASS。
-- 未覆盖：真实 Cloudflare 账号/Zone（无授权秘密），UNTESTED。
+- 一致性补偿：CreateRecord/UpdateRecord 本地失败时尝试 provider 回滚/删除；DeleteRecord 把 provider 404 视为已不存在并清理本地行；`ErrProviderNotFound` 可区分。
+- 未覆盖：真实 Cloudflare 账号/Zone（无授权秘密），UNTESTED。数据库失败后的补偿路径由代码覆盖但无注入式单测，UNTESTED。
 
 ### DS-W6-03 SMTP / QQ 真实发送
 
@@ -56,13 +60,14 @@
 - 代码：`internal/certificates/acme.go`；测试 `acme_test.go`。
 - 能力：stdlib RFC 8555（directory/newNonce/newAccount/newOrder/authz/dns-01/finalize/order/certificate），ES256 JWS、nonce 一次性、kid/JWK、badNonce 单次重试、bounded polling、https/重定向/响应上限、私钥只经 `ACMESigner`、DNS 值只经 `ACMEDNS01Publisher` 并清理。
 - 命令/结果：`go test ./internal/certificates/ -count=1` → PASS；fake ACME 服务器独立验证 JWS/挑战 TXT/CSR 签发/链/序列号/有效期；badNonce、错误 TXT、finalize 失败、processing 轮询、signer 失败、重定向拒绝 PASS。
+- 生产 DNS-01 publisher：`dns.NewACMEChallengePublisher` 经 dns 服务创建/清理 `_acme-challenge` TXT，测试创建/清理/重复清理/非法输入/provider 失败/provider 404 幂等 PASS。
 - 未覆盖：真实 Let's Encrypt/ZeroSSL/Cloudflare DNS 账号、证书写回秘密存储，UNTESTED/BLOCKED。
 
 ## 门禁
 
 - `npm run check:go`（build/test/vet/staticcheck）→ PASS（最终代码 `814f1db`）。
 - `npm run check:policy` → PASS；`npm run check:security` → npm audit 0、govulncheck 无已知漏洞。
-- `npm run check` 完整运行：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
+- `npm run check` 完整运行（最终代码 `7699b4e`）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
 - `go test -race`：**UNTESTED**，本机 CGO_ENABLED=0 且无 gcc；不能声称 race 通过。
 - 迁移：**未新增**；AMCE/Nginx/文件通道均不依赖新表。`publishing.rollback-all` HTTP 路由为候选，未改 OpenAPI/Proto/gen。
 

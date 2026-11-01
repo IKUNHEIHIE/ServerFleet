@@ -166,7 +166,8 @@ message FileError {
 - 真实 HTTP：Cloudflare v4 `GET /user/tokens/verify`、`GET /zones`（分页 50/页、上限 100 页、按 ID 去重）、`POST/PATCH/DELETE /zones/{zone}/dns_records`；Bearer 头、TLS≥1.2、拒绝任何重定向（避免 Authorization 跨域）、响应上限 1MiB、无环境代理。
 - 错误：401→`CredentialInvalid`、403/9109→`CredentialMissingPermissions`；`CloudflareError` 只含操作名/状态码/Cloudflare code，不含 provider 文本或令牌；`CredentialStatusFromCloudflare` 供 `TestAccount` 使用。
 - 接线：`apps/controller/server` 当前 `cfg.DNSProvider` 为空时失败关闭。建议总控在配置了秘密后端与 Cloudflare 账号时注入该 provider；未配置时保持失败关闭，不得用假 provider 关闭功能。
-- 证据：本地 `httptest.NewTLSServer` 验证 verify/分页/CRUD 请求体/401/403/redirect 拒绝/令牌不泄露，并通过真实 `dns.Service` 创建账号→TestAccount→CreateZone→CreateRecord→ListRecords。**未调用真实 Cloudflare 账号**（无授权秘密），真实 Zone 写入仍 UNTESTED/BLOCKED。
+- 一致性补偿：`dns.CreateRecord` 在 provider 成功但本地持久化失败时尝试删除 provider 记录；`UpdateRecord` 在本地失败时尝试把 provider 回滚到旧值；`DeleteRecord` 把 provider 404（`dns.ErrProviderNotFound`）视为已不存在并删除本地行，保证重试/补偿幂等；补偿失败不影响作者如实报错。
+- 证据：本地 `httptest.NewTLSServer` 验证 verify/分页/CRUD 请求体/401/403/redirect 拒绝/令牌不泄露/404 类型，并通过真实 `dns.Service` 创建账号→TestAccount→CreateZone→CreateRecord→ListRecords。**未调用真实 Cloudflare 账号**（无授权秘密），真实 Zone 写入仍 UNTESTED/BLOCKED。
 
 ## 7. SMTP / QQ Bot 发送适配（已在本包实现）
 
@@ -197,4 +198,5 @@ message FileError {
 - 私钥边界：新增 `certificates.ACMESigner`（`PublicKey` + `SignDigest` 返回 P-256 raw r||s）；账号密钥与证书密钥都只以 `KeyRef` 出现，客户端不接收、不保存、不返回私钥材料。CSR 通过远程 signer 生成 DER。
 - 挑战边界：新增 `certificates.ACMEDNS01Publisher`（`Publish(fqdn,value)` 返回 cleanup）；每一次发布都会在成功或失败路径清理，清理失败作为错误返回但不丢弃已取得证书。
 - 测试：本地 `httptest.NewTLSServer` 作为 ACME 服务器，独立解析并验证每个 JWS（nonce 一次性、URL、ES256 签名），校验 DNS-01 TXT 值（客户端 key-authorization/SHA-256）、签发真实 CSR 对应证书、链/序列号/有效期；覆盖 badNonce 重试、错误 TXT、finalize 失败、processing 轮询、signer 失败、配置拒绝、重定向拒绝。
-- 未接线/未测：未接真实 Let's Encrypt/ZeroSSL 或真实 Cloudflare DNS 账号（无授权秘密）；证书写回 CX 秘密存储、域名/账户选择、`_acme-challenge` 记录的生产 ChallengePublisher 由总控组合；ACME 与内部 PKI 仍分域，不替代 `certificates.Issuer`。真实 CA 签发 UNTESTED/BLOCKED。
+- 生产 DNS-01 publisher：本包新增 `dns.NewACMEChallengePublisher(ACMEPublisherConfig{Service, SubjectID, RequestID, ZoneID, TTL})`，实现 `certificates.ACMEDNS01Publisher` 形状；经 dns 服务授权创建/删除 `_acme-challenge` TXT，cleanup 幂等、provider 404 视为已删除。测试覆盖创建/清理/重复清理/非法名称/值/provider 失败。控制器仍需注入授权服务主体与 zone/account 选择。
+- 未接线/未测：未接真实 Let's Encrypt/ZeroSSL 或真实 Cloudflare DNS 账号（无授权秘密）；证书写回 CX 秘密存储由总控组合；ACME 与内部 PKI 仍分域，不替代 `certificates.Issuer`。真实 CA 签发 UNTESTED/BLOCKED。
