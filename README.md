@@ -1,8 +1,8 @@
 # Server Fleet · M0-P1 工程基础
 
-Go模块化单体Controller、独立Go Agent、React/TypeScript/Vite工程。当前已实现SQLite持久化、REST/SSE管理接口及本地WSS+mTLS任务/浏览器组合；真实跨节点文件、通用受控执行、模型/插件/更新恢复等仍有代码和验收缺口，不能称完整v0.9可发布。
+Go模块化单体Controller、独立Go Agent、React/TypeScript/Vite工程。当前已有SQLite、REST/SSE、WSS+mTLS、持久随机凭据密钥和常驻Agent；指定awskr隔离验证已跑通连续两次固定自检与Nginx渲染代理。真实跨节点文件、通用受控执行、AI持久配额/完整接线、插件/更新恢复及外部验收仍有缺口，不能称完整v0.9可发布。
 
-**状态：2026-11-01负责人明确由codex重新总控，完整v0.9功能补齐继续；awskr获指定隔离测试授权。G0/G1有效，G2及发布准入未冻结。最新范围见[接管记录](docs/development/sprints/v09-five-day/CONTROL-RESUME.md)与[Wave6](docs/development/sprints/v09-five-day/WAVE6.md)。**
+**状态：2026-11-01由codex-review-02总控，CX/DS Wave6增量已审查并补组合安全修复，GM继续原任务。完整v0.9功能补齐继续；awskr只作指定隔离测试。G0/G1有效，G2及发布准入未冻结。共享代码/接口见[接收说明](docs/development/sprints/v09-five-day/WAVE6-SHARED.md)，后续连续实施见[CX/DS续作](docs/development/sprints/v09-five-day/WAVE6-FOLLOWUP.md)。**
 
 首批 G2-R01/N01/W01 的独立审查与下一批分工见 [首批审查报告](docs/development/reviews/BATCH-01-REVIEW.md) 和 [第二批任务单](docs/development/SECOND-BATCH-WORK-PACKAGES.md)。以任务登记板为准；原始 P1 报告是当时的验证快照。
 

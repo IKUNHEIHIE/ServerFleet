@@ -10,8 +10,8 @@ import (
 func TestAllEnvelopeVariantsRoundTrip(t *testing.T) {
 	d := (&agentv1.Envelope{}).ProtoReflect().Descriptor()
 	oneof := d.Oneofs().ByName("message")
-	if oneof == nil || oneof.Fields().Len() != 13 {
-		t.Fatal("reviewed 13 Envelope variants changed")
+	if oneof == nil || oneof.Fields().Len() != 17 {
+		t.Fatal("expected original 13 plus the four separately reviewed R6 variants")
 	}
 	if d.ParentFile().Services().Len() != 0 {
 		t.Fatal("WSS contract must not introduce a gRPC service")

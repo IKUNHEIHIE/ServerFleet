@@ -172,7 +172,23 @@ test("SSE gap and Last-Event-ID contract is explicit; cursor never grants author
 });
 test("P1 proto revision only adds go_package and formatting; original semantic tokens unchanged", () => {
   const original = read("docs/reference/ServerFleet-ALL-v0.9-G2/01-当前开发基线/g2/proto/serverfleet/agent/v1/agent.proto");
-  const p1 = read("proto/serverfleet/agent/v1/agent.proto");
+  const p1 = read("tests/contracts/proto-baseline/serverfleet/agent/v1/agent.proto");
   const tokens = v => v.replace(/option go_package = "[^"]+";/, "").replace(/\s+/g, "");
   assert.equal(tokens(p1), tokens(original));
+});
+
+test("R6 retains every P1 declaration and adds only its four reviewed Envelope fields", () => {
+  const p1 = read("tests/contracts/proto-baseline/serverfleet/agent/v1/agent.proto");
+  const current = read("proto/serverfleet/agent/v1/agent.proto");
+  const sections = current.split("// R6 CANDIDATE, NOT RUNTIME ADMISSION:");
+  assert.equal(sections.length, 2, "R6 declarations must be a separate append-only section");
+  let prefix = sections[0];
+  for (const [type, field, number] of [["FileChunkRequest","file_chunk_request",33],["FileChunkReply","file_chunk_reply",34],["FileOpenRequest","file_open_request",35],["FileOpenReply","file_open_reply",36]]) {
+    const line = `    ${type} ${field} = ${number};\n`;
+    assert.equal(prefix.split(line).length,2,"exactly one registered R6 field");
+    prefix = prefix.replace(line,"");
+    assert.ok(sections[1].includes(`message ${type} {`),"candidate body is present");
+  }
+  const tokens = v => v.replace(/\s+/g, "");
+  assert.equal(tokens(prefix), tokens(p1), "legacy declarations, field numbers and comments unchanged");
 });
