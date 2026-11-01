@@ -1,0 +1,101 @@
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -65,6 +65,7 @@
+ 	AgentServerName  string
+ 	EnrollmentIssuer *transport.CertificateIssuer
+ 	AgentFrameBytes  int
++	AgentFileGate transport.FileFrameGate
+ 
+ 	// Optional signed plugin package trust. Empty maps keep installation closed.
+ 	PluginTrustKeys         map[string]ed25519.PublicKey
+@@ -114,6 +115,7 @@
+ 	EnrollmentHTTP       *transport.EnrollmentHTTP
+ 	EnrollmentManagement *transport.EnrollmentManagementHTTP
+ 	Links                *transport.ControllerLinks
++	AgentFiles *transport.FileClient
+ 	AgentLinkHTTP        *transport.AgentLinkHTTP
+ 
+ 	AI               *ai.SessionService
+--- a/apps/controller/server/enrollment.go
++++ b/apps/controller/server/enrollment.go
+@@ -73,10 +73,12 @@
+ 		return nil, err
+ 	}
+ 	bridge := newAgentLinkBridge(s.NodesRepo, nodesService, tasksRepo, s.now)
++	semantic, minor := agentValidationLimits(), uint32(0)
++	if cfg.AgentFileGate != nil { semantic.AllowFileFrames = true; minor = 1 }
+ 	links, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{
+ 		ProtocolMajor:     1,
+-		ProtocolMinor:     0,
+-		Semantic:          agentValidationLimits(),
++		ProtocolMinor:     minor,
++		Semantic:          semantic,
+ 		Frames:            agentFrameLimits(),
+ 		HeartbeatInterval: 15 * time.Second,
+ 		MaxConnections:    100,
+@@ -89,6 +91,11 @@
+ 		return nil, err
+ 	}
+ 	bridge.links = links
++	if cfg.AgentFileGate != nil {
++		client, err := transport.NewFileClient(links, cfg.AgentFileGate, 32)
++		if err != nil { return nil, err }
++		bridge.files, s.AgentFiles = client, client
++	}
+ 	linkHTTP, err := transport.NewAgentLinkHTTP(links, cfg.AgentAuthority, cfg.AgentServerName, transport.WebSocketConfig{MaxFrameBytes: frameBytes})
+ 	if err != nil {
+ 		return nil, err
+--- a/apps/controller/server/agent_links.go
++++ b/apps/controller/server/agent_links.go
+@@ -22,6 +22,7 @@
+ func agentAllowedActions() map[string]string {
+ 	return map[string]string{
+ 		"tasks.command": "1",
++		transport.FileCapability: "1",
+ 		"host.patch":    "1",
+ 		"host.root":     "1",
+ 	}
+@@ -52,6 +53,7 @@
+ 	tasksRepo    *tasks.Repo
+ 	tasks        *tasks.Service
+ 	links        *transport.ControllerLinks
++	files *transport.FileClient
+ 	now          func() time.Time
+ 
+ 	seqMu     sync.Mutex
+@@ -73,7 +75,7 @@
+ 	allowed := agentAllowedActions()
+ 	granted := make([]string, 0, len(hello.CapabilityIds))
+ 	for _, capability := range hello.CapabilityIds {
+-		if allowed[capability] != "" {
++		if allowed[capability] != "" && (capability != transport.FileCapability || b.files != nil) {
+ 			granted = append(granted, capability)
+ 		}
+ 	}
+@@ -85,6 +87,10 @@
+ }
+ 
+ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkObservation, envelope *agentv1.Envelope) error {
++	if transport.FileEnvelope(envelope) || envelope.GetTaskOffer() != nil && envelope.GetTaskOffer().ActionId == transport.FileCapability {
++		if b.files == nil { return transport.ErrLinkRejected }
++		return b.files.AuthorizeFrame(ctx, observation, envelope)
++	}
+ 	offer := envelope.GetTaskOffer()
+ 	if offer == nil {
+ 		return nil
+@@ -123,6 +129,15 @@
+ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkObservation, envelope *agentv1.Envelope) error {
+ 	if b == nil || envelope == nil || envelope.GetNodeId() != observation.Identity.NodeID {
+ 		return transport.ErrLinkRejected
++	}
++	if b.files != nil {
++		consumed, err := b.files.Deliver(ctx, observation, envelope)
++		if err != nil { return err }
++		if consumed && transport.FileEnvelope(envelope) { return nil }
++	}
++	if output := envelope.GetTaskOutput(); output != nil {
++		task, err := b.tasksRepo.Get(ctx, output.TaskId)
++		if err != nil || task.ActionID == transport.FileCapability { return transport.ErrLinkRejected }
+ 	}
+ 	requestID := envelope.GetMessageId()
+ 	switch {

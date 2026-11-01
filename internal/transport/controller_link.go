@@ -248,6 +248,9 @@ func (l *controllerLink) deliver(ctx context.Context, envelope *agentv1.Envelope
 	if err != nil || id != l.observed.Identity {
 		return ErrLinkRejected
 	}
+	if FileEnvelope(envelope) && (!l.granted[FileCapability] || l.hub.cfg.ProtocolMinor < 1 || l.hub.cfg.Admit(ctx, l.observed, proto.Clone(envelope).(*agentv1.Envelope)) != nil) {
+		return ErrLinkRejected
+	}
 	if l.hub.cfg.Event(ctx, l.observed, envelope) != nil {
 		return ErrLinkRejected
 	}
@@ -314,6 +317,9 @@ func (h *ControllerLinks) Send(ctx context.Context, node string, envelope *agent
 	if offer := detached.GetTaskOffer(); offer != nil && !l.granted[offer.ActionId] {
 		return ErrLinkRejected
 	}
+	if FileEnvelope(detached) && (!l.granted[FileCapability] || h.cfg.ProtocolMinor < 1) {
+		return ErrLinkRejected
+	}
 	id, err := h.verifier.Verify(ctx, l.tls, node)
 	if err != nil || id != l.observed.Identity {
 		return ErrLinkRejected
@@ -325,3 +331,23 @@ func (h *ControllerLinks) Send(ctx context.Context, node string, envelope *agent
 }
 
 var _ Sender = (*ControllerLinks)(nil)
+
+// FileConnection returns only the current negotiated binding. It is metadata,
+// never an authorization grant; callers still repeat their task gate per frame.
+func (h *ControllerLinks) FileConnection(ctx context.Context, node string) (LinkObservation, error) {
+	if h == nil || ctx == nil || ctx.Err() != nil {
+		return LinkObservation{}, ErrLinkRejected
+	}
+	h.mu.Lock()
+	l := h.links[node]
+	ok := l != nil && l.active && l.granted[FileCapability] && h.cfg.ProtocolMinor >= 1
+	h.mu.Unlock()
+	if !ok {
+		return LinkObservation{}, ErrLinkRejected
+	}
+	id, err := h.verifier.Verify(ctx, l.tls, node)
+	if err != nil || id != l.observed.Identity || !h.current(l) {
+		return LinkObservation{}, ErrLinkRejected
+	}
+	return l.observed, nil
+}

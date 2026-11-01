@@ -43,6 +43,7 @@ type agentSessionConfig struct {
 	// one-shot CLI. They must not block; they never replace transport delivery.
 	Established       func()
 	ExecutionFinished func(taskID, executionID string)
+	Files             *agentFileSessions
 }
 type activeAgentExecution struct {
 	taskID, digest    string
@@ -313,6 +314,17 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 			return errAgentSession
 		}
 		switch {
+		case envelope.GetFileOpenRequest() != nil || envelope.GetFileChunkRequest() != nil:
+			if cfg.Files == nil || accepted.SelectedProtocolMinor < 1 || !granted[transport.FileCapability] {
+				return errAgentSession
+			}
+			reply, after, err := cfg.Files.Handle(bounded, envelope)
+			if err != nil || write(reply, transport.Established) != nil {
+				return errAgentSession
+			}
+			if after != nil {
+				after()
+			}
 		case envelope.GetTaskOffer() != nil:
 			offer := envelope.GetTaskOffer()
 			if !granted[offer.ActionId] || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.PluginId != "" || admit(bounded, offer) != nil {
@@ -340,6 +352,11 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 			}
 			if prior != nil {
 				delete(running, offer.ExecutionId)
+			}
+			for id, completed := range running {
+				if completed.finished {
+					delete(running, id)
+				}
 			}
 			if len(running) >= cfg.MaxConcurrent {
 				runningMu.Unlock()
@@ -373,6 +390,11 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 						return errAgentSession
 					}
 					if stage == "accepted" {
+						if offer.ActionId == transport.FileCapability {
+							if cfg.Files == nil || accepted.SelectedProtocolMinor < 1 || cfg.Files.Accept(workCtx, offer, seen) != nil {
+								return errAgentSession
+							}
+						}
 						runningMu.Lock()
 						work.reserved = true
 						runningMu.Unlock()

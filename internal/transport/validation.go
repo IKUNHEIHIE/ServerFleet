@@ -44,6 +44,8 @@ type ValidationContext struct {
 // offers. It is only a local structural allowlist, not resource authorization.
 // The caller must not mutate this map or the message during validation.
 type ValidationLimits struct {
+	// Explicit reviewed file profile only; defaults continue to deny File*.
+	AllowFileFrames    bool
 	MaxMessageBytes    int
 	MaxTextBytes       int
 	MaxParametersBytes int
@@ -143,6 +145,22 @@ func ValidateEnvelope(e *agentv1.Envelope, ctx ValidationContext, limits Validat
 // construct them). Unknown future oneof tags decode without a known payload.
 func knownPayload(e *agentv1.Envelope) (proto.Message, Direction, HandshakePhase) {
 	switch m := e.Message.(type) {
+	case *agentv1.Envelope_FileOpenRequest:
+		if m != nil {
+			return m.FileOpenRequest, ControllerToAgent, Established
+		}
+	case *agentv1.Envelope_FileOpenReply:
+		if m != nil {
+			return m.FileOpenReply, AgentToController, Established
+		}
+	case *agentv1.Envelope_FileChunkRequest:
+		if m != nil {
+			return m.FileChunkRequest, ControllerToAgent, Established
+		}
+	case *agentv1.Envelope_FileChunkReply:
+		if m != nil {
+			return m.FileChunkReply, AgentToController, Established
+		}
 	case *agentv1.Envelope_AgentHello:
 		if m != nil {
 			return m.AgentHello, AgentToController, AwaitAgentHello
@@ -300,6 +318,9 @@ func (v semanticValidator) offer(m *agentv1.TaskOffer) error {
 }
 
 func (v semanticValidator) payload(payload proto.Message) error {
+	if IsFilePayload(payload) {
+		return v.filePayload(payload)
+	}
 	switch m := payload.(type) {
 	case *agentv1.AgentHello:
 		for _, id := range []struct{ field, value string }{

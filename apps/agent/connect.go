@@ -147,18 +147,44 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		return errAgentConnect
 	}
 	semantic, frames := agentSessionLimits()
+	var files *agentFileSessions
+	minor := uint32(0)
+	admit := func(ctx context.Context, offer *agentv1.TaskOffer) error {
+		if ctx.Err() != nil {
+			return errAgentSession
+		}
+		if offer != nil && offer.ActionId == transport.FileCapability && request.FileRoot != "" {
+			_, err := transport.FileOffer(offer)
+			return err
+		}
+		return admitControlledOffer(offer)
+	}
+	if request.FileRoot != "" {
+		files, err = newAgentFileSessions(request.FileRoot, facts.NodeID, func(ctx context.Context, o *agentv1.TaskOffer) error {
+			if verifyAgentLinkTrust(state, endpoint.serverName, pin) != nil {
+				return errAgentSession
+			}
+			return admit(ctx, o)
+		})
+		if err != nil {
+			return err
+		}
+		defer files.Close()
+		executor.actions[transport.FileCapability] = files.Action()
+		semantic.AllowedActions[transport.FileCapability] = "1"
+		semantic.AllowFileFrames = true
+		minor = 1
+	}
 	established := make(chan struct{})
 	executed := make(chan struct{}, 4)
 	var establishedOnce sync.Once
 	cfg := agentSessionConfig{
 		NodeID: facts.NodeID, BootID: bootID, Version: request.AgentVersion, ServerName: endpoint.serverName,
-		RootSPKISHA256: pin, ProtocolMajor: 1, ProtocolMinor: 0, MaxConcurrent: 1, Semantic: semantic, Frames: frames,
+		RootSPKISHA256: pin, ProtocolMajor: 1, ProtocolMinor: minor, MaxConcurrent: 1, Semantic: semantic, Frames: frames, Files: files,
 		Current: func(_ context.Context, state tls.ConnectionState) error {
 			return verifyAgentLinkTrust(state, endpoint.serverName, pin)
 		},
-		Admit: func(_ context.Context, offer *agentv1.TaskOffer) error {
-			return admitControlledOffer(offer)
-		},
+		Admit:         admit,
 		Probe:         socket.Ping,
 		InitialSample: sampleAgentMetrics,
 		Established:   func() { establishedOnce.Do(func() { close(established) }) },
