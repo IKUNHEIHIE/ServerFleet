@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-CONTROL-RESUME | 用户明确由codex重新总控，并授权使用SSH别名awskr作Controller测试节点；接管登记/隔离实机验证与后续功能补齐 | codex-review-02 | integration/v09-control-resume-cx01 / `.worktrees/integration--v09-control-resume-cx01` | 独立审查接收、当前授权/任务/证据、隔离测试部署与必要集成接线；仅awskr指定主机，不改其既有服务/数据库/站点/防火墙，不创建云资源或扩展其他主机 | 项目负责人；起始2da203c；保留安全约束，完成本次交接/实机基线验证后报告 |
 | V09-WAVE5-REVIEW | 三线Wave 5独立审查/NetProber与LocalStagingTransport默认主控接线/WSL双进程CLI闭环与70步真后端浏览器验收通过（Go 636+1134、Web 329、Live 70/70、0漏洞），合入main | agy-review-01 | integration/v09-wave5-review / `.worktrees/integration--v09-wave1-review` | 三线Wave 5审查、apps/controller默认探测与暂存传输接线、审查报告/任务板/README | 项目负责人；起始3adf891；代码aef21ae；见reviews/V09-WAVE5-REVIEW.md |
 | V09-WAVE5-DISPATCH | Wave 5本地全栈收官/Wave 4新接口前后端打通/双进程CLI连接任务单已登记，三作者目录已快进同步至最新main；交接后等待Wave 5检查点 | agy-review-01 | integration/v09-wave5-dispatch / `.worktrees/integration--v09-wave1-review` | sprints/v09-five-day/WAVE5.md、任务板、README及三干净作者目录快进同步 | 项目负责人；起始f4609f5；见sprints/v09-five-day/WAVE5.md |
 | V09-WAVE4-REVIEW | 三线Wave 4独立审查/主控桥接接线/组合安全与58步真后端浏览器验收通过（Go 602+1132、Web 316、Live 58/58、0漏洞），合入main | agy-review-01 | integration/v09-wave4-review / `.worktrees/integration--v09-wave1-review` | 三线Wave 4审查、apps/controller桥接端口接线、审查报告/任务板/README | 项目负责人；起始0f9a75e；代码0d762f0；见reviews/V09-WAVE4-REVIEW.md |
