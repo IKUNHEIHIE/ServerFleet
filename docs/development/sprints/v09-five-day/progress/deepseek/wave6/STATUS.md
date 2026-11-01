@@ -31,6 +31,7 @@
   - `./.tools/go/bin/go test ./internal/files/ -count=1` → PASS（含新增通道与协调器用例）。
   - `./.tools/go/bin/go test ./... -count=1` → 全包 PASS（2026-11-01，含 architecture/contracts/integration/POC）。
 - 覆盖：真实 70,003 字节往返、上传/下载断线恢复、摘要不符拒绝、目标空间/符号链接/路径/未授权错误码、冲突策略、非 seekable 续传拒绝、逐项部分失败、执行期撤权拒绝+审计、取消、终态不重跑、spool 清理、任务结果回写、Coordinator 缺端口失败关闭。
+- 任务一致性：`files.TaskReporter` 把两个目标终态写回统一任务（completed→succeeded、canceled→canceled、partial/failed→unknown，避免自动重试可能已产生副作用的传输）；测试断言 completed/partial 两种终态。
 - 未覆盖：真实 WSS 双机字节链路、awskr/WSL 跨机、真实磁盘满、跨文件系统 rename、符号链接竞态、并发大文件。详见 HANDOFF。
 
 ### DS-W6-02 Cloudflare 真实适配

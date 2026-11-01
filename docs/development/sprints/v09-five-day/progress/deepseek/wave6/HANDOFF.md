@@ -39,7 +39,7 @@
        Repo: filesRepo, Transports: nodeTransports, Authorizer: authorizer,
        Audit: auditRecorder, SpoolDir: filepath.Join(stagingDir, "spool"), MaxFileBytes: 2 << 30,
    })
-   filesService, err := files.NewService(files.Options{/* 既有字段 */ Coordinator: coordinator})
+   filesService, err := files.NewService(files.Options{/* 既有字段 */ Coordinator: coordinator, Tasks: tasksService})
    ```
 4. 任务派发特例：action `files.transfer` 不再向两台 Agent 各发一个 shell `TaskOffer`。调度器在 `Dispatch` 或组合层拿到 `task_id`/`subject`/`request`/`execution_id` 后调用：
    ```go
@@ -47,7 +47,7 @@
        SubjectID: subject, RequestID: requestID, ExecutionID: executionID,
    })
    ```
-   逐项结果已由 `ApplyTaskUpdate` 写回传输记录；任务状态/日志仍由统一任务管线负责。
+   逐项结果已由 `ApplyTaskUpdate` 写回传输记录；`files.TaskReporter` 把两个目标的终态写回统一任务（completed→succeeded、canceled→canceled、partial/failed→unknown，避免自动重试可能已产生副作用的传输）。调用前两个目标必须先处于 dispatched 状态，否则 `RecordResult` 不会应用。
 5. `tasks.Command` 目前没有 `ExecutionID`（见 `SHARED-CHANGES` 第 2 节申请）。接收前协调器用 `task_<taskID>_<transferID>` 绑定 Agent 去重；接收后应传真实 CX 执行 ID。
 
 ### 1.2 Cloudflare
