@@ -63,3 +63,9 @@ Commands: `go test -tags=cx_r2_platform -overlay=reports/wave6-r2/platform-overl
 
 `updates-openapi.patch` proposes a new r7 candidate and root lint registration after the AI lint patch. Existing g2 historical schema is incompatible with the adopted HTTP's id/taskId/status shape; do not call this G2 frozen compatibility. No historical contract is overwritten. Candidate updates+AI Redocly lint and all five review patches applying/checking in a private Git index PASS. Final clean-SHA combination, root and security checks follow; source/key/host/authority dependencies remain as described in SHARED-CHANGES.
 
+# Final handoff
+
+Clean fixed code `22bbe91799ab11fbf0a0035296055a110eae4c40`: npm root policy/contracts/Go/Web/git and security all PASS. Go 763 top-level +1188 subtest PASS, 20 explicit SKIP; Web 340 PASS. Full candidate Controller/two actual resident Agent combination 6 PASS/0 SKIP. Eleven non-root native Linux groups 366 top-level PASS/3 SKIP (two subprocess helpers executed by parents, one Windows-only rule); actual auth key restart/rotation/concurrency/revocation included. Linux candidate vet/scan and Controller+Agent amd64/arm64 builds PASS. Current Web full retry passed without frontend changes, original failure retained.
+
+HANDOFF.md and EVIDENCE.json include exact commits/files/commands, original output hashes, test limits, patch order and each remaining dependency. Final changes after tested code are only author evidence/documents. All independent work is delivered; shared reception, real authority/artifact and physical/external acceptance remain explicit. Stop per task, without main merge, remote access or default authorization shortcuts.
+
