@@ -1,0 +1,67 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {gzipSync,gunzipSync} from 'node:zlib';
+const root=process.cwd(),head='9ddd5c64a5887e4fb05a85fb362fd2c71e6bcea9';
+const git=args=>execFileSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true}).trim();
+const read=file=>fs.readFileSync(path.join(root,file));
+const json=file=>JSON.parse(read(file).toString('utf8').replace(/^\uFEFF/,''));
+const hash=bytes=>createHash('sha256').update(bytes).digest('hex');
+function requireTrue(ok,label){if(!ok)throw Error(label);}
+requireTrue(git(['rev-parse','HEAD'])===head,'unexpected technical HEAD');
+const dirty=git(['diff','--name-only']).split('\n').filter(Boolean);
+requireTrue(dirty.every(f=>f==='README.md'||f.startsWith('docs/')),'runtime changed after checks');
+const check=json('reports/r1-accepted-check-result.json'),security=json('reports/check-security.json');
+requireTrue(check.results.every(x=>x.status==='PASS')&&security.results.every(x=>x.status==='PASS'),'root check failed');
+const go=read('reports/go-tests.log').toString('utf8').split(/\r?\n/).filter(l=>l.startsWith('{')).map(l=>JSON.parse(l));
+const passed=go.filter(e=>e.Action==='pass'&&e.Test),skips=go.filter(e=>e.Action==='skip'&&e.Test).map(e=>({package:e.Package,test:e.Test}));
+requireTrue(!go.some(e=>e.Action==='fail'),'Go failure');
+const suite=read('reports/web-junit.xml').toString('utf8').match(/<testsuites\b([^>]*)>/)?.[1];
+requireTrue(Boolean(suite),'missing junit suite');
+const web={};for(const key of ['tests','failures','errors'])web[key]=Number(suite.match(new RegExp('\\b'+key+'="(\\d+)"'))?.[1]);
+requireTrue(web.tests===340&&web.failures===0&&web.errors===0,'unexpected Web result');
+const positive=json('reports/r1-positive-strict/results.json'),strict=json('reports/r1-positive-strict-exit.json');
+requireTrue(positive.passed===20&&positive.blocked===6&&positive.failed===0&&positive.complete===false&&strict.exitCode===1,'positive result changed');
+requireTrue(read('reports/r1-live-release.log').toString().includes('live controller acceptance: 70/70 steps passed'),'legacy suite failed');
+requireTrue(read('reports/r1-stub-release.log').toString().includes('stub acceptance: 16/16 steps passed'),'stub suite failed');
+const platform=['agent','transport','ai','budget','controller','updates','recovery','restore'].map(target=>json('reports/wave6-r1-linux/'+target+'.json'));
+for(const r of platform){requireTrue(r.head===head&&r.status==='PASS'&&r.uid==='1000','stale Linux platform result');requireTrue(hash(read('reports/wave6-r1-linux/'+r.target+'.test'))===r.binarySHA256,'platform binary hash mismatch');}
+const services=json('reports/r1-linux-services/results.json');
+for(const r of services.results){requireTrue(r.head===head&&r.status==='PASS'&&r.uid==='1000','stale Linux services result');requireTrue(hash(read('reports/r1-linux-services/'+r.target+'.test'))===r.binarySHA256,'services binary hash mismatch');}
+for(const file of ['reports/r1-linux-accepted-security.log','reports/r1-accepted-security.log'])requireTrue(read(file).toString().includes('No vulnerabilities found.'),'security log missing');
+requireTrue(git(['diff','--name-only','379d5e0',head,'--','docs/reference','api/openapi/g2-core-candidate.yaml','api/openapi/g2-merged-candidate.yaml','api/openapi/xray-candidate.yaml','tests/contracts/proto-baseline','docs/contracts/revisions/g2-r03','proto','gen/go'])==='','protected source/protocol changed');
+const evidence='docs/development/reviews/evidence',artifacts=[];
+function archive(file,label){const bytes=read(file),name='v09-wave6-r1-'+label+'.gz.b64',encoded=gzipSync(bytes).toString('base64').match(/.{1,120}/g).join('\n')+'\n';requireTrue(gunzipSync(Buffer.from(encoded.replace(/\s/g,''),'base64')).equals(bytes),'archive roundtrip');fs.writeFileSync(path.join(evidence,name),encoded);artifacts.push({source:file,artifact:name,encoding:'base64(gzip(original bytes))',bytes:bytes.length,sha256:hash(bytes),roundTrip:'PASS'});}
+for(const [file,label] of [
+ ['reports/r1-npm-ci.log','npm-ci'],['reports/r1-tools-install-first-fail.log','tools-first-fail'],['reports/r1-tools-install.log','tools'],
+ ['reports/r1-combined-initial-result.json','initial-result'],['reports/r1-accepted-check.log','check'],['reports/r1-accepted-check-result.json','check-result'],['reports/web-junit.xml','web-junit'],
+ ['reports/r1-accepted-security.log','security'],['reports/check-security.json','security-result'],['reports/r1-linux-accepted-security.log','linux-security'],
+ ['reports/r1-acme-cleanup-before.log','acme-before'],['reports/r1-acme-cleanup-after.log','acme-after'],['reports/r1-web-settings-before.log','settings-before'],['reports/r1-web-settings-after.log','settings-after'],
+ ['reports/r1-shared-integration-first-compile.log','migration-first-compile'],['reports/r1-shared-integration.log','shared-integration'],['reports/r1-operator-probe.log','operator-id-probe'],
+ ['reports/r1-upload-authority-first-compile.log','upload-first-compile'],['reports/r1-upload-authority-before.log','upload-before'],['reports/r1-upload-authority-after.log','upload-after'],
+ ['reports/r1-live-final.log','live-before-upload-fix'],['reports/r1-live-release.log','live'],['reports/r1-stub-release.log','stub'],
+ ['reports/r1-positive-before.log','positive-author-base'],['reports/r1-positive-final.log','positive'],['reports/r1-positive-final/results.json','positive-result'],
+ ['reports/r1-positive-strict.log','positive-strict'],['reports/r1-positive-strict/results.json','positive-strict-result'],['reports/r1-positive-strict-exit.json','positive-strict-exit'],['reports/r1-probe-policy.log','probe-policy'],
+ ['reports/r1-linux-services/files-native-first-fail.log','linux-spool-before'],['reports/r1-linux-services/results.json','linux-services-result'],['reports/r1-awskr-agent-state.log','existing-agent-metadata']
+])archive(file,label);
+for(const r of platform){archive('reports/wave6-r1-linux/'+r.target+'-native.log','linux-'+r.target);archive('reports/wave6-r1-linux/'+r.target+'.json','linux-'+r.target+'-result');}
+for(const r of services.results)archive('reports/r1-linux-services/'+r.target+'-native.log','linux-'+r.target);
+for(const [file,name] of [
+ ['reports/r1-positive-strict/positive-13-task-failed.png','task-failed.png'],['reports/r1-positive-strict/positive-19-model-settings-ui.png','model-settings.png'],
+ ['reports/r1-live-final/debug-01-byte-stream-upload-through-session-conte.png','upload-before.png'],
+ ['reports/archive-r1-review.mjs','archive.mjs.txt'],['reports/r1-linux-services.mjs','linux-services.mjs.txt']
+]){const bytes=read(file),artifact='v09-wave6-r1-'+name;fs.writeFileSync(path.join(evidence,artifact),bytes);artifacts.push({source:file,artifact,bytes:bytes.length,sha256:hash(bytes)});}
+const counts={goTopLevel:passed.filter(e=>!e.Test.includes('/')).length,goSubtests:passed.filter(e=>e.Test.includes('/')).length,goFailed:0,goSkipped:skips.length,web};
+const report={task:'V09-WAVE6-R1-REVIEW',reviewer:'codex-review-02',date:'2026-11-01',baseMain:'379d5e0e4818844eb44d8ac13010f251d215d8c0',technicalHead:head,
+ authors:{codex:'17017a6a1aba0e9af5c03fdbb89894bc52496be8',deepseek:'361098283b3ed0e987c70e2292839acf42d6b341',gemini:'27c92be56b40cab725cca8a260c2ebe67fef078b'},
+ result:'ACCEPT_INCREMENTAL_IMPLEMENTATION_WITH_INTEGRATION_FIXES; FULL_V09_NOT_ACCEPTED',checks:check,security,counts,skips,
+ linux:{sourceHead:head,platform,services:services.results,totalTopLevelPass:platform.reduce((n,r)=>n+r.passed,0)+services.results.reduce((n,r)=>n+r.passed,0),skipped:platform.reduce((n,r)=>n+r.skipped,0)+services.results.reduce((n,r)=>n+r.skipped,0),scope:'Native WSL Linux amd64 UID1000 synthetic tests. Two helper tests execute through parent subprocesses; one Windows-only name case. Not physical cross-machine, ARM or hard 1C1G.'},
+ browser:{legacy:{sourceHead:head,passed:70,total:70,beforeFixPassed:68,scope:'Includes fail-closed/degraded cases; missing channel 503 plus failure audit is not remote transfer success'},stub:{passed:16,total:16,scope:'contract fixture'},positive:{sourceHead:'39305ca807f865836dc7193d99c4d520140e4301',passed:20,blocked:6,failed:0,status:'PARTIAL',complete:false},strictPositive:{sourceHead:'1c34f6d202247481f81f3264f1ca912347d83c5b',...strict},positiveCases:positive.results},
+ findings:[{id:'R1-01',status:'FIXED',detail:'failed issuance preserves DNS cleanup failure and record IDs on every exit'},{id:'R1-02',status:'FIXED',detail:'non-conflict save errors no longer become 409; actual conflict survives newer revision'},{id:'R1-03',status:'FIXED_TEST_FIXTURE',detail:'native Linux private spool fixtures; production check retained'},{id:'R1-04',status:'FIXED_CLASSIFICATION; HARNESS_INCOMPLETE_REMAINS',detail:'unexpected HTTP failure/timeouts stay FAIL; recovery uses boolean passed; actual source path/skip; B01 default explicit incomplete'},{id:'R1-05',status:'FIXED',detail:'upload owner metadata/content/complete use current write authority; no remote read grant; revoked writer denied'},{id:'OPEN-GM-403',status:'NOT_REPRODUCED_OPEN',detail:'URL-safe ID vectors and two Operator browser runs passed; original intermittent cause not established'},{id:'ENV-W6-01',status:'OPEN',detail:'awskr original root Agent auto-restart, MainPID0, exit1, NRestarts10461; read-only, no service change'}],
+ migrations:{newVersions:['cx/0007_ai_budgets_and_model_audit','ds/0081_publishing_targets'],total:21,legacyStatementsUnchanged:true,upgradeAndSecondApply:'PASS'},
+ shared:'docs/development/sprints/v09-five-day/WAVE6-R1-SHARED.md',followup:'docs/development/sprints/v09-five-day/WAVE6-R2.md',artifacts,
+ protectedSourcesUnchanged:true,protoAndGeneratedUnchanged:true,fullV09Complete:false,g2Frozen:false,productionReleaseReady:false,physicalTwoMachineFilesTested:false,arm64RuntimeTested:false,hard1C1GTested:false,realExternalAccountsUsed:false,existingRemoteServicesModified:false,remoteGitPushed:false,agentsAutomaticallyStarted:0,messagesSent:0,
+ finalBaselineRule:'Final metadata commit and clean main/author worktree fast-forwards recorded in primary reports/v09-wave6-r1-review-handoff.json and final user handoff'};
+fs.writeFileSync('docs/development/reviews/V09-WAVE6-R1-RESULTS.json',JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify({head,counts,linuxPass:report.linux.totalTopLevelPass,linuxSkip:report.linux.skipped,live:70,stub:16,positive:'20 PASS / 6 BLOCKED / 0 FAIL',strictExitCode:strict.exitCode,artifacts:artifacts.length}));

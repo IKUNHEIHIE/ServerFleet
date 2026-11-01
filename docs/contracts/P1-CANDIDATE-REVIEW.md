@@ -63,3 +63,5 @@ P1-C10补记（2026-11-01 Wave6增量组合）：独立AI设置/显式生成候�
 Wave6后续共享检查点：Proto FileChunk33/34、FileOpen35/36已按固定工具接收为可编译候选（非G2冻结），chunk另加cancel=8，open携带plan digest且必须与已接收TaskOffer核对。默认Validator/CLI仍拒绝文件动作；不改旧字段号/基线/r03 provenance，不授权运行时。旧未知字段负向改用仍未知的100并新增四种文件消息往返及两个方向默认拒绝，具体字段与后续门控见WAVE6-SHARED。
 
 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。当前已有本地实现与隔离实机证据，完整功能和发布准入须分别验收。
+
+Wave6-R1补记：接收File*显式minor1/capability/当前trusted gate及Controller注入接缝，默认CLI无完整文件worker/路径映射，不能以模块WSS通过批准默认运行。AI预算为同DB持久事务+typed/通用审计，只有程序注册管理端口，无新预算HTTP；模型设置沿用独立R6候选。新增cx/0007与ds/0081迁移，发布目标/targetRevision/targetsPersisted为实现候选，与原OpenAPI差异交下一轮独立v09-r7候选，旧三候选/69原文/Proto基线及r03不变。真实更新/灾备权威、Xray工件/Runtime及G2发布准入未关闭，详见development/sprints/v09-five-day/WAVE6-R1-SHARED.md。

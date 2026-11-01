@@ -38,3 +38,7 @@ GitHub 账号未提供，CODEOWNERS 尚无真实审批人，当前依靠任务�
 | apps/web/src各正式业务模块 | gemini-02 | 全管理台/REST-SSE适配/声明式插件UI与浏览器验证；只消费Controller，后端缺口不补假成功 |
 
 三个复合包的测试和进度目录也独立：CX为tests/integration/v09/platform、tests/poc/v09/platform及progress/codex；DS为对应services与progress/deepseek；GM为tests/browser/v09与progress/gemini。根配置/依赖锁/API/Proto/迁移编号/CI仍总控单写，作者给精确diff；未授权新增目录以外的跨模块改动不能因期限而覆盖他人文件。
+
+## Wave6-R2具体任务调整
+
+以`sprints/v09-five-day/WAVE6-R2.md`为当前授权：CX-03/codex-06接管`internal/files`与新增Controller file_*.go/ai_budget_http.go，DS-03暂停该模块写入，避免文件执行生命周期分散；DS可写新增Agent gateway_capability.go及同名前缀测试、Controller gateway_tasks.go。GM-03可写测试专用`tests/browser/v09/fixturehost` Go宿主，不得从生产引用。三位各自新增v09-r7候选文件范围见任务单，中央server/enrollment/bootstrap/Agent注册、迁移登记/Proto/gen/根锁/CI仍由总控接收patch。依赖白名单和统一任务/审批边界未放宽。
