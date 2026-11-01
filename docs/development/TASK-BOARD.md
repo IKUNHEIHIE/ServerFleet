@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-WAVE6-R2-REVIEW | IN PROGRESS：三线-03审查/必要修复/共享组合与正常负向复验，完成接收和续派后停止 | codex-review-02 | integration/v09-wave6-r2-review-cx02 / `.worktrees/integration--v09-wave6-r2-review-cx02` | 本轮收到代码的必要修复、中央注册/契约/迁移、验证/证据与后续任务；指定隔离测试，不改既有awskr服务 | 项目负责人；起始c9013f4；CX26f7cf6、DS3efebe8、GMb37636c |
 | V09-WAVE6-R1-REVIEW | 三线审查/必要修复/共享接收及根安全、Linux、浏览器验证完成；本轮合并/干净目录同步交接后停止 | codex-review-02 | integration/v09-wave6-r1-review-cx02 / `.worktrees/integration--v09-wave6-r1-review-cx02` | 本轮增量必要修复、Controller组合/共享差异、验证/证据及后续任务；仅既有授权awskr隔离测试，不改原服务 | 项目负责人；起始379d5e0；技术9ddd5c6；见reviews/V09-WAVE6-R1-REVIEW.md |
 | V09-R6-CX-03 | READY：完整文件worker/多item子执行及真实双Agent终态；AI预算HTTP、平台独立项连续推进；不自动启动 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6-R2.md的CX范围，新增接管internal/files、Controller file_*.go/ai_budget_http.go与专属R7候选；中央注册/DDL/Proto仍patch | codex-review-02+安全/通信；最终main交接SHA |
 | V09-R6-DS-03 | READY：真实发布阶段/补偿、受控Nginx、供应商借用组合与ACME清理持久化；本轮不写internal/files | deepseek-06 | feature/v09-r6-services-ds06 / `.worktrees/feature--v09-r6-services-ds06` | WAVE6-R2.md的DS范围，新增gateway_capability.go及对应测试、gateway_tasks.go与专属R7候选；中央注册/DDL仍patch | codex-review-02+安全/数据；最终main交接SHA |
