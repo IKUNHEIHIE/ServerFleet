@@ -188,3 +188,13 @@ message FileError {
 - 既有站点保护：渲染前拒绝未批准接管；Agent 动作必须再次检查 `takeover_approved`/`approval_ref`，不能只依赖控制器。
 - 反向补偿：`publishing.RollbackAll` 按 gateway→certificate→dns 逆序调用已执行阶段；失败即停止（避免下游还 live 时先撤上游），已成功补偿阶段立即持久化、下次从首个未补偿阶段继续；不重写阶段摘要，不宣称 DNS 缓存即时回滚。新增 `POST /api/v1/publications/{id}/rollback-all` 与 `/api/v1/publishing/publications/{id}/rollback-all`（候选，不在 g2-merged 契约内，需总控决定是否接收）。
 - 证据：本地测试覆盖渲染注入/接管门/摘要确定性/任务参数安全/逆序顺序/首次失败停止与续跑/部分计划/授权/运行中拒绝/HTTP 路由。**未在真实 Nginx 执行**：awskr 隔离目录步骤见 HANDOFF。
+
+## 9. ACME DNS-01 客户端（已在本包实现）
+
+- 文件：`internal/certificates/acme.go`、`internal/certificates/acme_test.go`。
+- 构造：`certificates.NewACMEClient(certificates.ACMEConfig{DirectoryURL, Client, AccountKey KeyRef, Signer, Challenge, PollInterval, Timeout})`；调用 `IssueDNS01(ctx, ACMERequest{CommonName, KeyRef})`，返回叶子 PEM、完整链 PEM、序列号与有效期。
+- 真实协议（RFC 8555，stdlib）：directory/newNonce/newAccount（JWK ES256 JWS）/newOrder/POST-as-GET authz/dns-01 挑战/finalize CSR/轮询 order/下载 `application/pem-certificate-chain`；每个 JWS 绑定 nonce+url+account kid，badNonce 只重试一次；所有端点强制 https、拒绝重定向（防 nonce/密钥跨域）、响应上限 1MiB、无环境代理、总体超时与有界轮询。
+- 私钥边界：新增 `certificates.ACMESigner`（`PublicKey` + `SignDigest` 返回 P-256 raw r||s）；账号密钥与证书密钥都只以 `KeyRef` 出现，客户端不接收、不保存、不返回私钥材料。CSR 通过远程 signer 生成 DER。
+- 挑战边界：新增 `certificates.ACMEDNS01Publisher`（`Publish(fqdn,value)` 返回 cleanup）；每一次发布都会在成功或失败路径清理，清理失败作为错误返回但不丢弃已取得证书。
+- 测试：本地 `httptest.NewTLSServer` 作为 ACME 服务器，独立解析并验证每个 JWS（nonce 一次性、URL、ES256 签名），校验 DNS-01 TXT 值（客户端 key-authorization/SHA-256）、签发真实 CSR 对应证书、链/序列号/有效期；覆盖 badNonce 重试、错误 TXT、finalize 失败、processing 轮询、signer 失败、配置拒绝、重定向拒绝。
+- 未接线/未测：未接真实 Let's Encrypt/ZeroSSL 或真实 Cloudflare DNS 账号（无授权秘密）；证书写回 CX 秘密存储、域名/账户选择、`_acme-challenge` 记录的生产 ChallengePublisher 由总控组合；ACME 与内部 PKI 仍分域，不替代 `certificates.Issuer`。真实 CA 签发 UNTESTED/BLOCKED。
