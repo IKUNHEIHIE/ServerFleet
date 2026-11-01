@@ -17,13 +17,18 @@ const (
 	ActionCertificateRenew   = "certificates.renew"
 	ActionCertificateRevoke  = "certificates.revoke"
 	ActionCertificateRotate  = "certificates.rotate"
+	ActionCleanupRecord      = "certificates.cleanup.record"
+	ActionCleanupRead        = "certificates.cleanup.read"
+	ActionCleanupRetry       = "certificates.cleanup.retry"
+	ActionCleanupCancel      = "certificates.cleanup.cancel"
 )
 
 // ServiceActions returns the audit action catalog this domain emits.
 func ServiceActions() []string {
 	return []string{
 		ActionCertificateRead, ActionCertificateRenew, ActionCertificateRevoke,
-		ActionCertificateRotate, ActionDistributionCreate,
+		ActionCertificateRotate, ActionDistributionCreate, ActionCleanupRecord,
+		ActionCleanupRead, ActionCleanupRetry, ActionCleanupCancel,
 	}
 }
 

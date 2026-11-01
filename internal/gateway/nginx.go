@@ -360,9 +360,6 @@ func BuildNginxApplyTask(site NginxSite, input NginxTaskInput) (TaskRequest, err
 		"site_path":           site.Path,
 		"artifact_path":       site.ArtifactPath,
 		"config_sha256":       site.Digest,
-		"validate_command":    "nginx -t",
-		"reload_command":      "reload",
-		ParamExistingSite:     strconv.FormatBool(input.ExistingSite),
 		ParamTakeoverApproved: strconv.FormatBool(input.TakeoverApproved),
 	}
 	if input.ApprovalRef != "" {
@@ -388,11 +385,9 @@ func BuildNginxRemoveTask(site NginxSite, input NginxTaskInput) (TaskRequest, er
 		return TaskRequest{}, fmt.Errorf("%w: task identity", ErrInvalidNginx)
 	}
 	params := map[string]string{
-		"operation":        "remove",
-		"site_path":        site.Path,
-		"config_sha256":    site.Digest,
-		"validate_command": "nginx -t",
-		"reload_command":   "reload",
+		"operation":     "remove",
+		"site_path":     site.Path,
+		"config_sha256": site.Digest,
 	}
 	if err := validateNginxTaskParams(params); err != nil {
 		return TaskRequest{}, err

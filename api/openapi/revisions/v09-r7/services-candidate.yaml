@@ -1,0 +1,407 @@
+openapi: 3.1.0
+info:
+  title: ServerFleet v0.9-r7 services candidate
+  version: 0.9.0-r7
+  description: >
+    Candidate contract for publication targets/operations and durable ACME
+    cleanup. This file is not registered in the root Redocly configuration;
+    registration is a separate shared patch. targetsPersisted=false means the
+    deployment has not accepted ds/0081 and no publication success may be claimed.
+servers:
+  - url: https://controller.example
+security:
+  - cookieAuth: []
+paths:
+  /api/v1/publications:
+    get:
+      operationId: listPublicationsR7
+      summary: List publication operations visible to the current subject
+      responses:
+        '200':
+          description: Publication operations
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PublicationOperationR7'
+        '401':
+          $ref: '#/components/responses/UnauthorizedR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+    post:
+      operationId: createPublicationR7
+      summary: Create a publication for explicit gateway/zone/certificate targets
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PublicationDraftR7'
+      responses:
+        '202':
+          description: Plan created; this is not execution success
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationOperationR7'
+        '400':
+          $ref: '#/components/responses/InvalidR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+        '409':
+          description: Preview ineligible or service group revision conflict
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorR7'
+        '503':
+          description: Target persistence or required publisher is unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorR7'
+  /api/v1/publications/{publicationId}:
+    get:
+      operationId: getPublicationR7
+      summary: Read one publication operation and its stages
+      parameters:
+        - $ref: '#/components/parameters/PublicationIdR7'
+      responses:
+        '200':
+          description: Publication operation
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationOperationR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+        '404':
+          $ref: '#/components/responses/NotFoundR7'
+  /api/v1/publications/{publicationId}/run:
+    post:
+      operationId: runPublicationR7
+      summary: Execute pending stages with current authorization and revision checks
+      parameters:
+        - $ref: '#/components/parameters/PublicationIdR7'
+      responses:
+        '200':
+          description: Plan reached a terminal or partial state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationOperationR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+        '409':
+          description: Revision conflict, concurrent run, or plan not runnable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorR7'
+        '422':
+          description: A stage failed; later stages stay pending
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationOperationR7'
+  /api/v1/publications/{publicationId}/rollback-all:
+    post:
+      operationId: rollbackAllPublicationR7
+      summary: Compensate executed stages in reverse order
+      parameters:
+        - $ref: '#/components/parameters/PublicationIdR7'
+      responses:
+        '200':
+          description: All executed stages were compensated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationOperationR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+        '409':
+          description: A stage is running or the plan cannot be rolled back
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorR7'
+        '502':
+          description: Provider compensation failed; persisted partial state is returned
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicationOperationR7'
+  /api/v1/certificates/cleanup:
+    get:
+      operationId: listCertificateCleanupR7
+      summary: List durable ACME DNS-01 cleanup records
+      responses:
+        '200':
+          description: Cleanup records
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/CleanupRecordR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+  /api/v1/certificates/cleanup/{cleanupId}/retry:
+    post:
+      operationId: retryCertificateCleanupR7
+      summary: Retry one cleanup record within the bounded retry budget
+      parameters:
+        - $ref: '#/components/parameters/CleanupIdR7'
+      responses:
+        '200':
+          description: Cleanup attempt result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupRecordR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+        '404':
+          $ref: '#/components/responses/NotFoundR7'
+        '409':
+          description: Record is resolved/canceled or retry budget is exhausted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorR7'
+  /api/v1/certificates/cleanup/{cleanupId}/cancel:
+    post:
+      operationId: cancelCertificateCleanupR7
+      summary: Stop automatic cleanup without deleting the record
+      parameters:
+        - $ref: '#/components/parameters/CleanupIdR7'
+      responses:
+        '200':
+          description: Canceled cleanup record
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupRecordR7'
+        '403':
+          $ref: '#/components/responses/ForbiddenR7'
+        '404':
+          $ref: '#/components/responses/NotFoundR7'
+        '409':
+          description: Record is already resolved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorR7'
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: __Host-sf_session
+  parameters:
+    PublicationIdR7:
+      name: publicationId
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    CleanupIdR7:
+      name: cleanupId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+  responses:
+    InvalidR7:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorR7'
+    ForbiddenR7:
+      description: Current permission or approval does not cover the action
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorR7'
+    UnauthorizedR7:
+      description: Missing or invalid session
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorR7'
+    NotFoundR7:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorR7'
+  schemas:
+    PublicationDraftR7:
+      type: object
+      additionalProperties: false
+      required:
+        - serviceGroupId
+        - gatewayIds
+        - domain
+        - https
+        - expectedGroupRevision
+      properties:
+        name:
+          type: string
+          maxLength: 128
+        serviceGroupId:
+          type: string
+          maxLength: 128
+        gatewayIds:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: string
+            maxLength: 128
+        zoneId:
+          type: string
+          maxLength: 128
+          description: Must reference a synchronized DNS zone for a real DNS stage.
+        certificateId:
+          type: string
+          maxLength: 128
+          description: Required for HTTPS; must be active and match the domain.
+        domain:
+          type: string
+          maxLength: 253
+        https:
+          type: boolean
+        targetRevision:
+          type: integer
+          minimum: 1
+          description: Immutable target snapshot revision stored with the plan.
+        expectedGroupRevision:
+          type: integer
+          minimum: 1
+        idempotencyKey:
+          type: string
+          maxLength: 128
+    PublicationOperationR7:
+      type: object
+      required:
+        - id
+        - status
+        - targetsPersisted
+        - stages
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        status:
+          type: string
+          enum:
+            - queued
+            - running
+            - succeeded
+            - partially_completed
+            - failed
+        currentStage:
+          type: string
+          enum:
+            - dns
+            - certificate
+            - gateway
+        targetsPersisted:
+          type: boolean
+          description: False means ds/0081 target columns are not present; no execution success may be inferred.
+        createdAt:
+          type: string
+          format: date-time
+        stages:
+          type: array
+          items:
+            $ref: '#/components/schemas/PublicationStageR7'
+    PublicationStageR7:
+      type: object
+      required:
+        - name
+        - status
+      properties:
+        name:
+          type: string
+          enum:
+            - dns
+            - certificate
+            - gateway
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - succeeded
+            - failed
+            - skipped
+            - rolled_back
+        message:
+          type: string
+          maxLength: 512
+    CleanupRecordR7:
+      type: object
+      required:
+        - id
+        - fqdn
+        - recordId
+        - state
+        - attempts
+      properties:
+        id:
+          type: integer
+          minimum: 1
+        domain:
+          type: string
+          maxLength: 253
+        fqdn:
+          type: string
+          maxLength: 255
+        recordId:
+          type: string
+          maxLength: 256
+        state:
+          type: string
+          enum:
+            - pending
+            - retrying
+            - resolved
+            - canceled
+            - failed
+        attempts:
+          type: integer
+          minimum: 0
+          maximum: 20
+        lastErrorCode:
+          type: string
+          maxLength: 64
+        nextAttemptAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    ErrorR7:
+      type: object
+      required:
+        - error
+      properties:
+        error:
+          type: object
+          required:
+            - code
+            - message
+          properties:
+            code:
+              type: string
+              maxLength: 64
+            message:
+              type: string
+              maxLength: 512
