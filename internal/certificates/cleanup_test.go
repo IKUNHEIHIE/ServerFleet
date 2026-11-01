@@ -2,7 +2,11 @@ package certificates_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -201,4 +205,55 @@ func TestCleanupJournalRetryDueUsesServiceAuthorization(t *testing.T) {
 	if list[0].State != certificates.CleanupResolved {
 		t.Fatalf("due state = %+v", list[0])
 	}
+}
+
+func TestCleanupHTTPRoutes(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	records, err := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	if err := certificates.RegisterCleanupHTTP(mux, f.journal, func(*http.Request) (certificates.CleanupPrincipal, error) {
+		return certificates.CleanupPrincipal{SubjectID: "admin-1", RequestID: "http-request"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+
+	response, err := http.Get(server.URL + "/api/v1/certificates/cleanup")
+	if err != nil || response.StatusCode != http.StatusOK {
+		t.Fatalf("list response = %v, err = %v", response, err)
+	}
+	var list []struct {
+		RecordID string `json:"recordId"`
+		State    string `json:"state"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&list); err != nil {
+		t.Fatal(err)
+	}
+	_ = response.Body.Close()
+	if len(list) != 1 || list[0].RecordID != "record-1" || list[0].State != "pending" {
+		t.Fatalf("list = %+v", list)
+	}
+	retry, err := http.Post(server.URL+"/api/v1/certificates/cleanup/"+strconv.FormatInt(records[0].ID, 10)+"/retry", "application/json", nil)
+	if err != nil || retry.StatusCode != http.StatusOK {
+		t.Fatalf("retry response = %v, err = %v", retry, err)
+	}
+	var retried struct {
+		State string `json:"state"`
+	}
+	if err := json.NewDecoder(retry.Body).Decode(&retried); err != nil {
+		t.Fatal(err)
+	}
+	_ = retry.Body.Close()
+	if retried.State != "resolved" {
+		t.Fatalf("retried = %+v", retried)
+	}
+	cancel, err := http.Post(server.URL+"/api/v1/certificates/cleanup/"+strconv.FormatInt(records[0].ID, 10)+"/cancel", "application/json", nil)
+	if err != nil || cancel.StatusCode != http.StatusConflict {
+		t.Fatalf("cancel resolved response = %v, err = %v", cancel, err)
+	}
+	_ = cancel.Body.Close()
 }
