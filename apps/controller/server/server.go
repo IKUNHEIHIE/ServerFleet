@@ -41,24 +41,25 @@ import (
 
 // Config configures the composed Controller management runtime.
 type Config struct {
-	DBPath                 string
-	CredentialKeyDir       string
-	AIGenerationQuota      ai.GenerationQuota
-	LocalAIProvider        *ai.LocalTLSProviderConfig
-	Origin                 string
-	StagingDir             string
-	Dispatcher             tasks.Dispatcher
-	DNSProvider            dns.Provider
-	GatewayChecker         gateway.Checker
-	MonitoringProber       monitoring.Prober
-	MonitoringAllowedHosts []string
-	CertificateIssuer      certificates.Issuer
-	PublishingBridge       publishing.LocalBridgeConfig
-	UploadTransport        files.UploadTransport
-	DownloadTransport      files.DownloadTransport
-	SMTPSender             notifications.SMTPSender
-	QQSender               notifications.QQSender
-	Now                    func() time.Time
+	DBPath                    string
+	CredentialKeyDir          string
+	AIGenerationQuota         ai.GenerationQuota
+	LocalAIProvider           *ai.LocalTLSProviderConfig
+	Origin                    string
+	StagingDir                string
+	Dispatcher                tasks.Dispatcher
+	DNSProvider               dns.Provider
+	GatewayChecker            gateway.Checker
+	MonitoringProber          monitoring.Prober
+	MonitoringAllowedHosts    []string
+	CertificateIssuer         certificates.Issuer
+	CertificateCleanupCleaner certificates.DNSRecordCleaner
+	PublishingBridge          publishing.LocalBridgeConfig
+	UploadTransport           files.UploadTransport
+	DownloadTransport         files.DownloadTransport
+	SMTPSender                notifications.SMTPSender
+	QQSender                  notifications.QQSender
+	Now                       func() time.Time
 
 	// Agent transport composition. Enrollment and the Agent WSS link stay
 	// unmounted unless the local PKI issuer and exact authority are supplied.
@@ -67,6 +68,7 @@ type Config struct {
 	EnrollmentIssuer *transport.CertificateIssuer
 	AgentFrameBytes  int
 	AgentFileGate    transport.FileFrameGate
+	FileExecution    *FileExecutionConfig
 
 	// Optional signed plugin package trust. Empty maps keep installation closed.
 	PluginTrustKeys         map[string]ed25519.PublicKey
@@ -74,49 +76,57 @@ type Config struct {
 	PluginTrustCapabilities map[string]bool
 
 	// BackupDir defaults to a private directory beside the SQLite database.
-	BackupDir       string
-	UpdateCheck     func(context.Context, string) (updates.CheckResult, error)
-	UpdatePlan      func(context.Context, string) (updates.Plan, error)
-	UpdateApply     func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
-	RecoveryExecute func(context.Context, recovery.Plan) (string, error)
-	PluginRuntime   plugins.AdmittedRuntime
-	XrayTaskHost    *plugins.XrayTaskHost
+	BackupDir         string
+	RecoveryLatch     *recovery.QuarantineLatch
+	UpdateExecution   *updates.TaskInstallWorkerOptions
+	UpdateResolvePlan func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
+	UpdateJobs        func(context.Context, updates.Principal) (updates.JobPage, error)
+	UpdateJob         func(context.Context, updates.Principal, string) (updates.ApplyResult, error)
+	UpdateCheck       func(context.Context, string) (updates.CheckResult, error)
+	UpdatePlan        func(context.Context, string) (updates.Plan, error)
+	UpdateApply       func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
+	RecoveryExecute   func(context.Context, recovery.Plan) (string, error)
+	PluginRuntime     plugins.AdmittedRuntime
+	XrayTaskHost      *plugins.XrayTaskHost
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
-	DB                *storage.DB
-	Audit             *audit.SQLRecorder
-	IdentityStore     *auth.SQLIdentityStore
-	Identity          *auth.IdentityService
-	Credentials       *auth.CredentialService
-	IdentityHTTP      *auth.IdentityHTTP
-	NodesRepo         *nodes.Repo
-	GroupsRepo        *nodes.GroupRepo
-	ServiceGroupsRepo *servicegroups.Repo
-	MonitoringRepo    *monitoring.Repo
-	QuotaRepo         *quota.Repo
-	CertificatesRepo  *certificates.Repo
-	PublishingRepo    *publishing.Repo
-	Nodes             *nodes.Service
-	ServiceGroups     *servicegroups.Service
-	TasksRepo         *tasks.Repo
-	Tasks             *tasks.Service
-	Files             *files.Service
-	FilesTransport    *files.LocalStagingTransport
-	DNS               *dns.Service
-	Notifications     *notifications.Service
-	Gateway           *gateway.Service
-	Monitoring        *monitoring.Service
-	Quota             *quota.Service
-	Certificates      *certificates.Service
-	Publishing        *publishing.Service
+	runtimeGate        func(context.Context) error
+	DB                 *storage.DB
+	Audit              *audit.SQLRecorder
+	IdentityStore      *auth.SQLIdentityStore
+	Identity           *auth.IdentityService
+	Credentials        *auth.CredentialService
+	IdentityHTTP       *auth.IdentityHTTP
+	NodesRepo          *nodes.Repo
+	GroupsRepo         *nodes.GroupRepo
+	ServiceGroupsRepo  *servicegroups.Repo
+	MonitoringRepo     *monitoring.Repo
+	QuotaRepo          *quota.Repo
+	CertificatesRepo   *certificates.Repo
+	PublishingRepo     *publishing.Repo
+	Nodes              *nodes.Service
+	ServiceGroups      *servicegroups.Service
+	TasksRepo          *tasks.Repo
+	Tasks              *tasks.Service
+	Files              *files.Service
+	FilesTransport     *files.LocalStagingTransport
+	DNS                *dns.Service
+	Notifications      *notifications.Service
+	Gateway            *gateway.Service
+	Monitoring         *monitoring.Service
+	Quota              *quota.Service
+	Certificates       *certificates.Service
+	CertificateCleanup *certificates.CleanupJournal
+	Publishing         *publishing.Service
 
 	Enrollment           *transport.EnrollmentService
 	EnrollmentHTTP       *transport.EnrollmentHTTP
 	EnrollmentManagement *transport.EnrollmentManagementHTTP
 	Links                *transport.ControllerLinks
 	AgentFiles           *transport.FileClient
+	FileWorker           *FileExecutionWorker
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
 	AI               *ai.SessionService
@@ -195,11 +205,14 @@ func Migrations() [][]storage.Migration {
 		servicegroups.Migrations(),
 		tasks.Migrations(),
 		files.Migrations(),
+		{{Version: "cx/0009_update_journal", Name: "review candidate installed provenance and audited receipts", Statements: updates.InstallJournalSchemaStatements()}},
+		{files.ExecutionBindingsMigration()},
 		monitoring.Migrations(),
 		notifications.Migrations(),
 		quota.Migrations(),
 		dns.Migrations(),
 		certificates.Migrations(),
+		certificates.CleanupMigrations(),
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
@@ -237,9 +250,12 @@ func AuditActions() []string {
 		"host.patch",
 		"host.root",
 		"files.transfer",
+		updates.ActionInstall,
 		"ai.budget.configure",
 		"ai.budget.reserve",
 		"gateway.provision",
+		"gateway.nginx.site_apply",
+		"gateway.nginx.site_remove",
 		"enrollment.issue",
 		"enrollment.token.issue",
 		"enrollment.request",
@@ -321,6 +337,11 @@ func AuditActions() []string {
 // ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
 func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
+		{Key: certificates.ActionCleanupRead, Description: "Read owned cleanup records", ResourceType: "node", ReadOnly: true, AdminOnly: true},
+		{Key: certificates.ActionCleanupRetry, Description: "Retry owned cleanup records", ResourceType: "node", AdminOnly: true},
+		{Key: certificates.ActionCleanupCancel, Description: "Cancel owned cleanup records", ResourceType: "node", AdminOnly: true},
+		{Key: certificates.ActionCleanupRecord, Description: "Record owned cleanup failures", ResourceType: "node", AdminOnly: true},
+		{Key: updates.ActionInstall, Description: "Install verified releases on granted owned targets", ResourceType: "node", AdminOnly: true},
 		{Key: nodes.ActionNodesWrite, Description: "Modify granted nodes", ResourceType: "node"},
 		{Key: nodes.ActionNodeCreate, Description: "Create nodes", ResourceType: "node"},
 		{Key: nodes.ActionNodesSuspend, Description: "Suspend granted nodes", ResourceType: "node"},
@@ -378,6 +399,10 @@ func ExtraPermissions() []auth.PermissionDefinition {
 
 // New opens and migrates the SQLite WAL database and wires all Controller services and HTTP routes.
 func New(ctx context.Context, cfg Config) (*Server, error) {
+	runtimeGate, guardErr := recovery.RuntimeGuard(ctx, cfg.DBPath, cfg.RecoveryLatch)
+	if guardErr != nil {
+		return nil, guardErr
+	}
 	if strings.TrimSpace(cfg.DBPath) == "" {
 		return nil, errors.New("controller: database path is required")
 	}
@@ -561,6 +586,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	s = &Server{
+		runtimeGate:       runtimeGate,
 		DB:                db,
 		Audit:             auditRecorder,
 		IdentityStore:     identityStore,
@@ -594,6 +620,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	s.Nodes = nodesService
+	if cfg.FileExecution != nil {
+		if cfg.AgentFileGate != nil || cfg.EnrollmentIssuer == nil || cfg.AgentAuthority == "" {
+			return cleanup(files.ErrTransferExecution)
+		}
+		s.FileWorker, err = NewFileExecutionWorker(s, filesRepo, authorizer, *cfg.FileExecution)
+		if err != nil {
+			return cleanup(err)
+		}
+		cfg.AgentFileGate = s.FileWorker.Gate
+	}
 	agentBridge, err := s.setupAgentTransport(cfg, nodesService, tasksRepo)
 	if err != nil {
 		return cleanup(err)
@@ -621,14 +657,61 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if dispatcher == nil && agentBridge != nil {
 		dispatcher = agentBridge
 	}
+	workers := map[string]tasks.Worker{}
+	if s.FileWorker != nil {
+		workers[files.ActionTransfer] = s.FileWorker
+		agentBridge.fileWorker = s.FileWorker
+	}
+	if cfg.UpdateExecution != nil {
+		if cfg.UpdateResolvePlan == nil || cfg.UpdateApply != nil {
+			return cleanup(updates.ErrArtifactRejected)
+		}
+		options := *cfg.UpdateExecution
+		options.Current = func(ctx context.Context, id, plan string) (tasks.Task, error) {
+			return s.Tasks.CheckExecution(ctx, id, plan)
+		}
+		options.Administrator = s.Identity.AuthorizeAdministrator
+		worker, e := updates.NewTaskInstallWorker(options)
+		if e != nil {
+			return cleanup(e)
+		}
+		workers[updates.ActionInstall] = worker
+		projection, e := updates.NewTaskJobProjection(tasksRepo, func(ctx context.Context, p updates.Principal, t tasks.Task) error {
+			return (&composedTaskReadGate{identity: s.Identity, tasks: tasksRepo}).AuthorizeTaskRead(ctx, p.SubjectID, t.ID)
+		})
+		if e != nil {
+			return cleanup(e)
+		}
+		cfg.UpdateJobs, cfg.UpdateJob = projection.Jobs, projection.Job
+		cfg.UpdateApply = func(ctx context.Context, r updates.ApplyRequest) (updates.ApplyResult, error) {
+			if !r.Principal.Administrator || s.Identity.AuthorizeAdministrator(ctx, r.Principal.SubjectID) != nil {
+				return updates.ApplyResult{}, updates.ErrArtifactRejected
+			}
+			p, e := cfg.UpdateResolvePlan(ctx, r)
+			if e != nil || p.ID != r.PlanID || p.SubjectID != r.Principal.SubjectID || r.Confirmation != p.Attempted.Version || r.BackupMode != "required" {
+				return updates.ApplyResult{}, updates.ErrArtifactRejected
+			}
+			request, e := p.TaskRequest(r.Principal.RequestID)
+			if e != nil {
+				return updates.ApplyResult{}, e
+			}
+			t, e := s.Tasks.Submit(ctx, request)
+			if e != nil {
+				return updates.ApplyResult{}, e
+			}
+			return updates.ApplyResult{ID: t.ID, TaskID: t.ID, Status: string(t.Status), TargetVersion: p.Attempted.Version}, nil
+		}
+	}
 	tasksService, err := tasks.NewService(tasks.Options{
-		DB:         db,
-		Repo:       tasksRepo,
-		Audit:      auditRecorder,
-		Authorizer: authorizer,
-		Dispatcher: dispatcher,
-		Nodes:      nodeLookup,
-		Now:        now,
+		RuntimeGate: runtimeGate,
+		Workers:     workers,
+		DB:          db,
+		Repo:        tasksRepo,
+		Audit:       auditRecorder,
+		Authorizer:  authorizer,
+		Dispatcher:  dispatcher,
+		Nodes:       nodeLookup,
+		Now:         now,
 	})
 	if err != nil {
 		return cleanup(err)
@@ -661,17 +744,24 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if downloads == nil {
 		downloads, _ = uploads.(files.DownloadTransport)
 	}
+	var fileSubmitter files.TaskSubmitter = taskBridge
+	var validateTransfer func(context.Context, files.TransferCommand) error
+	if s.FileWorker != nil {
+		fileSubmitter = s.FileWorker
+		validateTransfer = s.FileWorker.ValidateTransfer
+	}
 	filesService, err := files.NewService(files.Options{
-		DB:         db,
-		Repo:       filesRepo,
-		Audit:      auditRecorder,
-		Authorizer: authorizer,
-		Submitter:  taskBridge,
-		Canceller:  taskBridge,
-		Uploads:    uploads,
-		Downloads:  downloads,
-		StagingDir: stagingDir,
-		Now:        now,
+		ValidateTransfer: validateTransfer,
+		DB:               db,
+		Repo:             filesRepo,
+		Audit:            auditRecorder,
+		Authorizer:       authorizer,
+		Submitter:        fileSubmitter,
+		Canceller:        taskBridge,
+		Uploads:          uploads,
+		Downloads:        downloads,
+		StagingDir:       stagingDir,
+		Now:              now,
 	})
 	if err != nil {
 		return cleanup(err)
@@ -767,6 +857,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	s.CertificateCleanup, err = certificates.NewCleanupJournal(certificates.CleanupJournalOptions{DB: db, Audit: auditRecorder, Authorizer: authorizer, Cleaner: cfg.CertificateCleanupCleaner, Now: now})
+	if err != nil {
+		return cleanup(err)
+	}
 	pubBridge := publishing.NewLocalBridge(cfg.PublishingBridge)
 	publishingService, err := publishing.NewService(publishing.Options{
 		DB:           db,
@@ -785,6 +879,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 
 	s.ServiceGroups = serviceGroupsService
 	s.Files = filesService
+	if s.FileWorker != nil {
+		if _, err := s.Files.RecoverTransfers(ctx); err != nil {
+			return cleanup(err)
+		}
+		if _, err := s.Tasks.Recover(ctx); err != nil {
+			return cleanup(err)
+		}
+	}
 	s.DNS = dnsService
 	s.Notifications = notificationsService
 	s.Gateway = gatewayService
@@ -815,6 +917,14 @@ func (s *Server) Close() error {
 	if s == nil {
 		return nil
 	}
+	if s.Links != nil {
+		closeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		err := s.Links.Close(closeCtx)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
 	if s.runCancel != nil {
 		s.runCancel()
 		select {
@@ -844,7 +954,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqID := newRequestID()
 	w.Header().Set("X-Request-ID", reqID)
 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
-	s.mux.ServeHTTP(w, r.WithContext(ctx))
+	recovery.RuntimeHTTP(s.mux, s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))
 }
 
 func (s *Server) registerRoutes() error {
@@ -869,6 +979,9 @@ func (s *Server) registerRoutes() error {
 
 	s.registerEnrollmentRoutes()
 	s.registerAIRoutes()
+	if err := s.RegisterAIBudgetRoutes(); err != nil {
+		return err
+	}
 	s.registerPluginRoutes()
 	s.registerUpdateRecoveryRoutes()
 	if s.AgentLinkHTTP != nil {
@@ -973,6 +1086,12 @@ func (s *Server) registerRoutes() error {
 			return certificates.Principal{SubjectID: sub, RequestID: reqID}, err
 		},
 	); err != nil {
+		return err
+	}
+	if err := certificates.RegisterCleanupHTTP(s.mux, s.CertificateCleanup, func(r *http.Request) (certificates.CleanupPrincipal, error) {
+		sub, id, err := s.authenticate(r)
+		return certificates.CleanupPrincipal{SubjectID: sub, RequestID: id}, err
+	}); err != nil {
 		return err
 	}
 	if err := publishing.RegisterHTTP(s.mux, s.Publishing, func(r *http.Request) (publishing.Principal, error) {
@@ -1178,6 +1297,7 @@ func (a *composedAuthorizer) Authorize(ctx context.Context, check auth.Check) er
 			strings.HasPrefix(check.Action, "notifications.") ||
 			strings.HasPrefix(check.Action, "monitoring.") ||
 			check.Action == certificates.ActionCertificateRead ||
+			strings.HasPrefix(check.Action, "certificates.cleanup.") ||
 			check.Action == publishing.ActionRead {
 			return a.identity.AuthorizeSubjectAction(ctx, check.SubjectID, check.Action)
 		}

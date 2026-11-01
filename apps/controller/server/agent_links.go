@@ -54,6 +54,7 @@ type agentLinkBridge struct {
 	tasks        *tasks.Service
 	links        *transport.ControllerLinks
 	files        *transport.FileClient
+	fileWorker   *FileExecutionWorker
 	now          func() time.Time
 
 	seqMu     sync.Mutex
@@ -132,6 +133,14 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 	if b == nil || envelope == nil || envelope.GetNodeId() != observation.Identity.NodeID {
 		return transport.ErrLinkRejected
 	}
+	fileChild := false
+	if b.fileWorker != nil {
+		var err error
+		fileChild, err = b.fileWorker.Observe(ctx, observation, envelope)
+		if err != nil {
+			return err
+		}
+	}
 	if b.files != nil {
 		consumed, err := b.files.Deliver(ctx, observation, envelope)
 		if err != nil {
@@ -141,9 +150,12 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 			return nil
 		}
 	}
+	if fileChild {
+		return nil
+	}
 	if output := envelope.GetTaskOutput(); output != nil {
 		task, err := b.tasksRepo.Get(ctx, output.TaskId)
-		if err != nil || task.ActionID == transport.FileCapability {
+		if err != nil || (task.ActionID == transport.FileCapability || task.ActionID == "files.transfer") {
 			return transport.ErrLinkRejected
 		}
 	}

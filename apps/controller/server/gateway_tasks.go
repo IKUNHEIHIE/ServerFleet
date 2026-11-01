@@ -46,14 +46,30 @@ func (h *gatewayTaskHost) apply(ctx context.Context, site gateway.NginxSite, inp
 	if h == nil || h.tasks == nil || h.artifacts == nil {
 		return "", gateway.ErrTaskSubmitterUnavailable
 	}
-	if err := h.artifacts.Upload(ctx, input.NodeID, site.ArtifactPath, site.Config, site.Digest); err != nil {
-		return "", err
-	}
 	request, err := gateway.BuildNginxApplyTask(site, input)
 	if err != nil {
 		return "", err
 	}
-	return h.submit(ctx, request, "nginx site apply "+input.GatewayID)
+	id, err := h.submit(ctx, request, "nginx site apply "+input.GatewayID)
+	if err != nil {
+		return "", err
+	}
+	task, err := h.tasks.Get(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if task.Status == tasks.StatusCompleted {
+		return id, nil
+	}
+	// No artifact I/O before the sole task is approved and actually running.
+	// A queued task is not a completed publication stage.
+	if _, err := h.tasks.CheckExecution(ctx, id, task.PlanHash); err != nil {
+		return "", err
+	}
+	if err := h.artifacts.Upload(ctx, input.NodeID, site.ArtifactPath, site.Config, site.Digest); err != nil {
+		return "", err
+	}
+	return h.confirmCompleted(ctx, id)
 }
 
 func (h *gatewayTaskHost) remove(ctx context.Context, site gateway.NginxSite, input gateway.NginxTaskInput) (string, error) {
@@ -64,14 +80,34 @@ func (h *gatewayTaskHost) remove(ctx context.Context, site gateway.NginxSite, in
 	if err != nil {
 		return "", err
 	}
-	return h.submit(ctx, request, "nginx site remove "+input.GatewayID)
+	id, err := h.submit(ctx, request, "nginx site remove "+input.GatewayID)
+	if err != nil {
+		return "", err
+	}
+	return h.confirmCompleted(ctx, id)
+}
+
+func (h *gatewayTaskHost) confirmCompleted(ctx context.Context, id string) (string, error) {
+	task, err := h.tasks.Get(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	if task.Status != tasks.StatusCompleted {
+		return "", publishing.ErrProductionUnavailable
+	}
+	for _, target := range task.Targets {
+		if target.State != tasks.TargetSucceeded {
+			return "", publishing.ErrProductionUnavailable
+		}
+	}
+	return id, nil
 }
 
 func (h *gatewayTaskHost) submit(ctx context.Context, request gateway.TaskRequest, name string) (string, error) {
 	task, err := h.tasks.Submit(ctx, tasks.SubmitRequest{
 		SubjectID: request.SubjectID, RequestID: request.RequestID, Name: name,
 		ActionID: request.ActionID, OperationClass: tasks.OperationClassModifying,
-		TargetType: "node_ids", TargetResourceID: request.ResourceID, TargetNodeIDs: request.NodeIDs,
+		TargetType: "node_ids", TargetNodeIDs: request.NodeIDs,
 		Params: request.Params, IdempotencyKey: request.IdempotencyKey,
 	})
 	if err != nil {

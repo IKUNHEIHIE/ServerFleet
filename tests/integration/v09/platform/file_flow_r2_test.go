@@ -1,5 +1,3 @@
-//go:build cx_r2_controller
-
 package platform_test
 
 import (

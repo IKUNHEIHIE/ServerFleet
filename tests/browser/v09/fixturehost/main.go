@@ -54,11 +54,24 @@ func main() {
 	aiUpstreamCert := flag.String("ai-upstream-cert", "", "AI upstream TLS certificate path (required)")
 	aiUpstreamKey := flag.String("ai-upstream-key", "", "AI upstream TLS key path (required)")
 	aiUpstreamListen := flag.String("ai-upstream-listen", "127.0.0.1:18444", "AI upstream TLS listen address")
-	fixtureListen := flag.String("fixture-listen", "0.0.0.0:18445", "fixture control plane listen address")
+	fixtureListen := flag.String("fixture-listen", "127.0.0.1:18445", "read-only fixture telemetry listen address")
 	agentPKIDir := flag.String("agent-pki-dir", "", "optional local agent PKI directory; enables the enrollment and Agent WSS link")
 	agentAuthority := flag.String("agent-authority", "", "agent-facing authority host:port when the agent link is enabled")
 	agentServerName := flag.String("agent-server-name", "", "agent TLS server name when the agent link is enabled")
+	secretFile := flag.String("ai-secret-file", "", "private synthetic upstream secret file")
 	flag.Parse()
+	controlHost, _, controlErr := net.SplitHostPort(*fixtureListen)
+	if controlErr != nil || net.ParseIP(controlHost) == nil || !net.ParseIP(controlHost).IsLoopback() {
+		log.Fatal("fixture telemetry must bind loopback")
+	}
+	secretInfo, secretErr := os.Lstat(*secretFile)
+	if secretErr != nil || !secretInfo.Mode().IsRegular() || secretInfo.Mode().Perm()&0077 != 0 || secretInfo.Size() > 128 {
+		log.Fatal("private fixture secret required")
+	}
+	secret, secretErr := os.ReadFile(*secretFile)
+	if secretErr != nil || len(secret) < 16 {
+		log.Fatal("invalid synthetic fixture secret")
+	}
 
 	if *origin == "" || *dbPath == "" || *tlsCert == "" || *tlsKey == "" ||
 		*aiUpstreamOrigin == "" || *aiUpstreamCA == "" || *aiUpstreamCert == "" || *aiUpstreamKey == "" {
@@ -70,6 +83,7 @@ func main() {
 	}
 
 	upstream := &upstreamState{}
+	upstream.setSecret(string(secret))
 	if err := upstream.serveTLS(*aiUpstreamListen, *aiUpstreamCert, *aiUpstreamKey); err != nil {
 		log.Fatalf("%v", err)
 	}
@@ -117,35 +131,6 @@ func main() {
 	controlMux := http.NewServeMux()
 	controlMux.HandleFunc("GET /fixture/health", func(writer http.ResponseWriter, request *http.Request) {
 		writeFixtureJSON(writer, http.StatusOK, fixtureResponse{OK: true})
-	})
-	controlMux.HandleFunc("GET /fixture/configure", func(writer http.ResponseWriter, request *http.Request) {
-		query := request.URL.Query()
-		input := configureRequest{OwnerID: query.Get("owner"), ProfileID: query.Get("profile"), Secret: query.Get("secret")}
-		if input.OwnerID == "" || input.ProfileID == "" || input.Secret == "" {
-			writeFixtureJSON(writer, http.StatusBadRequest, fixtureResponse{Error: "owner, profile and secret query parameters are required"})
-			return
-		}
-		now := time.Now().UTC()
-		policy := ai.GenerationBudgetPolicy{
-			OwnerID:          input.OwnerID,
-			ProfileID:        input.ProfileID,
-			WindowID:         "fixture-window-01",
-			Revision:         1,
-			StartsAt:         now.Add(-time.Hour),
-			EndsAt:           now.Add(30 * 24 * time.Hour),
-			RequestLimit:     200,
-			InputByteLimit:   1 << 20,
-			OutputTokenLimit: 128000,
-		}
-		bounded, cancel := context.WithTimeout(request.Context(), 10*time.Second)
-		defer cancel()
-		if err := composed.AIBudget.Configure(bounded, input.OwnerID, 0, policy); err != nil {
-			writeFixtureJSON(writer, http.StatusBadRequest, fixtureResponse{OK: false, Error: err.Error()})
-			return
-		}
-		upstream.setSecret(input.Secret)
-		log.Printf("fixturehost: budget configured for owner %s profile %s", input.OwnerID, input.ProfileID)
-		writeFixtureJSON(writer, http.StatusOK, fixtureResponse{OK: true, Window: policy.WindowID})
 	})
 	controlMux.HandleFunc("GET /fixture/upstream", func(writer http.ResponseWriter, request *http.Request) {
 		count, bearerOK, model := upstream.snapshot()

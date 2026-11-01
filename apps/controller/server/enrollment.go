@@ -79,6 +79,7 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		minor = 1
 	}
 	links, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{
+		RuntimeGate:       s.runtimeGate,
 		ProtocolMajor:     1,
 		ProtocolMinor:     minor,
 		Semantic:          semantic,

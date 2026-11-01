@@ -1,5 +1,3 @@
-//go:build cx_r2_platform
-
 package platform_test
 
 import (
@@ -28,7 +26,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 		filtered := []storage.Migration{}
 		for _, migration := range group {
 			total++
-			if migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" {
+			if migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" {
 				filtered = append(filtered, migration)
 			}
 		}
@@ -36,7 +34,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 			old = append(old, filtered)
 		}
 	}
-	if total != 23 {
+	if total != 24 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)

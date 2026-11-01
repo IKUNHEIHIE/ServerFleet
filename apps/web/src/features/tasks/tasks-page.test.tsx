@@ -46,6 +46,26 @@ function taskRoutes(): FetchRoutes {
 }
 
 describe("task center", () => {
+  it("distinguishes same-name nodes by their exact identity", async () => {
+    const { calls } = await renderAuthenticated("/tasks", {
+      ...taskRoutes(),
+      "GET /api/v1/nodes": () => jsonResponse({ items: [
+        { id: "n-2", name: "enrollment-token", online: true },
+        { id: "n-1", name: "enrollment-token", online: true },
+      ] }),
+    });
+    await screen.findByText("t-1");
+    fireEvent.click(screen.getByRole("button", { name: "创建任务" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.change(within(dialog).getByLabelText("任务名称"), { target: { value: "exact node" } });
+    fireEvent.change(within(dialog).getByLabelText("命令或脚本"), { target: { value: "host.patch" } });
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: "enrollment-token (n-1)" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "预演目标" }));
+    await waitFor(() => {
+      const preview = calls.find(call => call.url === "/api/v1/tasks/preview");
+      expect(JSON.parse(String(preview?.init?.body)).target.nodeIds).toEqual(["n-1"]);
+    });
+  });
   it("previews and submits a task through real endpoints", async () => {
     const { calls } = await renderAuthenticated("/tasks", taskRoutes());
     expect(await screen.findByRole("heading", { level: 1, name: "批量任务" })).toBeVisible();

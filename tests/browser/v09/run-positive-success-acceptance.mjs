@@ -35,6 +35,7 @@
  *   [--require-complete]（需 WSL 默认发行版可用；--distro 显式指定发行版名）
  *   [--attempt-file-flow] 仅在完整文件测试宿主已配置后尝试B01；否则明确HARNESS_INCOMPLETE。
  */
+import { randomBytes } from "node:crypto";
 import { spawn } from "node:child_process";
 import { expectedUnavailable, recoveryPreviewReady } from "./probe-status.mjs";
 import { existsSync } from "node:fs";
@@ -71,6 +72,7 @@ const skipBuild = hasFlag("skip-build");
 const keepTemp = hasFlag("keep");
 const DISTRO = argValue("distro", "");
 const aiHostMode = hasFlag("ai-host");
+const fixtureAIKey = "sk-local-synthetic-"+randomBytes(16).toString("hex");
 
 const ADMIN_USER = "admin";
 const ADMIN_PASSWORD = "positive-admin-strong-password-01";
@@ -404,7 +406,8 @@ exec "$work/fixturehost" -db "$work/db/controller.db" -agent-pki-dir "$work/pki"
   -ai-upstream-ca "$work/pki/local-agent-ca.pem" \\
   -ai-upstream-cert "$work/ai-upstream-cert.pem" -ai-upstream-key "$work/ai-upstream-key.pem" \\
   -ai-upstream-listen "127.0.0.1:$aiUpstreamPort" \\
-  -fixture-listen "0.0.0.0:$fixturePort" \\
+  -ai-secret-file "$work/fixture-ai-key.txt" \\
+  -fixture-listen "127.0.0.1:$fixturePort" \\
   > "$work/logs/fixturehost.log" 2>&1
 `;
 
@@ -592,6 +595,7 @@ async function main() {
   await writeFile(join(tempDir, "webhost.mjs"), WEBHOST_SCRIPT);
   await writeFile(join(tempDir, "pki.sh"), PKI_SCRIPT.trimStart());
   await writeFile(join(tempDir, "run-webhost.sh"), RUN_WEBHOST_SCRIPT);
+  await writeFile(join(tempDir, "fixture-ai-key.txt"), fixtureAIKey, {mode:0o600});
   await writeFile(join(tempDir, "run-controller.sh"), RUN_CONTROLLER_SCRIPT);
   await writeFile(join(tempDir, "run-fixturehost.sh"), RUN_FIXTUREHOST_SCRIPT);
   await writeFile(join(tempDir, "run-agent-enroll.sh"), RUN_AGENT_ENROLL_SCRIPT);
@@ -621,7 +625,7 @@ async function main() {
 
   const wslTemp = toWslPath(tempDir);
   await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
-    `cp ${wslTemp}/${aiHostMode ? "fixturehost" : "controller"} ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/${aiHostMode ? "fixturehost" : "controller"} ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-fixturehost.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && sh ${workDir}/pki.sh ${workDir}`]);
+    `cp ${wslTemp}/${aiHostMode ? "fixturehost" : "controller"} ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/${aiHostMode ? "fixturehost" : "controller"} ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-fixturehost.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && cp ${wslTemp}/fixture-ai-key.txt ${workDir}/fixture-ai-key.txt && chmod 600 ${workDir}/fixture-ai-key.txt && sh ${workDir}/pki.sh ${workDir}`]);
   console.log("staged controller/agent/dist and prepared local PKI + localhost server certificate");
 
   const apiPort = await freePort();
@@ -1042,7 +1046,7 @@ async function main() {
     await clickText(session, "创建任务", { exact: true });
     await fillField(session, "任务名称", "host patch rejected by agent");
     await fillField(session, "命令或脚本", "host.patch");
-    await setCheckbox(session, ENROLLED_NODE_LABEL, true);
+    await setCheckbox(session, `${ENROLLED_NODE_LABEL} (${nodeId})`, true);
     await clickText(session, "预演目标", { exact: true });
     await expectText(session, "需要审批：是", 20_000);
     await setCheckbox(session, "预演（dryRun）", false);
@@ -1050,6 +1054,9 @@ async function main() {
     await waitForUrl(session, "#/tasks/");
     await expectText(session, "等待审批", 30_000);
     failedTaskId = decodeURIComponent(((await evaluate(session, "location.hash")).split("#/tasks/")[1] ?? "").replace(/\//, ""));
+    const submitted=await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${failedTaskId}')`);
+    const targets=submitted.targetNodeIdsSnapshot ?? submitted.job?.targetNodeIdsSnapshot;
+    if (!Array.isArray(targets)||targets.length!==1||targets[0]!==nodeId) throw new Error(`P13 selected a different node: ${JSON.stringify(targets)}`);
     // 切换审批人；等待页面完成加载，任何持续拒绝均保留为失败供定位。
     await clickText(session, "退出", { exact: true });
     await expectText(session, "登录", 15_000);
@@ -1169,7 +1176,7 @@ async function main() {
   await attemptPositive("B02 AI generation reaches a terminal assistant message", async () => {
     // 完整结构：合成 ai_api_key 凭据（不入日志/不回显）→ owner CAS 保存模型设置 →
     // 会话创建 → 用户消息入队（明确：入队不等于生成）→ 显式 generate。
-    const syntheticKey = "sk-local-synthetic-" + Math.random().toString(36).slice(2, 10);
+    const syntheticKey = aiHostMode ? fixtureAIKey : "sk-local-synthetic-" + Math.random().toString(36).slice(2, 10);
     const credential = await evaluate(session, `(${PAGE_WRITE})('/api/v1/credentials', 'POST', {
       name: "positive-suite local model key", kind: "ai_api_key",
       secret: ${JSON.stringify(syntheticKey)}, usageScope: ["ai"],
@@ -1197,8 +1204,9 @@ async function main() {
     if (aiHostMode) {
       // 测试宿主模式：通过宿主控制面触发真实 AIBudget.Configure（admin gate 仍走
       // 服务端管理员/owner/profile 校验），上游秘密只在此登记用于 Bearer 校验。
-      const configure = await fixtureControl(`/fixture/configure?owner=${adminUserId}&profile=${profileId}&secret=${syntheticKey}`);
-      if (!configure?.ok) throw new Error(`fixture budget configure failed: ${JSON.stringify(configure).slice(0, 200)}`);
+      const now=Date.now();
+      const configure=await evaluate(session, `(${PAGE_WRITE})('/api/v1/ai/model-settings/${profileId}/budget','PUT',${JSON.stringify({expectedRevision:0,windowId:"browser-fixture-window",startsAt:new Date(now-60000).toISOString(),endsAt:new Date(now+3600000).toISOString(),requestLimit:10,inputByteLimit:1048576,outputTokenLimit:128000})})`);
+      if (configure.status!==200) throw new Error(`authenticated budget configure failed: ${configure.status}`);
     }
     const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/ai/sessions', 'POST', {})`);
     if (![200, 201].includes(created.status)) throw new Error(`ai session create ${created.status}`);

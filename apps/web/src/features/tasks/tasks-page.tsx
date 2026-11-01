@@ -182,6 +182,8 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
                   <label key={node.id} className="mt-1 flex items-center gap-2 text-sm">
                     <input
                       type="checkbox"
+                      value={node.id}
+                      aria-label={`${node.name.trim() || node.id} (${node.id})`}
                       className="size-4 accent-[var(--primary)]"
                       checked={selectedNodes.has(node.id)}
                       onChange={event => {
@@ -195,6 +197,7 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
                       }}
                     />
                     {node.name.trim() || node.id} {node.online ? "" : "（离线）"}
+                    <span className="font-mono text-xs text-muted-foreground">({node.id})</span>
                   </label>
                 ))}
               </fieldset>

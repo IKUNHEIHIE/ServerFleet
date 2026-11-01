@@ -15,3 +15,10 @@ apis:
     root: api/openapi/xray-candidate.yaml
   v09-r6-ai:
     root: api/openapi/revisions/v09-r6/ai-candidate.yaml
+  v09-r7-ai-budget:
+    root: api/openapi/revisions/v09-r7/ai-budget-candidate.yaml
+  v09-r7-updates:
+    root: api/openapi/revisions/v09-r7/updates-candidate.yaml
+
+  v09-r7-services:
+    root: api/openapi/revisions/v09-r7/services-candidate.yaml

@@ -39,6 +39,7 @@ func (s *Server) setupUpdatesRecovery(cfg Config) error {
 		},
 		Now:   s.now,
 		Check: cfg.UpdateCheck, Plan: cfg.UpdatePlan, Apply: cfg.UpdateApply,
+		Jobs: cfg.UpdateJobs, Job: cfg.UpdateJob,
 	})
 	if err != nil {
 		return err
