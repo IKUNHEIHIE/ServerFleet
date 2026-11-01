@@ -16,21 +16,24 @@ import (
 	"serverfleet.local/serverfleet/internal/tasks"
 )
 
-const ActionTransferExecute = "files.transfer_execute"
-
 var (
-	ErrExecutionTerminal = errors.New("files: transfer execution is already terminal")
-	ErrTransferIdentity  = errors.New("files: transfer execution identity mismatch")
-	ErrSpoolUnavailable  = errors.New("files: transfer spool directory is not configured")
+	ErrExecutionTerminal   = errors.New("files: transfer execution is already terminal")
+	ErrExecutionInProgress = errors.New("files: transfer execution is already in progress")
+	ErrTransferIdentity    = errors.New("files: transfer execution identity mismatch")
+	ErrSpoolUnavailable    = errors.New("files: transfer spool directory is not configured")
 )
 
-// TransferExecution is the trusted task linkage. ExecutionID is the CX execution
-// identifier when the task pipeline exposes one; when empty the coordinator uses a
-// stable task/transfer-derived id so retries still dedupe at the agent.
+// TransferExecution is the trusted task linkage. Per-node execution IDs are the
+// values frozen in the accepted TaskOffer; ExecutionID is a convenience fallback
+// for both nodes in isolated tests. PlanDigestSHA256 is the accepted task plan
+// hash and is echoed by every open frame.
 type TransferExecution struct {
-	SubjectID   string
-	RequestID   string
-	ExecutionID string
+	SubjectID              string
+	RequestID              string
+	ExecutionID            string
+	SourceExecutionID      string
+	DestinationExecutionID string
+	PlanDigestSHA256       string
 }
 
 // NodeTransport is the pair of ports the coordinator uses for one node. The
@@ -97,10 +100,18 @@ type CoordinatorOptions struct {
 	Repo         *Repo
 	Transports   NodeFileTransports
 	Authorizer   auth.Authorizer
+	Admission    ExecutionAdmission
 	Audit        AuditSink
 	SpoolDir     string
 	MaxFileBytes int64
 	Now          func() time.Time
+}
+
+// ExecutionAdmission verifies that the unified task target accepted the file
+// execution and that the execution/plan digest are the persisted values. A nil
+// admission makes execution fail closed.
+type ExecutionAdmission interface {
+	AdmitFileExecution(ctx context.Context, taskID, nodeID, executionID, planDigest string) error
 }
 
 // TransferCoordinator pulls a source file through the controller and pushes it to
@@ -110,6 +121,7 @@ type TransferCoordinator struct {
 	repo       *Repo
 	transports NodeFileTransports
 	authorizer auth.Authorizer
+	admission  ExecutionAdmission
 	audit      AuditSink
 	spoolDir   string
 	maxFile    int64
@@ -139,7 +151,7 @@ func NewTransferCoordinator(options CoordinatorOptions) (*TransferCoordinator, e
 	}
 	return &TransferCoordinator{
 		repo: options.Repo, transports: options.Transports, authorizer: options.Authorizer,
-		audit: options.Audit, spoolDir: options.SpoolDir, maxFile: maxFile, now: now,
+		admission: options.Admission, audit: options.Audit, spoolDir: options.SpoolDir, maxFile: maxFile, now: now,
 	}, nil
 }
 
@@ -151,7 +163,19 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 	if c == nil {
 		return TransferOutcome{}, ErrCoordinatorUnavailable
 	}
-	if !validToken(taskID, 128) || !validToken(execution.SubjectID, 128) || execution.RequestID == "" {
+	if !validChannelID(taskID) || !validToken(execution.SubjectID, 128) || execution.RequestID == "" ||
+		!sha256Pattern.MatchString(execution.PlanDigestSHA256) {
+		return TransferOutcome{}, ErrTransferIdentity
+	}
+	sourceExecutionID := execution.SourceExecutionID
+	destinationExecutionID := execution.DestinationExecutionID
+	if sourceExecutionID == "" {
+		sourceExecutionID = execution.ExecutionID
+	}
+	if destinationExecutionID == "" {
+		destinationExecutionID = execution.ExecutionID
+	}
+	if !validChannelID(sourceExecutionID) || !validChannelID(destinationExecutionID) {
 		return TransferOutcome{}, ErrTransferIdentity
 	}
 	transfer, err := c.repo.GetTransferByTask(ctx, taskID)
@@ -167,18 +191,20 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 	if transfer.DryRun {
 		return TransferOutcome{}, fmt.Errorf("%w: dry-run transfer cannot execute", ErrInvalidTransfer)
 	}
+	if c.admission == nil {
+		return TransferOutcome{}, ErrTransferExecution
+	}
+	if err := c.admission.AdmitFileExecution(ctx, taskID, transfer.SourceNodeID, sourceExecutionID, execution.PlanDigestSHA256); err != nil {
+		return TransferOutcome{}, fmt.Errorf("%w: source admission", ErrTransferExecution)
+	}
+	if err := c.admission.AdmitFileExecution(ctx, taskID, transfer.DestinationNodeID, destinationExecutionID, execution.PlanDigestSHA256); err != nil {
+		return TransferOutcome{}, fmt.Errorf("%w: destination admission", ErrTransferExecution)
+	}
 	if err := c.authorizeExecution(ctx, execution, transfer); err != nil {
 		return TransferOutcome{}, err
 	}
-	if err := os.MkdirAll(c.spoolDir, 0o700); err != nil {
-		return TransferOutcome{}, fmt.Errorf("%w: %v", ErrSpoolUnavailable, err)
-	}
-	executionID := execution.ExecutionID
-	if executionID == "" {
-		executionID = "task_" + taskID + "_" + transfer.ID
-	}
-	if !validChannelToken(executionID, 160) {
-		return TransferOutcome{}, ErrTransferIdentity
+	if err := secureSpoolDirectory(c.spoolDir); err != nil {
+		return TransferOutcome{}, err
 	}
 	source, err := c.transports.ForNode(ctx, transfer.SourceNodeID)
 	if err != nil || source.Download == nil {
@@ -188,6 +214,17 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 	if err != nil || destination.Upload == nil {
 		return TransferOutcome{}, fmt.Errorf("%w: destination node", ErrTransportAbsent)
 	}
+	claimed, won, err := c.repo.ClaimTransfer(ctx, taskID, c.now())
+	if err != nil {
+		return TransferOutcome{}, err
+	}
+	if !won {
+		if claimed.Status == TransferRunning || claimed.Status == TransferCancelling {
+			return TransferOutcome{}, ErrExecutionInProgress
+		}
+		return TransferOutcome{}, ErrExecutionTerminal
+	}
+	transfer = claimed
 
 	outcome := TransferOutcome{
 		TaskID: taskID, SourceNodeID: transfer.SourceNodeID, DestinationNodeID: transfer.DestinationNodeID,
@@ -236,13 +273,19 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 			}
 			return outcome, err
 		}
-		itemCtx := WithChannelTask(WithChannelIdentity(ctx, transfer.ID+":"+strconv.Itoa(item.Sequence), executionID), taskID)
+		itemCtx := WithChannelScope(ctx, taskID, itemTransferID(transfer.ID, item.Sequence), sourceExecutionID, execution.PlanDigestSHA256)
+		itemCtx = WithChannelAuthorizer(itemCtx, &executionChannelAuthorizer{coordinator: c, execution: execution, transfer: transfer})
 		update.Status = ItemCopying
 		outcome.Items = append(outcome.Items, update)
+		if err := c.persistProgress(ctx, transfer, outcome); err != nil {
+			return outcome, err
+		}
 		if progress != nil {
 			progress(outcome)
 		}
-		copied, destinationPath, resultStatus, err := c.transferItem(itemCtx, c.spoolDir, source.Download, destination.Upload, transfer, item, execution)
+		uploadCtx := WithChannelScope(ctx, taskID, itemTransferID(transfer.ID, item.Sequence), destinationExecutionID, execution.PlanDigestSHA256)
+		uploadCtx = WithChannelAuthorizer(uploadCtx, &executionChannelAuthorizer{coordinator: c, execution: execution, transfer: transfer})
+		copied, destinationPath, resultStatus, err := c.transferItem(itemCtx, uploadCtx, c.spoolDir, source.Download, destination.Upload, transfer, item, execution)
 		outcome.Items[len(outcome.Items)-1] = ItemUpdate{
 			SourcePath: item.SourcePath, DestinationPath: destinationPath, Status: resultStatus,
 			BytesCopied: copied, ErrorCode: "", ErrorMessage: "",
@@ -252,13 +295,16 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 			code := coordinationErrorCode(err)
 			outcome.Items[len(outcome.Items)-1].ErrorCode = code
 			outcome.Items[len(outcome.Items)-1].ErrorMessage = tasks.Redact(err.Error())
-			if code == "channel_disconnected" || code == "agent_unauthorized" || code == "destination_unavailable" {
+			if code == "channel_disconnected" || code == "agent_unauthorized" || code == "authorization_denied" || code == "destination_unavailable" || code == "agent_unknown" {
 				aborted = code
 			}
 		}
 		if itemSucceeded {
 			outcome.CopiedBytes += copied
 			outcome.TotalBytes += copied
+		}
+		if err := c.persistProgress(ctx, transfer, outcome); err != nil {
+			return outcome, err
 		}
 		if progress != nil {
 			progress(outcome)
@@ -275,7 +321,76 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 	return outcome, nil
 }
 
-func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string, download DownloadTransport, upload UploadTransport, transfer Transfer, item TransferItem, execution TransferExecution) (int64, string, ItemStatus, error) {
+func itemTransferID(base string, sequence int) string {
+	return base + "_" + strconv.Itoa(sequence)
+}
+
+type executionChannelAuthorizer struct {
+	coordinator *TransferCoordinator
+	execution   TransferExecution
+	transfer    Transfer
+}
+
+// AuthorizeChannel rechecks only the current direction's permission and the
+// transfer grant. It is called before every chunk and before commit.
+func (a *executionChannelAuthorizer) AuthorizeChannel(ctx context.Context, direction ChannelDirection) error {
+	if a == nil || a.coordinator == nil {
+		return ErrAuthorizationRequired
+	}
+	if a.transfer.SubmitterID != a.execution.SubjectID {
+		return ErrTransferIdentity
+	}
+	var checks []auth.Check
+	switch direction {
+	case ChannelRead:
+		checks = []auth.Check{
+			{SubjectID: a.execution.SubjectID, Action: ActionRead, NodeIDs: []string{a.transfer.SourceNodeID}},
+			{SubjectID: a.execution.SubjectID, Action: ActionTransfer, NodeIDs: []string{a.transfer.SourceNodeID}},
+		}
+	case ChannelWrite:
+		checks = []auth.Check{
+			{SubjectID: a.execution.SubjectID, Action: ActionWrite, NodeIDs: []string{a.transfer.DestinationNodeID}},
+			{SubjectID: a.execution.SubjectID, Action: ActionTransfer, NodeIDs: []string{a.transfer.DestinationNodeID}},
+		}
+	default:
+		return ErrChannelProtocol
+	}
+	for _, check := range checks {
+		if err := a.coordinator.authorizer.Authorize(ctx, check); err != nil {
+			if isPureDenial(err) {
+				a.coordinator.auditDenial(ctx, a.execution, a.transfer, check.Action)
+			}
+			return err
+		}
+	}
+	return nil
+}
+
+func (c *TransferCoordinator) persistProgress(ctx context.Context, transfer Transfer, outcome TransferOutcome) error {
+	items := make([]TransferItem, 0, len(outcome.Items))
+	for _, item := range outcome.Items {
+		items = append(items, TransferItem{
+			Sequence: itemSequence(transfer.Items, item.SourcePath), SourcePath: item.SourcePath,
+			DestinationPath: item.DestinationPath, Status: item.Status, BytesCopied: item.BytesCopied,
+			ErrorCode: item.ErrorCode, ErrorMessage: item.ErrorMessage,
+		})
+	}
+	progress := outcome.TaskUpdate().Progress
+	total, copied := outcome.TotalBytes, outcome.CopiedBytes
+	return c.repo.SaveProgress(context.WithoutCancel(ctx), transfer.ID, progress, &total, &copied,
+		outcome.Message, items, outcome.StartedAt)
+}
+
+func itemSequence(items []TransferItem, sourcePath string) int {
+	for _, item := range items {
+		if item.SourcePath == sourcePath {
+			return item.Sequence
+		}
+	}
+	return 0
+}
+
+func (c *TransferCoordinator) transferItem(ctx context.Context, uploadCtx context.Context, spoolDir string, download DownloadTransport, upload UploadTransport, transfer Transfer, item TransferItem, execution TransferExecution) (int64, string, ItemStatus, error) {
 	if err := c.authorizeExecution(ctx, execution, transfer); err != nil {
 		return 0, item.DestinationPath, ItemFailed, ErrAgentUnauthorized
 	}
@@ -292,7 +407,8 @@ func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string,
 		return 0, item.DestinationPath, ItemFailed, fmt.Errorf("%w: %v", ErrSpoolUnavailable, err)
 	}
 	hasher := sha256.New()
-	sink := io.MultiWriter(spool, hasher)
+	limited := &cappedWriter{writer: spool, remaining: c.maxFile}
+	sink := io.MultiWriter(limited, hasher)
 	written, err := download.PullFile(ctx, transfer.SourceNodeID, item.SourcePath, sink)
 	if err != nil {
 		return written, item.DestinationPath, ItemFailed, err
@@ -314,15 +430,15 @@ func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string,
 	destinationPath := item.DestinationPath
 	var result UploadResult
 	if policyUpload, ok := upload.(PolicyUploadTransport); ok {
-		result, err = policyUpload.PushFileWithPolicy(ctx, transfer.DestinationNodeID, destinationPath, transfer.ConflictPolicy, spool, written, digest)
+		result, err = policyUpload.PushFileWithPolicy(uploadCtx, transfer.DestinationNodeID, destinationPath, transfer.ConflictPolicy, spool, written, digest)
 	} else {
 		if transfer.ConflictPolicy != ConflictOverwrite {
 			return written, destinationPath, ItemFailed, fmt.Errorf("%w: transport cannot honor conflict policy", ErrInvalidTransfer)
 		}
 		if rich, ok := upload.(ResultUploadTransport); ok {
-			result, err = rich.PushFileResult(ctx, transfer.DestinationNodeID, destinationPath, spool, written, digest)
+			result, err = rich.PushFileResult(uploadCtx, transfer.DestinationNodeID, destinationPath, spool, written, digest)
 		} else {
-			err = upload.PushFile(ctx, transfer.DestinationNodeID, destinationPath, spool, written, digest)
+			err = upload.PushFile(uploadCtx, transfer.DestinationNodeID, destinationPath, spool, written, digest)
 			result = UploadResult{DestinationPath: destinationPath, Bytes: written, SHA256: digest}
 		}
 	}
@@ -427,10 +543,14 @@ func coordinationErrorCode(err error) string {
 		contextErr = "checksum_mismatch"
 	case errors.Is(err, ErrAgentIO):
 		contextErr = "agent_io"
+	case errors.Is(err, ErrAgentUnknown):
+		contextErr = "agent_unknown"
 	case errors.Is(err, ErrAgentConflict):
 		contextErr = "conflict"
 	case errors.Is(err, ErrAgentUnauthorized):
 		contextErr = "agent_unauthorized"
+	case isPureDenial(err):
+		contextErr = "authorization_denied"
 	case errors.Is(err, ErrChannelDisconnected):
 		contextErr = "channel_disconnected"
 	case errors.Is(err, ErrChannelUnavailable), errors.Is(err, ErrTransportAbsent):
@@ -443,6 +563,12 @@ func coordinationErrorCode(err error) string {
 		contextErr = "size_mismatch"
 	case errors.Is(err, ErrSpoolUnavailable):
 		contextErr = "local_spool_failed"
+	case errors.Is(err, ErrPathMappingUnavailable):
+		contextErr = "path_mapping_unavailable"
+	case errors.Is(err, ErrTaskBindingRequired):
+		contextErr = "task_binding_missing"
+	case errors.Is(err, ErrAuthorizationRequired):
+		contextErr = "authorization_required"
 	case errors.Is(err, ErrTransferIdentity):
 		contextErr = "unauthorized"
 	default:

@@ -34,7 +34,7 @@ type QQConfig struct {
 	Client     *http.Client
 	TokenURL   string
 	APIBaseURL string
-	Secrets    SecretResolver
+	Secrets    SecretBorrower
 	Timeout    time.Duration
 }
 
@@ -44,7 +44,7 @@ type QQBotSender struct {
 	client     *http.Client
 	tokenURL   string
 	apiBaseURL string
-	secrets    SecretResolver
+	secrets    SecretBorrower
 }
 
 var _ QQSender = (*QQBotSender)(nil)
@@ -110,9 +110,9 @@ type qqMessageResponse struct {
 	Message   string `json:"message"`
 }
 
-// Send delivers one text message through the QQ Bot OpenAPI. A failed send after
-// the request reached the API is classified as delivery_unknown so the service
-// never automatically repeats a possibly delivered message.
+// Send delivers one text message through the QQ Bot OpenAPI. Token fetch and
+// message send both run inside the borrow callback. A failed send after the
+// request reached the API is delivery_unknown and is never retried automatically.
 func (s *QQBotSender) Send(ctx context.Context, settings QQSettings, secretRef string, message Message) (ProviderResult, error) {
 	if s == nil || s.secrets == nil {
 		return ProviderResult{}, ErrQQConfig
@@ -127,8 +127,31 @@ func (s *QQBotSender) Send(ctx context.Context, settings QQSettings, secretRef s
 	if err != nil {
 		return ProviderResult{Outcome: ProviderRejected, Code: "message_too_large"}, err
 	}
-	clientSecret, err := s.secrets.Resolve(ctx, secretRef)
-	if err != nil || strings.TrimSpace(clientSecret) == "" || len(clientSecret) > 4096 ||
+	use := SecretUse{Ref: secretRef, Operation: "qqbot.send"}
+	scope := secretScopeFrom(ctx)
+	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
+	ran := false
+	var result ProviderResult
+	var sendErr error
+	err = s.secrets.WithSecret(ctx, use, func(borrowCtx context.Context, secret string) error {
+		ran = true
+		result, sendErr = s.sendWithSecret(borrowCtx, settings, secret, content)
+		return sendErr
+	})
+	if err != nil && !ran {
+		return ProviderResult{}, ErrQQSecret
+	}
+	if err != nil {
+		if sendErr == nil {
+			result = ProviderResult{Outcome: ProviderUnknown, Code: "qq_use_unknown"}
+		}
+		return result, err
+	}
+	return result, sendErr
+}
+
+func (s *QQBotSender) sendWithSecret(ctx context.Context, settings QQSettings, clientSecret, content string) (ProviderResult, error) {
+	if strings.TrimSpace(clientSecret) == "" || len(clientSecret) > 4096 ||
 		strings.ContainsAny(clientSecret, "\x00\r\n") {
 		return ProviderResult{}, ErrQQSecret
 	}
@@ -214,11 +237,14 @@ func (s *QQBotSender) fetchToken(ctx context.Context, appID, clientSecret string
 	var decoded qqTokenResponse
 	_ = json.Unmarshal(payload, &decoded)
 	switch response.StatusCode {
+	case http.StatusOK:
 	case http.StatusUnauthorized, http.StatusForbidden:
 		return "", ProviderResult{Outcome: ProviderRejected, Code: "qq_token_auth", CredentialInvalid: true},
 			fmt.Errorf("%w: token unauthorized", ErrQQSecret)
 	case http.StatusTooManyRequests:
 		return "", ProviderResult{Outcome: ProviderRateLimited, Code: "qq_token_429"}, fmt.Errorf("%w: token rate limited", ErrQQTransport)
+	default:
+		return "", ProviderResult{}, fmt.Errorf("%w: token status %d", ErrQQTransport, response.StatusCode)
 	}
 	if decoded.AccessToken == "" {
 		if decoded.Code == 401 || decoded.Code == 403 {

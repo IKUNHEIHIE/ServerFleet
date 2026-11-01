@@ -265,7 +265,8 @@ func (s *Service) TestChannel(ctx context.Context, subjectID, requestID string, 
 	if start.existing {
 		return start.delivery, providerError(start.delivery.Status)
 	}
-	attempted, sendErr := s.attempt(ctx, record, message, start.delivery)
+	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+	attempted, sendErr := s.attempt(attemptCtx, record, message, start.delivery)
 	final, err := s.finalizeDelivery(ctx, attempted, ActionTest, subjectID, requestID, "test_send", func(txCtx context.Context, tx storage.Tx) error {
 		if attempted.ProviderCredentialInvalid {
 			return s.repo.updateCredential(txCtx, tx, channel, record.SecretRef, CredentialInvalid, s.now())
@@ -324,7 +325,8 @@ func (s *Service) SendAlert(ctx context.Context, alert Alert) (Delivery, error) 
 	if start.existing {
 		return start.delivery, nil
 	}
-	attempted, sendErr := s.attempt(ctx, primary, message, start.delivery)
+	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: systemAuditSubject, RequestID: "alert"})
+	attempted, sendErr := s.attempt(attemptCtx, primary, message, start.delivery)
 	final, err := s.finalizeDelivery(ctx, attempted, ActionSend, systemAuditSubject, "alert", "alert", nil)
 	if err != nil {
 		return Delivery{}, err
@@ -339,7 +341,8 @@ func (s *Service) SendAlert(ctx context.Context, alert Alert) (Delivery, error) 
 	if err != nil {
 		return final, err
 	}
-	fallbackAttempt, fallbackErr := s.attempt(ctx, *smtpFallback, message, fallback)
+	fallbackCtx := WithSecretScope(ctx, SecretScope{SubjectID: systemAuditSubject, RequestID: "alert-fallback"})
+	fallbackAttempt, fallbackErr := s.attempt(fallbackCtx, *smtpFallback, message, fallback)
 	fallbackFinal, err := s.finalizeDelivery(ctx, fallbackAttempt, ActionSend, systemAuditSubject, "alert-fallback", "alert_fallback", nil)
 	if err != nil {
 		return final, err
@@ -396,7 +399,8 @@ func (s *Service) RetryDelivery(ctx context.Context, subjectID, requestID string
 		return Delivery{}, err
 	}
 	message := Message{Subject: "ServerFleet notification retry", Body: delivery.Message}
-	attempted, sendErr := s.attempt(ctx, record, message, delivery)
+	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+	attempted, sendErr := s.attempt(attemptCtx, record, message, delivery)
 	final, err := s.finalizeDelivery(ctx, attempted, ActionRetry, subjectID, requestID, "retry", nil)
 	if err != nil {
 		return Delivery{}, err

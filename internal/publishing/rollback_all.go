@@ -2,6 +2,7 @@ package publishing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"serverfleet.local/serverfleet/internal/storage"
@@ -73,6 +74,21 @@ func (s *Service) RollbackAll(ctx context.Context, subjectID, requestID, planID 
 		if stage == nil {
 			return plan, ErrStageNotFound
 		}
+		currentGroup, authErr := s.refreshStageAuthority(ctx, subjectID, requestID, plan, "publishing_rollback_all_stage")
+		if authErr != nil {
+			reason := "rollback_all_authorization_denied"
+			if errors.Is(authErr, ErrRevisionConflict) {
+				reason = "rollback_all_revision_conflict"
+			}
+			plan.Status = PlanPartialFailure
+			plan.CurrentStage = stage.Kind
+			plan.UpdatedAt = s.now().UTC()
+			if persistErr := s.persistRollbackAll(ctx, subjectID, requestID, plan, nil, group.NodeIDs, "failure", reason); persistErr != nil {
+				return Plan{}, persistErr
+			}
+			return plan, authErr
+		}
+		group = currentGroup
 		if err := s.rollback(ctx, plan, stage.Kind, StageResult{Summary: stage.ResultSummary}); err != nil {
 			plan.Status = PlanPartialFailure
 			plan.CurrentStage = stage.Kind

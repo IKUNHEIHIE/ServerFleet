@@ -43,6 +43,12 @@ func (r *fakeTaskReporter) snapshot() []reporterCall {
 	return append([]reporterCall(nil), r.calls...)
 }
 
+type allowAdmission struct{}
+
+func (allowAdmission) AdmitFileExecution(context.Context, string, string, string, string) error {
+	return nil
+}
+
 type coordinatorFixture struct {
 	agent       *fakeAgent
 	transport   *files.ChannelTransport
@@ -93,7 +99,7 @@ func newCoordinatorFixture(t *testing.T, authorizer auth.Authorizer) *coordinato
 		Transports: files.NodeFileTransportsFunc(func(context.Context, string) (files.NodeTransport, error) {
 			return files.NodeTransport{Upload: transport, Download: transport}, nil
 		}),
-		Authorizer: execAuthorizer, Audit: recorder, SpoolDir: spool,
+		Authorizer: execAuthorizer, Admission: allowAdmission{}, Audit: recorder, SpoolDir: spool,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -125,11 +131,16 @@ func (f *coordinatorFixture) createTransfer(t *testing.T, policy files.ConflictP
 	return transfer
 }
 
+func testTransferExecution() files.TransferExecution {
+	return files.TransferExecution{
+		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
+		PlanDigestSHA256: testPlanDigest(),
+	}
+}
+
 func (f *coordinatorFixture) execute(t *testing.T, ctx context.Context) (files.TransferOutcome, error) {
 	t.Helper()
-	return f.coordinator.ExecuteTask(ctx, "task-transfer", files.TransferExecution{
-		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
-	}, nil)
+	return f.coordinator.ExecuteTask(ctx, "task-transfer", testTransferExecution(), nil)
 }
 
 func TestCoordinatorCopiesBytesAndAudits(t *testing.T) {
@@ -285,9 +296,7 @@ func TestCoordinatorCancelAndTerminalRefusal(t *testing.T) {
 	transfer := f.createTransfer(t, files.ConflictOverwrite, []string{"/etc/blob.bin", "/etc/second.bin"})
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	outcome, err := f.coordinator.ExecuteTask(ctx, "task-transfer", files.TransferExecution{
-		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
-	}, func(snapshot files.TransferOutcome) {
+	outcome, err := f.coordinator.ExecuteTask(ctx, "task-transfer", testTransferExecution(), func(snapshot files.TransferOutcome) {
 		if len(snapshot.Items) > 0 && snapshot.Items[0].Status == files.ItemCopied {
 			cancel()
 		}
@@ -313,9 +322,7 @@ func TestServiceExecuteTransferTaskSeam(t *testing.T) {
 	f := newCoordinatorFixture(t, nil)
 	f.agent.putFile("node-src", "/etc/blob.bin", []byte("payload"))
 	transfer := f.createTransfer(t, files.ConflictOverwrite, []string{"/etc/blob.bin"})
-	updated, err := f.runner.ExecuteTransferTask(context.Background(), transfer.TaskID, files.TransferExecution{
-		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
-	})
+	updated, err := f.runner.ExecuteTransferTask(context.Background(), transfer.TaskID, testTransferExecution())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -338,9 +345,7 @@ func TestServiceReportsUnknownForPartialTransfer(t *testing.T) {
 	f := newCoordinatorFixture(t, nil)
 	f.agent.putFile("node-src", "/etc/present.bin", []byte("present"))
 	f.createTransfer(t, files.ConflictOverwrite, []string{"/etc/present.bin", "/etc/missing.bin"})
-	updated, err := f.runner.ExecuteTransferTask(context.Background(), "task-transfer", files.TransferExecution{
-		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
-	})
+	updated, err := f.runner.ExecuteTransferTask(context.Background(), "task-transfer", testTransferExecution())
 	if err != nil {
 		t.Fatal(err)
 	}

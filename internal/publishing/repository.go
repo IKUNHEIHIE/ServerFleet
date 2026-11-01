@@ -2,6 +2,7 @@ package publishing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -12,19 +13,62 @@ import (
 // Repo persists publication plans and stage rows. It never authorizes callers and
 // never invokes a publisher.
 type Repo struct {
-	db *storage.DB
+	db         *storage.DB
+	hasTargets bool
 }
 
 func NewRepo(db *storage.DB) (*Repo, error) {
 	if db == nil {
 		return nil, errors.New("publishing: database is required")
 	}
-	return &Repo{db: db}, nil
+	return &Repo{db: db, hasTargets: detectTargetColumns(db)}, nil
 }
 
-const planSelect = `SELECT id, name, domain, service_group_id, expected_group_revision,
+// detectTargetColumns reports whether the candidate ds/0081 columns were
+// accepted by the integration owner. The target fields are never silently
+// written into a schema that cannot store them.
+func detectTargetColumns(db *storage.DB) bool {
+	rows, err := db.Query(context.Background(), `PRAGMA table_info(publishing_plans)`)
+	if err != nil {
+		return false
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid, notNull, primaryKey int
+			name, columnType         string
+			defaultValue             any
+		)
+		if err := rows.Scan(&cid, &name, &columnType, &notNull, &defaultValue, &primaryKey); err != nil {
+			return false
+		}
+		if name == "gateway_ids" {
+			return true
+		}
+	}
+	return false
+}
+
+// TargetsPersisted reports whether the accepted schema has the candidate target
+// columns. Callers must expose false rather than silently pretending targets were
+// stored.
+func (r *Repo) TargetsPersisted() bool { return r != nil && r.hasTargets }
+
+const planSelectLegacy = `SELECT id, name, domain, service_group_id, expected_group_revision,
 	status, current_stage, created_by, idempotency_key, created_at, updated_at
 	FROM publishing_plans`
+
+const planSelectTargets = `SELECT id, name, domain, service_group_id, expected_group_revision,
+	gateway_ids, zone_id, certificate_id, https, target_revision,
+	status, current_stage, created_by, idempotency_key, created_at, updated_at
+	FROM publishing_plans`
+
+func (r *Repo) planSelect() string {
+	if r != nil && r.hasTargets {
+		return planSelectTargets
+	}
+	return planSelectLegacy
+}
 
 const stageSelect = `SELECT plan_id, stage, status, attempts, result_summary,
 	error_code, started_at, finished_at FROM publishing_stages`
@@ -39,13 +83,30 @@ func (r *Repo) Create(ctx context.Context, q storage.Queryer, plan Plan, stages 
 	if err := validateInitialStages(plan, stages); err != nil {
 		return err
 	}
-	_, err := q.Exec(ctx, `INSERT INTO publishing_plans
-		(id, name, domain, service_group_id, expected_group_revision, status,
-		 current_stage, created_by, idempotency_key, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		plan.ID, plan.Name, plan.Domain, plan.ServiceGroupID, int64(plan.ExpectedGroupRevision),
-		string(plan.Status), string(plan.CurrentStage), plan.CreatedBy, plan.IdempotencyKey,
-		storage.EncodeTime(plan.CreatedAt), storage.EncodeTime(plan.UpdatedAt))
+	var err error
+	if r.hasTargets {
+		gatewayJSON, marshalErr := json.Marshal(plan.GatewayIDs)
+		if marshalErr != nil {
+			return fmt.Errorf("publishing: encode gateway targets: %w", marshalErr)
+		}
+		_, err = q.Exec(ctx, `INSERT INTO publishing_plans
+			(id, name, domain, service_group_id, expected_group_revision, gateway_ids, zone_id,
+			 certificate_id, https, target_revision, status, current_stage, created_by,
+			 idempotency_key, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			plan.ID, plan.Name, plan.Domain, plan.ServiceGroupID, int64(plan.ExpectedGroupRevision),
+			string(gatewayJSON), plan.ZoneID, plan.CertificateID, boolInt(plan.HTTPS), int64(plan.TargetRevision),
+			string(plan.Status), string(plan.CurrentStage), plan.CreatedBy, plan.IdempotencyKey,
+			storage.EncodeTime(plan.CreatedAt), storage.EncodeTime(plan.UpdatedAt))
+	} else {
+		_, err = q.Exec(ctx, `INSERT INTO publishing_plans
+			(id, name, domain, service_group_id, expected_group_revision, status,
+			 current_stage, created_by, idempotency_key, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			plan.ID, plan.Name, plan.Domain, plan.ServiceGroupID, int64(plan.ExpectedGroupRevision),
+			string(plan.Status), string(plan.CurrentStage), plan.CreatedBy, plan.IdempotencyKey,
+			storage.EncodeTime(plan.CreatedAt), storage.EncodeTime(plan.UpdatedAt))
+	}
 	if err != nil {
 		if storage.IsUniqueViolation(err) {
 			var existing int
@@ -73,14 +134,14 @@ func (r *Repo) List(ctx context.Context) ([]Plan, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("publishing: repository is not configured")
 	}
-	rows, err := r.db.Query(ctx, planSelect+" ORDER BY created_at DESC, id")
+	rows, err := r.db.Query(ctx, r.planSelect()+" ORDER BY created_at DESC, id")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	plans := make([]Plan, 0)
 	for rows.Next() {
-		plan, err := scanPlan(rows)
+		plan, err := scanPlan(rows, r.hasTargets)
 		if err != nil {
 			return nil, err
 		}
@@ -93,7 +154,7 @@ func (r *Repo) Get(ctx context.Context, planID string) (Plan, []Stage, error) {
 	if r == nil || r.db == nil {
 		return Plan{}, nil, errors.New("publishing: repository is not configured")
 	}
-	plan, err := scanPlan(r.db.QueryRow(ctx, planSelect+" WHERE id = ?", planID))
+	plan, err := scanPlan(r.db.QueryRow(ctx, r.planSelect()+" WHERE id = ?", planID), r.hasTargets)
 	if storage.IsNotFound(err) {
 		return Plan{}, nil, ErrPlanNotFound
 	}
@@ -114,7 +175,7 @@ func (r *Repo) GetByIdempotencyKey(ctx context.Context, createdBy, key string) (
 	if key == "" {
 		return Plan{}, nil, false, nil
 	}
-	plan, err := scanPlan(r.db.QueryRow(ctx, planSelect+" WHERE created_by = ? AND idempotency_key = ?", createdBy, key))
+	plan, err := scanPlan(r.db.QueryRow(ctx, r.planSelect()+" WHERE created_by = ? AND idempotency_key = ?", createdBy, key), r.hasTargets)
 	if storage.IsNotFound(err) {
 		return Plan{}, nil, false, nil
 	}
@@ -209,16 +270,38 @@ func (r *Repo) stages(ctx context.Context, planID string) ([]Stage, error) {
 	return stages, nil
 }
 
-func scanPlan(row scanner) (Plan, error) {
+func scanPlan(row scanner, hasTargets bool) (Plan, error) {
 	var (
 		plan             Plan
 		revision         int64
+		gatewayJSON      string
+		https            int
+		targetRevision   int64
 		status, current  string
 		created, updated string
 	)
-	if err := row.Scan(&plan.ID, &plan.Name, &plan.Domain, &plan.ServiceGroupID, &revision,
-		&status, &current, &plan.CreatedBy, &plan.IdempotencyKey, &created, &updated); err != nil {
-		return Plan{}, err
+	if hasTargets {
+		if err := row.Scan(&plan.ID, &plan.Name, &plan.Domain, &plan.ServiceGroupID, &revision,
+			&gatewayJSON, &plan.ZoneID, &plan.CertificateID, &https, &targetRevision,
+			&status, &current, &plan.CreatedBy, &plan.IdempotencyKey, &created, &updated); err != nil {
+			return Plan{}, err
+		}
+		if err := json.Unmarshal([]byte(gatewayJSON), &plan.GatewayIDs); err != nil {
+			return Plan{}, fmt.Errorf("publishing: stored plan %q has invalid gateway targets", plan.ID)
+		}
+		plan.HTTPS = https != 0
+		if targetRevision < 1 {
+			return Plan{}, fmt.Errorf("publishing: stored plan %q has invalid target revision", plan.ID)
+		}
+		plan.TargetRevision = uint64(targetRevision)
+		plan.TargetsPersisted = true
+	} else {
+		if err := row.Scan(&plan.ID, &plan.Name, &plan.Domain, &plan.ServiceGroupID, &revision,
+			&status, &current, &plan.CreatedBy, &plan.IdempotencyKey, &created, &updated); err != nil {
+			return Plan{}, err
+		}
+		plan.TargetRevision = 1
+		plan.TargetsPersisted = false
 	}
 	plan.Status = PlanStatus(status)
 	if !plan.Status.Valid() {
@@ -298,6 +381,9 @@ func validatePlanRecord(plan Plan) error {
 	}
 	if plan.ExpectedGroupRevision == 0 {
 		return fmt.Errorf("%w: expected group revision", ErrInvalidPlan)
+	}
+	if err := validateTargets(plan.GatewayIDs, plan.ZoneID, plan.CertificateID, plan.TargetRevision); err != nil {
+		return err
 	}
 	if !plan.Status.Valid() {
 		return fmt.Errorf("%w: status", ErrInvalidPlan)

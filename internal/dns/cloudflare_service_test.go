@@ -39,8 +39,8 @@ func TestCloudflareProviderThroughDNSDomain(t *testing.T) {
 	provider, err := dns.NewCloudflareProvider(dns.CloudflareConfig{
 		Client:  server.Client(),
 		BaseURL: server.URL,
-		Secrets: dns.SecretResolverFunc(func(context.Context, dns.CredentialRef) (string, error) {
-			return cloudflareTestToken, nil
+		Secrets: dns.SecretBorrowerFunc(func(ctx context.Context, _ dns.SecretUse, fn func(context.Context, string) error) error {
+			return fn(ctx, cloudflareTestToken)
 		}),
 	})
 	if err != nil {

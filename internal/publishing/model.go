@@ -90,12 +90,20 @@ type Plan struct {
 	Domain                string
 	ServiceGroupID        string
 	ExpectedGroupRevision uint64
-	Status                PlanStatus
-	CurrentStage          StageKind
-	CreatedBy             string
-	IdempotencyKey        string
-	CreatedAt             time.Time
-	UpdatedAt             time.Time
+	GatewayIDs            []string
+	ZoneID                string
+	CertificateID         string
+	HTTPS                 bool
+	TargetRevision        uint64
+	// TargetsPersisted is a read-only compatibility flag: false means the
+	// deployment has not accepted ds/0081 and target fields were not stored.
+	TargetsPersisted bool
+	Status           PlanStatus
+	CurrentStage     StageKind
+	CreatedBy        string
+	IdempotencyKey   string
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // Stage is one durable stage row. ResultSummary and error codes are redacted;
@@ -119,6 +127,11 @@ type CreateInput struct {
 	Domain                string
 	ServiceGroupID        string
 	ExpectedGroupRevision uint64
+	GatewayIDs            []string
+	ZoneID                string
+	CertificateID         string
+	HTTPS                 bool
+	TargetRevision        uint64
 	IdempotencyKey        string
 }
 
@@ -128,7 +141,10 @@ type PreviewInput struct {
 	ExpectedGroupRevision uint64
 	Domain                string
 	GatewayIDs            []string
+	ZoneID                string
+	CertificateID         string
 	HTTPS                 bool
+	TargetRevision        uint64
 }
 
 // PreviewCheck is one preflight observation. Only facts the domain can verify
@@ -156,6 +172,9 @@ type PlanDetail struct {
 
 // Stable stage error codes. Raw provider errors are never stored.
 const (
-	ErrorCodePublishError  = "publish_error"
-	ErrorCodeInvalidResult = "invalid_result"
+	ErrorCodePublishError        = "publish_error"
+	ErrorCodeInvalidResult       = "invalid_result"
+	ErrorCodeAuthorizationDenied = "authorization_denied"
+	ErrorCodeRevisionConflict    = "revision_conflict"
+	ErrorCodeGroupLookupFailed   = "group_lookup_failed"
 )

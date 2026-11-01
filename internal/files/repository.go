@@ -316,3 +316,83 @@ func encodeTime(value time.Time) any {
 	}
 	return value.UTC().Format(time.RFC3339Nano)
 }
+
+// ClaimTransfer atomically moves one queued transfer into running. Only the
+// winner may execute; a second caller gets executed=false and must not open a
+// second byte channel.
+func (r *Repo) ClaimTransfer(ctx context.Context, taskID string, now time.Time) (Transfer, bool, error) {
+	result, err := r.db.Exec(ctx, `UPDATE file_transfers SET status = ?, started_at = COALESCE(started_at, ?),
+		updated_at = ? WHERE task_id = ? AND status = ?`,
+		string(TransferRunning), encodeTime(now), encodeTime(now), taskID, string(TransferQueued))
+	if err != nil {
+		return Transfer{}, false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return Transfer{}, false, err
+	}
+	transfer, err := r.GetTransferByTask(ctx, taskID)
+	if err != nil {
+		return Transfer{}, false, err
+	}
+	return transfer, affected == 1, nil
+}
+
+// RecoverRunningTransfers conservatively fences transfers whose controller died
+// while they were running. Copied items remain evidence; queued/copying items
+// become failed with an unknown-result code and are never replayed automatically.
+func (r *Repo) RecoverRunningTransfers(ctx context.Context, now time.Time) (int, error) {
+	recovered := 0
+	err := r.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		rows, err := tx.Query(txCtx, `SELECT id FROM file_transfers WHERE status = ?`, string(TransferRunning))
+		if err != nil {
+			return err
+		}
+		var ids []string
+		for rows.Next() {
+			var id string
+			if err := rows.Scan(&id); err != nil {
+				rows.Close()
+				return err
+			}
+			ids = append(ids, id)
+		}
+		if err := rows.Close(); err != nil {
+			return err
+		}
+		for _, id := range ids {
+			result, err := tx.Exec(txCtx, `UPDATE file_transfers SET
+				status = CASE WHEN copied_bytes > 0 THEN ? ELSE ? END,
+				error_message = ?, completed_at = ?, updated_at = ?
+				WHERE id = ? AND status = ?`,
+				string(TransferPartialFailure), string(TransferFailed),
+				"controller restarted during transfer; result unknown",
+				encodeTime(now), encodeTime(now), id, string(TransferRunning))
+			if err != nil {
+				return err
+			}
+			affected, err := result.RowsAffected()
+			if err != nil {
+				return err
+			}
+			if affected != 1 {
+				continue
+			}
+			if _, err := tx.Exec(txCtx, `UPDATE file_transfer_items SET status = ?, error_code = ?, error_message = ?
+				WHERE transfer_id = ? AND status IN (?, ?)`,
+				string(ItemFailed), "controller_restarted_unknown", "result unknown after controller restart",
+				id, string(ItemQueued), string(ItemCopying)); err != nil {
+				return err
+			}
+			recovered++
+		}
+		return nil
+	})
+	return recovered, err
+}
+
+// SaveProgress persists a non-terminal snapshot so a restart cannot report queued
+// work as completed or lose which items already reached the destination.
+func (r *Repo) SaveProgress(ctx context.Context, id string, progress float64, total, copied *int64, message string, items []TransferItem, started time.Time) error {
+	return r.ApplyTaskUpdate(ctx, r.db, id, TransferRunning, progress, total, copied, message, items, started, time.Time{})
+}

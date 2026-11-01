@@ -25,17 +25,21 @@ import (
 )
 
 type smtpServer struct {
-	t             *testing.T
-	listener      net.Listener
-	tlsConfig     *tls.Config
-	implicit      bool
-	advertiseSTLS bool
-	rejectAuth    bool
-	user          string
-	password      string
+	t              *testing.T
+	listener       net.Listener
+	tlsConfig      *tls.Config
+	implicit       bool
+	advertiseSTLS  bool
+	rejectAuth     bool
+	closeAfterRcpt bool
+	closeAfterData bool
+	rejectData     bool
+	user           string
+	password       string
 
 	mu       sync.Mutex
 	messages []string
+	conns    int
 }
 
 func testCertificate(t *testing.T) (tls.Certificate, *x509.CertPool) {
@@ -117,6 +121,9 @@ func (s *smtpServer) serve() {
 		if err != nil {
 			return
 		}
+		s.mu.Lock()
+		s.conns++
+		s.mu.Unlock()
 		go s.handle(conn)
 	}
 }
@@ -190,7 +197,12 @@ func (s *smtpServer) handle(conn net.Conn) {
 			if !write("235 authentication successful") {
 				return
 			}
-		case strings.HasPrefix(upper, "MAIL FROM:"), strings.HasPrefix(upper, "RCPT TO:"):
+		case strings.HasPrefix(upper, "MAIL FROM:"):
+			write("250 ok")
+		case strings.HasPrefix(upper, "RCPT TO:"):
+			if s.closeAfterRcpt {
+				return
+			}
 			write("250 ok")
 		case upper == "DATA":
 			if !write("354 end with .") {
@@ -207,6 +219,13 @@ func (s *smtpServer) handle(conn net.Conn) {
 					break
 				}
 				data.WriteString(trimmed + "\n")
+			}
+			if s.closeAfterData {
+				return
+			}
+			if s.rejectData {
+				write("554 rejected")
+				continue
 			}
 			s.mu.Lock()
 			s.messages = append(s.messages, data.String())
@@ -231,8 +250,8 @@ type mailerOptions struct {
 func newTestMailer(t *testing.T, server *smtpServer, pool *x509.CertPool, options mailerOptions) *notifications.SMTPMailer {
 	t.Helper()
 	mailer, err := notifications.NewSMTPMailer(notifications.SMTPConfig{
-		Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) {
-			return options.secret, nil
+		Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			return fn(ctx, options.secret)
 		}),
 		RootCAs: pool, Timeout: 5 * time.Second, MaxMessageBytes: options.maxMessage,
 	})
@@ -361,8 +380,8 @@ func TestSMTPMailerRejectsOversizeMessage(t *testing.T) {
 func TestSMTPMailerSecretResolverFailure(t *testing.T) {
 	server, pool := newSMTPServer(t, true)
 	mailer, err := notifications.NewSMTPMailer(notifications.SMTPConfig{
-		Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) {
-			return "", io.EOF
+		Secrets: notifications.SecretBorrowerFunc(func(context.Context, notifications.SecretUse, func(context.Context, string) error) error {
+			return io.EOF
 		}),
 		RootCAs: pool, Timeout: 5 * time.Second,
 	})
@@ -385,4 +404,86 @@ func TestSMTPAuthHeaderEncodingRoundTrip(t *testing.T) {
 		t.Fatalf("secret leaked into message: %s", raw)
 	}
 	_ = fmt.Sprintf("%v", raw)
+}
+
+func (s *smtpServer) connectionCount() int {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.conns
+}
+
+func TestSMTPMailerBorrowPrecheckBlocksNetwork(t *testing.T) {
+	server, pool := newSMTPServer(t, true)
+	mailer, err := notifications.NewSMTPMailer(notifications.SMTPConfig{
+		Secrets: notifications.SecretBorrowerFunc(func(context.Context, notifications.SecretUse, func(context.Context, string) error) error {
+			return errors.New("credential revoked before use")
+		}),
+		RootCAs: pool, Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mailer.Send(context.Background(), smtpSettings(server, notifications.SMTPSecurityTLS), "secret/smtp", notifications.Message{Subject: "alert", Body: "x"}); !errors.Is(err, notifications.ErrSecretUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	if server.connectionCount() != 0 {
+		t.Fatal("provider network I/O ran after the borrow pre-check failed")
+	}
+}
+
+func TestSMTPMailerPostBorrowFailureIsUnknown(t *testing.T) {
+	server, pool := newSMTPServer(t, true)
+	mailer, err := notifications.NewSMTPMailer(notifications.SMTPConfig{
+		Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			if err := fn(ctx, "mailer:smtp-secret"); err != nil {
+				return err
+			}
+			return errors.New("credential revoked after use")
+		}),
+		RootCAs: pool, Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := mailer.Send(context.Background(), smtpSettings(server, notifications.SMTPSecurityTLS), "secret/smtp", notifications.Message{Subject: "alert", Body: "x"})
+	if err == nil || result.Outcome != notifications.ProviderUnknown {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	if len(server.storedMessages()) != 1 {
+		t.Fatal("provider I/O did not run inside the borrow callback")
+	}
+}
+
+func TestSMTPMailerSubmissionStageBoundaries(t *testing.T) {
+	cases := []struct {
+		name      string
+		mutate    func(*smtpServer)
+		want      notifications.ProviderOutcome
+		wantEmpty bool
+	}{
+		{"pre-data disconnect is a known failure", func(s *smtpServer) { s.closeAfterRcpt = true }, "", true},
+		{"final dot acknowledgement loss is unknown", func(s *smtpServer) { s.closeAfterData = true }, notifications.ProviderUnknown, false},
+		{"final dot rejection is rejected", func(s *smtpServer) { s.rejectData = true }, notifications.ProviderRejected, false},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			server, pool := newSMTPServer(t, true)
+			test.mutate(server)
+			mailer := newTestMailer(t, server, pool, mailerOptions{secret: "mailer:smtp-secret"})
+			result, err := mailer.Send(context.Background(), smtpSettings(server, notifications.SMTPSecurityTLS),
+				"secret/smtp", notifications.Message{Subject: "alert", Body: "body"})
+			if err == nil {
+				t.Fatal("expected an error")
+			}
+			if test.wantEmpty {
+				if result.Outcome != "" {
+					t.Fatalf("known pre-data failure was classified as %q", result.Outcome)
+				}
+				return
+			}
+			if result.Outcome != test.want {
+				t.Fatalf("result = %+v, want %q", result, test.want)
+			}
+		})
+	}
 }

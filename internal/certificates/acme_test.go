@@ -96,15 +96,15 @@ func newACMEPublisher(fake *fakeACMEServer) *acmePublisher {
 	return &acmePublisher{fake: fake, records: map[string]string{}}
 }
 
-func (p *acmePublisher) Publish(_ context.Context, fqdn, value string) (func(context.Context) error, error) {
+func (p *acmePublisher) Publish(_ context.Context, fqdn, value string) (string, func(context.Context) error, error) {
 	if p.fail {
-		return nil, errors.New("dns provider offline")
+		return "", nil, errors.New("dns provider offline")
 	}
 	p.mu.Lock()
 	p.records[fqdn] = value
 	p.fake.setPublished(fqdn, value)
 	p.mu.Unlock()
-	return func(context.Context) error {
+	return "record-1", func(context.Context) error {
 		p.mu.Lock()
 		defer p.mu.Unlock()
 		p.cleaned++
@@ -145,6 +145,9 @@ type fakeACMEServer struct {
 	serial             *big.Int
 	notBefore          time.Time
 	notAfter           time.Time
+	identifierType     string
+	identifierValue    string
+	authzWildcard      bool
 }
 
 func newFakeACMEServer(t *testing.T) *fakeACMEServer {
@@ -175,6 +178,7 @@ func newFakeACMEServer(t *testing.T) *fakeACMEServer {
 		caPEM:  pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}),
 		nonces: map[string]bool{}, published: map[string]string{},
 		orderStatus: "pending", challengeStatus: "pending",
+		identifierType: "dns", identifierValue: "app.example.com",
 	}
 	token := make([]byte, 16)
 	_, _ = rand.Read(token)
@@ -255,8 +259,12 @@ func (f *fakeACMEServer) authorization(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	status := f.challengeStatus
 	f.mu.Unlock()
+	f.mu.Lock()
+	identifierType, identifierValue, wildcard := f.identifierType, f.identifierValue, f.authzWildcard
+	f.mu.Unlock()
 	writeACMEMap(w, map[string]any{
-		"status": status, "identifier": map[string]string{"type": "dns", "value": "app.example.com"},
+		"status": status, "identifier": map[string]string{"type": identifierType, "value": identifierValue},
+		"wildcard": wildcard,
 		"challenges": []map[string]string{{
 			"type": "dns-01", "url": f.server.URL + "/challenge", "token": f.token,
 		}},
@@ -526,9 +534,11 @@ func writeACMEMap(w http.ResponseWriter, value any) {
 
 func newACMEClient(t *testing.T, fake *fakeACMEServer, signer *testKeySigner, publisher *acmePublisher) *certificates.ACMEClient {
 	t.Helper()
+	trust := x509.NewCertPool()
+	trust.AddCert(fake.caCert)
 	client, err := certificates.NewACMEClient(certificates.ACMEConfig{
 		DirectoryURL: fake.server.URL + "/directory", Client: fake.server.Client(),
-		AccountKey: "account-key", Signer: signer, Challenge: publisher,
+		AccountKey: "account-key", Signer: signer, Challenge: publisher, TrustRoots: trust,
 		PollInterval: 10 * time.Millisecond, Timeout: 5 * time.Second,
 	})
 	if err != nil {
@@ -635,10 +645,13 @@ func TestACMEDNS01RejectsConfigAndSignerFailures(t *testing.T) {
 	fake := newFakeACMEServer(t)
 	signer := newTestKeySigner(t, "account-key", "cert-key")
 	publisher := newACMEPublisher(fake)
+	trust := x509.NewCertPool()
+	trust.AddCert(fake.caCert)
 	for _, config := range []certificates.ACMEConfig{
 		{AccountKey: "account-key", Signer: signer},
-		{DirectoryURL: "http://insecure.example/directory", AccountKey: "account-key", Signer: signer, Challenge: publisher},
-		{DirectoryURL: fake.server.URL + "/directory", Signer: signer, Challenge: publisher},
+		{DirectoryURL: "http://insecure.example/directory", AccountKey: "account-key", Signer: signer, Challenge: publisher, TrustRoots: trust},
+		{DirectoryURL: fake.server.URL + "/directory", Signer: signer, Challenge: publisher, TrustRoots: trust},
+		{DirectoryURL: fake.server.URL + "/directory", AccountKey: "account-key", Signer: signer, Challenge: publisher},
 	} {
 		if _, err := certificates.NewACMEClient(config); !errors.Is(err, certificates.ErrACMEConfig) {
 			t.Fatalf("config %+v err = %v", config, err)
@@ -664,7 +677,7 @@ func TestACMEDNS01RedirectRefused(t *testing.T) {
 	signer := newTestKeySigner(t)
 	client, err := certificates.NewACMEClient(certificates.ACMEConfig{
 		DirectoryURL: source.URL + "/directory", Client: source.Client(),
-		AccountKey: "account-key", Signer: signer,
+		AccountKey: "account-key", Signer: signer, TrustRoots: x509.NewCertPool(),
 		Challenge: &acmePublisher{fake: &fakeACMEServer{}},
 	})
 	if err != nil {
@@ -684,4 +697,128 @@ func parseLeaf(payload []byte) (*x509.Certificate, error) {
 		return nil, errors.New("no certificate")
 	}
 	return x509.ParseCertificate(block.Bytes)
+}
+
+func TestACMEDNS01RejectsAuthorizationMismatch(t *testing.T) {
+	cases := []struct {
+		name       string
+		mutate     func(*fakeACMEServer)
+		commonName string
+	}{
+		{"wrong type", func(f *fakeACMEServer) { f.identifierType = "ip" }, "app.example.com"},
+		{"wrong value", func(f *fakeACMEServer) { f.identifierValue = "other.example.com" }, "app.example.com"},
+		{"unexpected wildcard", func(f *fakeACMEServer) { f.authzWildcard = true }, "app.example.com"},
+		{"missing wildcard flag", func(f *fakeACMEServer) { f.authzWildcard = false }, "*.app.example.com"},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			fake := newFakeACMEServer(t)
+			test.mutate(fake)
+			signer := newTestKeySigner(t, "account-key", "cert-key")
+			client := newACMEClient(t, fake, signer, newACMEPublisher(fake))
+			_, err := client.IssueDNS01(context.Background(), certificates.ACMERequest{CommonName: test.commonName, KeyRef: "cert-key"})
+			if !errors.Is(err, certificates.ErrACMEAuthorize) {
+				t.Fatalf("err = %v", err)
+			}
+		})
+	}
+}
+
+func TestACMEDNS01WildcardSuccess(t *testing.T) {
+	fake := newFakeACMEServer(t)
+	fake.identifierValue = "app.example.com"
+	fake.authzWildcard = true
+	signer := newTestKeySigner(t, "account-key", "cert-key")
+	issued, err := newACMEClient(t, fake, signer, newACMEPublisher(fake)).IssueDNS01(context.Background(), certificates.ACMERequest{
+		CommonName: "*.app.example.com", KeyRef: "cert-key",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	leaf, err := parseLeaf(issued.CertificatePEM)
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, name := range leaf.DNSNames {
+		if name == "*.app.example.com" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("leaf SANs = %v", leaf.DNSNames)
+	}
+}
+
+func TestACMEDNS01RejectsUntrustedChain(t *testing.T) {
+	fake := newFakeACMEServer(t)
+	signer := newTestKeySigner(t, "account-key", "cert-key")
+	unrelatedKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	template := &x509.Certificate{
+		SerialNumber: big.NewInt(999), Subject: pkix.Name{CommonName: "Unrelated CA"},
+		NotBefore: time.Now().Add(-time.Hour), NotAfter: time.Now().Add(time.Hour),
+		KeyUsage:              x509.KeyUsageCertSign | x509.KeyUsageDigitalSignature,
+		BasicConstraintsValid: true, IsCA: true,
+	}
+	der, err := x509.CreateCertificate(rand.Reader, template, template, &unrelatedKey.PublicKey, unrelatedKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	unrelated, err := x509.ParseCertificate(der)
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust := x509.NewCertPool()
+	trust.AddCert(unrelated)
+	client, err := certificates.NewACMEClient(certificates.ACMEConfig{
+		DirectoryURL: fake.server.URL + "/directory", Client: fake.server.Client(),
+		AccountKey: "account-key", Signer: signer, Challenge: newACMEPublisher(fake), TrustRoots: trust,
+		PollInterval: 10 * time.Millisecond, Timeout: 5 * time.Second,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.IssueDNS01(context.Background(), certificates.ACMERequest{CommonName: "app.example.com", KeyRef: "cert-key"}); !errors.Is(err, certificates.ErrACMEChain) {
+		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestACMEDNS01CleanupFailureExposesRecordID(t *testing.T) {
+	fake := newFakeACMEServer(t)
+	signer := newTestKeySigner(t, "account-key", "cert-key")
+	publisher := newACMEPublisher(fake)
+	publisher.cleanErr = errors.New("dns delete failed")
+	issued, err := newACMEClient(t, fake, signer, publisher).IssueDNS01(context.Background(), certificates.ACMERequest{
+		CommonName: "app.example.com", KeyRef: "cert-key",
+	})
+	if !errors.Is(err, certificates.ErrACMEDNSCleanup) {
+		t.Fatalf("err = %v", err)
+	}
+	if len(issued.CertificatePEM) == 0 || len(issued.DNS01Records) != 1 || issued.DNS01Records[0].RecordID != "record-1" {
+		t.Fatalf("issued = %+v", issued)
+	}
+}
+
+func TestACMEDNS01RejectsCrossOriginDirectory(t *testing.T) {
+	other := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+	defer other.Close()
+	directory := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"newNonce":"`+other.URL+`/nonce","newAccount":"`+other.URL+`/account","newOrder":"`+other.URL+`/order"}`)
+	}))
+	defer directory.Close()
+	client, err := certificates.NewACMEClient(certificates.ACMEConfig{
+		DirectoryURL: directory.URL + "/directory", Client: directory.Client(),
+		AccountKey: "account-key", Signer: newTestKeySigner(t, "account-key", "cert-key"),
+		Challenge: &acmePublisher{fake: &fakeACMEServer{}}, TrustRoots: x509.NewCertPool(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := client.IssueDNS01(context.Background(), certificates.ACMERequest{CommonName: "app.example.com", KeyRef: "cert-key"}); !errors.Is(err, certificates.ErrACMEOrigin) {
+		t.Fatalf("err = %v", err)
+	}
 }

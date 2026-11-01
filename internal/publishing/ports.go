@@ -5,25 +5,46 @@ import "context"
 // DNSPublishRequest is the complete input for the DNS stage.
 type DNSPublishRequest struct {
 	PlanID                string
+	SubjectID             string
+	RequestID             string
 	Domain                string
 	ServiceGroupID        string
 	ExpectedGroupRevision uint64
+	GatewayIDs            []string
+	ZoneID                string
+	CertificateID         string
+	HTTPS                 bool
+	TargetRevision        uint64
 }
 
 // CertificateRequest is the complete input for the certificate stage.
 type CertificateRequest struct {
 	PlanID                string
+	SubjectID             string
+	RequestID             string
 	Domain                string
 	ServiceGroupID        string
 	ExpectedGroupRevision uint64
+	GatewayIDs            []string
+	ZoneID                string
+	CertificateID         string
+	HTTPS                 bool
+	TargetRevision        uint64
 }
 
 // GatewayRequest is the complete input for the gateway stage.
 type GatewayRequest struct {
 	PlanID                string
+	SubjectID             string
+	RequestID             string
 	Domain                string
 	ServiceGroupID        string
 	ExpectedGroupRevision uint64
+	GatewayIDs            []string
+	ZoneID                string
+	CertificateID         string
+	HTTPS                 bool
+	TargetRevision        uint64
 }
 
 // StageResult is a validated provider answer. Only Summary is persisted, and it

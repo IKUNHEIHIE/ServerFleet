@@ -81,7 +81,7 @@ func (s *Service) CreateUpload(ctx context.Context, subjectID, requestID, nodeID
 // AppendChunk writes bytes at exactly the stored offset. A mismatched offset is a
 // conflict rather than a silent overwrite, so a resumed client can trust the
 // reported byte count.
-func (s *Service) AppendChunk(ctx context.Context, subjectID, uploadID string, offset int64, data []byte) (Upload, error) {
+func (s *Service) AppendChunk(ctx context.Context, subjectID, requestID, uploadID string, offset int64, data []byte) (Upload, error) {
 	unlock := s.lockUpload(uploadID)
 	defer unlock()
 	upload, err := s.repo.GetUpload(ctx, uploadID)
@@ -93,6 +93,9 @@ func (s *Service) AppendChunk(ctx context.Context, subjectID, uploadID string, o
 	}
 	if upload.Status != UploadOpen {
 		return Upload{}, ErrUploadClosed
+	}
+	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_append"); err != nil {
+		return Upload{}, err
 	}
 	if len(data) == 0 || len(data) > maxChunkBytes {
 		return Upload{}, fmt.Errorf("%w: chunk size", ErrInvalidTransfer)
@@ -135,7 +138,7 @@ func (s *Service) AppendChunk(ctx context.Context, subjectID, uploadID string, o
 // recorded offset. The body is capped by both the per-upload limit and the
 // declared size; an oversized or interrupted write leaves the recorded progress
 // unchanged so the client can safely retry the same offset.
-func (s *Service) WriteUploadContent(ctx context.Context, subjectID, uploadID string, offset int64, content io.Reader) (Upload, error) {
+func (s *Service) WriteUploadContent(ctx context.Context, subjectID, requestID, uploadID string, offset int64, content io.Reader) (Upload, error) {
 	if content == nil {
 		return Upload{}, fmt.Errorf("%w: content", ErrInvalidTransfer)
 	}
@@ -153,6 +156,9 @@ func (s *Service) WriteUploadContent(ctx context.Context, subjectID, uploadID st
 	}
 	if upload.Status != UploadOpen {
 		return Upload{}, ErrUploadClosed
+	}
+	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_content"); err != nil {
+		return Upload{}, err
 	}
 	if offset < 0 || offset != upload.BytesReceived {
 		return Upload{}, ErrOffsetConflict
@@ -319,6 +325,9 @@ func (s *Service) AbortUpload(ctx context.Context, subjectID, requestID, uploadI
 	if upload.SubjectID != subjectID {
 		return ErrSubjectMismatch
 	}
+	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_abort"); err != nil {
+		return err
+	}
 	if upload.Status != UploadOpen {
 		return ErrUploadClosed
 	}
@@ -335,13 +344,16 @@ func (s *Service) AbortUpload(ctx context.Context, subjectID, requestID, uploadI
 	})
 }
 
-func (s *Service) GetUpload(ctx context.Context, subjectID, uploadID string) (Upload, error) {
+func (s *Service) GetUpload(ctx context.Context, subjectID, requestID, uploadID string) (Upload, error) {
 	upload, err := s.repo.GetUpload(ctx, uploadID)
 	if err != nil {
 		return Upload{}, err
 	}
 	if upload.SubjectID != subjectID {
 		return Upload{}, ErrSubjectMismatch
+	}
+	if err := s.authorizeNode(ctx, subjectID, ActionRead, requestID, upload.NodeID, "file_upload_read"); err != nil {
+		return Upload{}, err
 	}
 	return upload, nil
 }

@@ -73,6 +73,7 @@ type draftBody struct {
 	CertificateID         string   `json:"certificateId"`
 	CreateMonitor         bool     `json:"createMonitor"`
 	ExpectedGroupRevision uint64   `json:"expectedGroupRevision"`
+	TargetRevision        uint64   `json:"targetRevision"`
 }
 
 type previewResponse struct {
@@ -89,10 +90,11 @@ type previewCheck struct {
 }
 
 type asyncOperationDTO struct {
-	ID        string     `json:"id"`
-	Status    string     `json:"status"`
-	CreatedAt string     `json:"createdAt"`
-	Stages    []stageDTO `json:"stages"`
+	ID               string     `json:"id"`
+	Status           string     `json:"status"`
+	CreatedAt        string     `json:"createdAt"`
+	TargetsPersisted bool       `json:"targetsPersisted"`
+	Stages           []stageDTO `json:"stages"`
 }
 
 type stageDTO struct {
@@ -115,7 +117,8 @@ func (api *httpAPI) preview(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := api.service.Preview(r.Context(), principal.SubjectID, PreviewInput{
 		ServiceGroupID: body.ServiceGroupID, ExpectedGroupRevision: body.ExpectedGroupRevision,
-		Domain: body.Domain, GatewayIDs: body.GatewayIDs, HTTPS: *body.HTTPS,
+		Domain: body.Domain, GatewayIDs: body.GatewayIDs, ZoneID: body.ZoneID,
+		CertificateID: body.CertificateID, HTTPS: *body.HTTPS, TargetRevision: body.TargetRevision,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -145,7 +148,8 @@ func (api *httpAPI) create(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := api.service.Preview(r.Context(), principal.SubjectID, PreviewInput{
 		ServiceGroupID: body.ServiceGroupID, ExpectedGroupRevision: body.ExpectedGroupRevision,
-		Domain: body.Domain, GatewayIDs: body.GatewayIDs, HTTPS: *body.HTTPS,
+		Domain: body.Domain, GatewayIDs: body.GatewayIDs, ZoneID: body.ZoneID,
+		CertificateID: body.CertificateID, HTTPS: *body.HTTPS, TargetRevision: body.TargetRevision,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -166,7 +170,9 @@ func (api *httpAPI) create(w http.ResponseWriter, r *http.Request) {
 	}
 	plan, err := api.service.Create(r.Context(), principal.SubjectID, principal.RequestID, CreateInput{
 		ID: newPlanID(), Name: name, Domain: body.Domain, ServiceGroupID: body.ServiceGroupID,
-		ExpectedGroupRevision: revision, IdempotencyKey: r.Header.Get("Idempotency-Key"),
+		ExpectedGroupRevision: revision, GatewayIDs: body.GatewayIDs, ZoneID: body.ZoneID,
+		CertificateID: body.CertificateID, HTTPS: *body.HTTPS, TargetRevision: body.TargetRevision,
+		IdempotencyKey: r.Header.Get("Idempotency-Key"),
 	})
 	if err != nil {
 		writeError(w, err)
@@ -383,7 +389,8 @@ func operationFromDetail(detail PlanDetail) asyncOperationDTO {
 	}
 	return asyncOperationDTO{
 		ID: detail.Plan.ID, Status: operationStatus(detail.Plan.Status),
-		CreatedAt: formatOptionalTime(detail.Plan.CreatedAt), Stages: stages,
+		CreatedAt: formatOptionalTime(detail.Plan.CreatedAt), TargetsPersisted: detail.Plan.TargetsPersisted,
+		Stages: stages,
 	}
 }
 

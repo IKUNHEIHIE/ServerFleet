@@ -29,18 +29,50 @@ var (
 	ErrCloudflareRedirect  = errors.New("dns: cloudflare redirect is not allowed")
 )
 
-// SecretResolver resolves an opaque secret-store reference into a provider
-// credential. Implementations must never log or persist the returned value; the
-// Cloudflare adapter only keeps it in memory for one request.
-type SecretResolver interface {
-	Resolve(ctx context.Context, ref CredentialRef) (string, error)
+// SecretUse is the borrow intent. The controller adapter maps Ref to the CX
+// credential id/revision/scope and enforces before/after checks inside
+// WithSecret; the provider adapter never receives a plaintext resolver.
+type SecretUse struct {
+	Ref        string
+	Operation  string
+	SubjectID  string
+	RequestID  string
+	PlanDigest string
 }
 
-// SecretResolverFunc adapts a function to SecretResolver.
-type SecretResolverFunc func(context.Context, CredentialRef) (string, error)
+// SecretBorrower lends a credential only inside a callback so provider I/O and
+// the post-use authority check happen in the same borrow window.
+type SecretBorrower interface {
+	WithSecret(ctx context.Context, use SecretUse, fn func(context.Context, string) error) error
+}
 
-func (f SecretResolverFunc) Resolve(ctx context.Context, ref CredentialRef) (string, error) {
-	return f(ctx, ref)
+// SecretBorrowerFunc adapts a function to SecretBorrower.
+type SecretBorrowerFunc func(context.Context, SecretUse, func(context.Context, string) error) error
+
+func (f SecretBorrowerFunc) WithSecret(ctx context.Context, use SecretUse, fn func(context.Context, string) error) error {
+	return f(ctx, use, fn)
+}
+
+type secretScopeKey struct{}
+
+// SecretScope carries the acting subject/request/plan into a borrow intent
+// without adding them to Provider method signatures.
+type SecretScope struct {
+	SubjectID  string
+	RequestID  string
+	PlanDigest string
+}
+
+func WithSecretScope(ctx context.Context, scope SecretScope) context.Context {
+	return context.WithValue(ctx, secretScopeKey{}, scope)
+}
+
+func secretScopeFrom(ctx context.Context) SecretScope {
+	if ctx == nil {
+		return SecretScope{}
+	}
+	scope, _ := ctx.Value(secretScopeKey{}).(SecretScope)
+	return scope
 }
 
 // CloudflareConfig configures the real Cloudflare API adapter. BaseURL is
@@ -49,7 +81,7 @@ func (f SecretResolverFunc) Resolve(ctx context.Context, ref CredentialRef) (str
 type CloudflareConfig struct {
 	Client    *http.Client
 	BaseURL   string
-	Secrets   SecretResolver
+	Secrets   SecretBorrower
 	UserAgent string
 	Timeout   time.Duration
 }
@@ -59,7 +91,7 @@ type CloudflareConfig struct {
 type CloudflareProvider struct {
 	client    *http.Client
 	baseURL   string
-	secrets   SecretResolver
+	secrets   SecretBorrower
 	userAgent string
 }
 
@@ -297,11 +329,28 @@ func cloudflareRecordBody(input RecordInput) ([]byte, error) {
 	return json.Marshal(payload)
 }
 
-func (p *CloudflareProvider) newRequest(ctx context.Context, method, path string, credential CredentialRef, body io.Reader, operation string) (*http.Request, error) {
-	token, err := p.secrets.Resolve(ctx, credential)
-	if err != nil || strings.TrimSpace(token) == "" || len(token) > 4096 || strings.ContainsAny(token, "\r\n\x00") {
-		return nil, fmt.Errorf("%w: %s", ErrCloudflareSecret, operation)
+func (p *CloudflareProvider) borrow(ctx context.Context, credential CredentialRef, operation string, fn func(context.Context, string) error) error {
+	if err := credential.Validate(); err != nil {
+		return fmt.Errorf("%w: credential ref", ErrCloudflareSecret)
 	}
+	use := SecretUse{Ref: string(credential), Operation: operation}
+	scope := secretScopeFrom(ctx)
+	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
+	ran := false
+	err := p.secrets.WithSecret(ctx, use, func(borrowCtx context.Context, token string) error {
+		ran = true
+		if strings.TrimSpace(token) == "" || len(token) > 4096 || strings.ContainsAny(token, "\r\n\x00") {
+			return fmt.Errorf("%w: %s", ErrCloudflareSecret, operation)
+		}
+		return fn(borrowCtx, token)
+	})
+	if err != nil && !ran {
+		return fmt.Errorf("%w: %s: %v", ErrCloudflareSecret, operation, err)
+	}
+	return err
+}
+
+func (p *CloudflareProvider) newRequest(ctx context.Context, method, path, token string, body io.Reader, operation string) (*http.Request, error) {
 	request, err := http.NewRequestWithContext(ctx, method, p.baseURL+path, body)
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", ErrCloudflareConfig, operation)
@@ -315,75 +364,64 @@ func (p *CloudflareProvider) newRequest(ctx context.Context, method, path string
 	return request, nil
 }
 
-func (p *CloudflareProvider) do(ctx context.Context, method, path string, credential CredentialRef, body io.Reader, operation string) (cloudflareEnvelope, error) {
-	request, err := p.newRequest(ctx, method, path, credential, body, operation)
+// rawRequest performs one HTTP call inside a borrow callback. The token is never
+// stored outside the callback.
+func (p *CloudflareProvider) rawRequest(ctx context.Context, method, path, token string, body io.Reader, operation string) (int, http.Header, []byte, error) {
+	request, err := p.newRequest(ctx, method, path, token, body, operation)
 	if err != nil {
-		return cloudflareEnvelope{}, err
+		return 0, nil, nil, err
 	}
 	response, err := p.client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
-			return cloudflareEnvelope{}, ctx.Err()
+			return 0, nil, nil, ctx.Err()
 		}
-		return cloudflareEnvelope{}, fmt.Errorf("%w: %s: %w", ErrCloudflareTransport, operation, err)
+		return 0, nil, nil, fmt.Errorf("%w: %s: %w", ErrCloudflareTransport, operation, err)
 	}
 	defer response.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(response.Body, maxCloudflareBodyBytes+1))
 	if err != nil || len(payload) > maxCloudflareBodyBytes {
-		return cloudflareEnvelope{}, fmt.Errorf("%w: %s body", ErrCloudflareResponse, operation)
+		return 0, nil, nil, fmt.Errorf("%w: %s body", ErrCloudflareResponse, operation)
 	}
+	return response.StatusCode, response.Header, payload, nil
+}
+
+func (p *CloudflareProvider) do(ctx context.Context, method, path string, credential CredentialRef, body io.Reader, operation string) (cloudflareEnvelope, error) {
 	var envelope cloudflareEnvelope
-	decodeErr := json.Unmarshal(payload, &envelope)
-	if credentialStatus := cloudflareCredentialStatus(response.StatusCode, envelope.Errors); credentialStatus != "" {
-		return cloudflareEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode,
-			Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus,
+	err := p.borrow(ctx, credential, operation, func(borrowCtx context.Context, token string) error {
+		status, _, payload, err := p.rawRequest(borrowCtx, method, path, token, body, operation)
+		if err != nil {
+			return err
 		}
-	}
-	if response.StatusCode < 200 || response.StatusCode > 299 {
-		return cloudflareEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode, Code: firstCloudflareCode(envelope.Errors),
+		decodeErr := json.Unmarshal(payload, &envelope)
+		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
+			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
 		}
-	}
-	if decodeErr != nil || !envelope.Success {
-		return cloudflareEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode, Code: firstCloudflareCode(envelope.Errors),
+		if status < 200 || status > 299 || decodeErr != nil || !envelope.Success {
+			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
 		}
-	}
-	return envelope, nil
+		return nil
+	})
+	return envelope, err
 }
 
 func (p *CloudflareProvider) doZones(ctx context.Context, method, path string, credential CredentialRef, body io.Reader, operation string) (cloudflareZonesEnvelope, error) {
-	request, err := p.newRequest(ctx, method, path, credential, body, operation)
-	if err != nil {
-		return cloudflareZonesEnvelope{}, err
-	}
-	response, err := p.client.Do(request)
-	if err != nil {
-		if ctx.Err() != nil {
-			return cloudflareZonesEnvelope{}, ctx.Err()
-		}
-		return cloudflareZonesEnvelope{}, fmt.Errorf("%w: %s: %w", ErrCloudflareTransport, operation, err)
-	}
-	defer response.Body.Close()
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maxCloudflareBodyBytes+1))
-	if err != nil || len(payload) > maxCloudflareBodyBytes {
-		return cloudflareZonesEnvelope{}, fmt.Errorf("%w: %s body", ErrCloudflareResponse, operation)
-	}
 	var envelope cloudflareZonesEnvelope
-	decodeErr := json.Unmarshal(payload, &envelope)
-	if credentialStatus := cloudflareCredentialStatus(response.StatusCode, envelope.Errors); credentialStatus != "" {
-		return cloudflareZonesEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode,
-			Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus,
+	err := p.borrow(ctx, credential, operation, func(borrowCtx context.Context, token string) error {
+		status, _, payload, err := p.rawRequest(borrowCtx, method, path, token, body, operation)
+		if err != nil {
+			return err
 		}
-	}
-	if response.StatusCode < 200 || response.StatusCode > 299 || decodeErr != nil || !envelope.Success {
-		return cloudflareZonesEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode, Code: firstCloudflareCode(envelope.Errors),
+		decodeErr := json.Unmarshal(payload, &envelope)
+		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
+			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
 		}
-	}
-	return envelope, nil
+		if status < 200 || status > 299 || decodeErr != nil || !envelope.Success {
+			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
+		}
+		return nil
+	})
+	return envelope, err
 }
 
 func (p *CloudflareProvider) doRecord(ctx context.Context, method, path string, credential CredentialRef, body []byte, operation string) (cloudflareRecordEnvelope, error) {
@@ -391,47 +429,33 @@ func (p *CloudflareProvider) doRecord(ctx context.Context, method, path string, 
 	if body != nil {
 		reader = bytes.NewReader(body)
 	}
-	request, err := p.newRequest(ctx, method, path, credential, reader, operation)
-	if err != nil {
-		return cloudflareRecordEnvelope{}, err
-	}
-	response, err := p.client.Do(request)
-	if err != nil {
-		if ctx.Err() != nil {
-			return cloudflareRecordEnvelope{}, ctx.Err()
-		}
-		return cloudflareRecordEnvelope{}, fmt.Errorf("%w: %s: %w", ErrCloudflareTransport, operation, err)
-	}
-	defer response.Body.Close()
-	payload, err := io.ReadAll(io.LimitReader(response.Body, maxCloudflareBodyBytes+1))
-	if err != nil || len(payload) > maxCloudflareBodyBytes {
-		return cloudflareRecordEnvelope{}, fmt.Errorf("%w: %s body", ErrCloudflareResponse, operation)
-	}
 	var envelope cloudflareEnvelope
-	decodeErr := json.Unmarshal(payload, &envelope)
-	if credentialStatus := cloudflareCredentialStatus(response.StatusCode, envelope.Errors); credentialStatus != "" {
-		return cloudflareRecordEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode,
-			Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus,
-		}
-	}
-	if response.StatusCode == http.StatusNotFound {
-		return cloudflareRecordEnvelope{}, ErrProviderNotFound
-	}
-	if response.StatusCode < 200 || response.StatusCode > 299 || decodeErr != nil || !envelope.Success {
-		return cloudflareRecordEnvelope{}, &cloudflareAPIError{
-			Operation: operation, StatusCode: response.StatusCode, Code: firstCloudflareCode(envelope.Errors),
-		}
-	}
 	var record cloudflareRecordEnvelope
-	if len(envelope.Result) > 0 {
-		if err := json.Unmarshal(envelope.Result, &record.Result); err != nil {
-			return cloudflareRecordEnvelope{}, ErrCloudflareResponse
+	err := p.borrow(ctx, credential, operation, func(borrowCtx context.Context, token string) error {
+		status, _, payload, err := p.rawRequest(borrowCtx, method, path, token, reader, operation)
+		if err != nil {
+			return err
 		}
-	}
+		decodeErr := json.Unmarshal(payload, &envelope)
+		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
+			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
+		}
+		if status == http.StatusNotFound {
+			return ErrProviderNotFound
+		}
+		if status < 200 || status > 299 || decodeErr != nil || !envelope.Success {
+			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
+		}
+		if len(envelope.Result) > 0 {
+			if err := json.Unmarshal(envelope.Result, &record.Result); err != nil {
+				return ErrCloudflareResponse
+			}
+		}
+		return nil
+	})
 	record.Success = envelope.Success
 	record.Errors = envelope.Errors
-	return record, nil
+	return record, err
 }
 
 func cloudflareCredentialStatus(status int, errors []cloudflareErr) CredentialStatus {

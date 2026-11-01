@@ -259,7 +259,7 @@ func newPublicationFixtureAt(t *testing.T, path string, ports *publicationPorts,
 		switched = &switchAuthorizer{}
 		authorizer = switched
 	}
-	db := testkit.NewDBAt(t, path, publishing.Migrations(), audit.Migrations())
+	db := testkit.NewDBAt(t, path, append(publishing.Migrations(), publishing.TargetMigrations()...), audit.Migrations())
 	repo, err := publishing.NewRepo(db)
 	if err != nil {
 		t.Fatalf("NewRepo: %v", err)

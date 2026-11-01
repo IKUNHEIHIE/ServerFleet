@@ -34,7 +34,7 @@ var (
 // SMTPConfig configures the standard-library SMTP sender. Dialer and RootCAs are
 // injectable for a local TLS test server; production uses the system roots.
 type SMTPConfig struct {
-	Secrets         SecretResolver
+	Secrets         SecretBorrower
 	Dialer          *net.Dialer
 	RootCAs         *x509.CertPool
 	Timeout         time.Duration
@@ -45,7 +45,7 @@ type SMTPConfig struct {
 // SMTPMailer is the real network implementation of SMTPSender. It refuses to send
 // credentials over a plaintext connection and never retries by itself.
 type SMTPMailer struct {
-	secrets  SecretResolver
+	secrets  SecretBorrower
 	dialer   *net.Dialer
 	rootCAs  *x509.CertPool
 	timeout  time.Duration
@@ -81,9 +81,8 @@ func NewSMTPMailer(config SMTPConfig) (*SMTPMailer, error) {
 	}, nil
 }
 
-// Send delivers one text message. The returned ProviderResult is only
-// "provider_accepted" after the server's final DATA response; a connection error
-// after the terminating dot is classified as delivery_unknown.
+// Send delivers one text message. The provider I/O runs inside the CX borrow
+// callback; a connection error after the terminating dot is delivery_unknown.
 func (s *SMTPMailer) Send(ctx context.Context, settings SMTPSettings, secretRef string, message Message) (ProviderResult, error) {
 	if s == nil || s.secrets == nil {
 		return ProviderResult{}, ErrSMTPConfig
@@ -98,9 +97,32 @@ func (s *SMTPMailer) Send(ctx context.Context, settings SMTPSettings, secretRef 
 	if err != nil {
 		return ProviderResult{Outcome: ProviderRejected, Code: "message_too_large"}, err
 	}
-	credential, err := s.secrets.Resolve(ctx, secretRef)
-	if err != nil || credential == "" {
-		return ProviderResult{}, fmt.Errorf("%w: %s", ErrSecretUnavailable, "smtp")
+	use := SecretUse{Ref: secretRef, Operation: "smtp.send"}
+	scope := secretScopeFrom(ctx)
+	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
+	ran := false
+	var result ProviderResult
+	var sendErr error
+	err = s.secrets.WithSecret(ctx, use, func(borrowCtx context.Context, credential string) error {
+		ran = true
+		result, sendErr = s.sendWithCredential(borrowCtx, settings, credential, payload)
+		return sendErr
+	})
+	if err != nil && !ran {
+		return ProviderResult{}, fmt.Errorf("%w: smtp", ErrSecretUnavailable)
+	}
+	if err != nil {
+		if sendErr == nil {
+			result = ProviderResult{Outcome: ProviderUnknown, Code: "smtp_use_unknown"}
+		}
+		return result, err
+	}
+	return result, sendErr
+}
+
+func (s *SMTPMailer) sendWithCredential(ctx context.Context, settings SMTPSettings, credential string, payload []byte) (ProviderResult, error) {
+	if credential == "" {
+		return ProviderResult{}, ErrSMTPSecret
 	}
 	username, password, err := parseSMTPCredential(credential, settings.Sender)
 	if err != nil {
@@ -323,6 +345,10 @@ func classifySMTPError(stage string, err error) (ProviderResult, error) {
 	}
 	if stage == "connect" {
 		return ProviderResult{}, fmt.Errorf("%w: connect", ErrSMTPTransport)
+	}
+	if stage == "auth" || stage == "mail_from" || stage == "rcpt_to" || stage == "data_open" {
+		// The message was not submitted; this is a known failure, not unknown.
+		return ProviderResult{}, fmt.Errorf("%w: %s", ErrSMTPTransport, stage)
 	}
 	return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_unknown"}, fmt.Errorf("%w: connection lost", ErrSMTPTransport)
 }

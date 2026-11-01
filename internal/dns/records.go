@@ -41,7 +41,7 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 	if err != nil {
 		return Record{}, err
 	}
-	providerID, err := provider.CreateRecord(ctx, credential, zone.ProviderZoneID, input)
+	providerID, err := provider.CreateRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, input)
 	if err != nil {
 		return Record{}, ErrProviderFailed
 	}
@@ -61,6 +61,7 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 	})
 	if err != nil {
 		compCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		compCtx = WithSecretScope(compCtx, SecretScope{SubjectID: subjectID, RequestID: requestID})
 		compErr := provider.DeleteRecord(compCtx, credential, zone.ProviderZoneID, providerID)
 		cancel()
 		if compErr != nil {
@@ -94,7 +95,7 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 	if err != nil {
 		return Record{}, err
 	}
-	if err := provider.UpdateRecord(ctx, credential, zone.ProviderZoneID, current.ID, input); err != nil {
+	if err := provider.UpdateRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, current.ID, input); err != nil {
 		return Record{}, ErrProviderFailed
 	}
 	updated := Record{
@@ -110,6 +111,7 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 	})
 	if err != nil {
 		compCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		compCtx = WithSecretScope(compCtx, SecretScope{SubjectID: subjectID, RequestID: requestID})
 		compErr := provider.UpdateRecord(compCtx, credential, zone.ProviderZoneID, current.ID, recordInputFrom(current))
 		cancel()
 		if compErr != nil {
@@ -140,7 +142,7 @@ func (s *Service) DeleteRecord(ctx context.Context, subjectID, requestID, record
 		return err
 	}
 	providerAbsent := false
-	if err := provider.DeleteRecord(ctx, credential, zone.ProviderZoneID, current.ID); err != nil {
+	if err := provider.DeleteRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, current.ID); err != nil {
 		if !errors.Is(err, ErrProviderNotFound) {
 			return ErrProviderFailed
 		}

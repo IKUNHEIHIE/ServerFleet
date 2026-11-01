@@ -33,12 +33,16 @@ const (
 )
 
 var (
-	ErrACMEConfig    = errors.New("certificates: acme configuration is invalid")
-	ErrACMEProtocol  = errors.New("certificates: acme protocol error")
-	ErrACMEChallenge = errors.New("certificates: acme dns-01 challenge failed")
-	ErrACMEIssuance  = errors.New("certificates: acme issuance failed")
-	ErrACMESigner    = errors.New("certificates: acme signer failed")
-	ErrACMERedirect  = errors.New("certificates: acme redirect is not allowed")
+	ErrACMEConfig     = errors.New("certificates: acme configuration is invalid")
+	ErrACMEProtocol   = errors.New("certificates: acme protocol error")
+	ErrACMEChallenge  = errors.New("certificates: acme dns-01 challenge failed")
+	ErrACMEIssuance   = errors.New("certificates: acme issuance failed")
+	ErrACMESigner     = errors.New("certificates: acme signer failed")
+	ErrACMERedirect   = errors.New("certificates: acme redirect is not allowed")
+	ErrACMEOrigin     = errors.New("certificates: acme endpoint origin is not allowed")
+	ErrACMEAuthorize  = errors.New("certificates: acme authorization does not match the order")
+	ErrACMEChain      = errors.New("certificates: acme certificate chain is not trusted")
+	ErrACMEDNSCleanup = errors.New("certificates: acme dns-01 cleanup failed")
 )
 
 // ACMESigner exposes only public-key and digest-signing operations for a key held
@@ -48,11 +52,19 @@ type ACMESigner interface {
 	SignDigest(ctx context.Context, ref KeyRef, digest []byte) ([]byte, error)
 }
 
-// ACMEDNS01Publisher publishes the dns-01 TXT value and returns a cleanup
-// function. The client calls cleanup for every published value even when a later
-// step fails.
+// ACMEDNS01Record is the durable identity of one published challenge record. The
+// caller can persist RecordID and Name if cleanup fails.
+type ACMEDNS01Record struct {
+	FQDN     string
+	Value    string
+	RecordID string
+}
+
+// ACMEDNS01Publisher publishes the dns-01 TXT value and returns the durable
+// provider record id plus a cleanup function. The client calls cleanup for every
+// published value even when a later step fails.
 type ACMEDNS01Publisher interface {
-	Publish(ctx context.Context, fqdn, value string) (func(context.Context) error, error)
+	Publish(ctx context.Context, fqdn, value string) (recordID string, cleanup func(context.Context) error, err error)
 }
 
 // ACMEConfig configures the RFC 8555 DNS-01 client.
@@ -62,6 +74,7 @@ type ACMEConfig struct {
 	AccountKey   KeyRef
 	Signer       ACMESigner
 	Challenge    ACMEDNS01Publisher
+	TrustRoots   *x509.CertPool
 	PollInterval time.Duration
 	Timeout      time.Duration
 }
@@ -79,25 +92,28 @@ type ACMEIssued struct {
 	Serial         string
 	NotBefore      time.Time
 	NotAfter       time.Time
+	DNS01Records   []ACMEDNS01Record
 }
 
 // ACMEClient implements a bounded RFC 8555 DNS-01 flow. It never handles private
 // key material; signing is delegated to ACMESigner.
 type ACMEClient struct {
-	directoryURL string
-	client       *http.Client
-	dirMu        sync.Mutex
-	directory    acmeDirectory
-	dirFetched   bool
-	accountKey   KeyRef
-	signer       ACMESigner
-	challenge    ACMEDNS01Publisher
-	pollInterval time.Duration
-	timeout      time.Duration
+	directoryURL    string
+	client          *http.Client
+	dirMu           sync.Mutex
+	directory       acmeDirectory
+	dirFetched      bool
+	directoryOrigin string
+	accountKey      KeyRef
+	signer          ACMESigner
+	challenge       ACMEDNS01Publisher
+	trustRoots      *x509.CertPool
+	pollInterval    time.Duration
+	timeout         time.Duration
 }
 
 func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
-	if config.Signer == nil || config.Challenge == nil {
+	if config.Signer == nil || config.Challenge == nil || config.TrustRoots == nil {
 		return nil, ErrACMEConfig
 	}
 	if err := config.AccountKey.Validate(); err != nil {
@@ -139,7 +155,7 @@ func NewACMEClient(config ACMEConfig) (*ACMEClient, error) {
 	}
 	return &ACMEClient{
 		directoryURL: directory, client: &cloned, accountKey: config.AccountKey,
-		signer: config.Signer, challenge: config.Challenge,
+		signer: config.Signer, challenge: config.Challenge, trustRoots: config.TrustRoots,
 		pollInterval: poll, timeout: timeout,
 	}, nil
 }
@@ -260,6 +276,7 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 		return ACMEIssued{}, err
 	}
 	var cleanups []func(context.Context) error
+	var records []ACMEDNS01Record
 	cleanup := func() error {
 		var failures []error
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -274,8 +291,9 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 		}
 		return errors.Join(failures...)
 	}
+	wildcard := strings.HasPrefix(commonName, "*.")
 	for _, authzURL := range order.Authorizations {
-		authz, err := c.fetchAuthorization(ctx, accountURL, authzURL)
+		authz, err := c.fetchAuthorization(ctx, accountURL, authzURL, commonName, wildcard)
 		if err != nil {
 			_ = cleanup()
 			return ACMEIssued{}, err
@@ -288,11 +306,11 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 			_ = cleanup()
 			return ACMEIssued{}, fmt.Errorf("%w: no dns-01 challenge", ErrACMEChallenge)
 		}
-		if err := c.authorizeChallenge(ctx, accountURL, authz, challenge, thumbprint, &cleanups); err != nil {
+		if err := c.authorizeChallenge(ctx, accountURL, authz, challenge, thumbprint, &cleanups, &records); err != nil {
 			_ = cleanup()
 			return ACMEIssued{}, err
 		}
-		if err := c.waitAuthorization(ctx, accountURL, authzURL); err != nil {
+		if err := c.waitAuthorization(ctx, accountURL, authzURL, commonName, wildcard); err != nil {
 			_ = cleanup()
 			return ACMEIssued{}, err
 		}
@@ -328,29 +346,65 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 		_ = cleanup()
 		return ACMEIssued{}, err
 	}
-	// A successful ACME order is not proof that its download belongs to our
-	// request. Bind the result to this CSR, domain and current validity window.
-	block, _ := pem.Decode(issued.CertificatePEM)
-	leaf, leafErr := x509.ParseCertificate(block.Bytes)
-	requestCSR, csrErr := x509.ParseCertificateRequest(csr)
-	now := time.Now()
-	nameOK := leafErr == nil && leaf.VerifyHostname(commonName) == nil
-	if strings.HasPrefix(commonName, "*.") && leafErr == nil {
-		nameOK = false
-		for _, name := range leaf.DNSNames {
-			if strings.EqualFold(name, commonName) {
-				nameOK = true
-			}
-		}
-	}
-	if leafErr != nil || csrErr != nil || !nameOK || !bytes.Equal(leaf.RawSubjectPublicKeyInfo, requestCSR.RawSubjectPublicKeyInfo) || leaf.IsCA || now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) {
+	issued.DNS01Records = append([]ACMEDNS01Record(nil), records...)
+	if err := c.verifyIssuedChain(issued, csr, commonName, wildcard, time.Now()); err != nil {
 		_ = cleanup()
-		return ACMEIssued{}, ErrACMEIssuance
+		return ACMEIssued{}, err
 	}
 	if cleanupErr := cleanup(); cleanupErr != nil {
-		return issued, fmt.Errorf("%w: dns cleanup: %v", ErrACMEChallenge, cleanupErr)
+		return issued, fmt.Errorf("%w: %v", ErrACMEDNSCleanup, cleanupErr)
 	}
 	return issued, nil
+}
+
+// verifyIssuedChain checks the downloaded leaf/intermediates against the
+// explicitly configured roots and binds the leaf to this CSR, domain and current
+// validity window.
+func (c *ACMEClient) verifyIssuedChain(issued ACMEIssued, csr []byte, commonName string, wildcard bool, now time.Time) error {
+	certs, err := parseCertificateChain(issued.ChainPEM)
+	if err != nil || len(certs) < 2 {
+		return fmt.Errorf("%w: chain length", ErrACMEChain)
+	}
+	leaf := certs[0]
+	if leaf.IsCA {
+		return fmt.Errorf("%w: ca leaf", ErrACMEChain)
+	}
+	requestCSR, err := x509.ParseCertificateRequest(csr)
+	if err != nil || !bytes.Equal(leaf.RawSubjectPublicKeyInfo, requestCSR.RawSubjectPublicKeyInfo) {
+		return fmt.Errorf("%w: csr key", ErrACMEChain)
+	}
+	if now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) {
+		return fmt.Errorf("%w: validity", ErrACMEChain)
+	}
+	if wildcard {
+		found := false
+		for _, name := range leaf.DNSNames {
+			if strings.EqualFold(name, commonName) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("%w: san", ErrACMEChain)
+		}
+	} else if err := leaf.VerifyHostname(commonName); err != nil {
+		return fmt.Errorf("%w: san", ErrACMEChain)
+	}
+	intermediates := x509.NewCertPool()
+	for _, cert := range certs[1:] {
+		intermediates.AddCert(cert)
+	}
+	verifyName := commonName
+	if wildcard {
+		verifyName = ""
+	}
+	if _, err := leaf.Verify(x509.VerifyOptions{
+		Roots: c.trustRoots, Intermediates: intermediates, DNSName: verifyName,
+		CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+	}); err != nil {
+		return fmt.Errorf("%w: %v", ErrACMEChain, err)
+	}
+	return nil
 }
 
 func (c *ACMEClient) fetchDirectory(ctx context.Context) (acmeDirectory, error) {
@@ -370,13 +424,22 @@ func (c *ACMEClient) fetchDirectory(ctx context.Context) (acmeDirectory, error) 
 	if err := json.Unmarshal(body, &directory); err != nil {
 		return acmeDirectory{}, fmt.Errorf("%w: directory body", ErrACMEProtocol)
 	}
+	origin, err := acmeOrigin(c.directoryURL)
+	if err != nil {
+		return acmeDirectory{}, fmt.Errorf("%w: directory origin", ErrACMEConfig)
+	}
 	for _, endpoint := range []string{directory.NewNonce, directory.NewAccount, directory.NewOrder} {
 		parsed, err := url.Parse(endpoint)
 		if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
 			return acmeDirectory{}, fmt.Errorf("%w: endpoint", ErrACMEProtocol)
 		}
+		endpointOrigin, err := acmeOrigin(endpoint)
+		if err != nil || endpointOrigin != origin {
+			return acmeDirectory{}, ErrACMEOrigin
+		}
 	}
 	c.directory = directory
+	c.directoryOrigin = origin
 	c.dirFetched = true
 	return directory, nil
 }
@@ -419,7 +482,7 @@ func (c *ACMEClient) newOrder(ctx context.Context, directory acmeDirectory, acco
 	return order, orderURL, nil
 }
 
-func (c *ACMEClient) fetchAuthorization(ctx context.Context, accountURL, authzURL string) (acmeAuthorization, error) {
+func (c *ACMEClient) fetchAuthorization(ctx context.Context, accountURL, authzURL, commonName string, wildcard bool) (acmeAuthorization, error) {
 	_, body, status, err := c.postJWS(ctx, authzURL, []byte{}, nil, accountURL, "")
 	if err != nil {
 		return acmeAuthorization{}, err
@@ -434,18 +497,37 @@ func (c *ACMEClient) fetchAuthorization(ctx context.Context, accountURL, authzUR
 	if authz.Status == "invalid" || authz.Identifier.Value == "" {
 		return acmeAuthorization{}, fmt.Errorf("%w: authorization invalid", ErrACMEChallenge)
 	}
+	if authz.Identifier.Type != "dns" {
+		return acmeAuthorization{}, fmt.Errorf("%w: identifier type", ErrACMEAuthorize)
+	}
+	expectedValue := commonName
+	if wildcard {
+		expectedValue = strings.TrimPrefix(commonName, "*.")
+		if !authz.Wildcard {
+			return acmeAuthorization{}, fmt.Errorf("%w: wildcard flag", ErrACMEAuthorize)
+		}
+	} else if authz.Wildcard {
+		return acmeAuthorization{}, fmt.Errorf("%w: unexpected wildcard", ErrACMEAuthorize)
+	}
+	if !strings.EqualFold(authz.Identifier.Value, expectedValue) {
+		return acmeAuthorization{}, fmt.Errorf("%w: identifier value", ErrACMEAuthorize)
+	}
 	return authz, nil
 }
 
-func (c *ACMEClient) authorizeChallenge(ctx context.Context, accountURL string, authz acmeAuthorization, challenge acmeChallenge, thumbprint string, cleanups *[]func(context.Context) error) error {
+func (c *ACMEClient) authorizeChallenge(ctx context.Context, accountURL string, authz acmeAuthorization, challenge acmeChallenge, thumbprint string, cleanups *[]func(context.Context) error, records *[]ACMEDNS01Record) error {
 	keyAuth := challenge.Token + "." + thumbprint
 	digest := sha256.Sum256([]byte(keyAuth))
 	value := base64.RawURLEncoding.EncodeToString(digest[:])
 	fqdn := "_acme-challenge." + authz.Identifier.Value
-	cleanup, err := c.challenge.Publish(ctx, fqdn, value)
+	recordID, cleanup, err := c.challenge.Publish(ctx, fqdn, value)
 	if err != nil {
 		return fmt.Errorf("%w: publish dns-01", ErrACMEChallenge)
 	}
+	if recordID == "" {
+		return fmt.Errorf("%w: challenge record id", ErrACMEChallenge)
+	}
+	*records = append(*records, ACMEDNS01Record{FQDN: fqdn, Value: value, RecordID: recordID})
 	*cleanups = append(*cleanups, cleanup)
 	_, _, status, err := c.postJWS(ctx, challenge.URL, map[string]any{}, nil, accountURL, "")
 	if err != nil {
@@ -457,11 +539,11 @@ func (c *ACMEClient) authorizeChallenge(ctx context.Context, accountURL string, 
 	return nil
 }
 
-func (c *ACMEClient) waitAuthorization(ctx context.Context, accountURL, authzURL string) error {
+func (c *ACMEClient) waitAuthorization(ctx context.Context, accountURL, authzURL, commonName string, wildcard bool) error {
 	ticker := time.NewTicker(c.pollInterval)
 	defer ticker.Stop()
 	for {
-		authz, err := c.fetchAuthorization(ctx, accountURL, authzURL)
+		authz, err := c.fetchAuthorization(ctx, accountURL, authzURL, commonName, wildcard)
 		if err != nil {
 			return err
 		}
@@ -702,6 +784,12 @@ func (c *ACMEClient) doRawHeaders(ctx context.Context, method, endpoint string, 
 	if err != nil || parsed.Scheme != "https" || parsed.Host == "" {
 		return nil, nil, 0, fmt.Errorf("%w: endpoint", ErrACMEProtocol)
 	}
+	if c.directoryOrigin != "" {
+		origin, err := acmeOrigin(endpoint)
+		if err != nil || origin != c.directoryOrigin {
+			return nil, nil, 0, ErrACMEOrigin
+		}
+	}
 	var reader io.Reader
 	if body != nil {
 		reader = strings.NewReader(string(body))
@@ -746,6 +834,38 @@ func findDNS01(challenges []acmeChallenge) (acmeChallenge, bool) {
 		}
 	}
 	return acmeChallenge{}, false
+}
+
+func acmeOrigin(raw string) (string, error) {
+	parsed, err := url.Parse(raw)
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil {
+		return "", ErrACMEOrigin
+	}
+	return parsed.Scheme + "://" + parsed.Host, nil
+}
+
+func parseCertificateChain(chain []byte) ([]*x509.Certificate, error) {
+	remaining := chain
+	var certificates []*x509.Certificate
+	for {
+		block, rest := pem.Decode(remaining)
+		if block == nil {
+			break
+		}
+		remaining = rest
+		if block.Type != "CERTIFICATE" {
+			continue
+		}
+		certificate, err := x509.ParseCertificate(block.Bytes)
+		if err != nil {
+			return nil, fmt.Errorf("%w: parse chain", ErrACMEIssuance)
+		}
+		certificates = append(certificates, certificate)
+	}
+	if len(certificates) == 0 {
+		return nil, fmt.Errorf("%w: empty chain", ErrACMEIssuance)
+	}
+	return certificates, nil
 }
 
 func acmeJWKFromKey(publicKey crypto.PublicKey) (*acmeJWK, error) {

@@ -124,8 +124,11 @@ func (s *Service) Create(ctx context.Context, subjectID, requestID string, input
 	}
 	now := s.now().UTC()
 	plan := Plan{
-		ID: normalized.ID, Name: normalized.Name, Domain: normalized.Domain,
+		TargetsPersisted: s.repo.TargetsPersisted(),
+		ID:               normalized.ID, Name: normalized.Name, Domain: normalized.Domain,
 		ServiceGroupID: normalized.ServiceGroupID, ExpectedGroupRevision: normalized.ExpectedGroupRevision,
+		GatewayIDs: append([]string(nil), normalized.GatewayIDs...), ZoneID: normalized.ZoneID,
+		CertificateID: normalized.CertificateID, HTTPS: normalized.HTTPS, TargetRevision: normalized.TargetRevision,
 		Status: PlanQueued, CurrentStage: StageDNS, CreatedBy: subjectID,
 		IdempotencyKey: normalized.IdempotencyKey, CreatedAt: now, UpdatedAt: now,
 	}
@@ -178,10 +181,11 @@ func (s *Service) Preview(ctx context.Context, subjectID string, input PreviewIn
 	if _, err := normalizeDomain(input.Domain); err != nil {
 		return Preview{}, err
 	}
-	for _, gatewayID := range input.GatewayIDs {
-		if !validID(gatewayID) {
-			return Preview{}, fmt.Errorf("%w: gateway id", ErrInvalidPlan)
-		}
+	if input.TargetRevision == 0 {
+		input.TargetRevision = 1
+	}
+	if err := validateTargets(input.GatewayIDs, input.ZoneID, input.CertificateID, input.TargetRevision); err != nil {
+		return Preview{}, err
 	}
 	group, err := s.lookupGroup(ctx, input.ServiceGroupID)
 	if err != nil {
@@ -323,6 +327,17 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 		if err := ctx.Err(); err != nil {
 			return plan, err
 		}
+		stageGroup, authErr := s.refreshStageAuthority(ctx, subjectID, requestID, plan, "publishing_stage")
+		if authErr != nil {
+			code := ErrorCodeAuthorizationDenied
+			if errors.Is(authErr, ErrRevisionConflict) {
+				code = ErrorCodeRevisionConflict
+			} else if !isPureDenial(authErr) {
+				code = ErrorCodeGroupLookupFailed
+			}
+			return s.fail(ctx, subjectID, requestID, plan, stages, index, code, authErr, group.NodeIDs)
+		}
+		group = stageGroup
 		stage := &stages[index]
 		now := s.now().UTC()
 		stage.Status = StageRunning
@@ -338,7 +353,7 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 			return Plan{}, err
 		}
 
-		result, publishErr := s.publish(ctx, plan, stage.Kind)
+		result, publishErr := s.publish(ctx, subjectID, requestID, plan, stage.Kind)
 		if publishErr != nil {
 			if ctx.Err() != nil {
 				return plan, ctx.Err()
@@ -450,6 +465,16 @@ func (s *Service) Rollback(ctx context.Context, subjectID, requestID, planID str
 	}
 	if !stage.Status.Executed() {
 		return plan, ErrStageNotRollable
+	}
+	if _, err := s.refreshStageAuthority(ctx, subjectID, requestID, plan, "publishing_rollback_stage"); err != nil {
+		reason := "rollback_authorization_denied"
+		if errors.Is(err, ErrRevisionConflict) {
+			reason = "rollback_revision_conflict"
+		}
+		if auditErr := s.recordFailure(ctx, subjectID, ActionRollback, requestID, group.NodeIDs, reason); auditErr != nil {
+			return plan, fmt.Errorf("%w (rollback authority audit failed)", err)
+		}
+		return plan, err
 	}
 	if err := s.rollback(ctx, plan, normalized, StageResult{Summary: stage.ResultSummary}); err != nil {
 		auditErr := s.recordFailure(ctx, subjectID, ActionRollback, requestID, group.NodeIDs, "rollback_failed")
@@ -567,31 +592,34 @@ func (s *Service) persistProgress(ctx context.Context, subjectID, requestID stri
 	})
 }
 
-func (s *Service) publish(ctx context.Context, plan Plan, kind StageKind) (StageResult, error) {
+func (s *Service) publish(ctx context.Context, subjectID, requestID string, plan Plan, kind StageKind) (StageResult, error) {
 	switch kind {
 	case StageDNS:
 		if s.dns == nil {
 			return StageResult{}, ErrPublisherUnavailable
 		}
 		return s.dns.Publish(ctx, DNSPublishRequest{
-			PlanID: plan.ID, Domain: plan.Domain, ServiceGroupID: plan.ServiceGroupID,
-			ExpectedGroupRevision: plan.ExpectedGroupRevision,
+			PlanID: plan.ID, SubjectID: subjectID, RequestID: requestID, Domain: plan.Domain, ServiceGroupID: plan.ServiceGroupID,
+			ExpectedGroupRevision: plan.ExpectedGroupRevision, GatewayIDs: append([]string(nil), plan.GatewayIDs...),
+			ZoneID: plan.ZoneID, CertificateID: plan.CertificateID, HTTPS: plan.HTTPS, TargetRevision: plan.TargetRevision,
 		})
 	case StageCertificate:
 		if s.certificates == nil {
 			return StageResult{}, ErrPublisherUnavailable
 		}
 		return s.certificates.Publish(ctx, CertificateRequest{
-			PlanID: plan.ID, Domain: plan.Domain, ServiceGroupID: plan.ServiceGroupID,
-			ExpectedGroupRevision: plan.ExpectedGroupRevision,
+			PlanID: plan.ID, SubjectID: subjectID, RequestID: requestID, Domain: plan.Domain, ServiceGroupID: plan.ServiceGroupID,
+			ExpectedGroupRevision: plan.ExpectedGroupRevision, GatewayIDs: append([]string(nil), plan.GatewayIDs...),
+			ZoneID: plan.ZoneID, CertificateID: plan.CertificateID, HTTPS: plan.HTTPS, TargetRevision: plan.TargetRevision,
 		})
 	case StageGateway:
 		if s.gateway == nil {
 			return StageResult{}, ErrPublisherUnavailable
 		}
 		return s.gateway.Publish(ctx, GatewayRequest{
-			PlanID: plan.ID, Domain: plan.Domain, ServiceGroupID: plan.ServiceGroupID,
-			ExpectedGroupRevision: plan.ExpectedGroupRevision,
+			PlanID: plan.ID, SubjectID: subjectID, RequestID: requestID, Domain: plan.Domain, ServiceGroupID: plan.ServiceGroupID,
+			ExpectedGroupRevision: plan.ExpectedGroupRevision, GatewayIDs: append([]string(nil), plan.GatewayIDs...),
+			ZoneID: plan.ZoneID, CertificateID: plan.CertificateID, HTTPS: plan.HTTPS, TargetRevision: plan.TargetRevision,
 		})
 	default:
 		return StageResult{}, ErrInvalidStage
@@ -618,6 +646,23 @@ func (s *Service) rollback(ctx context.Context, plan Plan, kind StageKind, resul
 	default:
 		return ErrInvalidStage
 	}
+}
+
+// refreshStageAuthority re-reads the service group immediately before a stage or
+// compensation. A changed membership revision or revoked write permission stops
+// the plan instead of relying on the authorization captured at Run start.
+func (s *Service) refreshStageAuthority(ctx context.Context, subjectID, requestID string, plan Plan, reason string) (GroupRef, error) {
+	group, err := s.lookupGroup(ctx, plan.ServiceGroupID)
+	if err != nil {
+		return GroupRef{}, err
+	}
+	if group.Revision != plan.ExpectedGroupRevision {
+		return group, ErrRevisionConflict
+	}
+	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, group.NodeIDs, reason); err != nil {
+		return group, err
+	}
+	return group, nil
 }
 
 func (s *Service) lookupGroup(ctx context.Context, serviceGroupID string) (GroupRef, error) {

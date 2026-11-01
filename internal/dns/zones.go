@@ -39,7 +39,7 @@ func (s *Service) CreateZone(ctx context.Context, subjectID, requestID, accountI
 	if err != nil {
 		return Zone{}, err
 	}
-	infos, err := provider.ListZones(ctx, credential)
+	infos, err := provider.ListZones(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential)
 	if err != nil {
 		return Zone{}, ErrProviderFailed
 	}
