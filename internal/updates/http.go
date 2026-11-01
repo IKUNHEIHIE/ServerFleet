@@ -56,7 +56,22 @@ type Options struct {
 	Check        func(context.Context, string) (CheckResult, error)
 	Plan         func(context.Context, string) (Plan, error)
 	Now          func() time.Time
+	// Apply resolves a persisted approved plan through the sole task service.
+	// It must not take executable paths or privilege from this HTTP request.
+	Apply func(context.Context, ApplyRequest) (ApplyResult, error)
 }
+
+type ApplyRequest struct {
+	Principal                        Principal
+	PlanID, Confirmation, BackupMode string
+}
+type ApplyResult struct {
+	ID            string `json:"id"`
+	TaskID        string `json:"taskId"`
+	Status        string `json:"status"`
+	TargetVersion string `json:"targetVersion"`
+}
+type updatePrincipalKey struct{}
 
 type HTTP struct {
 	options Options
@@ -103,7 +118,7 @@ func (h *HTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		writeUpdateProblem(w, http.StatusForbidden, "NOT_AUTHORIZED")
 		return
 	}
-	h.mux.ServeHTTP(w, r)
+	h.mux.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), updatePrincipalKey{}, principal)))
 }
 
 func writeUpdateProblem(w http.ResponseWriter, status int, code string) {
@@ -217,7 +232,21 @@ func (h *HTTP) apply(w http.ResponseWriter, r *http.Request) {
 		writeUpdateProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
 		return
 	}
-	writeUpdateProblem(w, http.StatusNotImplemented, "UPDATE_INSTALLER_UNAVAILABLE")
+	if h.options.Apply == nil {
+		writeUpdateProblem(w, http.StatusNotImplemented, "UPDATE_INSTALLER_UNAVAILABLE")
+		return
+	}
+	principal, ok := r.Context().Value(updatePrincipalKey{}).(Principal)
+	if !ok {
+		writeUpdateProblem(w, 403, "NOT_AUTHORIZED")
+		return
+	}
+	result, err := h.options.Apply(r.Context(), ApplyRequest{principal, body.PlanID, body.Confirmation, body.BackupMode})
+	if err != nil || !installID(result.ID) || !installID(result.TaskID) || (result.Status != "installed" && result.Status != "rolled_back" && result.Status != "queued") {
+		writeUpdateProblem(w, 503, "UPDATE_OUTCOME_UNKNOWN")
+		return
+	}
+	writeUpdateJSON(w, http.StatusAccepted, result)
 }
 
 func (h *HTTP) jobs(w http.ResponseWriter, r *http.Request) {

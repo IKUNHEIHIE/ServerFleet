@@ -1,0 +1,59 @@
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -68,6 +68,12 @@
+ 
+ 	// BackupDir defaults to a private directory beside the SQLite database.
+ 	BackupDir string
++	UpdateCheck func(context.Context,string)(updates.CheckResult,error)
++	UpdatePlan func(context.Context,string)(updates.Plan,error)
++	UpdateApply func(context.Context,updates.ApplyRequest)(updates.ApplyResult,error)
++	RecoveryExecute func(context.Context,recovery.Plan)(string,error)
++	PluginRuntime plugins.AdmittedRuntime
++	XrayTaskHost *plugins.XrayTaskHost
+ }
+ 
+ // Server holds the wired Controller database, services, and HTTP router.
+--- a/apps/controller/server/updates_recovery.go
++++ b/apps/controller/server/updates_recovery.go
+@@ -38,6 +38,7 @@
+ 			return updates.Principal{SubjectID: identity.SubjectID, RequestID: requestID, Administrator: identity.Administrator}, nil
+ 		},
+ 		Now: s.now,
++		Check: cfg.UpdateCheck, Plan: cfg.UpdatePlan, Apply: cfg.UpdateApply,
+ 	})
+ 	if err != nil {
+ 		return err
+@@ -51,6 +52,7 @@
+ 			return recovery.Principal{SubjectID: identity.SubjectID, RequestID: requestID, Administrator: identity.Administrator}, nil
+ 		},
+ 		VerifyBackup: s.verifyBackupFile,
++		Execute: cfg.RecoveryExecute,
+ 		Now:          s.now,
+ 	})
+ 	if err != nil {
+--- a/apps/controller/server/plugins.go
++++ b/apps/controller/server/plugins.go
+@@ -52,7 +52,7 @@
+ 		}
+ 		return nil
+ 	}
+-	manager, err := plugins.NewLifecycleManager(store, vault, trust, gate, nil)
++	manager, err := plugins.NewLifecycleManager(store, vault, trust, gate, cfg.PluginRuntime)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -74,7 +74,13 @@
+ 	if err != nil {
+ 		return err
+ 	}
+-	xray, err := plugins.NewXrayDeclarativeHTTP(func(r *http.Request) (plugins.LifecyclePrincipal, error) {
++	newXrayHTTP := plugins.NewXrayDeclarativeHTTP
++	if cfg.XrayTaskHost != nil {
++		newXrayHTTP = func(a plugins.PluginAuthenticator, state func(context.Context)(plugins.Installation,error), nodes func(context.Context)([]plugins.XrayNodeView,error))(*plugins.XrayDeclarativeHTTP,error) {
++			return plugins.NewXrayHTTPWithTaskHost(a,state,nodes,*cfg.XrayTaskHost)
++		}
++	}
++	xray, err := newXrayHTTP(func(r *http.Request) (plugins.LifecyclePrincipal, error) {
+ 		identity, requestID, err := s.authenticateIdentity(r)
+ 		if err != nil {
+ 			return plugins.LifecyclePrincipal{}, err

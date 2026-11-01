@@ -1,6 +1,6 @@
 // Package runtime owns the optional Agent CLI presentation for status self-check,
-// one explicit enrollment attempt and one controlled WSS+mTLS connection. It
-// never loops, retries or replaces an existing identity.
+// one explicit enrollment attempt, a single WSS+mTLS connection or resident
+// links with bounded reconnect. It never replaces an existing identity.
 package runtime
 
 import (
@@ -148,7 +148,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		}
 	}
 	if modes > 1 {
-		fmt.Fprintln(stderr, "agent: -status, -enroll-token and -connect-once are mutually exclusive")
+		fmt.Fprintln(stderr, "agent: -status, -enroll-token, -connect-once and -serve are mutually exclusive")
 		return 2
 	}
 
@@ -241,7 +241,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		writeJSON(stdout, result)
 		return 0
 	default:
-		fmt.Fprintln(stderr, "agent: specify -status, -enroll-token or -connect-once (see -h)")
+		fmt.Fprintln(stderr, "agent: specify -status, -enroll-token, -connect-once or -serve (see -h)")
 		return 2
 	}
 }

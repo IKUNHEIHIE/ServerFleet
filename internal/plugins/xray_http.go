@@ -20,6 +20,7 @@ type XrayDeclarativeHTTP struct {
 	state        func(context.Context) (Installation, error)
 	listNodes    func(context.Context) ([]XrayNodeView, error)
 	mux          *http.ServeMux
+	taskHost     *XrayTaskHost
 }
 
 func NewXrayDeclarativeHTTP(authenticate PluginAuthenticator, state func(context.Context) (Installation, error), listNodes func(context.Context) ([]XrayNodeView, error)) (*XrayDeclarativeHTTP, error) {
@@ -92,7 +93,7 @@ func (h *XrayDeclarativeHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) 
 		writePluginProblem(w, http.StatusForbidden, "NOT_AUTHORIZED")
 		return
 	}
-	h.mux.ServeHTTP(w, r)
+	h.mux.ServeHTTP(w, r.WithContext(WithLifecyclePrincipal(r.Context(), principal)))
 }
 
 func (h *XrayDeclarativeHTTP) enabledState(w http.ResponseWriter, r *http.Request) (Installation, bool) {
@@ -237,6 +238,9 @@ func (h *XrayDeclarativeHTTP) traffic(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *XrayDeclarativeHTTP) unavailableRuntime(w http.ResponseWriter, r *http.Request) {
+	if h.taskHost != nil && h.submitHostTask(w, r) {
+		return
+	}
 	if _, ok := h.enabledState(w, r); !ok {
 		return
 	}

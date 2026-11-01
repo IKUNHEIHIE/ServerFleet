@@ -32,4 +32,17 @@ controller-ai-keyring.patch **取代** controller-keyring.patch，proposed.txt �
 
 代码复核同时修正 Agent 身份借用包装会隐藏 worker UNKNOWN 的问题，避免未停止 worker 后重连。
 
-Xray / 更新 / 恢复继续包内推进。G2 和发布准入不变。
+增量 3 SHA：86a7247b3ecdcc91b37c6f5d21d44f7b39765a9c。
+
+## 增量 4：更新、隔离恢复与 Xray 任务 Host
+
+- 更新：DirectoryReleaseSource 读取固定私有离线 inbox，签名/版本/架构/序列下限/大小/哈希由既有 Stager 验证；NewTaskInstallExecutor 将已批准持久计划接入真实 SlotInstaller；HTTP Apply 可注入实际执行，重复安装拒绝。服务 Stop/Start/Health、存储兼容、审计提交仍是必需适配，测试中明确为 double，没有伪装进程健康。
+- 恢复：RestoreIsolated 在新私有任务目录内先落 quarantine，再复制/哈希/验证真实 SQLite 台账、用外部权威合并撤销和 UNKNOWN；同任务目录不可重跑。成功仍 restored_quarantined，没有自动放开旧主控 fence。新增 auth 纯变换提升身份/策略 epoch、撤销旧会话、使旧 Token/审批失效、合并当前凭据撤销/主体禁用；保留密钥计数与借用防重放台账，去除旧暂存轮换。由总控/DS 在一笔恢复事务应用，不直接修改运行库。
+- Xray：NewXrayHTTPWithTaskHost 仅给明确 mutation 白名单接入统一任务 Submit；不可变动作/目标/参数摘要、当前准入前后检查、生命周期版本检查、幂等键、拒绝内联秘密/Shell。返回 queued taskId，**不声称 Xray 已执行**；预演/配置验证/导出仍需已准入业务 Runtime/Host，不能靠启用 flag 绕过。
+- 权限/worker 安全复核：启动还验证暂存凭据与 Xray 密文；Agent 文件绑定/目录/提交回执增加目录同步。Windows 不开放这些 Linux 权限能力。
+
+模块及平台 Windows 测试 PASS；WSL 初验 plugins 12、updates 14、真实 SQLite 恢复专项 1，均 PASS/0 SKIP；最终固定提交复验待 HANDOFF。恢复首次缺测试台账 FAIL 已修为真实空迁移台账后 PASS，未放宽生产验证。根 check PASS；security 首次 FAIL 由自建 overlay 临时 .go 被扫描为独立包导致，改用 .txt 后 check:go 与 check:security PASS（0已知漏洞）。新增 auth 变换后另做最终检查。
+
+共享补丁 controller-platform.patch 提供更新源/执行、恢复入队、已准入插件 Runtime 与 Xray TaskHost 的 Config 注入；与组合 AI/密钥补丁无重叠。组合 Go overlay 编译 PASS。所有共享补丁初次 git apply 检查因作者生成 CRLF 失败，现统一 LF，git apply --check PASS；没有应用到共享文件。
+
+当前硬依赖：总控/DS 接收 WSS 文件/Proto、统一任务动作与恢复事务适配；总控配置私有密钥、配额与供应商；Xray 安全工件/运行时/Host 准入；真实 supervisor/旧主控 fence/新密钥与吊销权威及实机。未解决前不能关闭完整 v0.9 验收。完成证据收口后停止，不合并 main。

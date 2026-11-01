@@ -140,6 +140,9 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 		if e != nil || closed != nil {
 			return errFileCapability
 		}
+		if syncAgentFileDirectory(f.root, dir) != nil || syncAgentFileDirectory(f.root, ".") != nil {
+			return errFileCapability
+		}
 	} else {
 		prior, e := f.root.ReadFile(dir + "/binding.json")
 		if e != nil || string(prior) != string(encoded) {
@@ -188,7 +191,19 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 		return errFileCapability
 	}
 	defer d.Close()
-	if d.Sync() != nil || f.check(ctx, b, "committed") != nil {
+	if d.Sync() != nil || syncAgentFileDirectory(f.root, dir) != nil || f.check(ctx, b, "committed") != nil {
+		return errFileCapability
+	}
+	return nil
+}
+
+func syncAgentFileDirectory(root *os.Root, name string) error {
+	d, err := root.Open(name)
+	if err != nil {
+		return errFileCapability
+	}
+	defer d.Close()
+	if d.Sync() != nil {
 		return errFileCapability
 	}
 	return nil

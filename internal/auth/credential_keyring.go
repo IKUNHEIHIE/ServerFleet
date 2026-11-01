@@ -234,8 +234,26 @@ func NewPersistentCredentialService(ctx context.Context, identity *IdentityServi
 			}
 		}
 		for _, r := range st.CredentialChanges {
-			if v.cipher.keys[r.Sealed.KeyID] == nil {
+			purpose, _, e := credentialPurpose(r.Meta.Kind)
+			if e != nil {
 				return ErrIdentityUnavailable
+			}
+			plain, e := v.cipher.open(credentialBinding{r.BindingID, r.Owner, purpose, r.Meta.Revision}, r.Sealed, credentialExpiry(r.Meta), r.Meta.CreatedAt, false)
+			clear(plain)
+			if e != nil {
+				return ErrIdentityUnavailable
+			}
+		}
+		for _, r := range st.XrayMaterials {
+			if v.cipher.keys[r.ReservedKeyID] == nil {
+				return ErrIdentityUnavailable
+			}
+			if len(r.Sealed.Ciphertext) > 0 {
+				plain, e := v.cipher.open(xrayMaterialBinding(r), r.Sealed, r.Meta.ExpiresAt, r.Meta.CreatedAt, false)
+				clear(plain)
+				if e != nil {
+					return ErrIdentityUnavailable
+				}
 			}
 		}
 		return nil

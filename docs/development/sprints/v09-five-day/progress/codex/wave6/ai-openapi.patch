@@ -1,0 +1,103 @@
+--- /dev/null
++++ b/api/openapi/revisions/v09-r6/ai-candidate.yaml
+@@ -0,0 +1,100 @@
++openapi: 3.1.0
++info:
++  title: Wave6 AI owner settings and explicit generation additions (PROPOSED)
++  version: 0.9.0-r6-candidate
++servers:
++  - url: https://server-fleet.example.invalid
++security:
++  - cookieSession: []
++paths:
++  /api/v1/ai/model-settings:
++    get:
++      operationId: getAIModelSettingsR6
++      summary: Read current owner's saved model metadata
++      responses:
++        '200':
++          description: Saved metadata, never plaintext secrets or provider health
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ModelSettings' }
++        '403': { description: Current identity or owner access denied }
++    put:
++      operationId: putAIModelSettingsR6
++      summary: Replace current owner's model configuration with CAS
++      parameters:
++        - { $ref: '#/components/parameters/CSRF' }
++      requestBody:
++        required: true
++        content:
++          application/json:
++            schema:
++              allOf:
++                - { $ref: '#/components/schemas/ModelInput' }
++                - type: object
++                  required: [expectedRevision]
++                  properties:
++                    expectedRevision: { type: integer, minimum: 0 }
++      responses:
++        '200':
++          description: Saved metadata after current owner and credential-revision validation
++          content:
++            application/json:
++              schema: { $ref: '#/components/schemas/ModelSettings' }
++        '400': { description: Invalid or inline-secret input }
++        '403': { description: Current identity, Origin, CSRF or owner access denied }
++        '409': { description: MODEL_REVISION_CONFLICT }
++        '503': { description: Metadata source unavailable }
++  /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate:
++    post:
++      operationId: generateAIQueuedMessageR6
++      summary: Explicitly generate one already queued message, never retry UNKNOWN
++      description: Upstream SSE is bounded and buffered until terminal verification and post-borrow authorization. This endpoint returns a complete verified Message, not browser token deltas. No resource or tool authority is granted by model output.
++      parameters:
++        - { $ref: '#/components/parameters/CSRF' }
++        - in: path
++          name: sessionId
++          required: true
++          schema: { type: string, minLength: 1, maxLength: 128 }
++        - in: path
++          name: messageId
++          required: true
++          schema: { type: string, minLength: 1, maxLength: 128 }
++      responses:
++        '200':
++          description: Complete response after current identity/scope/model/credential recheck
++          content:
++            application/json:
++              schema: { $ref: '../../g2-merged-candidate.yaml#/components/schemas/AIMessage' }
++        '400': { description: Body/query/identifier invalid }
++        '403': { description: Current identity, Origin, CSRF or scope denied }
++        '409': { description: Stale scope or generation state }
++        '503': { description: Missing configuration, quota denial, canceled or unknown generation; no automatic retry }
++components:
++  securitySchemes:
++    cookieSession: { type: apiKey, in: cookie, name: __Host-sf_session }
++  parameters:
++    CSRF:
++      in: header
++      name: X-CSRF-Token
++      required: true
++      schema: { type: string, minLength: 1 }
++  schemas:
++    ModelInput:
++      type: object
++      required: [enabled, provider, model, credentialRef, credentialRevision]
++      properties:
++        enabled: { type: boolean }
++        provider: { type: string, enum: ['', openai-responses] }
++        model: { type: string, maxLength: 128 }
++        credentialRef: { type: string, maxLength: 128 }
++        credentialRevision: { type: integer, minimum: 0 }
++      description: Empty provider/model/ref and revision zero are allowed only when disabled. Backend independently verifies owner, kind, scope, revision and expiry. No URL/secret/default fallback.
++    ModelSettings:
++      allOf:
++        - { $ref: '#/components/schemas/ModelInput' }
++        - type: object
++          properties:
++            id: { type: string }
++            ownerId: { type: string }
++            revision: { type: integer, minimum: 0 }
++            updatedAt: { type: string, format: date-time }
