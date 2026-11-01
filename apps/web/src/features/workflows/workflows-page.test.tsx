@@ -136,8 +136,10 @@ describe("workflows page", () => {
         jsonResponse({ identity: readOnlyIdentity, sessionExpiresAt: "2026-12-31T23:59:59Z", csrfToken: "csrf-test" }),
     });
     expect(await screen.findByText(/写操作已禁用/)).toBeVisible();
+    // 列表行异步渲染：先等任一行内按钮出现，再断言只读禁用态。
+    const triggerButton = await screen.findByRole("button", { name: "触发运行" });
+    expect(triggerButton).toBeDisabled();
     expect(screen.getByRole("button", { name: "创建工作流" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "触发运行" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "停用" })).toBeDisabled();
   });
 });
