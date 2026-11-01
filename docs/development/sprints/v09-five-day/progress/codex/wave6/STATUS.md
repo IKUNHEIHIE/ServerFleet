@@ -12,4 +12,12 @@
 
 剩余：Controller 固定密钥位于总控独占目录，作者未修改；具体补丁 controller-keyring.patch 待接收。总控必须配置私有路径、在新隔离数据库验证；awskr 已有数据库不允许用新密钥替换。Windows ACL 适配未准入。
 
-Agent / 文件 / AI / Xray / 更新 / 恢复继续包内推进。G2 和发布准入不变。
+增量 1 SHA：6331a5691350adeac907d86a90315af248cbca00。
+
+## 增量 2：常驻连接与受限文件字节组件
+
+Agent `-serve`、有界重连/退避、持续心跳指标、信号取消及 worker UNKNOWN 停止重连；复用原持久执行/对账。Linux 非 root 私有文件根，分块读写、完整 SHA、不可变绑定、重启续写、当前权限前后复核、原子拒绝覆盖；字节不进入任务输出。
+
+Windows `go test ./apps/agent/...` 首次 FAIL：文件最终目录同步在 Windows 不受支持；修正为 Linux 专属能力并明确 SKIP 后 PASS。不是放宽 Linux 持久化门。WSL 初验 38 顶层 PASS、0 SKIP，后续最终复验另记。`AGENT-LINUX.md` 含启动/停止/安装候选、Proto 接收/兼容/DS 接缝与未测项目。共享 Proto 只交 patch，未生成/接线，不声称跨机功能完成。
+
+AI / Xray / 更新 / 恢复继续包内推进。G2 和发布准入不变。

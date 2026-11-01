@@ -68,6 +68,7 @@ type ConnectRequest struct {
 	NodeName        string
 	WaitTaskMillis  int
 	AgentVersion    string
+	Persistent      bool
 }
 
 // ConnectResult is the observed single-shot connection outcome.
@@ -88,6 +89,7 @@ type Deps struct {
 	Status  func(ctx context.Context, stateDir, rootPin string) (Status, error)
 	Enroll  func(ctx context.Context, request EnrollRequest) (EnrollResult, error)
 	Connect func(ctx context.Context, request ConnectRequest) (ConnectResult, error)
+	Serve   func(ctx context.Context, request ConnectRequest) error
 }
 
 // Run executes the Agent CLI. No arguments keep the historical scaffold output.
@@ -105,6 +107,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	controllerURL := flags.String("controller-url", "", "Controller https or wss origin, e.g. https://controller.example")
 	enrollToken := flags.String("enroll-token", "", "one-time enrollment token")
 	connectOnce := flags.Bool("connect-once", false, "open one controlled WSS+mTLS connection, sample once and exit")
+	serve := flags.Bool("serve", false, "maintain WSS+mTLS with bounded reconnect; stop with SIGTERM")
 	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
 	waitTaskMS := flags.Int("wait-task-ms", 0, "one-shot wait window for one TaskOffer after sampling (0..600000)")
 	agentVersion := flags.String("agent-version", DefaultVersion, "Agent version reported during enrollment and connection")
@@ -133,13 +136,13 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		fmt.Fprintln(stderr, "agent: -state-dir must be an absolute path")
 		return 2
 	}
-	if *connectOnce && strings.TrimSpace(*rootCert) == "" {
+	if (*connectOnce || *serve) && strings.TrimSpace(*rootCert) == "" {
 		fmt.Fprintln(stderr, "agent: -connect-once requires -root-cert")
 		return 2
 	}
 
 	modes := 0
-	for _, active := range []bool{*statusFlag, *enrollToken != "", *connectOnce} {
+	for _, active := range []bool{*statusFlag, *enrollToken != "", *connectOnce, *serve} {
 		if active {
 			modes++
 		}
@@ -150,6 +153,20 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	}
 
 	switch {
+	case *serve:
+		origin, ok := normalizeControllerURL(*controllerURL)
+		if !ok || !validNodeName(strings.TrimSpace(*nodeName)) || *waitTaskMS != 0 {
+			return 2
+		}
+		if deps.Serve == nil {
+			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
+			return 1
+		}
+		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true}); err != nil {
+			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
+			return 1
+		}
+		return 0
 	case *statusFlag:
 		if deps.Status == nil {
 			fmt.Fprintln(stderr, "agent: status self-check is unavailable")

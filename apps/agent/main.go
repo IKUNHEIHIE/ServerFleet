@@ -7,17 +7,21 @@ import (
 	"context"
 	"errors"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	agentruntime "serverfleet.local/serverfleet/apps/agent/runtime"
 )
 
 func main() {
-	os.Exit(agentruntime.Run(context.Background(), os.Args[1:], agentRuntimeDeps(), os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	os.Exit(agentruntime.Run(ctx, os.Args[1:], agentRuntimeDeps(), os.Stdout, os.Stderr))
 }
 
 func agentRuntimeDeps() agentruntime.Deps {
-	return agentruntime.Deps{Status: agentStatus, Enroll: agentEnrollOnce, Connect: agentConnectOnce}
+	return agentruntime.Deps{Status: agentStatus, Enroll: agentEnrollOnce, Connect: agentConnectOnce, Serve: agentServe}
 }
 
 func agentStatus(ctx context.Context, stateDir, rootPin string) (agentruntime.Status, error) {
