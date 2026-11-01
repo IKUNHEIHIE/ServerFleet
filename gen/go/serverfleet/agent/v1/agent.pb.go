@@ -201,6 +201,10 @@ type Envelope struct {
 	//	*Envelope_StateSyncRequest
 	//	*Envelope_StateSyncReply
 	//	*Envelope_ControlError
+	//	*Envelope_FileChunkRequest
+	//	*Envelope_FileChunkReply
+	//	*Envelope_FileOpenRequest
+	//	*Envelope_FileOpenReply
 	Message       isEnvelope_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -409,6 +413,42 @@ func (x *Envelope) GetControlError() *ControlError {
 	return nil
 }
 
+func (x *Envelope) GetFileChunkRequest() *FileChunkRequest {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_FileChunkRequest); ok {
+			return x.FileChunkRequest
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetFileChunkReply() *FileChunkReply {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_FileChunkReply); ok {
+			return x.FileChunkReply
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetFileOpenRequest() *FileOpenRequest {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_FileOpenRequest); ok {
+			return x.FileOpenRequest
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetFileOpenReply() *FileOpenReply {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_FileOpenReply); ok {
+			return x.FileOpenReply
+		}
+	}
+	return nil
+}
+
 type isEnvelope_Message interface {
 	isEnvelope_Message()
 }
@@ -465,6 +505,22 @@ type Envelope_ControlError struct {
 	ControlError *ControlError `protobuf:"bytes,32,opt,name=control_error,json=controlError,proto3,oneof"`
 }
 
+type Envelope_FileChunkRequest struct {
+	FileChunkRequest *FileChunkRequest `protobuf:"bytes,33,opt,name=file_chunk_request,json=fileChunkRequest,proto3,oneof"`
+}
+
+type Envelope_FileChunkReply struct {
+	FileChunkReply *FileChunkReply `protobuf:"bytes,34,opt,name=file_chunk_reply,json=fileChunkReply,proto3,oneof"`
+}
+
+type Envelope_FileOpenRequest struct {
+	FileOpenRequest *FileOpenRequest `protobuf:"bytes,35,opt,name=file_open_request,json=fileOpenRequest,proto3,oneof"`
+}
+
+type Envelope_FileOpenReply struct {
+	FileOpenReply *FileOpenReply `protobuf:"bytes,36,opt,name=file_open_reply,json=fileOpenReply,proto3,oneof"`
+}
+
 func (*Envelope_AgentHello) isEnvelope_Message() {}
 
 func (*Envelope_ControllerHello) isEnvelope_Message() {}
@@ -490,6 +546,14 @@ func (*Envelope_StateSyncRequest) isEnvelope_Message() {}
 func (*Envelope_StateSyncReply) isEnvelope_Message() {}
 
 func (*Envelope_ControlError) isEnvelope_Message() {}
+
+func (*Envelope_FileChunkRequest) isEnvelope_Message() {}
+
+func (*Envelope_FileChunkReply) isEnvelope_Message() {}
+
+func (*Envelope_FileOpenRequest) isEnvelope_Message() {}
+
+func (*Envelope_FileOpenReply) isEnvelope_Message() {}
 
 type AgentHello struct {
 	state                       protoimpl.MessageState `protogen:"open.v1"`
@@ -1650,11 +1714,470 @@ func (x *ControlError) GetRelatedMessageId() string {
 	return ""
 }
 
+// R6 CANDIDATE, NOT RUNTIME ADMISSION: files.transfer.v1 requires negotiated
+// minor >=1 and a durable accepted files.transfer TaskOffer. Existing default
+// validators/CLI capability grants reject these frames until the full task,
+// current-authority and identity bindings are implemented and reviewed.
+// Every frame <=65536; data <=32768. IDs use [A-Za-z0-9_-]{1,128}.
+// Immutable path/direction/size/hash come from the accepted execution binding;
+// chunk messages cannot replace it. File bytes NEVER enter task output/audit.
+type FileChunkRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	ExecutionId   string                 `protobuf:"bytes,2,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	TransferId    string                 `protobuf:"bytes,3,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
+	Offset        uint64                 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	ReadBytes     uint32                 `protobuf:"varint,5,opt,name=read_bytes,json=readBytes,proto3" json:"read_bytes,omitempty"`
+	Data          []byte                 `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`
+	Finish        bool                   `protobuf:"varint,7,opt,name=finish,proto3" json:"finish,omitempty"`
+	Cancel        bool                   `protobuf:"varint,8,opt,name=cancel,proto3" json:"cancel,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileChunkRequest) Reset() {
+	*x = FileChunkRequest{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileChunkRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileChunkRequest) ProtoMessage() {}
+
+func (x *FileChunkRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileChunkRequest.ProtoReflect.Descriptor instead.
+func (*FileChunkRequest) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *FileChunkRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *FileChunkRequest) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *FileChunkRequest) GetTransferId() string {
+	if x != nil {
+		return x.TransferId
+	}
+	return ""
+}
+
+func (x *FileChunkRequest) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *FileChunkRequest) GetReadBytes() uint32 {
+	if x != nil {
+		return x.ReadBytes
+	}
+	return 0
+}
+
+func (x *FileChunkRequest) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *FileChunkRequest) GetFinish() bool {
+	if x != nil {
+		return x.Finish
+	}
+	return false
+}
+
+func (x *FileChunkRequest) GetCancel() bool {
+	if x != nil {
+		return x.Cancel
+	}
+	return false
+}
+
+type FileChunkReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	TaskId        string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	ExecutionId   string                 `protobuf:"bytes,2,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	TransferId    string                 `protobuf:"bytes,3,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
+	Offset        uint64                 `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	NextOffset    uint64                 `protobuf:"varint,5,opt,name=next_offset,json=nextOffset,proto3" json:"next_offset,omitempty"`
+	Data          []byte                 `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`
+	Complete      bool                   `protobuf:"varint,7,opt,name=complete,proto3" json:"complete,omitempty"`
+	ResultCode    string                 `protobuf:"bytes,8,opt,name=result_code,json=resultCode,proto3" json:"result_code,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileChunkReply) Reset() {
+	*x = FileChunkReply{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileChunkReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileChunkReply) ProtoMessage() {}
+
+func (x *FileChunkReply) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileChunkReply.ProtoReflect.Descriptor instead.
+func (*FileChunkReply) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *FileChunkReply) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *FileChunkReply) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *FileChunkReply) GetTransferId() string {
+	if x != nil {
+		return x.TransferId
+	}
+	return ""
+}
+
+func (x *FileChunkReply) GetOffset() uint64 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *FileChunkReply) GetNextOffset() uint64 {
+	if x != nil {
+		return x.NextOffset
+	}
+	return 0
+}
+
+func (x *FileChunkReply) GetData() []byte {
+	if x != nil {
+		return x.Data
+	}
+	return nil
+}
+
+func (x *FileChunkReply) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *FileChunkReply) GetResultCode() string {
+	if x != nil {
+		return x.ResultCode
+	}
+	return ""
+}
+
+// Open metadata MUST match an accepted task reservation. Download size/hash are
+// observed under the admitted relative path and frozen before reading chunks.
+// Upload metadata/policy must match its accepted immutable write binding.
+// A relative path is rooted ONLY at the operator-configured private file root.
+type FileOpenRequest struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	TaskId           string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	ExecutionId      string                 `protobuf:"bytes,2,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	TransferId       string                 `protobuf:"bytes,3,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
+	RelativePath     string                 `protobuf:"bytes,4,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
+	Direction        string                 `protobuf:"bytes,5,opt,name=direction,proto3" json:"direction,omitempty"` // read or write; no filesystem authority by itself
+	Size             uint64                 `protobuf:"varint,6,opt,name=size,proto3" json:"size,omitempty"`
+	Sha256           string                 `protobuf:"bytes,7,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	ConflictPolicy   string                 `protobuf:"bytes,8,opt,name=conflict_policy,json=conflictPolicy,proto3" json:"conflict_policy,omitempty"` // skip, rename or overwrite; unsupported => reject
+	ResumeOffset     uint64                 `protobuf:"varint,9,opt,name=resume_offset,json=resumeOffset,proto3" json:"resume_offset,omitempty"`
+	CreateParents    bool                   `protobuf:"varint,10,opt,name=create_parents,json=createParents,proto3" json:"create_parents,omitempty"`
+	PlanDigestSha256 string                 `protobuf:"bytes,11,opt,name=plan_digest_sha256,json=planDigestSha256,proto3" json:"plan_digest_sha256,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *FileOpenRequest) Reset() {
+	*x = FileOpenRequest{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileOpenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileOpenRequest) ProtoMessage() {}
+
+func (x *FileOpenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileOpenRequest.ProtoReflect.Descriptor instead.
+func (*FileOpenRequest) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *FileOpenRequest) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetTransferId() string {
+	if x != nil {
+		return x.TransferId
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetDirection() string {
+	if x != nil {
+		return x.Direction
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *FileOpenRequest) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetConflictPolicy() string {
+	if x != nil {
+		return x.ConflictPolicy
+	}
+	return ""
+}
+
+func (x *FileOpenRequest) GetResumeOffset() uint64 {
+	if x != nil {
+		return x.ResumeOffset
+	}
+	return 0
+}
+
+func (x *FileOpenRequest) GetCreateParents() bool {
+	if x != nil {
+		return x.CreateParents
+	}
+	return false
+}
+
+func (x *FileOpenRequest) GetPlanDigestSha256() string {
+	if x != nil {
+		return x.PlanDigestSha256
+	}
+	return ""
+}
+
+type FileOpenReply struct {
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	TaskId           string                 `protobuf:"bytes,1,opt,name=task_id,json=taskId,proto3" json:"task_id,omitempty"`
+	ExecutionId      string                 `protobuf:"bytes,2,opt,name=execution_id,json=executionId,proto3" json:"execution_id,omitempty"`
+	TransferId       string                 `protobuf:"bytes,3,opt,name=transfer_id,json=transferId,proto3" json:"transfer_id,omitempty"`
+	Size             uint64                 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"`
+	Sha256           string                 `protobuf:"bytes,5,opt,name=sha256,proto3" json:"sha256,omitempty"`
+	ResumeOffset     uint64                 `protobuf:"varint,6,opt,name=resume_offset,json=resumeOffset,proto3" json:"resume_offset,omitempty"`
+	RelativePath     string                 `protobuf:"bytes,7,opt,name=relative_path,json=relativePath,proto3" json:"relative_path,omitempty"`
+	Skipped          bool                   `protobuf:"varint,8,opt,name=skipped,proto3" json:"skipped,omitempty"`
+	Complete         bool                   `protobuf:"varint,9,opt,name=complete,proto3" json:"complete,omitempty"`
+	ResultCode       string                 `protobuf:"bytes,10,opt,name=result_code,json=resultCode,proto3" json:"result_code,omitempty"`
+	PlanDigestSha256 string                 `protobuf:"bytes,11,opt,name=plan_digest_sha256,json=planDigestSha256,proto3" json:"plan_digest_sha256,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
+}
+
+func (x *FileOpenReply) Reset() {
+	*x = FileOpenReply{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileOpenReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileOpenReply) ProtoMessage() {}
+
+func (x *FileOpenReply) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileOpenReply.ProtoReflect.Descriptor instead.
+func (*FileOpenReply) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *FileOpenReply) GetTaskId() string {
+	if x != nil {
+		return x.TaskId
+	}
+	return ""
+}
+
+func (x *FileOpenReply) GetExecutionId() string {
+	if x != nil {
+		return x.ExecutionId
+	}
+	return ""
+}
+
+func (x *FileOpenReply) GetTransferId() string {
+	if x != nil {
+		return x.TransferId
+	}
+	return ""
+}
+
+func (x *FileOpenReply) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *FileOpenReply) GetSha256() string {
+	if x != nil {
+		return x.Sha256
+	}
+	return ""
+}
+
+func (x *FileOpenReply) GetResumeOffset() uint64 {
+	if x != nil {
+		return x.ResumeOffset
+	}
+	return 0
+}
+
+func (x *FileOpenReply) GetRelativePath() string {
+	if x != nil {
+		return x.RelativePath
+	}
+	return ""
+}
+
+func (x *FileOpenReply) GetSkipped() bool {
+	if x != nil {
+		return x.Skipped
+	}
+	return false
+}
+
+func (x *FileOpenReply) GetComplete() bool {
+	if x != nil {
+		return x.Complete
+	}
+	return false
+}
+
+func (x *FileOpenReply) GetResultCode() string {
+	if x != nil {
+		return x.ResultCode
+	}
+	return ""
+}
+
+func (x *FileOpenReply) GetPlanDigestSha256() string {
+	if x != nil {
+		return x.PlanDigestSha256
+	}
+	return ""
+}
+
 var File_serverfleet_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	" serverfleet/agent/v1/agent.proto\x12\x14serverfleet.agent.v1\"\xad\t\n" +
+	" serverfleet/agent/v1/agent.proto\x12\x14serverfleet.agent.v1\"\xfb\v\n" +
 	"\bEnvelope\x12%\n" +
 	"\x0eprotocol_major\x18\x01 \x01(\rR\rprotocolMajor\x12%\n" +
 	"\x0eprotocol_minor\x18\x02 \x01(\rR\rprotocolMinor\x12\x1d\n" +
@@ -1680,7 +2203,11 @@ const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"taskCancel\x12V\n" +
 	"\x12state_sync_request\x18\x1e \x01(\v2&.serverfleet.agent.v1.StateSyncRequestH\x00R\x10stateSyncRequest\x12P\n" +
 	"\x10state_sync_reply\x18\x1f \x01(\v2$.serverfleet.agent.v1.StateSyncReplyH\x00R\x0estateSyncReply\x12I\n" +
-	"\rcontrol_error\x18  \x01(\v2\".serverfleet.agent.v1.ControlErrorH\x00R\fcontrolErrorB\t\n" +
+	"\rcontrol_error\x18  \x01(\v2\".serverfleet.agent.v1.ControlErrorH\x00R\fcontrolError\x12V\n" +
+	"\x12file_chunk_request\x18! \x01(\v2&.serverfleet.agent.v1.FileChunkRequestH\x00R\x10fileChunkRequest\x12P\n" +
+	"\x10file_chunk_reply\x18\" \x01(\v2$.serverfleet.agent.v1.FileChunkReplyH\x00R\x0efileChunkReply\x12S\n" +
+	"\x11file_open_request\x18# \x01(\v2%.serverfleet.agent.v1.FileOpenRequestH\x00R\x0ffileOpenRequest\x12M\n" +
+	"\x0ffile_open_reply\x18$ \x01(\v2#.serverfleet.agent.v1.FileOpenReplyH\x00R\rfileOpenReplyB\t\n" +
 	"\amessage\"\xd2\x02\n" +
 	"\n" +
 	"AgentHello\x12#\n" +
@@ -1787,7 +2314,59 @@ const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\fControlError\x12\x12\n" +
 	"\x04code\x18\x01 \x01(\tR\x04code\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12,\n" +
-	"\x12related_message_id\x18\x03 \x01(\tR\x10relatedMessageId*P\n" +
+	"\x12related_message_id\x18\x03 \x01(\tR\x10relatedMessageId\"\xea\x01\n" +
+	"\x10FileChunkRequest\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
+	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\x12\x1f\n" +
+	"\vtransfer_id\x18\x03 \x01(\tR\n" +
+	"transferId\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x04R\x06offset\x12\x1d\n" +
+	"\n" +
+	"read_bytes\x18\x05 \x01(\rR\treadBytes\x12\x12\n" +
+	"\x04data\x18\x06 \x01(\fR\x04data\x12\x16\n" +
+	"\x06finish\x18\a \x01(\bR\x06finish\x12\x16\n" +
+	"\x06cancel\x18\b \x01(\bR\x06cancel\"\xf7\x01\n" +
+	"\x0eFileChunkReply\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
+	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\x12\x1f\n" +
+	"\vtransfer_id\x18\x03 \x01(\tR\n" +
+	"transferId\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x04R\x06offset\x12\x1f\n" +
+	"\vnext_offset\x18\x05 \x01(\x04R\n" +
+	"nextOffset\x12\x12\n" +
+	"\x04data\x18\x06 \x01(\fR\x04data\x12\x1a\n" +
+	"\bcomplete\x18\a \x01(\bR\bcomplete\x12\x1f\n" +
+	"\vresult_code\x18\b \x01(\tR\n" +
+	"resultCode\"\x80\x03\n" +
+	"\x0fFileOpenRequest\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
+	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\x12\x1f\n" +
+	"\vtransfer_id\x18\x03 \x01(\tR\n" +
+	"transferId\x12#\n" +
+	"\rrelative_path\x18\x04 \x01(\tR\frelativePath\x12\x1c\n" +
+	"\tdirection\x18\x05 \x01(\tR\tdirection\x12\x12\n" +
+	"\x04size\x18\x06 \x01(\x04R\x04size\x12\x16\n" +
+	"\x06sha256\x18\a \x01(\tR\x06sha256\x12'\n" +
+	"\x0fconflict_policy\x18\b \x01(\tR\x0econflictPolicy\x12#\n" +
+	"\rresume_offset\x18\t \x01(\x04R\fresumeOffset\x12%\n" +
+	"\x0ecreate_parents\x18\n" +
+	" \x01(\bR\rcreateParents\x12,\n" +
+	"\x12plan_digest_sha256\x18\v \x01(\tR\x10planDigestSha256\"\xe7\x02\n" +
+	"\rFileOpenReply\x12\x17\n" +
+	"\atask_id\x18\x01 \x01(\tR\x06taskId\x12!\n" +
+	"\fexecution_id\x18\x02 \x01(\tR\vexecutionId\x12\x1f\n" +
+	"\vtransfer_id\x18\x03 \x01(\tR\n" +
+	"transferId\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x04R\x04size\x12\x16\n" +
+	"\x06sha256\x18\x05 \x01(\tR\x06sha256\x12#\n" +
+	"\rresume_offset\x18\x06 \x01(\x04R\fresumeOffset\x12#\n" +
+	"\rrelative_path\x18\a \x01(\tR\frelativePath\x12\x18\n" +
+	"\askipped\x18\b \x01(\bR\askipped\x12\x1a\n" +
+	"\bcomplete\x18\t \x01(\bR\bcomplete\x12\x1f\n" +
+	"\vresult_code\x18\n" +
+	" \x01(\tR\n" +
+	"resultCode\x12,\n" +
+	"\x12plan_digest_sha256\x18\v \x01(\tR\x10planDigestSha256*P\n" +
 	"\tPrivilege\x12\x19\n" +
 	"\x15PRIVILEGE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PRIVILEGE_NORMAL\x10\x01\x12\x12\n" +
@@ -1813,7 +2392,7 @@ func file_serverfleet_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_serverfleet_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_serverfleet_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 16)
+var file_serverfleet_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
 var file_serverfleet_agent_v1_agent_proto_goTypes = []any{
 	(Privilege)(0),            // 0: serverfleet.agent.v1.Privilege
 	(ExecutionResult)(0),      // 1: serverfleet.agent.v1.ExecutionResult
@@ -1834,6 +2413,10 @@ var file_serverfleet_agent_v1_agent_proto_goTypes = []any{
 	(*ExecutionSnapshot)(nil), // 16: serverfleet.agent.v1.ExecutionSnapshot
 	(*StateSyncReply)(nil),    // 17: serverfleet.agent.v1.StateSyncReply
 	(*ControlError)(nil),      // 18: serverfleet.agent.v1.ControlError
+	(*FileChunkRequest)(nil),  // 19: serverfleet.agent.v1.FileChunkRequest
+	(*FileChunkReply)(nil),    // 20: serverfleet.agent.v1.FileChunkReply
+	(*FileOpenRequest)(nil),   // 21: serverfleet.agent.v1.FileOpenRequest
+	(*FileOpenReply)(nil),     // 22: serverfleet.agent.v1.FileOpenReply
 }
 var file_serverfleet_agent_v1_agent_proto_depIdxs = []int32{
 	4,  // 0: serverfleet.agent.v1.Envelope.agent_hello:type_name -> serverfleet.agent.v1.AgentHello
@@ -1849,17 +2432,21 @@ var file_serverfleet_agent_v1_agent_proto_depIdxs = []int32{
 	15, // 10: serverfleet.agent.v1.Envelope.state_sync_request:type_name -> serverfleet.agent.v1.StateSyncRequest
 	17, // 11: serverfleet.agent.v1.Envelope.state_sync_reply:type_name -> serverfleet.agent.v1.StateSyncReply
 	18, // 12: serverfleet.agent.v1.Envelope.control_error:type_name -> serverfleet.agent.v1.ControlError
-	7,  // 13: serverfleet.agent.v1.MetricsBatch.points:type_name -> serverfleet.agent.v1.MetricPoint
-	0,  // 14: serverfleet.agent.v1.TaskOffer.privilege:type_name -> serverfleet.agent.v1.Privilege
-	2,  // 15: serverfleet.agent.v1.TaskOutput.stream:type_name -> serverfleet.agent.v1.TaskOutput.Stream
-	1,  // 16: serverfleet.agent.v1.TaskFinished.result:type_name -> serverfleet.agent.v1.ExecutionResult
-	1,  // 17: serverfleet.agent.v1.ExecutionSnapshot.result:type_name -> serverfleet.agent.v1.ExecutionResult
-	16, // 18: serverfleet.agent.v1.StateSyncReply.executions:type_name -> serverfleet.agent.v1.ExecutionSnapshot
-	19, // [19:19] is the sub-list for method output_type
-	19, // [19:19] is the sub-list for method input_type
-	19, // [19:19] is the sub-list for extension type_name
-	19, // [19:19] is the sub-list for extension extendee
-	0,  // [0:19] is the sub-list for field type_name
+	19, // 13: serverfleet.agent.v1.Envelope.file_chunk_request:type_name -> serverfleet.agent.v1.FileChunkRequest
+	20, // 14: serverfleet.agent.v1.Envelope.file_chunk_reply:type_name -> serverfleet.agent.v1.FileChunkReply
+	21, // 15: serverfleet.agent.v1.Envelope.file_open_request:type_name -> serverfleet.agent.v1.FileOpenRequest
+	22, // 16: serverfleet.agent.v1.Envelope.file_open_reply:type_name -> serverfleet.agent.v1.FileOpenReply
+	7,  // 17: serverfleet.agent.v1.MetricsBatch.points:type_name -> serverfleet.agent.v1.MetricPoint
+	0,  // 18: serverfleet.agent.v1.TaskOffer.privilege:type_name -> serverfleet.agent.v1.Privilege
+	2,  // 19: serverfleet.agent.v1.TaskOutput.stream:type_name -> serverfleet.agent.v1.TaskOutput.Stream
+	1,  // 20: serverfleet.agent.v1.TaskFinished.result:type_name -> serverfleet.agent.v1.ExecutionResult
+	1,  // 21: serverfleet.agent.v1.ExecutionSnapshot.result:type_name -> serverfleet.agent.v1.ExecutionResult
+	16, // 22: serverfleet.agent.v1.StateSyncReply.executions:type_name -> serverfleet.agent.v1.ExecutionSnapshot
+	23, // [23:23] is the sub-list for method output_type
+	23, // [23:23] is the sub-list for method input_type
+	23, // [23:23] is the sub-list for extension type_name
+	23, // [23:23] is the sub-list for extension extendee
+	0,  // [0:23] is the sub-list for field type_name
 }
 
 func init() { file_serverfleet_agent_v1_agent_proto_init() }
@@ -1881,6 +2468,10 @@ func file_serverfleet_agent_v1_agent_proto_init() {
 		(*Envelope_StateSyncRequest)(nil),
 		(*Envelope_StateSyncReply)(nil),
 		(*Envelope_ControlError)(nil),
+		(*Envelope_FileChunkRequest)(nil),
+		(*Envelope_FileChunkReply)(nil),
+		(*Envelope_FileOpenRequest)(nil),
+		(*Envelope_FileOpenReply)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1888,7 +2479,7 @@ func file_serverfleet_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_serverfleet_agent_v1_agent_proto_rawDesc), len(file_serverfleet_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   16,
+			NumMessages:   20,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

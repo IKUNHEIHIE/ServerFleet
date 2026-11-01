@@ -41,7 +41,7 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/ModelSettings' }
         '400': { description: Invalid or inline-secret input }
-        '403': { description: Current identity, Origin, CSRF or owner access denied }
+        '403': { description: 'Current identity, Origin, CSRF or owner access denied' }
         '409': { description: MODEL_REVISION_CONFLICT }
         '503': { description: Metadata source unavailable }
   /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate:
@@ -66,9 +66,9 @@ paths:
             application/json:
               schema: { $ref: '../../g2-merged-candidate.yaml#/components/schemas/AIMessage' }
         '400': { description: Body/query/identifier invalid }
-        '403': { description: Current identity, Origin, CSRF or scope denied }
+        '403': { description: 'Current identity, Origin, CSRF or scope denied' }
         '409': { description: Stale scope or generation state }
-        '503': { description: Missing configuration, quota denial, canceled or unknown generation; no automatic retry }
+        '503': { description: 'Missing configuration, quota denial, canceled or unknown generation; no automatic retry' }
 components:
   securitySchemes:
     cookieSession: { type: apiKey, in: cookie, name: __Host-sf_session }

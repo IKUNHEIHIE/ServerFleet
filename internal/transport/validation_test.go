@@ -445,9 +445,9 @@ func TestErrorsDoNotEchoUntrustedValues(t *testing.T) {
 
 func TestUnknownFieldsAreNotInferredAsMessagesOrAuthority(t *testing.T) {
 	decoded := new(agentv1.Envelope)
-	if err := proto.Unmarshal([]byte{0x8a, 0x02, 0x00}, decoded); err != nil {
+	if err := proto.Unmarshal([]byte{0xa2, 0x06, 0x00}, decoded); err != nil {
 		t.Fatal(err)
-	} // Future oneof field33.
+	} // Future field100; 33-36 now describe the disabled R6 file candidate.
 	assertCode(t, transport.ValidateEnvelope(decoded, contextFor(transport.AgentToController, transport.Established), limits()), transport.MissingPayload)
 	sample := examples()[2]
 	sample.e.ProtoReflect().SetUnknown([]byte{0xa0, 0x06, 0x01})

@@ -230,7 +230,7 @@ func TestFrameUnknownExtensionsPreservedAndOpaque(t *testing.T) {
 	unknown = protowire.AppendTag(unknown, 100, protowire.EndGroupType)
 	assertFrameSuccess(t, append(encodeFrame(t, sample.e), unknown...), sample, frameLimits())
 	// A future payload field alongside a known payload stays an opaque extension.
-	assertFrameSuccess(t, append(encodeFrame(t, sample.e), bytesField(33, []byte{0xff})...), sample, frameLimits())
+	assertFrameSuccess(t, append(encodeFrame(t, sample.e), bytesField(100, []byte{0xff})...), sample, frameLimits())
 	// Extensions inside a known payload also remain compatible.
 	body, err := proto.Marshal(sample.e.GetHeartbeat())
 	if err != nil {
@@ -362,7 +362,7 @@ func TestFrameSemanticFailureReturnsNoMessage(t *testing.T) {
 		}
 	}
 	sample := examples()[2]
-	raw := append(withoutPayload(t, sample), bytesField(33, nil)...)
+	raw := append(withoutPayload(t, sample), bytesField(100, nil)...)
 	decoded, err := transport.DecodeEnvelopeFrame(raw, sample.ctx, limits(), frameLimits())
 	if decoded != nil {
 		t.Fatal("unknown payload-only exposed message")

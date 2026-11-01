@@ -32,6 +32,10 @@ message Envelope {
     StateSyncRequest state_sync_request = 30;
     StateSyncReply state_sync_reply = 31;
     ControlError control_error = 32;
+    FileChunkRequest file_chunk_request = 33;
+    FileChunkReply file_chunk_reply = 34;
+    FileOpenRequest file_open_request = 35;
+    FileOpenReply file_open_reply = 36;
   }
 }
 
@@ -164,4 +168,65 @@ message ControlError {
   string code = 1;
   string message = 2;
   string related_message_id = 3;
+}
+
+// R6 CANDIDATE, NOT RUNTIME ADMISSION: files.transfer.v1 requires negotiated
+// minor >=1 and a durable accepted files.transfer TaskOffer. Existing default
+// validators/CLI capability grants reject these frames until the full task,
+// current-authority and identity bindings are implemented and reviewed.
+// Every frame <=65536; data <=32768. IDs use [A-Za-z0-9_-]{1,128}.
+// Immutable path/direction/size/hash come from the accepted execution binding;
+// chunk messages cannot replace it. File bytes NEVER enter task output/audit.
+message FileChunkRequest {
+  string task_id = 1;
+  string execution_id = 2;
+  string transfer_id = 3;
+  uint64 offset = 4;
+  uint32 read_bytes = 5;
+  bytes data = 6;
+  bool finish = 7;
+  bool cancel = 8;
+}
+
+message FileChunkReply {
+  string task_id = 1;
+  string execution_id = 2;
+  string transfer_id = 3;
+  uint64 offset = 4;
+  uint64 next_offset = 5;
+  bytes data = 6;
+  bool complete = 7;
+  string result_code = 8;
+}
+
+// Open metadata MUST match an accepted task reservation. Download size/hash are
+// observed under the admitted relative path and frozen before reading chunks.
+// Upload metadata/policy must match its accepted immutable write binding.
+// A relative path is rooted ONLY at the operator-configured private file root.
+message FileOpenRequest {
+  string task_id = 1;
+  string execution_id = 2;
+  string transfer_id = 3;
+  string relative_path = 4;
+  string direction = 5; // read or write; no filesystem authority by itself
+  uint64 size = 6;
+  string sha256 = 7;
+  string conflict_policy = 8; // skip, rename or overwrite; unsupported => reject
+  uint64 resume_offset = 9;
+  bool create_parents = 10;
+  string plan_digest_sha256 = 11;
+}
+
+message FileOpenReply {
+  string task_id = 1;
+  string execution_id = 2;
+  string transfer_id = 3;
+  uint64 size = 4;
+  string sha256 = 5;
+  uint64 resume_offset = 6;
+  string relative_path = 7;
+  bool skipped = 8;
+  bool complete = 9;
+  string result_code = 10;
+  string plan_digest_sha256 = 11;
 }

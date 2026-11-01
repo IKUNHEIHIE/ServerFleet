@@ -60,4 +60,6 @@ P1-C10补记（完整v0.9五日冲刺）：负责人明确“五天内完整v0.9
 
 P1-C10补记（2026-11-01 Wave6增量组合）：独立AI设置/显式生成候选位于`api/openapi/revisions/v09-r6/ai-candidate.yaml`，原三候选/69原文不改。当前管理HTTP采用`__Host-sf_session`，旧候选`sf_session`仍是未关闭的迁移/冻结差异；新增候选明确真实Cookie名，不视为D01—D07批准。DS的rollback-all路由保持实现候选；文件帧33—36、能力/minor、TaskOffer绑定、路径/ID兼容尚未接收，不改Proto/gen。已登记主控持久密钥/AI与平台注入接缝，默认远端文件缺通道失败关闭；详见development/sprints/v09-five-day/WAVE6-SHARED.md。本地与指定awskr隔离测试获当前授权，真实高权限、生产与外部账号仍未准入。
 
+Wave6后续共享检查点：Proto FileChunk33/34、FileOpen35/36已按固定工具接收为可编译候选（非G2冻结），chunk另加cancel=8，open携带plan digest且必须与已接收TaskOffer核对。默认Validator/CLI仍拒绝文件动作；不改旧字段号/基线/r03 provenance，不授权运行时。旧未知字段负向改用仍未知的100并新增四种文件消息往返及两个方向默认拒绝，具体字段与后续门控见WAVE6-SHARED。
+
 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。当前已有本地实现与隔离实机证据，完整功能和发布准入须分别验收。

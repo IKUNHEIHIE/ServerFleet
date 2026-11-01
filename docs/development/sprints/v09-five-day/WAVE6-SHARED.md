@@ -23,11 +23,13 @@
 - `GET/PUT /api/v1/ai/model-settings`，PUT要求当前真人管理员、Origin/CSRF及expectedRevision；`POST /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate`无请求体/查询，响应为完整消息，不是浏览器token流。
 - 当前实现Cookie名`__Host-sf_session`与旧候选`sf_session`的差异登记到P1-CANDIDATE-REVIEW，不用新增候选暗中修改旧合同。
 - DS新增`POST /api/v1/publications/{id}/rollback-all`及带publishing前缀别名仍是实现候选；授权/逆序/失败停止/续跑通过模块测试，不代表真实发布桥已验收。
-- 本轮不改Proto/gen/已固定r03 provenance。CX的FileChunk 33/34和DS建议FileOpen 35/36均仍PROPOSED，不能各自落一套后宣称已互通。现有传输语义校验默认拒绝未知帧，这属于待解决的兼容门。
+- 已接收可编译的R6文件消息候选：Envelope oneof33/34为`FileChunkRequest/Reply`，35/36为`FileOpenRequest/Reply`；固定Buf/protoc-gen-go生成，保留所有旧字段号和原兼容基线。`files.transfer.v1`能力及minor>=1预留给后续完整实现，当前默认语义校验、CLI能力与任务准入继续拒绝File*。新测试验证四类候选往返且两个方向都不能默认获准。原未知字段测试改用仍未知的100，保留原拒绝/扩展检查；r03 provenance及原始资料不变。
 
 ## 文件链路下一检查点
 
 CX继续私有Agent/transport实现，DS继续files协调器；给总控可应用且同步的Proto/生成/组合补丁。至少一起解决：
+
+双方直接使用`gen/go/serverfleet/agent/v1`新类型，不再重复申请同一组字段。Chunk的1—7沿用CX提议、8为cancel（取消不得带data/readBytes/finish）；Open的路径/方向/策略/大小/SHA/planDigest必须与已接受任务绑定核对。相对路径映射、执行ID、取消和冲突策略按下述检查点完成后，总控再审查默认语义校验和WSS接线，不可只打开switch使其通过。
 
 - 当前DS每项transferID含冒号，CX只接受`[A-Za-z0-9_-]{1,128}`；executionID长度也必须统一，不能仅靠fake peer通过。
 - DS输入是节点绝对路径，CX只接受file-root相对路径。不能静默去掉斜杠；必须由已冻结任务映射，执行前源读/目标写各自授权。
