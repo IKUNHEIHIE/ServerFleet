@@ -188,6 +188,19 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 	}, nil
 }
 
+func validateNginxTaskParams(params map[string]string) error {
+	if len(params) > 32 {
+		return fmt.Errorf("%w: task params", ErrInvalidNginx)
+	}
+	for key, value := range params {
+		if !validToken(key, 64) || len(value) > 1024 ||
+			strings.ContainsFunc(value, func(r rune) bool { return r < 0x20 || r == 0x7f }) {
+			return fmt.Errorf("%w: task param", ErrInvalidNginx)
+		}
+	}
+	return nil
+}
+
 func nginxProxyLocation(upstream string) string {
 	var builder strings.Builder
 	builder.WriteString("    location / {\n")
@@ -333,6 +346,9 @@ type NginxTaskInput struct {
 // validating and reloading one rendered site. The agent action must itself verify
 // the content digest before writing and run its fixed validate/reload commands.
 func BuildNginxApplyTask(site NginxSite, input NginxTaskInput) (TaskRequest, error) {
+	if !validToken(input.SubjectID, 128) || !validText(input.RequestID, 128) {
+		return TaskRequest{}, fmt.Errorf("%w: task subject/request", ErrInvalidNginx)
+	}
 	if !validID(input.GatewayID) || input.GatewayID != site.GatewayID || !validID(input.NodeID) {
 		return TaskRequest{}, fmt.Errorf("%w: task identity", ErrInvalidNginx)
 	}
@@ -352,6 +368,9 @@ func BuildNginxApplyTask(site NginxSite, input NginxTaskInput) (TaskRequest, err
 	if input.ApprovalRef != "" {
 		params[ParamApprovalRef] = input.ApprovalRef
 	}
+	if err := validateNginxTaskParams(params); err != nil {
+		return TaskRequest{}, err
+	}
 	return TaskRequest{
 		SubjectID: input.SubjectID, RequestID: input.RequestID, ActionID: NginxActionApply,
 		ResourceID: input.GatewayID, NodeIDs: []string{input.NodeID},
@@ -362,6 +381,9 @@ func BuildNginxApplyTask(site NginxSite, input NginxTaskInput) (TaskRequest, err
 // BuildNginxRemoveTask removes only when the on-disk digest still matches the
 // site that ServerFleet wrote.
 func BuildNginxRemoveTask(site NginxSite, input NginxTaskInput) (TaskRequest, error) {
+	if !validToken(input.SubjectID, 128) || !validText(input.RequestID, 128) {
+		return TaskRequest{}, fmt.Errorf("%w: task subject/request", ErrInvalidNginx)
+	}
 	if !validID(input.GatewayID) || input.GatewayID != site.GatewayID || !validID(input.NodeID) {
 		return TaskRequest{}, fmt.Errorf("%w: task identity", ErrInvalidNginx)
 	}
@@ -371,6 +393,9 @@ func BuildNginxRemoveTask(site NginxSite, input NginxTaskInput) (TaskRequest, er
 		"config_sha256":    site.Digest,
 		"validate_command": "nginx -t",
 		"reload_command":   "reload",
+	}
+	if err := validateNginxTaskParams(params); err != nil {
+		return TaskRequest{}, err
 	}
 	return TaskRequest{
 		SubjectID: input.SubjectID, RequestID: input.RequestID, ActionID: NginxActionRemove,
