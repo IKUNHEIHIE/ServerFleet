@@ -47,28 +47,29 @@ func NewACMEChallengePublisher(config ACMEPublisherConfig) (*ACMEChallengePublis
 }
 
 // Publish creates one TXT record. The cleanup function is idempotent and deletes
-// only the record returned by this call.
-func (p *ACMEChallengePublisher) Publish(ctx context.Context, fqdn, value string) (func(context.Context) error, error) {
+// only the record returned by this call. The provider record id is returned so a
+// failed cleanup can be persisted by the caller.
+func (p *ACMEChallengePublisher) Publish(ctx context.Context, fqdn, value string) (string, func(context.Context) error, error) {
 	if p == nil || p.service == nil {
-		return nil, ErrProviderUnavailable
+		return "", nil, ErrProviderUnavailable
 	}
 	if !validToken(fqdn, 255) || !strings.HasPrefix(fqdn, "_acme-challenge.") {
-		return nil, fmt.Errorf("%w: challenge name", ErrInvalidInput)
+		return "", nil, fmt.Errorf("%w: challenge name", ErrInvalidInput)
 	}
 	if !validToken(value, 255) {
-		return nil, fmt.Errorf("%w: challenge value", ErrInvalidInput)
+		return "", nil, fmt.Errorf("%w: challenge value", ErrInvalidInput)
 	}
 	record, err := p.service.CreateRecord(ctx, p.subjectID, p.requestID, p.zoneID, RecordInput{
 		Type: RecordTXT, Name: fqdn, Content: value, TTL: p.ttl,
 	})
 	if err != nil {
-		return nil, err
+		return "", nil, err
 	}
 	var (
 		once       sync.Once
 		cleanupErr error
 	)
-	return func(cleanupCtx context.Context) error {
+	return record.ID, func(cleanupCtx context.Context) error {
 		once.Do(func() {
 			cleanupErr = p.service.DeleteRecord(cleanupCtx, p.subjectID, p.requestID, record.ID)
 		})

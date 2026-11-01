@@ -131,7 +131,7 @@ func (s *Service) TestAccount(ctx context.Context, subjectID, requestID, account
 	if account.CredentialRef == "" {
 		return ConnectionTest{}, ErrCredentialNotConfigured
 	}
-	result, err := s.provider.Test(ctx, account.CredentialRef)
+	result, err := s.provider.Test(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), account.CredentialRef)
 	if err != nil {
 		return ConnectionTest{}, ErrProviderFailed
 	}

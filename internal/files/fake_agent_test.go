@@ -11,35 +11,44 @@ import (
 	"serverfleet.local/serverfleet/internal/files"
 )
 
-// fakeAgent is an in-process agent-side file capability used to exercise the
-// controller transport at the exact frame boundary. It deliberately implements
-// resume, conflict, fault injection and error codes so tests do not need a real
-// remote node.
+// fakeAgent is an in-process CX file-capability double. It exercises the exact
+// open/chunk boundary with generated-frame field semantics, including resume,
+// conflicts and fault injection.
 type fakeAgent struct {
-	mu             sync.Mutex
-	files          map[string]map[string][]byte
-	partial        map[string]map[string][]byte
-	rejects        map[string]string
-	failUpload     map[string]int
-	failDownload   map[string]int
-	refuseDials    int
-	dials          int
-	uploads        int
-	downloads      int
-	corruptDigest  bool
-	lastTransferID string
-	lastExecID     string
+	mu              sync.Mutex
+	files           map[string]map[string][]byte
+	partial         map[string]map[string][]byte
+	rejects         map[string]string
+	failUpload      map[string]int
+	failDownload    map[string]int
+	refuseDials     int
+	dials           int
+	uploads         int
+	downloads       int
+	corruptDigest   bool
+	unknownCommit   bool
+	rejectOverwrite bool
+	lastTaskID      string
+	lastTransferID  string
+	lastExecID      string
+	lastPlanDigest  string
+	openCalls       []fakeOpenCall
+}
+
+type fakeOpenCall struct {
+	execution string
+	transfer  string
+	direction files.ChannelDirection
 }
 
 func newFakeAgent() *fakeAgent {
 	return &fakeAgent{
-		files:        map[string]map[string][]byte{},
-		partial:      map[string]map[string][]byte{},
-		rejects:      map[string]string{},
-		failUpload:   map[string]int{},
-		failDownload: map[string]int{},
+		files: map[string]map[string][]byte{}, partial: map[string]map[string][]byte{},
+		rejects: map[string]string{}, failUpload: map[string]int{}, failDownload: map[string]int{},
 	}
 }
+
+func fakeAbsolute(relative string) string { return "/" + relative }
 
 func (a *fakeAgent) putFile(nodeID, path string, data []byte) {
 	a.mu.Lock()
@@ -63,234 +72,213 @@ func (a *fakeAgent) reject(nodeID, path, code string) {
 	a.rejects[nodeID+"|"+path] = code
 }
 
-func (a *fakeAgent) OpenFileChannel(_ context.Context, nodeID, transferID, executionID string) (files.FileChannelSession, error) {
+func (a *fakeAgent) OpenFileChannel(ctx context.Context, binding files.FileBinding) (files.AgentFileSession, files.FileOpenResult, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, files.FileOpenResult{}, err
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.dials++
-	a.lastTransferID = transferID
-	a.lastExecID = executionID
+	a.lastTaskID = binding.TaskID
+	a.lastTransferID = binding.TransferID
+	a.lastExecID = binding.ExecutionID
+	a.lastPlanDigest = binding.PlanDigestSHA256
+	a.openCalls = append(a.openCalls, fakeOpenCall{execution: binding.ExecutionID, transfer: binding.TransferID, direction: binding.Direction})
 	if a.dials <= a.refuseDials {
-		return nil, errors.New("connection refused")
+		return nil, files.FileOpenResult{}, errors.New("connection refused")
 	}
-	return &fakeSession{agent: a, nodeID: nodeID, transferID: transferID, executionID: executionID}, nil
+	result := files.FileOpenResult{
+		TaskID: binding.TaskID, ExecutionID: binding.ExecutionID, TransferID: binding.TransferID,
+		PlanDigestSHA256: binding.PlanDigestSHA256, RelativePath: binding.RelativePath, ResultCode: "ok",
+	}
+	if code, rejected := a.rejects[binding.NodeID+"|"+fakeAbsolute(binding.RelativePath)]; rejected {
+		return nil, files.FileOpenResult{}, fakeCodeError(code)
+	}
+	if binding.Direction == files.ChannelWrite {
+		final, exists := a.files[binding.NodeID][fakeAbsolute(binding.RelativePath)]
+		if exists {
+			switch binding.ConflictPolicy {
+			case files.ConflictSkip:
+				result.Skipped = true
+				result.ResultCode = "skipped"
+				return &fakeSession{agent: a, binding: binding}, result, nil
+			case files.ConflictRename:
+				result.RelativePath = binding.RelativePath + ".1"
+			case files.ConflictOverwrite:
+				if a.rejectOverwrite || final != nil && len(final) >= 0 && a.rejectOverwrite {
+					return nil, files.FileOpenResult{}, files.ErrAgentConflict
+				}
+			default:
+				return nil, files.FileOpenResult{}, files.ErrAgentConflict
+			}
+		}
+		partial := a.partial[binding.NodeID][fakeAbsolute(result.RelativePath)]
+		result.Size = binding.Size
+		result.SHA256 = binding.SHA256
+		result.ResumeOffset = int64(len(partial))
+		return &fakeSession{agent: a, binding: binding, writePath: fakeAbsolute(result.RelativePath), uploadBuffer: append([]byte(nil), partial...)}, result, nil
+	}
+	final, exists := a.files[binding.NodeID][fakeAbsolute(binding.RelativePath)]
+	if !exists {
+		return nil, files.FileOpenResult{}, files.ErrAgentIO
+	}
+	digest := sha256.Sum256(final)
+	result.Size = int64(len(final))
+	result.SHA256 = hex.EncodeToString(digest[:])
+	result.ResumeOffset = binding.ResumeOffset
+	result.Complete = int64(len(final)) == binding.ResumeOffset
+	if binding.ResumeOffset > int64(len(final)) {
+		return nil, files.FileOpenResult{}, files.ErrChannelProtocol
+	}
+	a.downloads++
+	return &fakeSession{agent: a, binding: binding, readData: append([]byte(nil), final...), readSent: int(binding.ResumeOffset)}, result, nil
+}
+
+func fakeCodeError(code string) error {
+	switch code {
+	case "path_rejected", "invalid_path":
+		return files.ErrAgentPathRejected
+	case "symlink_forbidden":
+		return files.ErrAgentSymlink
+	case "insufficient_space":
+		return files.ErrInsufficientSpace
+	case "checksum_mismatch":
+		return files.ErrAgentChecksum
+	case "conflict":
+		return files.ErrAgentConflict
+	case "unauthorized", "capability_denied":
+		return files.ErrAgentUnauthorized
+	case "canceled", "cancelled":
+		return files.ErrChannelCanceled
+	default:
+		return files.ErrAgentIO
+	}
 }
 
 type fakeSession struct {
-	agent       *fakeAgent
-	nodeID      string
-	transferID  string
-	executionID string
+	agent   *fakeAgent
+	binding files.FileBinding
+	dead    bool
 
-	responses []files.ChannelFrame
-	dead      bool
-	direction files.ChannelDirection
-
-	uploadPath   string
-	uploadSize   int64
-	uploadSHA    string
-	uploadPolicy files.ConflictPolicy
+	writePath    string
 	uploadBuffer []byte
 
-	downloadData   []byte
-	downloadOffset int64
-	downloadSize   int64
+	readData []byte
+	readSent int
 }
 
 func (s *fakeSession) Close() error { return nil }
 
-func (s *fakeSession) Send(ctx context.Context, frame files.ChannelFrame) error {
-	if s.dead && len(s.responses) == 0 {
-		return errors.New("channel closed")
-	}
-	if frame.TransferID != s.transferID || frame.ExecutionID != s.executionID {
-		return errors.New("identity mismatch")
-	}
-	switch frame.Type {
-	case files.FrameOpen:
-		return s.open(frame)
-	case files.FrameChunk:
-		return s.chunk(frame)
-	case files.FrameComplete:
-		return s.complete(frame)
-	case files.FrameAck:
-		if s.dead {
-			return errors.New("channel closed")
-		}
-		return nil
-	case files.FrameCompleteAck:
-		return nil
-	case files.FrameCancel:
-		s.dead = true
-		return nil
-	default:
-		return fmt.Errorf("unexpected frame %s", frame.Type)
+func (s *fakeSession) Cancel(context.Context, string) error {
+	s.dead = true
+	return nil
+}
+
+func (s *fakeSession) result(offset, next uint64, complete bool, code string) files.FileChunkResult {
+	return files.FileChunkResult{
+		TaskID: s.binding.TaskID, ExecutionID: s.binding.ExecutionID, TransferID: s.binding.TransferID,
+		Offset: offset, NextOffset: next, Complete: complete, ResultCode: code,
 	}
 }
 
-func (s *fakeSession) Receive(ctx context.Context) (files.ChannelFrame, error) {
-	if len(s.responses) > 0 {
-		frame := s.responses[0]
-		s.responses = s.responses[1:]
-		return frame, nil
+func (s *fakeSession) ReadChunk(ctx context.Context, op files.FileChunkOp) (files.FileChunkResult, error) {
+	if err := ctx.Err(); err != nil {
+		return files.FileChunkResult{}, err
 	}
 	if s.dead {
-		return files.ChannelFrame{}, errors.New("channel closed")
+		return files.FileChunkResult{}, files.ErrChannelDisconnected
 	}
-	return files.ChannelFrame{}, errors.New("no response")
-}
-
-func (s *fakeSession) queueError(code string) {
-	s.responses = append(s.responses, files.ChannelFrame{
-		Version: files.ChannelProtocolVersion, Type: files.FrameError,
-		TransferID: s.transferID, ExecutionID: s.executionID, ErrorCode: code,
-	})
-	s.dead = true
-}
-
-func (s *fakeSession) open(frame files.ChannelFrame) error {
-	if code, rejected := s.agent.rejects[s.nodeID+"|"+frame.Path]; rejected {
-		s.queueError(code)
-		return nil
+	if op.Cancel || len(op.Data) != 0 || op.Finish || op.ReadBytes == 0 {
+		return files.FileChunkResult{}, files.ErrChannelProtocol
 	}
-	if frame.Direction == files.ChannelUpload {
-		s.direction = files.ChannelUpload
-		s.uploadPath = frame.Path
-		s.uploadSize = frame.Size
-		s.uploadSHA = frame.SHA256
-		s.uploadPolicy = frame.ConflictPolicy
-		if final, exists := s.agent.files[s.nodeID][frame.Path]; exists {
-			switch frame.ConflictPolicy {
-			case files.ConflictSkip:
-				s.responses = append(s.responses, files.ChannelFrame{
-					Version: files.ChannelProtocolVersion, Type: files.FrameOpenAck,
-					TransferID: s.transferID, ExecutionID: s.executionID, Skipped: true,
-				})
-				return nil
-			case files.ConflictRename:
-				if final != nil {
-					s.uploadPath = frame.Path + ".1"
-				}
-			}
+	if op.Offset > uint64(len(s.readData)) {
+		return files.FileChunkResult{}, files.ErrChannelProtocol
+	}
+	want := int(op.ReadBytes)
+	if want > len(s.readData)-int(op.Offset) {
+		want = len(s.readData) - int(op.Offset)
+	}
+	if want <= 0 {
+		return files.FileChunkResult{}, files.ErrChannelProtocol
+	}
+	if configured := s.agent.failDownload[s.binding.NodeID]; configured > 0 {
+		remainingBudget := configured - s.readSent
+		if remainingBudget <= 0 {
+			s.dead = true
+			s.agent.failDownload[s.binding.NodeID] = 0
+			return files.FileChunkResult{}, files.ErrChannelDisconnected
 		}
-		partial := s.agent.partial[s.nodeID][s.uploadPath]
-		s.uploadBuffer = append([]byte(nil), partial...)
-		s.responses = append(s.responses, files.ChannelFrame{
-			Version: files.ChannelProtocolVersion, Type: files.FrameOpenAck,
-			TransferID: s.transferID, ExecutionID: s.executionID,
-			ResumeOffset: int64(len(s.uploadBuffer)), ResolvedPath: s.uploadPath,
-		})
-		return nil
+		if want > remainingBudget {
+			want = remainingBudget
+			s.dead = true
+			s.agent.failDownload[s.binding.NodeID] = 0
+		}
 	}
-	s.direction = files.ChannelDownload
-	final, exists := s.agent.files[s.nodeID][frame.Path]
-	if !exists {
-		s.queueError("io_error")
-		return nil
+	s.readSent += want
+	chunk := append([]byte(nil), s.readData[int(op.Offset):int(op.Offset)+want]...)
+	next := op.Offset + uint64(len(chunk))
+	complete := next == uint64(len(s.readData))
+	result := s.result(op.Offset, next, complete, "ok")
+	result.Data = chunk
+	if s.dead {
+		return result, nil
 	}
-	if frame.Offset > int64(len(final)) {
-		s.queueError("protocol_error")
-		return nil
+	return result, nil
+}
+
+func (s *fakeSession) WriteChunk(ctx context.Context, op files.FileChunkOp) (files.FileChunkResult, error) {
+	if err := ctx.Err(); err != nil {
+		return files.FileChunkResult{}, err
 	}
-	digest := sha256.Sum256(final)
-	s.downloadData = final
-	s.downloadOffset = frame.Offset
-	s.downloadSize = int64(len(final))
-	s.agent.downloads++
-	s.responses = append(s.responses, files.ChannelFrame{
-		Version: files.ChannelProtocolVersion, Type: files.FrameOpenAck,
-		TransferID: s.transferID, ExecutionID: s.executionID,
-		Size: int64(len(final)), SHA256: hex.EncodeToString(digest[:]), ResumeOffset: frame.Offset,
-	})
-	remaining := final[frame.Offset:]
-	limit := len(remaining)
-	if configured := s.agent.failDownload[s.nodeID]; configured > 0 && limit > configured {
-		limit = configured
+	if s.dead {
+		return files.FileChunkResult{}, files.ErrChannelDisconnected
+	}
+	if op.Cancel {
 		s.dead = true
-		s.agent.failDownload[s.nodeID] = 0
+		return s.result(op.Offset, op.Offset, false, "canceled"), files.ErrChannelCanceled
 	}
-	const chunk = 1024
-	for sent := 0; sent < limit; sent += chunk {
-		end := sent + chunk
-		if end > limit {
-			end = limit
+	if op.ReadBytes != 0 {
+		return files.FileChunkResult{}, files.ErrChannelProtocol
+	}
+	if op.Offset != uint64(len(s.uploadBuffer)) {
+		return files.FileChunkResult{}, files.ErrChannelProtocol
+	}
+	next := append(s.uploadBuffer, op.Data...)
+	if int64(len(next)) > s.binding.Size {
+		return files.FileChunkResult{}, files.ErrAgentIO
+	}
+	if configured := s.agent.failUpload[s.binding.NodeID]; configured > 0 && len(next) >= configured && !op.Finish {
+		s.uploadBuffer = next
+		if s.agent.partial[s.binding.NodeID] == nil {
+			s.agent.partial[s.binding.NodeID] = map[string][]byte{}
 		}
-		s.responses = append(s.responses, files.ChannelFrame{
-			Version: files.ChannelProtocolVersion, Type: files.FrameChunk,
-			TransferID: s.transferID, ExecutionID: s.executionID,
-			Offset: int64(sent) + frame.Offset, Data: remaining[sent:end],
-		})
-	}
-	if !s.dead {
-		s.responses = append(s.responses, files.ChannelFrame{
-			Version: files.ChannelProtocolVersion, Type: files.FrameComplete,
-			TransferID: s.transferID, ExecutionID: s.executionID,
-			Size: int64(len(final)), SHA256: hex.EncodeToString(digest[:]),
-		})
-	}
-	return nil
-}
-
-func (s *fakeSession) chunk(frame files.ChannelFrame) error {
-	if s.direction != files.ChannelUpload || s.uploadPath == "" {
-		s.queueError("protocol_error")
-		return nil
-	}
-	expected := int64(len(s.uploadBuffer))
-	if frame.Offset != expected {
-		s.queueError("protocol_error")
-		return nil
-	}
-	next := append(s.uploadBuffer, frame.Data...)
-	if int64(len(next)) > s.uploadSize {
-		s.queueError("protocol_error")
-		return nil
+		s.agent.partial[s.binding.NodeID][s.writePath] = append([]byte(nil), next...)
+		s.agent.failUpload[s.binding.NodeID] = 0
+		s.dead = true
+		return files.FileChunkResult{}, files.ErrChannelDisconnected
 	}
 	s.uploadBuffer = next
-	if configured := s.agent.failUpload[s.nodeID]; configured > 0 && len(s.uploadBuffer) >= configured {
-		if s.agent.partial[s.nodeID] == nil {
-			s.agent.partial[s.nodeID] = map[string][]byte{}
-		}
-		s.agent.partial[s.nodeID][s.uploadPath] = append([]byte(nil), s.uploadBuffer...)
-		s.agent.failUpload[s.nodeID] = 0
-		s.dead = true
-		return nil
+	if !op.Finish {
+		return s.result(op.Offset, op.Offset+uint64(len(op.Data)), false, "ok"), nil
 	}
-	s.responses = append(s.responses, files.ChannelFrame{
-		Version: files.ChannelProtocolVersion, Type: files.FrameAck,
-		TransferID: s.transferID, ExecutionID: s.executionID,
-		Offset: frame.Offset + int64(len(frame.Data)),
-	})
-	return nil
-}
-
-func (s *fakeSession) complete(frame files.ChannelFrame) error {
-	if s.direction != files.ChannelUpload {
-		s.queueError("protocol_error")
-		return nil
+	if s.agent.unknownCommit {
+		s.agent.unknownCommit = false
+		return files.FileChunkResult{}, files.ErrChannelDisconnected
 	}
-	if s.agent.corruptDigest {
-		s.queueError("checksum_mismatch")
-		return nil
-	}
-	if frame.Size != s.uploadSize || frame.SHA256 != s.uploadSHA || int64(len(s.uploadBuffer)) != s.uploadSize {
-		s.queueError("checksum_mismatch")
-		return nil
+	if s.agent.corruptDigest || int64(len(s.uploadBuffer)) != s.binding.Size {
+		return s.result(op.Offset, op.Offset, false, "checksum_mismatch"), files.ErrAgentChecksum
 	}
 	digest := sha256.Sum256(s.uploadBuffer)
-	if hex.EncodeToString(digest[:]) != s.uploadSHA {
-		s.queueError("checksum_mismatch")
-		return nil
+	if hex.EncodeToString(digest[:]) != s.binding.SHA256 {
+		return s.result(op.Offset, op.Offset, false, "checksum_mismatch"), files.ErrAgentChecksum
 	}
-	if s.agent.files[s.nodeID] == nil {
-		s.agent.files[s.nodeID] = map[string][]byte{}
+	if s.agent.files[s.binding.NodeID] == nil {
+		s.agent.files[s.binding.NodeID] = map[string][]byte{}
 	}
-	s.agent.files[s.nodeID][s.uploadPath] = append([]byte(nil), s.uploadBuffer...)
-	delete(s.agent.partial[s.nodeID], s.uploadPath)
+	s.agent.files[s.binding.NodeID][s.writePath] = append([]byte(nil), s.uploadBuffer...)
+	delete(s.agent.partial[s.binding.NodeID], s.writePath)
 	s.agent.uploads++
-	s.responses = append(s.responses, files.ChannelFrame{
-		Version: files.ChannelProtocolVersion, Type: files.FrameCompleteAck,
-		TransferID: s.transferID, ExecutionID: s.executionID,
-		Size: frame.Size, SHA256: frame.SHA256,
-	})
-	return nil
+	return s.result(op.Offset, uint64(len(s.uploadBuffer)), true, "ok"), nil
 }
+
+func (a *fakeAgent) String() string { return fmt.Sprintf("fakeAgent(dials=%d)", a.dials) }

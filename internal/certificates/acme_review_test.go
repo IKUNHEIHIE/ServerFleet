@@ -62,8 +62,11 @@ func TestWave6ACMERejectsCertificateForDifferentKeyOrName(t *testing.T) {
 				response.ContentLength = int64(len(chain))
 				return response, nil
 			})
+			trust := x509.NewCertPool()
+			trust.AddCert(fake.caCert)
 			acme, err := certificates.NewACMEClient(certificates.ACMEConfig{DirectoryURL: fake.server.URL + "/directory", Client: client,
-				AccountKey: "account-key", Signer: signer, Challenge: newACMEPublisher(fake), PollInterval: time.Millisecond, Timeout: 5 * time.Second})
+				AccountKey: "account-key", Signer: signer, Challenge: newACMEPublisher(fake), TrustRoots: trust,
+				PollInterval: time.Millisecond, Timeout: 5 * time.Second})
 			if err != nil {
 				t.Fatal(err)
 			}

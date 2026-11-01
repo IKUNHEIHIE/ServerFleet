@@ -24,6 +24,7 @@ var (
 	ErrTransportAbsent   = errors.New("files: transport port is not configured")
 	ErrTaskSubmitter     = errors.New("files: task submitter is not configured")
 	ErrRequestIDRequired = errors.New("files: request id is required")
+	ErrSameNode          = errors.New("files: source and destination nodes must differ")
 )
 
 // ConflictPolicy matches the candidate contract.

@@ -25,6 +25,8 @@ const (
 	ActionTransferCreate       = "files.transfer_create"
 	ActionTransferSubmitFailed = "files.transfer_submit_failed"
 	ActionTransferCancel       = "files.transfer_cancel"
+	ActionTransferExecute      = "files.transfer_execute"
+	ActionTransferRecover      = "files.transfer_recover"
 	ActionUploadCreate         = "files.upload_create"
 	ActionUploadComplete       = "files.upload_complete"
 	ActionUploadAbort          = "files.upload_abort"
@@ -33,7 +35,7 @@ const (
 
 func ServiceActions() []string {
 	return []string{ActionDownload, ActionRead, ActionTransfer, ActionTransferCancel, ActionTransferCreate,
-		ActionTransferExecute, ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite}
+		ActionTransferExecute, ActionTransferRecover, ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite}
 }
 
 var (
@@ -323,6 +325,29 @@ func (s *Service) ApplyTaskUpdate(ctx context.Context, taskID string, update Tas
 	return s.repo.GetTransfer(ctx, transfer.ID)
 }
 
+// RecoverTransfers fences transfers left running by a previous controller. It
+// never replays uncertain destination writes.
+func (s *Service) RecoverTransfers(ctx context.Context) (int, error) {
+	if s == nil || s.repo == nil {
+		return 0, ErrCoordinatorUnavailable
+	}
+	recovered, err := s.repo.RecoverRunningTransfers(ctx, s.now())
+	if err != nil || recovered == 0 {
+		return recovered, err
+	}
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	event := audit.Event{
+		SubjectID: "file-transfer-service", Action: ActionTransferRecover, Result: "success",
+		RequestID: "startup-recovery", Source: audit.SourceSystem,
+		ReasonCode: "recovered_unknown", At: s.now(),
+	}
+	if auditErr := s.audit.Append(auditCtx, event); auditErr != nil {
+		return recovered, auditErr
+	}
+	return recovered, nil
+}
+
 // ExecuteTransferTask is the unified task pipeline seam for the files.transfer
 // action. It runs the cross-node coordinator and persists the reconciled result;
 // per-item failures are stored on the transfer while setup errors are returned.
@@ -451,6 +476,9 @@ func allItemsSuccessful(items []TransferItem) bool {
 func buildTransfer(input CreateTransferInput, now time.Time) (Transfer, error) {
 	if !validToken(input.SubjectID, 128) || !validToken(input.SourceNodeID, 128) || !validToken(input.DestinationNodeID, 128) {
 		return Transfer{}, fmt.Errorf("%w: subject/nodes", ErrInvalidTransfer)
+	}
+	if input.SourceNodeID == input.DestinationNodeID {
+		return Transfer{}, ErrSameNode
 	}
 	if input.IdempotencyKey != "" && !validToken(input.IdempotencyKey, 128) {
 		return Transfer{}, fmt.Errorf("%w: idempotency key", ErrInvalidTransfer)

@@ -8,16 +8,43 @@ import (
 	"encoding/hex"
 	"errors"
 	"io"
+	"strings"
 	"testing"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/files"
 )
 
+type slashPathMapper struct{}
+
+func (slashPathMapper) RelativePath(_ context.Context, _, absolute string) (string, error) {
+	if !strings.HasPrefix(absolute, "/") || absolute == "/" {
+		return "", files.ErrPathMappingUnavailable
+	}
+	return strings.TrimPrefix(absolute, "/"), nil
+}
+
+func (slashPathMapper) AbsolutePath(_ context.Context, _, relative string) (string, error) {
+	return "/" + relative, nil
+}
+
+type allowChannelAuthorizer struct{}
+
+func (allowChannelAuthorizer) AuthorizeChannel(context.Context, files.ChannelDirection) error {
+	return nil
+}
+
+func testPlanDigest() string { return strings.Repeat("a", 64) }
+
+func testChannelContext() context.Context {
+	ctx := files.WithChannelScope(context.Background(), "task_1", "transfer_1", "exec_1", testPlanDigest())
+	return files.WithChannelAuthorizer(ctx, allowChannelAuthorizer{})
+}
+
 func testChannel(t *testing.T, agent *fakeAgent, options ...func(*files.ChannelTransportConfig)) *files.ChannelTransport {
 	t.Helper()
 	config := files.ChannelTransportConfig{
-		Channel: agent, MaxChunkBytes: 1024, MaxFileBytes: 1 << 20,
+		Channel: agent, Paths: slashPathMapper{}, MaxChunkBytes: 1024, MaxFileBytes: 1 << 20,
 		MaxAttempts: 3, FrameTimeout: 2 * time.Second,
 	}
 	for _, option := range options {
@@ -48,8 +75,7 @@ func TestChannelTransportUploadsAndDownloadsRealBytes(t *testing.T) {
 	agent := newFakeAgent()
 	transport := testChannel(t, agent)
 	data := randomBytes(t, 70_003)
-	ctx := files.WithChannelIdentity(context.Background(), "transfer-1", "execution-1")
-
+	ctx := testChannelContext()
 	result, err := transport.PushFileWithPolicy(ctx, "node-a", "/srv/data/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
 	if err != nil {
 		t.Fatal(err)
@@ -61,8 +87,8 @@ func TestChannelTransportUploadsAndDownloadsRealBytes(t *testing.T) {
 	if !ok || !bytes.Equal(stored, data) {
 		t.Fatalf("stored bytes do not match (%d bytes, found=%v)", len(stored), ok)
 	}
-	if agent.lastTransferID != "transfer-1" || agent.lastExecID != "execution-1" {
-		t.Fatalf("channel identity = %q/%q", agent.lastTransferID, agent.lastExecID)
+	if agent.lastTaskID != "task_1" || agent.lastTransferID != "transfer_1" || agent.lastExecID != "exec_1" || agent.lastPlanDigest != testPlanDigest() {
+		t.Fatalf("binding = %q/%q/%q/%q", agent.lastTaskID, agent.lastTransferID, agent.lastExecID, agent.lastPlanDigest)
 	}
 
 	var downloaded bytes.Buffer
@@ -80,16 +106,12 @@ func TestChannelTransportUploadResumesAfterDisconnect(t *testing.T) {
 	agent.failUpload["node-a"] = 5_000
 	transport := testChannel(t, agent)
 	data := randomBytes(t, 20_001)
-
-	result, err := transport.PushFileWithPolicy(context.Background(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
+	result, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !result.Resumed {
-		t.Fatalf("expected resume, result = %+v", result)
-	}
-	if agent.dials < 2 || agent.uploads != 1 {
-		t.Fatalf("dials=%d uploads=%d", agent.dials, agent.uploads)
+	if !result.Resumed || agent.dials < 2 || agent.uploads != 1 {
+		t.Fatalf("result=%+v dials=%d uploads=%d", result, agent.dials, agent.uploads)
 	}
 	stored, _ := agent.file("node-a", "/srv/blob.bin")
 	if !bytes.Equal(stored, data) {
@@ -103,17 +125,13 @@ func TestChannelTransportDownloadResumesAfterDisconnect(t *testing.T) {
 	agent.putFile("node-a", "/srv/blob.bin", data)
 	agent.failDownload["node-a"] = 5_000
 	transport := testChannel(t, agent)
-
 	var downloaded bytes.Buffer
-	written, err := transport.PullFile(context.Background(), "node-a", "/srv/blob.bin", &downloaded)
+	written, err := transport.PullFile(testChannelContext(), "node-a", "/srv/blob.bin", &downloaded)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if written != int64(len(data)) || !bytes.Equal(downloaded.Bytes(), data) {
-		t.Fatalf("downloaded %d bytes, equal=%v", written, bytes.Equal(downloaded.Bytes(), data))
-	}
-	if agent.dials < 2 {
-		t.Fatalf("dials=%d", agent.dials)
+	if written != int64(len(data)) || !bytes.Equal(downloaded.Bytes(), data) || agent.dials < 2 {
+		t.Fatalf("downloaded %d equal=%v dials=%d", written, bytes.Equal(downloaded.Bytes(), data), agent.dials)
 	}
 }
 
@@ -134,7 +152,7 @@ func TestChannelTransportRejectsAgentErrors(t *testing.T) {
 			agent.reject("node-a", "/srv/blocked.bin", test.code)
 			transport := testChannel(t, agent)
 			data := []byte("payload")
-			err := transport.PushFile(context.Background(), "node-a", "/srv/blocked.bin", bytes.NewReader(data), int64(len(data)), digest(data))
+			_, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blocked.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
 			if !errors.Is(err, test.want) {
 				t.Fatalf("err = %v, want %v", err, test.want)
 			}
@@ -147,7 +165,7 @@ func TestChannelTransportChecksumMismatch(t *testing.T) {
 	agent.corruptDigest = true
 	transport := testChannel(t, agent)
 	data := []byte("payload")
-	err := transport.PushFile(context.Background(), "node-a", "/srv/blob.bin", bytes.NewReader(data), int64(len(data)), digest(data))
+	_, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
 	if !errors.Is(err, files.ErrAgentChecksum) {
 		t.Fatalf("err = %v", err)
 	}
@@ -156,21 +174,33 @@ func TestChannelTransportChecksumMismatch(t *testing.T) {
 	}
 }
 
+func TestChannelTransportUnknownCommitIsNotRetried(t *testing.T) {
+	agent := newFakeAgent()
+	agent.unknownCommit = true
+	transport := testChannel(t, agent)
+	data := []byte("payload")
+	_, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
+	if !errors.Is(err, files.ErrAgentUnknown) {
+		t.Fatalf("err = %v", err)
+	}
+	if agent.dials != 1 {
+		t.Fatalf("unknown commit was retried: dials=%d", agent.dials)
+	}
+}
+
 func TestChannelTransportConflictPolicies(t *testing.T) {
 	agent := newFakeAgent()
 	agent.putFile("node-a", "/srv/blob.bin", []byte("original"))
 	transport := testChannel(t, agent)
 	data := []byte("replacement")
-
-	result, err := transport.PushFileWithPolicy(context.Background(), "node-a", "/srv/blob.bin", files.ConflictSkip, bytes.NewReader(data), int64(len(data)), digest(data))
+	result, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictSkip, bytes.NewReader(data), int64(len(data)), digest(data))
 	if err != nil || !result.Skipped {
 		t.Fatalf("skip result = %+v, %v", result, err)
 	}
 	if stored, _ := agent.file("node-a", "/srv/blob.bin"); string(stored) != "original" {
 		t.Fatalf("skip overwrote destination: %q", stored)
 	}
-
-	result, err = transport.PushFileWithPolicy(context.Background(), "node-a", "/srv/blob.bin", files.ConflictRename, bytes.NewReader(data), int64(len(data)), digest(data))
+	result, err = transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictRename, bytes.NewReader(data), int64(len(data)), digest(data))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -182,39 +212,64 @@ func TestChannelTransportConflictPolicies(t *testing.T) {
 	}
 }
 
-func TestChannelTransportBoundsAndResumeSupport(t *testing.T) {
+func TestChannelTransportBoundsBindingAndPathMapping(t *testing.T) {
 	agent := newFakeAgent()
 	transport := testChannel(t, agent)
 	data := []byte("payload")
-	if err := transport.PushFile(context.Background(), "node-a", "/srv/blob.bin", bytes.NewReader(data), 1<<21, digest(data)); !errors.Is(err, files.ErrFileTooLarge) {
+	if _, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), 1<<21, digest(data)); !errors.Is(err, files.ErrFileTooLarge) {
 		t.Fatalf("oversize err = %v", err)
 	}
-	if err := transport.PushFile(context.Background(), "node-a", "relative/path", bytes.NewReader(data), int64(len(data)), digest(data)); !errors.Is(err, files.ErrInvalidPath) {
+	if _, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "relative/path", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data)); !errors.Is(err, files.ErrInvalidTransfer) {
 		t.Fatalf("path err = %v", err)
+	}
+	if _, err := transport.PushFileWithPolicy(context.Background(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data)); !errors.Is(err, files.ErrTaskBindingRequired) {
+		t.Fatalf("missing scope err = %v", err)
+	}
+	noAuth := files.WithChannelScope(context.Background(), "task_1", "transfer_1", "exec_1", testPlanDigest())
+	if _, err := transport.PushFileWithPolicy(noAuth, "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data)); !errors.Is(err, files.ErrAuthorizationRequired) {
+		t.Fatalf("missing authorizer err = %v", err)
+	}
+	colon := files.WithChannelAuthorizer(files.WithChannelScope(context.Background(), "task_1", "xfer:1", "exec_1", testPlanDigest()), allowChannelAuthorizer{})
+	if _, err := transport.PushFileWithPolicy(colon, "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data)); !errors.Is(err, files.ErrTaskBindingRequired) {
+		t.Fatalf("colon transfer id err = %v", err)
+	}
+	if _, err := files.NewChannelTransport(files.ChannelTransportConfig{Channel: agent}); !errors.Is(err, files.ErrPathMappingUnavailable) {
+		t.Fatalf("missing mapper err = %v", err)
 	}
 
 	agent.failUpload["node-a"] = 1024
 	reader := io.NopCloser(bytes.NewReader(randomBytes(t, 4096)))
-	_, err := transport.PushFileWithPolicy(context.Background(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, reader, 4096, digest([]byte("unused")))
+	_, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, reader, 4096, digest([]byte("unused")))
 	if !errors.Is(err, files.ErrResumeUnsupported) {
 		t.Fatalf("non-seekable resume err = %v", err)
 	}
 }
 
-func TestChannelTransportDownloadDetectsTamperedDigest(t *testing.T) {
+func TestChannelTransportEmptyFileAndDownloadErrors(t *testing.T) {
 	agent := newFakeAgent()
-	data := []byte("remote-bytes")
-	agent.putFile("node-a", "/srv/blob.bin", data)
 	transport := testChannel(t, agent)
-	var buffer bytes.Buffer
-	if _, err := transport.PullFile(context.Background(), "node-a", "/srv/blob.bin", &buffer); err != nil {
+	ctx := testChannelContext()
+	empty := []byte{}
+	if _, err := transport.PushFileWithPolicy(ctx, "node-a", "/srv/empty.bin", files.ConflictOverwrite, bytes.NewReader(empty), 0, digest(empty)); err != nil {
 		t.Fatal(err)
 	}
-	if !bytes.Equal(buffer.Bytes(), data) {
-		t.Fatal("download bytes differ")
+	var buffer bytes.Buffer
+	if written, err := transport.PullFile(ctx, "node-a", "/srv/empty.bin", &buffer); err != nil || written != 0 {
+		t.Fatalf("empty download = %d, %v", written, err)
 	}
-	missing := &bytes.Buffer{}
-	if _, err := transport.PullFile(context.Background(), "node-a", "/srv/missing.bin", missing); !errors.Is(err, files.ErrAgentIO) {
+	if _, err := transport.PullFile(ctx, "node-a", "/srv/missing.bin", &buffer); !errors.Is(err, files.ErrAgentIO) {
 		t.Fatalf("missing err = %v", err)
+	}
+}
+
+func TestChannelTransportOverwriteRejectedByAgentIsExplicit(t *testing.T) {
+	agent := newFakeAgent()
+	agent.rejectOverwrite = true
+	agent.putFile("node-a", "/srv/blob.bin", []byte("original"))
+	transport := testChannel(t, agent)
+	data := []byte("replacement")
+	_, err := transport.PushFileWithPolicy(testChannelContext(), "node-a", "/srv/blob.bin", files.ConflictOverwrite, bytes.NewReader(data), int64(len(data)), digest(data))
+	if !errors.Is(err, files.ErrAgentConflict) {
+		t.Fatalf("err = %v", err)
 	}
 }

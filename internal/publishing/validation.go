@@ -24,6 +24,39 @@ var (
 	pemBlock            = regexp.MustCompile(`(?is)-----BEGIN [A-Z ]+-----.*?-----END [A-Z ]+-----`)
 )
 
+func boolInt(value bool) int {
+	if value {
+		return 1
+	}
+	return 0
+}
+
+func validateTargets(gatewayIDs []string, zoneID, certificateID string, targetRevision uint64) error {
+	if len(gatewayIDs) > 32 {
+		return fmt.Errorf("%w: too many gateway targets", ErrInvalidPlan)
+	}
+	seen := make(map[string]struct{}, len(gatewayIDs))
+	for _, gatewayID := range gatewayIDs {
+		if !validID(gatewayID) {
+			return fmt.Errorf("%w: gateway target", ErrInvalidPlan)
+		}
+		if _, duplicate := seen[gatewayID]; duplicate {
+			return fmt.Errorf("%w: duplicate gateway target", ErrInvalidPlan)
+		}
+		seen[gatewayID] = struct{}{}
+	}
+	if zoneID != "" && !validID(zoneID) {
+		return fmt.Errorf("%w: zone target", ErrInvalidPlan)
+	}
+	if certificateID != "" && !validID(certificateID) {
+		return fmt.Errorf("%w: certificate target", ErrInvalidPlan)
+	}
+	if targetRevision == 0 {
+		return fmt.Errorf("%w: target revision", ErrInvalidPlan)
+	}
+	return nil
+}
+
 func normalizeCreateInput(input CreateInput) (CreateInput, error) {
 	if !validID(input.ID) {
 		return CreateInput{}, fmt.Errorf("%w: id", ErrInvalidPlan)
@@ -41,6 +74,12 @@ func normalizeCreateInput(input CreateInput) (CreateInput, error) {
 	}
 	if input.ExpectedGroupRevision == 0 {
 		return CreateInput{}, fmt.Errorf("%w: expected group revision", ErrInvalidPlan)
+	}
+	if input.TargetRevision == 0 {
+		input.TargetRevision = 1
+	}
+	if err := validateTargets(input.GatewayIDs, input.ZoneID, input.CertificateID, input.TargetRevision); err != nil {
+		return CreateInput{}, err
 	}
 	if input.IdempotencyKey != "" && !validID(input.IdempotencyKey) {
 		return CreateInput{}, fmt.Errorf("%w: idempotency key", ErrInvalidPlan)

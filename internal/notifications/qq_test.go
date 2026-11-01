@@ -48,8 +48,8 @@ func newQQSender(t *testing.T, server *httptest.Server, secret string) *notifica
 	t.Helper()
 	sender, err := notifications.NewQQBotSender(notifications.QQConfig{
 		Client: server.Client(), TokenURL: server.URL + "/token", APIBaseURL: server.URL + "/api",
-		Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) {
-			return secret, nil
+		Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			return fn(ctx, secret)
 		}),
 	})
 	if err != nil {
@@ -218,7 +218,9 @@ func TestQQBotSenderRejectsOversizeAndRedirects(t *testing.T) {
 	defer redirecting.Close()
 	sender, err = notifications.NewQQBotSender(notifications.QQConfig{
 		Client: redirecting.Client(), TokenURL: redirecting.URL, APIBaseURL: redirecting.URL,
-		Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) { return "qq-secret", nil }),
+		Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			return fn(ctx, "qq-secret")
+		}),
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -236,8 +238,12 @@ func TestQQBotSenderRejectsOversizeAndRedirects(t *testing.T) {
 func TestQQBotSenderConfigAndSecretFailures(t *testing.T) {
 	for _, config := range []notifications.QQConfig{
 		{},
-		{TokenURL: "http://insecure.example/token", Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) { return "x", nil })},
-		{APIBaseURL: "https://user:pass@example.com", Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) { return "x", nil })},
+		{TokenURL: "http://insecure.example/token", Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			return fn(ctx, "x")
+		})},
+		{APIBaseURL: "https://user:pass@example.com", Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			return fn(ctx, "x")
+		})},
 	} {
 		if _, err := notifications.NewQQBotSender(config); !errors.Is(err, notifications.ErrQQConfig) {
 			t.Fatalf("config %+v err = %v", config, err)
@@ -245,8 +251,8 @@ func TestQQBotSenderConfigAndSecretFailures(t *testing.T) {
 	}
 	sender, err := notifications.NewQQBotSender(notifications.QQConfig{
 		TokenURL: "https://example.com/token", APIBaseURL: "https://example.com",
-		Secrets: notifications.SecretResolverFunc(func(context.Context, string) (string, error) {
-			return "", errors.New("store offline")
+		Secrets: notifications.SecretBorrowerFunc(func(context.Context, notifications.SecretUse, func(context.Context, string) error) error {
+			return errors.New("store offline")
 		}),
 	})
 	if err != nil {
@@ -256,5 +262,79 @@ func TestQQBotSenderConfigAndSecretFailures(t *testing.T) {
 		AppID: "app-1", TargetType: notifications.QQTargetPrivate, TargetID: "openid-1",
 	}, "secret/qq", notifications.Message{Subject: "alert", Body: "body"}); !errors.Is(err, notifications.ErrQQSecret) {
 		t.Fatalf("secret err = %v", err)
+	}
+}
+
+func TestQQBotSenderRejectsNonSuccessTokenStatusEvenWithTokenBody(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = io.WriteString(w, `{"access_token":"must-not-be-used","expires_in":7200}`)
+			return
+		}
+		t.Error("message endpoint was called after a failed token response")
+	}))
+	defer server.Close()
+	sender := newQQSender(t, server, "qq-secret")
+	result, err := sender.Send(context.Background(), notifications.QQSettings{
+		AppID: "app-1", TargetType: notifications.QQTargetPrivate, TargetID: "openid-1",
+	}, "secret/qq", notifications.Message{Subject: "alert", Body: "body"})
+	if err == nil || result.Outcome == notifications.ProviderAccepted {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+}
+
+func TestQQBotSenderBorrowBoundaries(t *testing.T) {
+	var requests int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/token" {
+			_, _ = io.WriteString(w, `{"access_token":"qq-token-xyz","expires_in":7200}`)
+			return
+		}
+		_, _ = io.WriteString(w, `{"id":"msg-1"}`)
+	}))
+	defer server.Close()
+
+	pre, err := notifications.NewQQBotSender(notifications.QQConfig{
+		Client: server.Client(), TokenURL: server.URL + "/token", APIBaseURL: server.URL + "/api",
+		Secrets: notifications.SecretBorrowerFunc(func(context.Context, notifications.SecretUse, func(context.Context, string) error) error {
+			return errors.New("revoked before use")
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pre.Send(context.Background(), notifications.QQSettings{
+		AppID: "app-1", TargetType: notifications.QQTargetPrivate, TargetID: "openid-1",
+	}, "secret/qq", notifications.Message{Subject: "alert", Body: "body"}); !errors.Is(err, notifications.ErrQQSecret) {
+		t.Fatalf("pre err = %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("provider I/O ran after the borrow pre-check failed: %d", requests)
+	}
+
+	post, err := notifications.NewQQBotSender(notifications.QQConfig{
+		Client: server.Client(), TokenURL: server.URL + "/token", APIBaseURL: server.URL + "/api",
+		Secrets: notifications.SecretBorrowerFunc(func(ctx context.Context, _ notifications.SecretUse, fn func(context.Context, string) error) error {
+			if err := fn(ctx, "qq-secret"); err != nil {
+				return err
+			}
+			return errors.New("revoked after use")
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := post.Send(context.Background(), notifications.QQSettings{
+		AppID: "app-1", TargetType: notifications.QQTargetPrivate, TargetID: "openid-1",
+	}, "secret/qq", notifications.Message{Subject: "alert", Body: "body"})
+	if err == nil || result.Outcome != notifications.ProviderUnknown {
+		t.Fatalf("post result = %+v, err = %v", result, err)
+	}
+	if requests == 0 {
+		t.Fatal("provider I/O did not run inside the borrow callback")
 	}
 }

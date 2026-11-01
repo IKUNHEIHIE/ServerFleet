@@ -208,7 +208,7 @@ func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, r.PathValue("uploadId"))
+	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("uploadId"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -235,7 +235,7 @@ func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	updated, err := api.service.WriteUploadContent(r.Context(), principal.SubjectID, upload.ID, offset, r.Body)
+	updated, err := api.service.WriteUploadContent(r.Context(), principal.SubjectID, principal.RequestID, upload.ID, offset, r.Body)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -275,7 +275,7 @@ func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, r.PathValue("uploadId"))
+	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("uploadId"))
 	if err != nil {
 		writeError(w, err)
 		return
@@ -391,6 +391,8 @@ func writeError(w http.ResponseWriter, err error) {
 		writeFixed(w, http.StatusRequestEntityTooLarge, "upload_too_large", "upload exceeds the size limit")
 	case errors.Is(err, ErrTransportAbsent), errors.Is(err, ErrTaskSubmitter), errors.Is(err, ErrCancellerAbsent):
 		writeFixed(w, http.StatusServiceUnavailable, "unavailable", "file transport is unavailable")
+	case errors.Is(err, ErrSameNode):
+		writeFixed(w, http.StatusConflict, "same_node", "source and destination nodes must differ")
 	case errors.Is(err, ErrInvalidPath), errors.Is(err, ErrSymlinkForbidden), errors.Is(err, ErrInvalidTransfer),
 		errors.Is(err, ErrRequestIDRequired), errors.Is(err, ErrMissingAuthorizer):
 		writeFixed(w, http.StatusBadRequest, "invalid_request", "request is invalid")

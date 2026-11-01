@@ -2,8 +2,9 @@ package publishing
 
 import "serverfleet.local/serverfleet/internal/storage"
 
-// Migrations returns the publication plan schema. DNS, certificate and gateway
-// state stay in their owning domains; this schema holds only orchestration state.
+// Migrations returns the accepted publication plan schema. DNS, certificate and
+// gateway state stay in their owning domains; this schema holds only
+// orchestration state.
 func Migrations() []storage.Migration {
 	return []storage.Migration{{
 		Version: "ds/0080_publishing",
@@ -37,6 +38,23 @@ func Migrations() []storage.Migration {
 				PRIMARY KEY (plan_id, stage)
 			)`,
 			`CREATE INDEX publishing_stages_status ON publishing_stages (plan_id, status)`,
+		},
+	}}
+}
+
+// TargetMigrations is the candidate DDL patch for persisted publishing targets.
+// It is not registered in Migrations until the integration owner accepts the
+// migration number and updates the shared migration-count fixtures.
+func TargetMigrations() []storage.Migration {
+	return []storage.Migration{{
+		Version: "ds/0081_publishing_targets",
+		Name:    "publication target ids and target revision",
+		Statements: []string{
+			`ALTER TABLE publishing_plans ADD COLUMN gateway_ids TEXT NOT NULL DEFAULT '[]'`,
+			`ALTER TABLE publishing_plans ADD COLUMN zone_id TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE publishing_plans ADD COLUMN certificate_id TEXT NOT NULL DEFAULT ''`,
+			`ALTER TABLE publishing_plans ADD COLUMN https INTEGER NOT NULL DEFAULT 0`,
+			`ALTER TABLE publishing_plans ADD COLUMN target_revision INTEGER NOT NULL DEFAULT 1`,
 		},
 	}}
 }

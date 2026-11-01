@@ -19,7 +19,7 @@ func TestWave6UnavailableUploadTransportAuditsFailureAndKeepsStagedBytes(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.service.AppendChunk(ctx, "user-1", upload.ID, 0, body); err != nil {
+	if _, err = f.service.AppendChunk(ctx, "user-1", "req-append", upload.ID, 0, body); err != nil {
 		t.Fatal(err)
 	}
 	withoutTransport, err := files.NewService(files.Options{DB: f.db, Repo: f.repo, Audit: f.audit, Authorizer: f.authorizer, StagingDir: f.staging})
@@ -36,7 +36,7 @@ func TestWave6UnavailableUploadTransportAuditsFailureAndKeepsStagedBytes(t *test
 	if page.Items[0].Result != "failure" {
 		t.Fatal("unavailable transport reported success")
 	}
-	stored, err := f.service.GetUpload(ctx, "user-1", upload.ID)
+	stored, err := f.service.GetUpload(ctx, "user-1", "req-get", upload.ID)
 	if err != nil || stored.Status != files.UploadOpen || stored.BytesReceived != size {
 		t.Fatal("failure lost staging or reported completion")
 	}
@@ -54,7 +54,7 @@ func TestWave6UploadCompletionRechecksCurrentWritePermission(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = f.service.AppendChunk(ctx, "user-1", upload.ID, 0, body); err != nil {
+	if _, err = f.service.AppendChunk(ctx, "user-1", "req-append", upload.ID, 0, body); err != nil {
 		t.Fatal(err)
 	}
 	revoked, err := files.NewService(files.Options{DB: f.db, Repo: f.repo, Audit: f.audit, Authorizer: authorizerFunc(func(context.Context, auth.Check) error { return auth.ErrDenied }), Uploads: f.upload, StagingDir: f.staging})

@@ -4,13 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io/fs"
+	"regexp"
 	"strings"
 )
-
-// ChannelProtocolVersion identifies the DS-owned file frame contract. The
-// controller adapter maps these frames onto the generated Protobuf messages;
-// this package never imports transport or the generated agent API.
-const ChannelProtocolVersion = 1
 
 const (
 	DefaultChannelChunkBytes = 16 << 10
@@ -19,77 +16,105 @@ const (
 	DefaultChannelAttempts   = 3
 )
 
-// ChannelFrameType is one bounded file-channel message kind.
-type ChannelFrameType string
-
-const (
-	FrameOpen        ChannelFrameType = "open"
-	FrameOpenAck     ChannelFrameType = "open_ack"
-	FrameChunk       ChannelFrameType = "chunk"
-	FrameAck         ChannelFrameType = "ack"
-	FrameComplete    ChannelFrameType = "complete"
-	FrameCompleteAck ChannelFrameType = "complete_ack"
-	FrameCancel      ChannelFrameType = "cancel"
-	FrameError       ChannelFrameType = "error"
-)
-
-func (t ChannelFrameType) valid() bool {
-	switch t {
-	case FrameOpen, FrameOpenAck, FrameChunk, FrameAck, FrameComplete, FrameCompleteAck, FrameCancel, FrameError:
-		return true
-	default:
-		return false
-	}
-}
-
-// ChannelDirection distinguishes an upload into the node from a download out of
-// it. A session is bound to exactly one direction.
+// ChannelDirection is the immutable binding direction. The generated CX frames
+// use the same lowercase vocabulary.
 type ChannelDirection string
 
 const (
-	ChannelUpload   ChannelDirection = "upload"
-	ChannelDownload ChannelDirection = "download"
+	ChannelRead  ChannelDirection = "read"
+	ChannelWrite ChannelDirection = "write"
 )
 
 func (d ChannelDirection) valid() bool {
-	return d == ChannelUpload || d == ChannelDownload
+	return d == ChannelRead || d == ChannelWrite
 }
 
-// ChannelFrame is the bounded, transport-neutral file frame. Data is only set on
-// chunk frames and must never exceed the negotiated chunk ceiling.
-type ChannelFrame struct {
-	Version        int
-	Type           ChannelFrameType
-	Direction      ChannelDirection
-	TaskID         string
-	TransferID     string
-	ExecutionID    string
-	Path           string
-	Offset         int64
-	Size           int64
-	SHA256         string
-	Data           []byte
-	ConflictPolicy ConflictPolicy
-	CreateParents  bool
-	ResumeOffset   int64
-	ResolvedPath   string
-	Skipped        bool
-	ErrorCode      string
+var channelIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
+
+// FileBinding is the immutable per-file reservation. It corresponds to the
+// generated FileOpenRequest fields plus the authenticated node identity. Paths
+// are relative to the operator-configured agent file root; absolute paths never
+// cross the wire.
+type FileBinding struct {
+	TaskID           string
+	ExecutionID      string
+	TransferID       string
+	NodeID           string
+	RelativePath     string
+	Direction        ChannelDirection
+	Size             int64
+	SHA256           string
+	ConflictPolicy   ConflictPolicy
+	ResumeOffset     int64
+	CreateParents    bool
+	PlanDigestSHA256 string
 }
 
-// FileChannelSession is one duplex, correlated file session with an agent. The
-// controller adapter must bind it to the mTLS-authenticated node connection; the
-// node id in a frame is never an independent authorization proof.
-type FileChannelSession interface {
-	Send(context.Context, ChannelFrame) error
-	Receive(context.Context) (ChannelFrame, error)
+// FileOpenResult is the validated FileOpenReply.
+type FileOpenResult struct {
+	TaskID           string
+	ExecutionID      string
+	TransferID       string
+	Size             int64
+	SHA256           string
+	RelativePath     string
+	ResumeOffset     int64
+	Skipped          bool
+	Complete         bool
+	ResultCode       string
+	PlanDigestSHA256 string
+}
+
+// FileChunkOp mirrors FileChunkRequest: read requests use ReadBytes, write
+// requests use Data/Finish. Cancel has no data/read bytes/finish.
+type FileChunkOp struct {
+	Offset    uint64
+	ReadBytes uint32
+	Data      []byte
+	Finish    bool
+	Cancel    bool
+}
+
+// FileChunkResult is the validated FileChunkReply.
+type FileChunkResult struct {
+	TaskID      string
+	ExecutionID string
+	TransferID  string
+	Offset      uint64
+	NextOffset  uint64
+	Data        []byte
+	Complete    bool
+	ResultCode  string
+}
+
+// AgentFileSession is one duplex file session bound to an authenticated node and
+// an immutable FileBinding. The controller adapter maps these calls to generated
+// FileChunkRequest/FileChunkReply envelopes.
+type AgentFileSession interface {
+	ReadChunk(context.Context, FileChunkOp) (FileChunkResult, error)
+	WriteChunk(context.Context, FileChunkOp) (FileChunkResult, error)
+	Cancel(context.Context, string) error
 	Close() error
 }
 
-// AgentFileChannel opens a session for one transfer. Implementations are owned by
-// the controller composition and backed by the active WSS+mTLS connection.
+// AgentFileChannel opens the open handshake and returns a session bound to the
+// result. Implementations live in the controller composition and must bind the
+// node to the mTLS-authenticated link, never to a frame-supplied node id.
 type AgentFileChannel interface {
-	OpenFileChannel(ctx context.Context, nodeID, transferID, executionID string) (FileChannelSession, error)
+	OpenFileChannel(ctx context.Context, binding FileBinding) (AgentFileSession, FileOpenResult, error)
+}
+
+// PathMapper is the explicit absolute-to-relative mapping. A missing mapper makes
+// every channel operation fail closed; there is no silent slash stripping.
+type PathMapper interface {
+	RelativePath(ctx context.Context, nodeID, absolutePath string) (string, error)
+	AbsolutePath(ctx context.Context, nodeID, relativePath string) (string, error)
+}
+
+// ChannelAuthorizer rechecks current source-read or target-write authority before
+// every chunk and before commit. It must not cache a previous decision.
+type ChannelAuthorizer interface {
+	AuthorizeChannel(ctx context.Context, direction ChannelDirection) error
 }
 
 var (
@@ -104,10 +129,14 @@ var (
 	ErrAgentConflict          = errors.New("files: destination conflict")
 	ErrAgentIO                = errors.New("files: agent file operation failed")
 	ErrAgentUnauthorized      = errors.New("files: agent rejected the file capability")
+	ErrAgentUnknown           = errors.New("files: agent file commit result is unknown")
 	ErrResumeUnsupported      = errors.New("files: resume requires a seekable source")
 	ErrFileTooLarge           = errors.New("files: file exceeds the channel size limit")
 	ErrFileSizeMismatch       = errors.New("files: transferred size does not match the declared size")
 	ErrTransferExecution      = errors.New("files: transfer execution is not allowed")
+	ErrPathMappingUnavailable = errors.New("files: explicit remote path mapping is not configured")
+	ErrTaskBindingRequired    = errors.New("files: channel task/execution/plan binding is required")
+	ErrAuthorizationRequired  = errors.New("files: per-chunk authorizer is required")
 	ErrCoordinatorUnavailable = errors.New("files: transfer coordinator is not configured")
 )
 
@@ -128,7 +157,11 @@ func (e *ChannelError) Error() string {
 }
 
 func channelError(code string) error {
-	switch code {
+	switch strings.ToLower(code) {
+	case "", "ok", "complete":
+		return nil
+	case "skipped", "skip":
+		return ErrAgentConflict
 	case "path_rejected", "invalid_path":
 		return ErrAgentPathRejected
 	case "symlink_forbidden":
@@ -147,6 +180,8 @@ func channelError(code string) error {
 		return ErrAgentIO
 	case "protocol_error", "unsupported", "frame_too_large":
 		return ErrChannelProtocol
+	case "unknown", "commit_unknown":
+		return ErrAgentUnknown
 	default:
 		return fmt.Errorf("%w: %s", ErrAgentIO, boundedCode(code))
 	}
@@ -157,7 +192,7 @@ func boundedCode(code string) string {
 		return "unknown"
 	}
 	if len(code) > 64 {
-		return code[:64]
+		code = code[:64]
 	}
 	for _, r := range code {
 		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '_' || r == '.' || r == '-' {
@@ -168,93 +203,115 @@ func boundedCode(code string) string {
 	return code
 }
 
-func validateChannelFrame(frame ChannelFrame, maxChunk int, maxFile int64) error {
-	if frame.Version != ChannelProtocolVersion {
-		return ErrChannelProtocol
-	}
-	if !frame.Type.valid() || !frame.Direction.valid() {
-		return ErrChannelProtocol
-	}
-	if !validChannelToken(frame.TransferID, 128) || !validChannelToken(frame.ExecutionID, 160) {
-		return ErrChannelProtocol
-	}
-	if frame.TaskID != "" && !validChannelToken(frame.TaskID, 128) {
-		return ErrChannelProtocol
-	}
-	if frame.Type == FrameOpen {
-		if err := ValidateRemotePath(frame.Path); err != nil {
-			return ErrAgentPathRejected
-		}
-		if frame.Path == "/" {
-			return ErrAgentPathRejected
-		}
-		if frame.Size < 0 || frame.Size > maxFile || frame.Offset < 0 {
-			return ErrChannelProtocol
-		}
-		if frame.Direction == ChannelUpload {
-			if frame.Offset > frame.Size || !sha256Pattern.MatchString(frame.SHA256) || !frame.ConflictPolicy.Valid() {
-				return ErrChannelProtocol
-			}
-		}
-	}
-	if frame.Type == FrameChunk {
-		if len(frame.Data) == 0 || len(frame.Data) > maxChunk {
-			return ErrChannelProtocol
-		}
-		if frame.Offset < 0 || frame.Offset+int64(len(frame.Data)) > maxFile {
-			return ErrChannelProtocol
-		}
-	}
-	if frame.Type == FrameError {
-		if frame.ErrorCode == "" || len(frame.ErrorCode) > 64 {
-			return ErrChannelProtocol
-		}
-	}
-	return nil
+func validChannelID(value string) bool {
+	return channelIDPattern.MatchString(value)
 }
 
-func validChannelToken(value string, max int) bool {
-	if value == "" || len(value) > max || strings.TrimSpace(value) != value {
+func validRelativePath(value string) bool {
+	if value == "" || len(value) > 1024 || !fs.ValidPath(value) || value == "." ||
+		strings.Contains(value, "\\") || strings.Contains(value, ":") ||
+		strings.HasPrefix(value, ".sf-") {
 		return false
 	}
-	for _, r := range value {
-		if r <= ' ' || r == 0x7f || r == '/' || r == '\\' {
+	for _, segment := range strings.Split(value, "/") {
+		if segment == "" || segment == "." || segment == ".." || len(segment) > 255 {
 			return false
 		}
 	}
 	return true
 }
 
-type channelIdentityKey struct{}
+func validateBinding(binding FileBinding, maxFile int64) error {
+	if !validChannelID(binding.TaskID) || !validChannelID(binding.ExecutionID) ||
+		!validChannelID(binding.TransferID) || !validChannelID(binding.NodeID) {
+		return ErrChannelProtocol
+	}
+	if !validRelativePath(binding.RelativePath) || !binding.Direction.valid() {
+		return ErrChannelProtocol
+	}
+	if binding.Size < 0 || binding.Size > maxFile || binding.ResumeOffset < 0 {
+		return ErrChannelProtocol
+	}
+	if binding.Direction == ChannelWrite {
+		if binding.ResumeOffset > binding.Size || !sha256Pattern.MatchString(binding.SHA256) || !binding.ConflictPolicy.Valid() {
+			return ErrChannelProtocol
+		}
+	} else if binding.SHA256 != "" && !sha256Pattern.MatchString(binding.SHA256) {
+		return ErrChannelProtocol
+	}
+	if !sha256Pattern.MatchString(binding.PlanDigestSHA256) {
+		return ErrTaskBindingRequired
+	}
+	return nil
+}
 
-type channelIdentity struct {
+func validateOpenResult(binding FileBinding, result FileOpenResult, maxFile int64) error {
+	if result.PlanDigestSHA256 != binding.PlanDigestSHA256 {
+		return fmt.Errorf("%w: plan digest echo", ErrChannelProtocol)
+	}
+	if result.Size < 0 || result.Size > maxFile {
+		return ErrFileTooLarge
+	}
+	if result.Skipped {
+		return nil
+	}
+	if !sha256Pattern.MatchString(result.SHA256) {
+		return fmt.Errorf("%w: open digest", ErrChannelProtocol)
+	}
+	if result.ResumeOffset < 0 || result.ResumeOffset > result.Size {
+		return fmt.Errorf("%w: open resume offset", ErrChannelProtocol)
+	}
+	if result.Complete && result.ResumeOffset != result.Size {
+		return fmt.Errorf("%w: complete open has a partial offset", ErrChannelProtocol)
+	}
+	return nil
+}
+
+type channelScopeKey struct{}
+
+type channelScope struct {
 	taskID      string
 	transferID  string
 	executionID string
+	planDigest  string
 }
 
-// WithChannelIdentity binds a stable transfer and execution id to one transport
-// call so retries after a reconnect reuse the agent's durable dedupe key.
-func WithChannelIdentity(ctx context.Context, transferID, executionID string) context.Context {
-	identity := channelIdentityFrom(ctx)
-	identity.transferID = transferID
-	identity.executionID = executionID
-	return context.WithValue(ctx, channelIdentityKey{}, identity)
-}
-
-// WithChannelTask adds the unified task id used by the CX FileChunk frames. The
-// wire adapter must include it in every request/reply; it is never authority by
-// itself.
-func WithChannelTask(ctx context.Context, taskID string) context.Context {
-	identity := channelIdentityFrom(ctx)
-	identity.taskID = taskID
-	return context.WithValue(ctx, channelIdentityKey{}, identity)
-}
-
-func channelIdentityFrom(ctx context.Context) channelIdentity {
-	if ctx == nil {
-		return channelIdentity{}
+// WithChannelScope binds the accepted unified task, execution, transfer and plan
+// digest to one transport call. All IDs must use [A-Za-z0-9_-]{1,128}; the plan
+// digest is a 64-char lowercase SHA-256. Invalid input yields no usable scope.
+func WithChannelScope(ctx context.Context, taskID, transferID, executionID, planDigest string) context.Context {
+	scope := channelScope{taskID: taskID, transferID: transferID, executionID: executionID, planDigest: planDigest}
+	if !validChannelID(taskID) || !validChannelID(transferID) || !validChannelID(executionID) ||
+		!sha256Pattern.MatchString(planDigest) {
+		scope = channelScope{}
 	}
-	identity, _ := ctx.Value(channelIdentityKey{}).(channelIdentity)
-	return identity
+	return context.WithValue(ctx, channelScopeKey{}, scope)
+}
+
+func channelScopeFrom(ctx context.Context) channelScope {
+	if ctx == nil {
+		return channelScope{}
+	}
+	scope, _ := ctx.Value(channelScopeKey{}).(channelScope)
+	return scope
+}
+
+func (s channelScope) valid() bool {
+	return validChannelID(s.taskID) && validChannelID(s.transferID) && validChannelID(s.executionID) &&
+		sha256Pattern.MatchString(s.planDigest)
+}
+
+type channelAuthorizerKey struct{}
+
+// WithChannelAuthorizer binds a per-chunk authority check to the context.
+func WithChannelAuthorizer(ctx context.Context, authorizer ChannelAuthorizer) context.Context {
+	return context.WithValue(ctx, channelAuthorizerKey{}, authorizer)
+}
+
+func channelAuthorizerFrom(ctx context.Context) ChannelAuthorizer {
+	if ctx == nil {
+		return nil
+	}
+	authorizer, _ := ctx.Value(channelAuthorizerKey{}).(ChannelAuthorizer)
+	return authorizer
 }

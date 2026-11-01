@@ -317,20 +317,20 @@ func TestUploadResumeChecksumAndTransportRetry(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.service.AppendChunk(context.Background(), "user-1", upload.ID, 0, body[:5]); err != nil {
+	if _, err := f.service.AppendChunk(context.Background(), "user-1", "req-append", upload.ID, 0, body[:5]); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.service.AppendChunk(context.Background(), "user-1", upload.ID, 0, body[:5]); !errors.Is(err, files.ErrOffsetConflict) {
+	if _, err := f.service.AppendChunk(context.Background(), "user-1", "req-append", upload.ID, 0, body[:5]); !errors.Is(err, files.ErrOffsetConflict) {
 		t.Fatalf("offset conflict err = %v", err)
 	}
-	if _, err := f.service.AppendChunk(context.Background(), "user-1", upload.ID, 5, body[5:]); err != nil {
+	if _, err := f.service.AppendChunk(context.Background(), "user-1", "req-append", upload.ID, 5, body[5:]); err != nil {
 		t.Fatal(err)
 	}
 	f.upload.err = errors.New("agent disconnected")
 	if _, err := f.service.CompleteUpload(context.Background(), "user-1", "req-up", upload.ID); !errors.Is(err, files.ErrTransportFailure) {
 		t.Fatalf("transport err = %v", err)
 	}
-	retried, err := f.service.GetUpload(context.Background(), "user-1", upload.ID)
+	retried, err := f.service.GetUpload(context.Background(), "user-1", "req-get", upload.ID)
 	if err != nil || retried.Status != files.UploadOpen {
 		t.Fatalf("retry state = %+v, %v", retried, err)
 	}
@@ -358,13 +358,13 @@ func TestUploadChecksumMismatchFails(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := f.service.AppendChunk(context.Background(), "user-1", upload.ID, 0, body); err != nil {
+	if _, err := f.service.AppendChunk(context.Background(), "user-1", "req-append", upload.ID, 0, body); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := f.service.CompleteUpload(context.Background(), "user-1", "req-up", upload.ID); !errors.Is(err, files.ErrChecksumMismatch) {
 		t.Fatalf("err = %v", err)
 	}
-	stored, err := f.service.GetUpload(context.Background(), "user-1", upload.ID)
+	stored, err := f.service.GetUpload(context.Background(), "user-1", "req-get", upload.ID)
 	if err != nil || stored.Status != files.UploadFailed {
 		t.Fatalf("stored = %+v, %v", stored, err)
 	}

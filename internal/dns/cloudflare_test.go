@@ -32,11 +32,11 @@ func cloudflareProviderWithClient(t *testing.T, baseURL string, client *http.Cli
 	provider, err := dns.NewCloudflareProvider(dns.CloudflareConfig{
 		Client:  client,
 		BaseURL: baseURL,
-		Secrets: dns.SecretResolverFunc(func(_ context.Context, ref dns.CredentialRef) (string, error) {
-			if ref != "secret/cf-1" {
-				return "", errors.New("unknown ref")
+		Secrets: dns.SecretBorrowerFunc(func(ctx context.Context, use dns.SecretUse, fn func(context.Context, string) error) error {
+			if use.Ref != "secret/cf-1" {
+				return errors.New("unknown ref")
 			}
-			return cloudflareTestToken, nil
+			return fn(ctx, cloudflareTestToken)
 		}),
 	})
 	if err != nil {
@@ -217,7 +217,9 @@ func TestCloudflareConfigAndSecretFailures(t *testing.T) {
 	for _, base := range []string{"http://api.cloudflare.com/client/v4", "https://user:pass@example.com", "not a url"} {
 		_, err := dns.NewCloudflareProvider(dns.CloudflareConfig{
 			BaseURL: base,
-			Secrets: dns.SecretResolverFunc(func(context.Context, dns.CredentialRef) (string, error) { return "x", nil }),
+			Secrets: dns.SecretBorrowerFunc(func(ctx context.Context, _ dns.SecretUse, fn func(context.Context, string) error) error {
+				return fn(ctx, "x")
+			}),
 		})
 		if !errors.Is(err, dns.ErrCloudflareConfig) {
 			t.Fatalf("base %q err = %v", base, err)
@@ -225,8 +227,8 @@ func TestCloudflareConfigAndSecretFailures(t *testing.T) {
 	}
 	provider, err := dns.NewCloudflareProvider(dns.CloudflareConfig{
 		BaseURL: "https://api.cloudflare.com/client/v4",
-		Secrets: dns.SecretResolverFunc(func(context.Context, dns.CredentialRef) (string, error) {
-			return "", errors.New("store offline")
+		Secrets: dns.SecretBorrowerFunc(func(context.Context, dns.SecretUse, func(context.Context, string) error) error {
+			return errors.New("store offline")
 		}),
 	})
 	if err != nil {
@@ -262,5 +264,50 @@ func TestCloudflareNotFoundIsTyped(t *testing.T) {
 	provider := cloudflareServerProvider(t, server)
 	if err := provider.DeleteRecord(context.Background(), "secret/cf-1", "zone-1", "record-1"); !errors.Is(err, dns.ErrProviderNotFound) {
 		t.Fatalf("err = %v", err)
+	}
+}
+
+func TestCloudflareBorrowBoundaries(t *testing.T) {
+	var requests int32
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		atomic.AddInt32(&requests, 1)
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"success":true,"result":{"status":"active"}}`)
+	}))
+	defer server.Close()
+
+	pre, err := dns.NewCloudflareProvider(dns.CloudflareConfig{
+		Client: server.Client(), BaseURL: server.URL,
+		Secrets: dns.SecretBorrowerFunc(func(context.Context, dns.SecretUse, func(context.Context, string) error) error {
+			return errors.New("revoked before use")
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := pre.Test(context.Background(), "secret/cf-1"); !errors.Is(err, dns.ErrCloudflareSecret) {
+		t.Fatalf("pre err = %v", err)
+	}
+	if requests != 0 {
+		t.Fatalf("provider I/O ran after the borrow pre-check failed: %d", requests)
+	}
+
+	post, err := dns.NewCloudflareProvider(dns.CloudflareConfig{
+		Client: server.Client(), BaseURL: server.URL,
+		Secrets: dns.SecretBorrowerFunc(func(ctx context.Context, use dns.SecretUse, fn func(context.Context, string) error) error {
+			if err := fn(ctx, cloudflareTestToken); err != nil {
+				return err
+			}
+			return errors.New("revoked after use")
+		}),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := post.Test(context.Background(), "secret/cf-1"); err == nil {
+		t.Fatal("post-borrow failure was reported as success")
+	}
+	if requests == 0 {
+		t.Fatal("provider I/O did not run inside the borrow callback")
 	}
 }

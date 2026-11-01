@@ -20,9 +20,7 @@ func TestWave6CoordinatorStopsAfterRevocationBetweenItems(t *testing.T) {
 	f.agent.putFile("node-src", "/etc/first.bin", []byte("first payload"))
 	f.agent.putFile("node-src", "/etc/second.bin", []byte("second payload"))
 	f.createTransfer(t, files.ConflictOverwrite, []string{"/etc/first.bin", "/etc/second.bin"})
-	outcome, err := f.coordinator.ExecuteTask(context.Background(), "task-transfer", files.TransferExecution{
-		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
-	}, func(snapshot files.TransferOutcome) {
+	outcome, err := f.coordinator.ExecuteTask(context.Background(), "task-transfer", testTransferExecution(), func(snapshot files.TransferOutcome) {
 		if len(snapshot.Items) > 0 && snapshot.Items[0].Status == files.ItemCopied {
 			revoked.Store(true)
 		}

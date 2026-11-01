@@ -36,9 +36,12 @@ func TestACMEChallengePublisherCreatesAndRemovesTXT(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "dns01-value")
+	recordID, cleanup, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "dns01-value")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if recordID == "" {
+		t.Fatal("publisher did not return a provider record id")
 	}
 	records, err := fixture.service.ListRecords(context.Background(), "admin", "zone-1")
 	if err != nil || len(records) != 1 {
@@ -78,7 +81,7 @@ func TestACMEChallengePublisherTreatsProviderNotFoundAsCleanup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	cleanup, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "value")
+	_, cleanup, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "value")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -107,14 +110,14 @@ func TestACMEChallengePublisherValidation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := publisher.Publish(context.Background(), "app.example.com", "value"); err == nil {
+	if _, _, err := publisher.Publish(context.Background(), "app.example.com", "value"); err == nil {
 		t.Fatal("non-challenge name accepted")
 	}
-	if _, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "bad value"); err == nil {
+	if _, _, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "bad value"); err == nil {
 		t.Fatal("value with whitespace accepted")
 	}
 	fixture.provider.createErr = errors.New("provider down")
-	if _, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "value"); !errors.Is(err, dns.ErrProviderFailed) {
+	if _, _, err := publisher.Publish(context.Background(), "_acme-challenge.app.example.com", "value"); !errors.Is(err, dns.ErrProviderFailed) {
 		t.Fatalf("provider err = %v", err)
 	}
 }
