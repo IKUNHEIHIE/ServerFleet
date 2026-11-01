@@ -11,6 +11,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"serverfleet.local/serverfleet/internal/tasks"
 )
 
 var ErrUpdateSourceUnavailable = errors.New("updates: release source unavailable")
@@ -59,6 +61,8 @@ type Options struct {
 	// Apply resolves a persisted approved plan through the sole task service.
 	// It must not take executable paths or privilege from this HTTP request.
 	Apply func(context.Context, ApplyRequest) (ApplyResult, error)
+	Jobs  func(context.Context, Principal) (JobPage, error)
+	Job   func(context.Context, Principal, string) (ApplyResult, error)
 }
 
 type ApplyRequest struct {
@@ -242,7 +246,7 @@ func (h *HTTP) apply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	result, err := h.options.Apply(r.Context(), ApplyRequest{principal, body.PlanID, body.Confirmation, body.BackupMode})
-	if err != nil || !installID(result.ID) || !installID(result.TaskID) || (result.Status != "installed" && result.Status != "rolled_back" && result.Status != "queued") {
+	if err != nil || !validJobResult(result) {
 		writeUpdateProblem(w, 503, "UPDATE_OUTCOME_UNKNOWN")
 		return
 	}
@@ -255,11 +259,63 @@ func (h *HTTP) jobs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// No job can be created without an admitted installer/hook set.
+	if h.options.Jobs != nil {
+		principal, _ := r.Context().Value(updatePrincipalKey{}).(Principal)
+		page, err := h.options.Jobs(r.Context(), principal)
+		if err != nil {
+			writeJobError(w, err)
+			return
+		}
+		if len(page.Items) > 200 {
+			writeJobError(w, ErrApplyUnknown)
+			return
+		}
+		for _, item := range page.Items {
+			if !validJobResult(item) {
+				writeJobError(w, ErrApplyUnknown)
+				return
+			}
+		}
+		writeUpdateJSON(w, 200, page)
+		return
+	}
 	writeUpdateJSON(w, http.StatusOK, map[string]any{"items": []any{}})
 }
 
 func (h *HTTP) job(w http.ResponseWriter, r *http.Request) {
+	if r.ContentLength > 0 || len(r.TransferEncoding) != 0 || r.URL.RawQuery != "" {
+		writeUpdateProblem(w, 400, "INVALID_REQUEST")
+		return
+	}
+	if h.options.Job != nil {
+		principal, _ := r.Context().Value(updatePrincipalKey{}).(Principal)
+		result, err := h.options.Job(r.Context(), principal, r.PathValue("jobId"))
+		if err != nil {
+			writeJobError(w, err)
+			return
+		}
+		if !validJobResult(result) {
+			writeJobError(w, ErrApplyUnknown)
+			return
+		}
+		writeUpdateJSON(w, 200, result)
+		return
+	}
 	writeUpdateProblem(w, http.StatusNotFound, "UPDATE_JOB_NOT_FOUND")
+}
+
+func validJobResult(r ApplyResult) bool {
+	return installID(r.ID) && installID(r.TaskID) && (r.Status == "installed" || r.Status == "rolled_back" || tasks.TaskStatus(r.Status).Valid())
+}
+func writeJobError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrUpdateJobNotFound):
+		writeUpdateProblem(w, 404, "UPDATE_JOB_NOT_FOUND")
+	case errors.Is(err, ErrUpdateJobDenied):
+		writeUpdateProblem(w, 403, "NOT_AUTHORIZED")
+	default:
+		writeUpdateProblem(w, 503, "UPDATE_SOURCE_UNAVAILABLE")
+	}
 }
 
 func (h *HTTP) rollback(w http.ResponseWriter, r *http.Request) {

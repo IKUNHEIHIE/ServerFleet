@@ -14,6 +14,7 @@ import (
 // Run starts the scheduler loop until ctx is canceled. Effects are only applied
 // through a new execution of RunOnce; no goroutine is shared across services.
 func (s *Service) Run(ctx context.Context) error {
+	defer s.stopWorkers()
 	ticker := time.NewTicker(s.interval)
 	defer ticker.Stop()
 	for {
@@ -50,6 +51,11 @@ func (s *Service) RunOnce(ctx context.Context) error {
 }
 
 func (s *Service) process(ctx context.Context, taskID string) error {
+	if s.runtimeGate != nil {
+		if err := s.runtimeGate(ctx); err != nil {
+			return err
+		}
+	}
 	unlock := s.lockTask(taskID)
 	defer unlock()
 	task, err := s.repo.Get(ctx, taskID)
@@ -60,6 +66,9 @@ func (s *Service) process(ctx context.Context, taskID string) error {
 		return nil
 	}
 	if task.CancelRequested {
+		if s.workers[task.ActionID] != nil && hasDispatched(task) {
+			return s.reconcileWorker(ctx, task)
+		}
 		if !hasDispatched(task) {
 			_, err := s.finalize(ctx, task, StatusCanceled, "canceled by operator")
 			return err
@@ -105,6 +114,9 @@ func (s *Service) process(ctx context.Context, taskID string) error {
 		}
 	}
 	if dispatched {
+		if s.workers[task.ActionID] != nil {
+			return s.reconcileWorker(ctx, task)
+		}
 		if err := s.ensureRunning(ctx, task); err != nil {
 			return err
 		}
@@ -147,6 +159,9 @@ func (s *Service) process(ctx context.Context, taskID string) error {
 			return nil
 		}
 		return err
+	}
+	if worker := s.workers[task.ActionID]; worker != nil {
+		return s.startWorker(ctx, task, pending, worker)
 	}
 	return s.dispatch(ctx, task, pending)
 }
@@ -268,6 +283,15 @@ func (s *Service) advance(ctx context.Context, taskID string) error {
 			return nil
 		}
 	}
+	// The pure batch gate treats UNKNOWN as insufficient success evidence. The
+	// durable service must additionally terminate it, never wait forever or
+	// advance/replay a side effect whose result is uncertain.
+	for _, target := range batch {
+		if target.State == TargetUnknown {
+			_, err := s.finalize(ctx, task, StatusUnknown, "one or more transport results are unknown")
+			return err
+		}
+	}
 	snapshot, err := taskSnapshot(task)
 	if err != nil {
 		return err
@@ -375,11 +399,11 @@ func deriveStatus(task Task) (TaskStatus, string) {
 			pending++
 		}
 	}
-	if task.CancelRequested {
-		return StatusCanceled, "canceled by operator"
-	}
 	if unknown > 0 {
 		return StatusUnknown, "one or more transport results are unknown"
+	}
+	if task.CancelRequested {
+		return StatusCanceled, "canceled by operator"
 	}
 	if pending > 0 {
 		if succeeded > 0 {

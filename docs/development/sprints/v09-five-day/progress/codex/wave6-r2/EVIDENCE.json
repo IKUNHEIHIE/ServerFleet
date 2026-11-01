@@ -1,0 +1,743 @@
+{
+  "task": "V09-R6-CX-03",
+  "session": "codex-06",
+  "reviewer": "codex-review-02",
+  "base": "c9013f4231c5f0a586eb0af26386f6e265996c0c",
+  "testedCodeSHA": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+  "testedTree": "3d57d17eab855099cf09cba2bd730e20f3a981c9",
+  "workingTreeAtVerification": "CLEAN",
+  "createdAt": "2026-11-01T16:57:04.288Z",
+  "scope": "Author implementation complete for independently executable work; shared reception and explicit external/admission gaps remain. No main merge/push, SSH/awskr/cloud/real secrets, other author edits, subagents or messages.",
+  "changedFilesAtTestedCodeSHA": [
+    "api/openapi/revisions/v09-r7/ai-budget-candidate.yaml",
+    "apps/controller/server/ai_budget_http.go",
+    "apps/controller/server/file_worker.go",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/SHARED-CHANGES.md",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/STATUS.md",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/controller-ai-budget.patch",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/controller-files.patch",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/controller-platform.patch",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/redocly-ai-budget.patch",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/updates-http-candidate.yaml",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/updates-openapi.patch",
+    "internal/ai/budget_http.go",
+    "internal/ai/budget_sql.go",
+    "internal/ai/budget_view.go",
+    "internal/ai/generation_budget.go",
+    "internal/files/cancel_r2_test.go",
+    "internal/files/execution_bindings.go",
+    "internal/files/http.go",
+    "internal/files/repository.go",
+    "internal/files/root_mapper.go",
+    "internal/files/service.go",
+    "internal/files/spool.go",
+    "internal/recovery/runtime_guard.go",
+    "internal/recovery/runtime_guard_test.go",
+    "internal/recovery/runtime_http.go",
+    "internal/recovery/runtime_http_test.go",
+    "internal/tasks/runtime_gate_test.go",
+    "internal/tasks/scheduler.go",
+    "internal/tasks/service.go",
+    "internal/tasks/worker.go",
+    "internal/tasks/worker_test.go",
+    "internal/transport/controller_close.go",
+    "internal/transport/controller_link.go",
+    "internal/updates/http.go",
+    "internal/updates/install_sql.go",
+    "internal/updates/task_jobs.go",
+    "internal/updates/task_process_linux_test.go",
+    "internal/updates/task_worker.go",
+    "internal/updates/task_worker_test.go",
+    "tests/integration/v09/platform/ai_budget_r2_test.go",
+    "tests/integration/v09/platform/controller_local_ai_r1_test.go",
+    "tests/integration/v09/platform/file_flow_r2_test.go",
+    "tests/integration/v09/platform/recovery_guard_r2_test.go",
+    "tests/integration/v09/platform/update_http_r2_test.go",
+    "tests/poc/v09/platform/check-wave6-r2-patches.mjs",
+    "tests/poc/v09/platform/prepare-wave6-r2-ai-overlays.mjs",
+    "tests/poc/v09/platform/prepare-wave6-r2-overlays.mjs",
+    "tests/poc/v09/platform/prepare-wave6-r2-platform-overlays.mjs",
+    "tests/poc/v09/platform/prepare-wave6-r2-update-contract.mjs",
+    "tests/poc/v09/platform/run-wave6-r2-combined.mjs",
+    "tests/poc/v09/platform/run-wave6-r2-linux.mjs"
+  ],
+  "commits": [
+    "c9f6855a73e742438cff8248965f7ebdc1e070a4 feat(files): execute durable transfers through one worker and real agents",
+    "6f10bc5fb5f19aa24d7c512304c91a2946c65ab7 feat(ai): expose owner budget policy and usage with audited CAS",
+    "199d678591d71fe30beec547090634af389b540d fix(files): preserve terminal cancellation and enforce live grant revocation",
+    "804993887de9b9f413a27310e9b14cc0b70cf889 feat(platform): bind approved updates and restored runtime to durable guards",
+    "41a5f5827a24b560914051176cbe829a19b4a986 test(platform): reproduce clean-head combined controller verification",
+    "544c048d15fce906c88629ddff60476748f8589b test(files): account for resident backoff in restart fixture",
+    "a0e22c49a328a488a0e0907d5ad9271f683d31af fix(platform): guard live response streams and expose assembly ports",
+    "22bbe91799ab11fbf0a0035296055a110eae4c40 fix(updates): project approved task states through current owner HTTP"
+  ],
+  "tools": {
+    "go": "1.27.3",
+    "node": "v24.22.1",
+    "npm": "11.19.1",
+    "linux": "Existing local WSL Ubuntu uid 1000, linux/amd64 test binaries cross-compiled by pinned Windows Go"
+  },
+  "rootChecks": {
+    "executedAt": "2026-11-01T16:52:38.884Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      },
+      {
+        "name": "contracts",
+        "status": "PASS"
+      },
+      {
+        "name": "go",
+        "status": "PASS"
+      },
+      {
+        "name": "web",
+        "status": "PASS"
+      },
+      {
+        "name": "git",
+        "status": "PASS"
+      }
+    ]
+  },
+  "security": {
+    "executedAt": "2026-11-01T16:51:24.947Z",
+    "results": [
+      {
+        "name": "security",
+        "status": "PASS"
+      }
+    ]
+  },
+  "goResults": {
+    "packages": 39,
+    "topPass": 763,
+    "subPass": 1188,
+    "failed": 0,
+    "skipped": [
+      {
+        "package": "serverfleet.local/serverfleet/apps/agent",
+        "test": "TestAgentExecutorRejectsNonPrivateLedgerOnLinux"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/apps/agent",
+        "test": "TestAgentFileBytesResumeHashAndIndependentReadGate"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/apps/agent",
+        "test": "TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/apps/agent",
+        "test": "TestActualWSSCompletionLossAndReconnectCannotRepeatWrite"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/apps/agent",
+        "test": "TestActualWSSFileTwoAgentsBytesCancelRevokeAndUnknown"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/tests/poc/v09/services/cloudflare",
+        "test": "TestCloudflareDNS"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/files",
+        "test": "TestLocalStagingRejectsSymlinkedDirectories"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/files",
+        "test": "TestLocalStagingRejectsSymlinkedTargetFile"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/recovery",
+        "test": "TestQuarantineRejectsNonPrivateLinuxDirectory"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+        "test": "TestPinnedXrayActualConfigTestAndLoopbackStart"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+        "test": "TestCustomActualTargetValidationAndProxyCannotReachAPI"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+        "test": "TestPinnedXrayActualVisionTrafficStatsAndProcessReset"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+        "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+        "test": "TestWave6ControllerAndResidentAgentCLI"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/auth",
+        "test": "TestPersistentCredentialRestartRotationAndFailureClosed"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/auth",
+        "test": "TestPersistentCredentialConcurrentInitialization"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/auth",
+        "test": "TestPersistentCredentialRejectDirectoryAndSymlink"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/internal/auth",
+        "test": "TestWave6RevokedCredentialDoesNotPreventRestart"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+        "test": "TestWave6IsolatedNginxProxy"
+      },
+      {
+        "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+        "test": "TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations"
+      }
+    ]
+  },
+  "web": {
+    "files": 38,
+    "passed": 340,
+    "failed": 0,
+    "priorIntermittentFailure": "Unchanged model fixture once failed at apps/web/src/features/ai/ai-pages.test.tsx:148; isolated 10 and final full 340 passed. Original failures retained; no frontend edits."
+  },
+  "combined": {
+    "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+    "workingTree": "CLEAN",
+    "uid": "1000",
+    "status": "PASS",
+    "passed": 6,
+    "skipped": 0,
+    "agentSHA256": "37296ad5479bff6573cc562cade34b13ae7ea0710ce9ac4fca30e56487e78599",
+    "testSHA256": "955f3e744204fb7b674027c22ef73cbab5a22aa612a6d104e31f844f17b9c461",
+    "logSHA256": "ea5ee00a240d2f476fe348ecac5633a5615c594f1c3009288f361a48ac8d7977",
+    "limits": "Full central files/AI/platform candidate overlay. Actual local Controller TLS and two resident Agent processes; restore authority/fence remains an explicit double. No physical two-machine/ARM runtime/awskr/production claim."
+  },
+  "native": [
+    {
+      "target": "agent",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "4dae6126322bac0cb07beab15260fd295810d747e8b199b289a30ef6dbd806e3",
+      "passed": 42,
+      "skipped": 1,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/agent.json",
+        "bytes": 394,
+        "sha256": "800962aa8cbf968f8302bae9813872b3c046eee51f7cc07790e4edce90f12d99"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/agent-native.log",
+        "bytes": 12913,
+        "sha256": "6742d0669a71a0f0e1c255460ad557af40be8fac6230c1c2699b28717c214cca"
+      }
+    },
+    {
+      "target": "transport",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "8909fbdd0a54dbecd19f2738deaf0246a7626fe4aa6b4244d36d9b0eef6ddd8d",
+      "passed": 58,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/transport.json",
+        "bytes": 398,
+        "sha256": "58ec8ac52ad9c180edc7a5f7a630f0374b3d2738e922d563583af389a2c87b0b"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/transport-native.log",
+        "bytes": 39903,
+        "sha256": "764a88a0f9d3d7d9152f31d0b95dbe014a0a12e44d875b45fc034919cc65ca4e"
+      }
+    },
+    {
+      "target": "ai",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "729bae17b0d1e0c63a7159e861dbcfc8029630a3760f0e0e524a0ccc9a858f2a",
+      "passed": 34,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/ai.json",
+        "bytes": 391,
+        "sha256": "e68c37b5218efa446fba1f1701014339e66c62ed7255a5ad8d813fff27c61a96"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/ai-native.log",
+        "bytes": 15241,
+        "sha256": "feb1c120b53e789882a23ea1ead7aaa243e7f6cec5972af25e72e77758ba2b72"
+      }
+    },
+    {
+      "target": "budget",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "b4bdd37cddaa8dcb0513a054eab00beed99a665b70dc4398026ca6de6171af61",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/budget.json",
+        "bytes": 394,
+        "sha256": "9baa20832e72847e88813a7068d7e164ef935a36d5d16378e0f46847ff9e6593"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/budget-native.log",
+        "bytes": 327,
+        "sha256": "fb2ed8af3ad7c0551427fca393339096182476715a0ac908f991950ad62ab585"
+      }
+    },
+    {
+      "target": "controller",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "b4bdd37cddaa8dcb0513a054eab00beed99a665b70dc4398026ca6de6171af61",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/controller.json",
+        "bytes": 398,
+        "sha256": "a2e22a615c17ae3ff6cde3b92c5ab374e470fd8d14b186ab5256aac95fd68942"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/controller-native.log",
+        "bytes": 301,
+        "sha256": "a428eb40e9f70d16b811db4e34076e80ff9fd7932773035de06e14ee5cc499bb"
+      }
+    },
+    {
+      "target": "updates",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "13221794b60993894f01d88f77a0fc3412e2ddde6f6bd579e98af9bf1d5ad2ab",
+      "passed": 17,
+      "skipped": 1,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/updates.json",
+        "bytes": 396,
+        "sha256": "440926b3b81b800cf12695696b2d5ed01e97d02e1a15edc42d3aeb30af69fb47"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/updates-native.log",
+        "bytes": 9071,
+        "sha256": "9d6de78d8fde58a0f6ba0cd7c1a92dd235993c1bfc3820ccd711f28cff61a650"
+      }
+    },
+    {
+      "target": "recovery",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "21b129e8474821114b7b2b76e28ee0dab5e73eb0dd648832160cd37c72aea285",
+      "passed": 9,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/recovery.json",
+        "bytes": 396,
+        "sha256": "6f56692678e6e8147d5648f4ead2e41ef3a3d15424e2a4291406d0c2ec24ecd8"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/recovery-native.log",
+        "bytes": 1305,
+        "sha256": "a4e6e998005055b6320b69a5785109c8c7f82bc37062abef56442eade7fb5c45"
+      }
+    },
+    {
+      "target": "restore",
+      "uid": "1000",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": "",
+      "binarySHA256": "b4bdd37cddaa8dcb0513a054eab00beed99a665b70dc4398026ca6de6171af61",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target exercises adopted production composition and registered migrations without overlays.",
+      "evidence": {
+        "path": "reports/wave6-r1-linux/restore.json",
+        "bytes": 395,
+        "sha256": "d98395ed54238ea8924b9c3c0009a45398c1a5b63d1dbffef181e9320064eaeb"
+      },
+      "log": {
+        "path": "reports/wave6-r1-linux/restore-native.log",
+        "bytes": 301,
+        "sha256": "075d94f55a10676a2a446f693d839773b9a2c5a4e7390a57ffe141416bf6948b"
+      }
+    },
+    {
+      "target": "auth",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": null,
+      "status": "PASS",
+      "passed": 73,
+      "skipped": 0,
+      "binarySHA256": "bda4a66efd89da5104bee2d2068838421cb13c3fcb7f67c3e450ec148165f3e5",
+      "logSHA256": "66fd728a64cdfbb62fb077706673a8c02bbf9e5baf2ea8d1d843ee76c20c32ef",
+      "limits": "Local non-root WSL amd64; actual temporary SQLite/private key files, not production deployment.",
+      "uid": "1000",
+      "evidence": {
+        "path": "reports/wave6-r2/auth-native.json",
+        "bytes": 443,
+        "sha256": "03711f5d3a0e94f994ca26241e75d6bc51766b46285cabffd64a34f048bf2b9e"
+      },
+      "log": {
+        "path": "reports/wave6-r2/auth-native.log",
+        "bytes": 49249,
+        "sha256": "66fd728a64cdfbb62fb077706673a8c02bbf9e5baf2ea8d1d843ee76c20c32ef"
+      }
+    },
+    {
+      "target": "files",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": null,
+      "status": "PASS",
+      "passed": 60,
+      "skipped": 1,
+      "binarySHA256": "8e142baa9b79ead56148f01bf6599caba9637054a79c53a65381a36eedf0d1b5",
+      "logSHA256": "e9f4f49b293835a585fca0bb543e4c5e6d0f569776863d6695c6a5662520ac52",
+      "limits": "Local non-root WSL amd64; actual temporary SQLite/private key files, not production deployment.",
+      "uid": "1000",
+      "evidence": {
+        "path": "reports/wave6-r2/files-native.json",
+        "bytes": 444,
+        "sha256": "7751bcdd32ddc785d5d4f8159cbc285f2d2d7264a7c0d4c0b5db686c9f47a6d5"
+      },
+      "log": {
+        "path": "reports/wave6-r2/files-native.log",
+        "bytes": 9484,
+        "sha256": "e9f4f49b293835a585fca0bb543e4c5e6d0f569776863d6695c6a5662520ac52"
+      }
+    },
+    {
+      "target": "tasks",
+      "head": "22bbe91799ab11fbf0a0035296055a110eae4c40",
+      "workingTree": null,
+      "status": "PASS",
+      "passed": 70,
+      "skipped": 0,
+      "binarySHA256": "f9b5a3c0de102e002d2d07abda8649b660469240cae693aa5b4b82c22f97cf42",
+      "logSHA256": "2175e5b3e4891f952ab2eadf4c1350439b186404d4e14015f2a03005d6643c10",
+      "limits": "Local non-root WSL amd64; actual temporary SQLite/private key files, not production deployment.",
+      "uid": "1000",
+      "evidence": {
+        "path": "reports/wave6-r2/tasks-native.json",
+        "bytes": 444,
+        "sha256": "a6b3c740ade5ef0f81a669904947ced1a2d887a7ed220fcc103b9e96accfe86d"
+      },
+      "log": {
+        "path": "reports/wave6-r2/tasks-native.log",
+        "bytes": 18969,
+        "sha256": "2175e5b3e4891f952ab2eadf4c1350439b186404d4e14015f2a03005d6643c10"
+      }
+    }
+  ],
+  "nativeTotals": {
+    "topPass": 366,
+    "skipped": 3,
+    "limits": "Do not sum overlapping native groups with Windows tests. Two skipped subprocess helpers are executed by their parents; files skips only the Windows-specific reserved-name rule, covered by the Windows suite."
+  },
+  "linux": {
+    "vet": "PASS including full central candidate overlay",
+    "govulncheck": "PASS; No vulnerabilities found",
+    "builds": [
+      {
+        "path": "reports/wave6-r2/controller-linux-amd64",
+        "bytes": 25473713,
+        "sha256": "4485de562588e151f3fa158d31bb4f4b4f28d1ab42a58b4384713d4db33d83b2"
+      },
+      {
+        "path": "reports/wave6-r2/controller-linux-arm64",
+        "bytes": 23835023,
+        "sha256": "f56cb24c411c835189c19ad6c00e190994a0ccc2b4228eed868094b759652e13"
+      },
+      {
+        "path": "reports/wave6-r2/agent-linux-amd64",
+        "bytes": 13853224,
+        "sha256": "37296ad5479bff6573cc562cade34b13ae7ea0710ce9ac4fca30e56487e78599"
+      },
+      {
+        "path": "reports/wave6-r2/agent-linux-arm64",
+        "bytes": 12924375,
+        "sha256": "df0379d5396bbeeab9f100dc1518c84ada41bdcc6ef8b2f8df4bf4501c414c12"
+      }
+    ],
+    "armRuntime": "UNTESTED"
+  },
+  "patches": [
+    {
+      "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/controller-files.patch",
+      "bytes": 5537,
+      "sha256": "53a16020bed411a0f49f107ddd899cd6334e17855d7d854589e1517f5e8939da"
+    },
+    {
+      "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/controller-ai-budget.patch",
+      "bytes": 470,
+      "sha256": "1fb38ad836ea517156157f16d62669c003380c82b39941988c2bdbe86ab88650"
+    },
+    {
+      "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/controller-platform.patch",
+      "bytes": 7727,
+      "sha256": "a24155b701b87133bce06bc79aa9b988a366c92b7714eb74028f6c01e13f6813"
+    },
+    {
+      "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/redocly-ai-budget.patch",
+      "bytes": 334,
+      "sha256": "aaad328ef0f7bd1f0f88e55c894336bb7fe6e2c16754c04f090e483ca8e806a1"
+    },
+    {
+      "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r2/updates-openapi.patch",
+      "bytes": 5386,
+      "sha256": "c4b579f69a6ea2aa7ce5421c7c0920adf672407c275f0f6659222abd2f401757"
+    }
+  ],
+  "candidateContracts": {
+    "status": "PASS",
+    "limits": "Review only. Updates r7 describes actual id/taskId/status shape, incompatible with historical g2 jobId/state; no frozen compatibility claim. Proto/generated sources unchanged."
+  },
+  "logs": [
+    {
+      "path": "reports/wave6-r2/npm-ci.log",
+      "bytes": 341,
+      "sha256": "465113b9b6536dddb80d876ba41952b72e8c4761afb14792f28cccea87fe0ef4"
+    },
+    {
+      "path": "reports/wave6-r2/tools-install-cached-proxy.log",
+      "bytes": 393,
+      "sha256": "e889f4db965670aef2d2ded045e8bfe7105b4a3f51e26909061794c1d330cec0"
+    },
+    {
+      "path": "reports/wave6-r2/root-check.log",
+      "bytes": 2154009,
+      "sha256": "254e19c3ed4cdd0443224833870a04b52ce1b5d9fffa10d3f140401d3aab2af7"
+    },
+    {
+      "path": "reports/wave6-r2/root-security.log",
+      "bytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2"
+    },
+    {
+      "path": "reports/check-all.json",
+      "bytes": 359,
+      "sha256": "9c00ac23aa13fc00a7c0d174debac5489f1421393b2bdf91e4b606aab19648f4"
+    },
+    {
+      "path": "reports/check-security.json",
+      "bytes": 128,
+      "sha256": "e8fb7b3ee203420327e16df05c7eac9aa862b6fd68297056db4b0ad3fb537a9b"
+    },
+    {
+      "path": "reports/go-tests.log",
+      "bytes": 2064969,
+      "sha256": "17dc8fb4ce8e0d7fbf1ce75162a9fd514d0a2811dc2db7c0a0d08f7273f911eb"
+    },
+    {
+      "path": "reports/go-vet.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "reports/staticcheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "reports/web-tests.log",
+      "bytes": 11214,
+      "sha256": "0d3988713245f3952991afcd3de264ab2a67ed44635ef9a57fd21e57772a596f"
+    },
+    {
+      "path": "reports/web-junit.xml",
+      "bytes": 77550,
+      "sha256": "72b4e389e7365aa8bcbfbb455be44f3e1a979949fb347dfa15348c32a09d41ad"
+    },
+    {
+      "path": "reports/wave6-r2/combined-native.log",
+      "bytes": 1778,
+      "sha256": "ea5ee00a240d2f476fe348ecac5633a5615c594f1c3009288f361a48ac8d7977"
+    },
+    {
+      "path": "reports/wave6-r2/combined.json",
+      "bytes": 642,
+      "sha256": "d6cb5a94fc8e33780276e51fd29d8de4347dd1879fbaa6882276426a1a051a03"
+    },
+    {
+      "path": "reports/wave6-r2/linux-vet.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "reports/wave6-r2/linux-govulncheck.log",
+      "bytes": 27,
+      "sha256": "0353520b9540385330271a83670eb660b057d25bb4db4982ef7c8337156c9f21"
+    },
+    {
+      "path": "reports/wave6-r2/final-candidate-lint.log",
+      "bytes": 410,
+      "sha256": "0bae8c366b7fc4c9a2379bfc612b8b39b6b0dc604860e594972fb9dcf298dca7"
+    },
+    {
+      "path": "reports/wave6-r2/patch-stack.json",
+      "bytes": 301,
+      "sha256": "21348db5c7b226741e2d728ef33f89977dbe2a493debb7669c20a548c270aaa5"
+    },
+    {
+      "path": "reports/wave6-r2/update-http.log",
+      "bytes": 220,
+      "sha256": "9823d9c428a95161efa59ccbe8720bbed2187a1c07e2c70030510ad1bfa77d97"
+    }
+  ],
+  "priorFailures": [
+    {
+      "path": "reports/wave6-r2/file-flow-first-bootstrap-fail.log",
+      "bytes": 503,
+      "sha256": "5179cb18d5fe44889a9cce7c01d9d147186815e45dd757328ea652f33f23cda9"
+    },
+    {
+      "path": "reports/wave6-r2/file-flow-unknown-parent-before-fix.log",
+      "bytes": 4118,
+      "sha256": "e53fae35de3f35f065db1f10de0e2b68635f47ee137131c48a312a9990daae7b"
+    },
+    {
+      "path": "reports/wave6-r2/file-revocation-view-first-fail.log",
+      "bytes": 573,
+      "sha256": "b3ed5c952759fa8f9e2ea7cc5ea21163045cba7306741e0b6d4e23e11ba9ba48"
+    },
+    {
+      "path": "reports/wave6-r2/update-worker-first-fixture-fail.log",
+      "bytes": 1082,
+      "sha256": "fc7c51846171fe2197f9fc3e6ccb3ae3579a7efdb731e09dabc84bc25939f55e"
+    },
+    {
+      "path": "reports/wave6-r2/combined-reconnect-deadline-first-fail.log",
+      "bytes": 1626,
+      "sha256": "7137130ed0e55fa42144f540238ca3a44f1b54f1d0319736414e0454e81fc9fc"
+    },
+    {
+      "path": "reports/wave6-r2/root-first-staticcheck-fail.log",
+      "bytes": 2149112,
+      "sha256": "e93f51274e974eddd2d3f745624e3114fd2e8e944d320aa2340eaaf3f141cd41"
+    },
+    {
+      "path": "reports/wave6-r2/staticcheck-first-fail.log",
+      "bytes": 330,
+      "sha256": "6e20cf8ddcee5d8743f39ee2c34ee6615ddebda07a369aecb17ab48c35f271c9"
+    },
+    {
+      "path": "reports/wave6-r2/tools-install-network-fail.log",
+      "bytes": 1445,
+      "sha256": "092f5f237b06225c04b78d0e2adb33c69e9288dbeb4bbeb11437b925b24d2416"
+    },
+    {
+      "path": "reports/wave6-r2/tools-install-offline.log",
+      "bytes": 1152,
+      "sha256": "634f7d36862ccb92d2c7cd426f616c9b4c57fc4ec9dd595e9c3b4022ff09df2f"
+    },
+    {
+      "path": "reports/wave6-r2/web-model-fixture-first-fail.log",
+      "bytes": 34276,
+      "sha256": "ca4c8371560a376ef51146acc898838fcacf184e2f272548c7a5ae9a0ccfcd8b"
+    },
+    {
+      "path": "reports/wave6-r2/root-web-first-fail.log",
+      "bytes": 2176233,
+      "sha256": "e471833606dbb0137d4f7b177e7ebe10700b05626df1c83052f2937ee139ab18"
+    },
+    {
+      "path": "reports/wave6-r2/web-model-fixture-retry.log",
+      "bytes": 651,
+      "sha256": "60022c9d6c7d5acc6bb68effc198d8a61c53334a78c9a5b9861c5eb41c5d846b"
+    },
+    {
+      "path": "reports/wave6-r2/update-http-first-assembly-fail.log",
+      "bytes": 285,
+      "sha256": "03ee64434b3e617a80afad636c0c8ab536886bace61067f97d93117084354564"
+    },
+    {
+      "path": "reports/wave6-r2/auth-native-first-powershell-arg-fail.log",
+      "bytes": 2997,
+      "sha256": "ed347b32d9004f15dff47bb56cbecaf71d4ee9029215dcfb3c9e4b165983a9b4"
+    },
+    {
+      "path": "reports/wave6-r2/xray-static-retry.log",
+      "bytes": 558,
+      "sha256": "b43b5159329a56bcf8f898706c68030fe1d9d04ba5f32db822df81809c4a2bef"
+    }
+  ],
+  "combinedExcerpt": [
+    "=== RUN   TestR2ControllerBudgetHTTPCurrentOwnerCASAuditAndGeneration",
+    "--- PASS: TestR2ControllerBudgetHTTPCurrentOwnerCASAuditAndGeneration (0.92s)",
+    "=== RUN   TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown",
+    "    file_flow_r2_test.go:403: actual HTTP cancel after real source frame stopped before destination write",
+    "    file_flow_r2_test.go:403: actual HTTP revoke after real source frame stopped before destination write",
+    "    file_flow_r2_test.go:496: actual Controller HTTP + unified worker + two resident Agent processes: three items, six child executions, SHA, task terminal, durable acceptance failure and published UNKNOWN restart fence verified",
+    "--- PASS: TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown (77.48s)",
+    "=== RUN   TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply",
+    "--- PASS: TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply (0.02s)",
+    "=== RUN   TestR2RestoredControllerRequiresOfflineReleaseAndLiveRuntimeGuard",
+    "--- PASS: TestR2RestoredControllerRequiresOfflineReleaseAndLiveRuntimeGuard (0.05s)",
+    "=== RUN   TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations",
+    "--- PASS: TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations (0.01s)",
+    "=== RUN   TestR2UpdateHTTPAwaitsHumanAndProjectsCurrentOwnerTask",
+    "--- PASS: TestR2UpdateHTTPAwaitsHumanAndProjectsCurrentOwnerTask (0.36s)"
+  ],
+  "remaining": [
+    {
+      "id": "CENTRAL-RECEPTION",
+      "status": "BLOCKED",
+      "reason": "Total-controller review/apply five patches, register new cx/0008 + proposed cx/0009 numbers, routes/catalog/lint; default CLI does not enable file/update workers."
+    },
+    {
+      "id": "FILES-POLICIES",
+      "status": "UNIMPLEMENTED_REJECTED",
+      "reason": "skip only, max 16 items/64MiB each, explicit private root mapping; overwrite/rename/createParents/nonzero resume rejected. UNKNOWN is reconciliation-only, never replay."
+    },
+    {
+      "id": "FILES-ENOSPC",
+      "status": "UNTESTED",
+      "reason": "Actual EFBIG partial write and Fstatfs capacity precheck are covered; no bounded capacity/inode filesystem fixture for real ENOSPC. No shared disk filled."
+    },
+    {
+      "id": "UPDATE-ADMISSION",
+      "status": "BLOCKED",
+      "reason": "Formal UPDATE/PRIV/WC/PKI-OPS sources, signing/trust key governance, product release/version+storage compatibility and host-owned product supervisor still required. Actual signed executable/SQLite tests are controlled PoC, with explicit authority fixtures."
+    },
+    {
+      "id": "RESTORE-AUTHORITY",
+      "status": "BLOCKED",
+      "reason": "Actual fresh offline authority/new keys and old Controller ongoing remote fence/reconciliation proof missing. Runtime/HTTP/frame quarantine is implemented; trusted verifier in tests is a double. No production restore release."
+    },
+    {
+      "id": "XRAY",
+      "status": "BLOCKED",
+      "reason": "Pinned 26.10.29 public archive unavailable on static retry; no new scan/execution, historical security FAIL remains. No alternate unapproved runtime selected."
+    },
+    {
+      "id": "EXTERNAL-ACCEPTANCE",
+      "status": "UNTESTED",
+      "reason": "No physical two-machine transfer, ARM runtime, 1C1G, real supplier accounts, root runtime admission, browser acceptance on this code or awskr operations. AI 8192 is output upper-bound reservation, not measured tokens/currency; strict owner budgets and missing-policy denial remain."
+    }
+  ],
+  "stopReason": "All independent CX-03 implementation and permitted local verification delivered. Remaining work requires central ownership, approved authority/artifacts, host/environment or explicit rejected policy expansion."
+}

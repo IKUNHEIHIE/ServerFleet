@@ -46,6 +46,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 }
 
 type transferDTO struct {
+	TaskID            string    `json:"taskId,omitempty"`
 	ID                string    `json:"id"`
 	SourceNodeID      string    `json:"sourceNodeId"`
 	SourcePaths       []string  `json:"sourcePaths"`
@@ -327,7 +328,8 @@ func dtoFromTransfer(transfer Transfer) transferDTO {
 		items = append(items, dto)
 	}
 	dto := transferDTO{
-		ID: transfer.ID, SourceNodeID: transfer.SourceNodeID, SourcePaths: sources,
+		TaskID: transfer.TaskID,
+		ID:     transfer.ID, SourceNodeID: transfer.SourceNodeID, SourcePaths: sources,
 		DestinationNodeID: transfer.DestinationNodeID, DestinationDir: transfer.DestinationDir,
 		ConflictPolicy: string(transfer.ConflictPolicy), Status: string(transfer.Status),
 		ProgressPercent: transfer.Progress, TotalBytes: transfer.TotalBytes,

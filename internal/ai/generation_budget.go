@@ -127,7 +127,7 @@ func encodeBudget(s *generationBudgetState) ([]byte, error) {
 // Configure is a program-registered admin operation, never model output. New
 // window IDs are explicit; reconfiguring an existing window retains its usage.
 func (b *PersistentGenerationBudget) Configure(ctx context.Context, actor string, expected uint64, p GenerationBudgetPolicy) error {
-	if b == nil || ctx == nil || !exactID(actor) || !validBudgetPolicy(p) || p.Revision != expected+1 || expected == math.MaxUint64 || b.admin(ctx, actor, p) != nil {
+	if b == nil || ctx == nil || !exactID(actor) || !validBudgetPolicy(p) || p.Revision != expected+1 || expected == math.MaxUint64 || checkBudgetWebActor(ctx, actor, true) != nil || b.admin(ctx, actor, p) != nil {
 		return ErrToolDenied
 	}
 	err := b.store.Update(ctx, func(raw []byte) ([]byte, []GenerationBudgetAudit, error) {
@@ -139,7 +139,7 @@ func (b *PersistentGenerationBudget) Configure(ctx context.Context, actor string
 		if s.Policies[key].Revision != expected {
 			return nil, nil, ErrModelRevisionConflict
 		}
-		if b.admin(ctx, actor, p) != nil {
+		if checkBudgetWebActor(ctx, actor, true) != nil || b.admin(ctx, actor, p) != nil {
 			return nil, nil, ErrToolDenied
 		}
 		now := b.now().UTC()
@@ -159,7 +159,7 @@ func (b *PersistentGenerationBudget) Configure(ctx context.Context, actor string
 	if err != nil {
 		return err
 	}
-	if ctx.Err() != nil || b.admin(ctx, actor, p) != nil {
+	if ctx.Err() != nil || checkBudgetWebActor(ctx, actor, true) != nil || b.admin(ctx, actor, p) != nil {
 		return ErrGenerationUnknown
 	}
 	return nil

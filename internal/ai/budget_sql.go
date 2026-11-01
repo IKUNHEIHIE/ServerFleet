@@ -16,6 +16,24 @@ type GenerationBudgetSQLBackend struct {
 }
 type SQLGenerationBudgetStore struct{ backend GenerationBudgetSQLBackend }
 
+// View uses the same coordinator transaction and NEVER updates counters/fences
+// or emits a reservation. It is not called from within Configure/Admit writers.
+func (s *SQLGenerationBudgetStore) View(ctx context.Context, fn func([]byte) error) error {
+	if s == nil || ctx == nil || ctx.Err() != nil || fn == nil {
+		return ErrSessionUnavailable
+	}
+	return s.backend.InTx(ctx, func(tx GenerationBudgetSQLStatements) error {
+		if tx.Read == nil {
+			return ErrSessionUnavailable
+		}
+		raw, err := tx.Read(ctx, `SELECT payload FROM cx_ai_generation_budget WHERE singleton=1 AND length(payload)<=4194304`)
+		if err != nil || len(raw) == 0 {
+			return ErrSessionUnavailable
+		}
+		return fn(raw)
+	})
+}
+
 func NewSQLGenerationBudgetStore(backend GenerationBudgetSQLBackend) (*SQLGenerationBudgetStore, error) {
 	if backend.InTx == nil {
 		return nil, ErrSessionUnavailable

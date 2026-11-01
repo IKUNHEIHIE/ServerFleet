@@ -31,6 +31,7 @@ type LinkObservation struct {
 	ConnectionID string
 }
 type ControllerLinkConfig struct {
+	RuntimeGate                  func(context.Context) error
 	ProtocolMajor, ProtocolMinor uint32
 	Semantic                     ValidationLimits
 	Frames                       FrameDecodeLimits
@@ -49,6 +50,8 @@ type ControllerLinks struct {
 	links    map[string]*controllerLink
 	verifier *PeerVerifier
 	cfg      ControllerLinkConfig
+	closed   bool
+	all      map[*controllerLink]struct{}
 }
 type controllerLink struct {
 	hub             *ControllerLinks
@@ -60,6 +63,7 @@ type controllerLink struct {
 	sequence        uint64
 	active          bool // guarded by hub.mu
 	granted         map[string]bool
+	done            chan struct{}
 }
 
 func NewControllerLinks(verifier *PeerVerifier, cfg ControllerLinkConfig) (*ControllerLinks, error) {
@@ -74,12 +78,12 @@ func NewControllerLinks(verifier *PeerVerifier, cfg ControllerLinkConfig) (*Cont
 		actions[k] = v
 	}
 	cfg.Semantic.AllowedActions = actions
-	return &ControllerLinks{links: map[string]*controllerLink{}, verifier: verifier, cfg: cfg}, nil
+	return &ControllerLinks{links: map[string]*controllerLink{}, all: map[*controllerLink]struct{}{}, verifier: verifier, cfg: cfg}, nil
 }
 func (h *ControllerLinks) current(l *controllerLink) bool {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	return l.active && h.links[l.observed.Identity.NodeID] == l
+	return !h.closed && l.active && h.links[l.observed.Identity.NodeID] == l
 }
 func (h *ControllerLinks) validation(direction Direction, phase HandshakePhase) ValidationContext {
 	return ValidationContext{Direction: direction, Phase: phase, ProtocolMajor: h.cfg.ProtocolMajor, ProtocolMinor: h.cfg.ProtocolMinor, Now: time.Now()}
@@ -101,6 +105,9 @@ func (h *ControllerLinks) Serve(ctx context.Context, socket FrameSocket, state t
 		return ErrLinkRejected
 	}
 	defer socket.Close()
+	if h.cfg.RuntimeGate != nil && h.cfg.RuntimeGate(ctx) != nil {
+		return ErrLinkRejected
+	}
 	identity, err := h.verifier.Verify(ctx, state, "")
 	if err != nil {
 		return ErrLinkRejected
@@ -110,7 +117,15 @@ func (h *ControllerLinks) Serve(ctx context.Context, socket FrameSocket, state t
 		return ErrLinkRejected
 	}
 	defer guard.Close()
-	l := &controllerLink{hub: h, socket: socket, tls: state, observed: LinkObservation{identity, connectionID}, incoming: guard}
+	l := &controllerLink{hub: h, socket: socket, tls: state, observed: LinkObservation{identity, connectionID}, incoming: guard, done: make(chan struct{})}
+	h.mu.Lock()
+	if h.closed {
+		h.mu.Unlock()
+		return ErrLinkRejected
+	}
+	h.all[l] = struct{}{}
+	h.mu.Unlock()
+	defer func() { h.mu.Lock(); delete(h.all, l); close(l.done); h.mu.Unlock() }()
 	handshakeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	binary, raw, err := socket.Read(handshakeCtx)
 	if err != nil || !binary {
@@ -199,9 +214,13 @@ func (h *ControllerLinks) activate(ctx context.Context, l *controllerLink, hello
 		}
 		l.sendMu.Lock()
 		h.mu.Lock()
-		if old == nil && len(h.links) >= h.cfg.MaxConnections {
+		if h.closed || old == nil && len(h.links) >= h.cfg.MaxConnections {
 			h.mu.Unlock()
 			l.sendMu.Unlock()
+			if old != nil {
+				old.sendMu.Unlock()
+				old.eventMu.Unlock()
+			}
 			return ErrLinkRejected
 		}
 		if h.links[l.observed.Identity.NodeID] != old {
@@ -239,6 +258,9 @@ func (h *ControllerLinks) activate(ctx context.Context, l *controllerLink, hello
 	}
 }
 func (l *controllerLink) deliver(ctx context.Context, envelope *agentv1.Envelope) error {
+	if l.hub.cfg.RuntimeGate != nil && l.hub.cfg.RuntimeGate(ctx) != nil {
+		return ErrLinkRejected
+	}
 	l.eventMu.Lock()
 	defer l.eventMu.Unlock()
 	if !l.hub.current(l) {
@@ -257,6 +279,9 @@ func (l *controllerLink) deliver(ctx context.Context, envelope *agentv1.Envelope
 	return nil
 }
 func (l *controllerLink) write(ctx context.Context, envelope *agentv1.Envelope, phase HandshakePhase) error {
+	if l.hub.cfg.RuntimeGate != nil && l.hub.cfg.RuntimeGate(ctx) != nil {
+		return ErrLinkRejected
+	}
 	id, err := l.hub.verifier.Verify(ctx, l.tls, l.observed.Identity.NodeID)
 	if err != nil || id != l.observed.Identity {
 		return ErrLinkRejected
@@ -336,6 +361,9 @@ var _ Sender = (*ControllerLinks)(nil)
 // never an authorization grant; callers still repeat their task gate per frame.
 func (h *ControllerLinks) FileConnection(ctx context.Context, node string) (LinkObservation, error) {
 	if h == nil || ctx == nil || ctx.Err() != nil {
+		return LinkObservation{}, ErrLinkRejected
+	}
+	if h.cfg.RuntimeGate != nil && h.cfg.RuntimeGate(ctx) != nil {
 		return LinkObservation{}, ErrLinkRejected
 	}
 	h.mu.Lock()

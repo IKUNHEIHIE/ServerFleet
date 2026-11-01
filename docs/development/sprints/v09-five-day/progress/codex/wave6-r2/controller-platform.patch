@@ -1,0 +1,176 @@
+diff --git a/apps/controller/server/server.go b/apps/controller/server/server.go
+index 5703725..ae23dba 100644
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -75,17 +75,23 @@ type Config struct {
+ 	PluginTrustCapabilities map[string]bool
+ 
+ 	// BackupDir defaults to a private directory beside the SQLite database.
+-	BackupDir       string
+-	UpdateCheck     func(context.Context, string) (updates.CheckResult, error)
+-	UpdatePlan      func(context.Context, string) (updates.Plan, error)
+-	UpdateApply     func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
+-	RecoveryExecute func(context.Context, recovery.Plan) (string, error)
+-	PluginRuntime   plugins.AdmittedRuntime
+-	XrayTaskHost    *plugins.XrayTaskHost
++	BackupDir         string
++	RecoveryLatch     *recovery.QuarantineLatch
++	UpdateExecution   *updates.TaskInstallWorkerOptions
++	UpdateResolvePlan func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
++	UpdateJobs        func(context.Context, updates.Principal) (updates.JobPage, error)
++	UpdateJob         func(context.Context, updates.Principal, string) (updates.ApplyResult, error)
++	UpdateCheck       func(context.Context, string) (updates.CheckResult, error)
++	UpdatePlan        func(context.Context, string) (updates.Plan, error)
++	UpdateApply       func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
++	RecoveryExecute   func(context.Context, recovery.Plan) (string, error)
++	PluginRuntime     plugins.AdmittedRuntime
++	XrayTaskHost      *plugins.XrayTaskHost
+ }
+ 
+ // Server holds the wired Controller database, services, and HTTP router.
+ type Server struct {
++	runtimeGate       func(context.Context) error
+ 	DB                *storage.DB
+ 	Audit             *audit.SQLRecorder
+ 	IdentityStore     *auth.SQLIdentityStore
+@@ -197,6 +203,7 @@ func Migrations() [][]storage.Migration {
+ 		servicegroups.Migrations(),
+ 		tasks.Migrations(),
+ 		files.Migrations(),
++		{{Version: "cx/0009_update_journal", Name: "review candidate installed provenance and audited receipts", Statements: updates.InstallJournalSchemaStatements()}},
+ 		{files.ExecutionBindingsMigration()},
+ 		monitoring.Migrations(),
+ 		notifications.Migrations(),
+@@ -240,6 +247,7 @@ func AuditActions() []string {
+ 		"host.patch",
+ 		"host.root",
+ 		"files.transfer",
++		updates.ActionInstall,
+ 		"ai.budget.configure",
+ 		"ai.budget.reserve",
+ 		"gateway.provision",
+@@ -324,6 +332,7 @@ func AuditActions() []string {
+ // ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
+ func ExtraPermissions() []auth.PermissionDefinition {
+ 	return []auth.PermissionDefinition{
++		{Key: updates.ActionInstall, Description: "Install verified releases on granted owned targets", ResourceType: "node", AdminOnly: true},
+ 		{Key: nodes.ActionNodesWrite, Description: "Modify granted nodes", ResourceType: "node"},
+ 		{Key: nodes.ActionNodeCreate, Description: "Create nodes", ResourceType: "node"},
+ 		{Key: nodes.ActionNodesSuspend, Description: "Suspend granted nodes", ResourceType: "node"},
+@@ -381,6 +390,10 @@ func ExtraPermissions() []auth.PermissionDefinition {
+ 
+ // New opens and migrates the SQLite WAL database and wires all Controller services and HTTP routes.
+ func New(ctx context.Context, cfg Config) (*Server, error) {
++	runtimeGate, guardErr := recovery.RuntimeGuard(ctx, cfg.DBPath, cfg.RecoveryLatch)
++	if guardErr != nil {
++		return nil, guardErr
++	}
+ 	if strings.TrimSpace(cfg.DBPath) == "" {
+ 		return nil, errors.New("controller: database path is required")
+ 	}
+@@ -564,6 +577,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
+ 	}
+ 
+ 	s = &Server{
++		runtimeGate:       runtimeGate,
+ 		DB:                db,
+ 		Audit:             auditRecorder,
+ 		IdentityStore:     identityStore,
+@@ -639,15 +653,56 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
+ 		workers[files.ActionTransfer] = s.FileWorker
+ 		agentBridge.fileWorker = s.FileWorker
+ 	}
++	if cfg.UpdateExecution != nil {
++		if cfg.UpdateResolvePlan == nil || cfg.UpdateApply != nil {
++			return cleanup(updates.ErrArtifactRejected)
++		}
++		options := *cfg.UpdateExecution
++		options.Current = func(ctx context.Context, id, plan string) (tasks.Task, error) {
++			return s.Tasks.CheckExecution(ctx, id, plan)
++		}
++		options.Administrator = s.Identity.AuthorizeAdministrator
++		worker, e := updates.NewTaskInstallWorker(options)
++		if e != nil {
++			return cleanup(e)
++		}
++		workers[updates.ActionInstall] = worker
++		projection, e := updates.NewTaskJobProjection(tasksRepo, func(ctx context.Context, p updates.Principal, t tasks.Task) error {
++			return (&composedTaskReadGate{identity: s.Identity, tasks: tasksRepo}).AuthorizeTaskRead(ctx, p.SubjectID, t.ID)
++		})
++		if e != nil {
++			return cleanup(e)
++		}
++		cfg.UpdateJobs, cfg.UpdateJob = projection.Jobs, projection.Job
++		cfg.UpdateApply = func(ctx context.Context, r updates.ApplyRequest) (updates.ApplyResult, error) {
++			if !r.Principal.Administrator || s.Identity.AuthorizeAdministrator(ctx, r.Principal.SubjectID) != nil {
++				return updates.ApplyResult{}, updates.ErrArtifactRejected
++			}
++			p, e := cfg.UpdateResolvePlan(ctx, r)
++			if e != nil || p.ID != r.PlanID || p.SubjectID != r.Principal.SubjectID || r.Confirmation != p.Attempted.Version || r.BackupMode != "required" {
++				return updates.ApplyResult{}, updates.ErrArtifactRejected
++			}
++			request, e := p.TaskRequest(r.Principal.RequestID)
++			if e != nil {
++				return updates.ApplyResult{}, e
++			}
++			t, e := s.Tasks.Submit(ctx, request)
++			if e != nil {
++				return updates.ApplyResult{}, e
++			}
++			return updates.ApplyResult{ID: t.ID, TaskID: t.ID, Status: string(t.Status), TargetVersion: p.Attempted.Version}, nil
++		}
++	}
+ 	tasksService, err := tasks.NewService(tasks.Options{
+-		Workers:    workers,
+-		DB:         db,
+-		Repo:       tasksRepo,
+-		Audit:      auditRecorder,
+-		Authorizer: authorizer,
+-		Dispatcher: dispatcher,
+-		Nodes:      nodeLookup,
+-		Now:        now,
++		RuntimeGate: runtimeGate,
++		Workers:     workers,
++		DB:          db,
++		Repo:        tasksRepo,
++		Audit:       auditRecorder,
++		Authorizer:  authorizer,
++		Dispatcher:  dispatcher,
++		Nodes:       nodeLookup,
++		Now:         now,
+ 	})
+ 	if err != nil {
+ 		return cleanup(err)
+@@ -886,7 +941,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+ 	reqID := newRequestID()
+ 	w.Header().Set("X-Request-ID", reqID)
+ 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
+-	s.mux.ServeHTTP(w, r.WithContext(ctx))
++	recovery.RuntimeHTTP(s.mux, s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))
+ }
+ 
+ func (s *Server) registerRoutes() error {
+diff --git a/apps/controller/server/enrollment.go b/apps/controller/server/enrollment.go
+index 08e428e..05426c7 100644
+--- a/apps/controller/server/enrollment.go
++++ b/apps/controller/server/enrollment.go
+@@ -79,6 +79,7 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
+ 		minor = 1
+ 	}
+ 	links, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{
++		RuntimeGate:       s.runtimeGate,
+ 		ProtocolMajor:     1,
+ 		ProtocolMinor:     minor,
+ 		Semantic:          semantic,
+diff --git a/apps/controller/server/updates_recovery.go b/apps/controller/server/updates_recovery.go
+index c8a8028..bb95c23 100644
+--- a/apps/controller/server/updates_recovery.go
++++ b/apps/controller/server/updates_recovery.go
+@@ -39,6 +39,7 @@ func (s *Server) setupUpdatesRecovery(cfg Config) error {
+ 		},
+ 		Now:   s.now,
+ 		Check: cfg.UpdateCheck, Plan: cfg.UpdatePlan, Apply: cfg.UpdateApply,
++		Jobs: cfg.UpdateJobs, Job: cfg.UpdateJob,
+ 	})
+ 	if err != nil {
+ 		return err

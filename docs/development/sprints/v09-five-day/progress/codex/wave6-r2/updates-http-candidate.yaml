@@ -1,0 +1,99 @@
+openapi: 3.1.0
+info:
+  title: Unified approved update task projection (PROPOSED)
+  version: 0.9.0-r7-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/system/updates/apply:
+    post:
+      operationId: applyApprovedUpdateR7
+      summary: Submit an immutable reviewed release plan for human approval
+      description: Requires current administrator Cookie, Origin and CSRF. The trusted program resolver loads an existing owner-bound frozen plan. The body cannot establish installed provenance, trust, backup, executable paths or approval. The task is modifying and requires independent human approval. Repeating a plan reuses the task. Missing adapters reject; no default installer exists. A 503 may be an uncertain outcome and requires reconciliation before another plan.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string, minLength: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [planId, confirmation, backupMode]
+              properties:
+                planId: {type: string}
+                confirmation: {type: string, description: Exact attempted version in the saved plan}
+                backupMode: {type: string, const: required}
+      responses:
+        '202':
+          description: Actual unified task status; acceptance does not mean installed
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskJob'}
+        '400': {description: INVALID_REQUEST}
+        '403': {description: NOT_AUTHORIZED}
+        '501': {description: UPDATE_INSTALLER_UNAVAILABLE}
+        '503': {description: UPDATE_OUTCOME_UNKNOWN}
+  /api/v1/system/updates/jobs:
+    get:
+      operationId: listOwnedUpdateTasksR7
+      summary: Read owned updates in the most recent 200 unified tasks
+      description: Current administrator and current tasks.read on the target are required. The window includes other unified tasks before owner/action filtering. truncated=true means the window was full; this is not an exhaustive update history. Older jobs can be read by exact task ID. Any current authorization failure rejects the whole page. Query parameters and GET bodies are rejected. Default unconfigured runtime returns an empty list without enabling execution.
+      responses:
+        '200':
+          description: Current owned tasks and conservative window marker
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 200
+                    items: {$ref: '#/components/schemas/TaskJob'}
+                  truncated: {type: boolean}
+        '400': {description: INVALID_REQUEST}
+        '403': {description: NOT_AUTHORIZED}
+        '503': {description: UPDATE_SOURCE_UNAVAILABLE}
+  /api/v1/system/updates/jobs/{jobId}:
+    parameters:
+      - in: path
+        name: jobId
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 128}
+    get:
+      operationId: getOwnedUpdateTaskR7
+      summary: Read the actual owned unified task by exact task ID
+      description: Checks current administrator, owner and tasks.read on every read. Other owners receive 404. Query parameters and GET bodies are rejected. Task completion and installer receipt are distinct; this endpoint does not invent phase, live health or rollback evidence.
+      responses:
+        '200':
+          description: Actual task status
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/TaskJob'}
+        '400': {description: INVALID_REQUEST}
+        '403': {description: NOT_AUTHORIZED}
+        '404': {description: UPDATE_JOB_NOT_FOUND}
+        '503': {description: UPDATE_SOURCE_UNAVAILABLE}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: __Host-sf_session}
+  schemas:
+    TaskJob:
+      type: object
+      additionalProperties: false
+      required: [id, taskId, status, targetVersion]
+      properties:
+        id: {type: string, description: Unified task ID in this worker adapter}
+        taskId: {type: string}
+        targetVersion: {type: string}
+        status:
+          type: string
+          enum: [awaiting_approval, queued, running, cancelling, completed, partial_failure, failed, canceled, expired, unknown, installed, rolled_back]

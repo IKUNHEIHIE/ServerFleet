@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: Owner AI budget policy and usage (PROPOSED)
+  version: 0.9.0-r7-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/ai/model-settings/{profileId}/budget:
+    parameters:
+      - in: path
+        name: profileId
+        required: true
+        schema: {type: string, minLength: 1, maxLength: 128}
+    get:
+      operationId: getOwnerAIBudgetR7
+      summary: Read the current owner's saved policy and window usage
+      description: Requires the current authenticated Cookie and own current model profile. No cross-owner query, operation list, prompt, secret or token cost estimate is returned. A missing policy has configured=false, policy=null and denies generation.
+      responses:
+        '200':
+          description: Current policy, conservative reservations and remaining limits
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BudgetView'}
+        '400': {description: Invalid request or body on GET}
+        '403': {description: 'Current identity, ownership or profile denied'}
+        '503': {description: Authoritative state unavailable}
+    put:
+      operationId: configureOwnerAIBudgetR7
+      summary: Administrator CAS of their own enabled current model budget
+      description: Current Cookie, Origin, CSRF, administrator, owner and profile are checked on the backend, including before commit. The window is explicit. Reconfiguring the same window preserves usage; all prior operation fences remain. No counter reset, delete or automatic rollover exists. Output tokens reserve the actual provider ceiling rather than measured currency cost. A 503 after uncertain commit requires a GET to reconcile; do not blindly replay.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string, minLength: 1}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/BudgetInput'}
+      responses:
+        '200':
+          description: Saved policy and preserved current counters
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/BudgetView'}
+        '400': {description: INVALID_REQUEST including owner/profile/counter input}
+        '403': {description: NOT_AUTHORIZED}
+        '409': {description: BUDGET_REVISION_CONFLICT}
+        '503': {description: AI_SOURCE_UNAVAILABLE or GENERATION_OUTCOME_UNKNOWN}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: __Host-sf_session}
+  schemas:
+    Usage:
+      type: object
+      additionalProperties: false
+      required: [requests, inputBytes, outputTokens]
+      properties:
+        requests: {type: integer, minimum: 0}
+        inputBytes: {type: integer, minimum: 0}
+        outputTokens: {type: integer, minimum: 0}
+    BudgetInput:
+      type: object
+      additionalProperties: false
+      required: [expectedRevision, windowId, startsAt, endsAt, requestLimit, inputByteLimit, outputTokenLimit]
+      properties:
+        expectedRevision: {type: integer, minimum: 0}
+        windowId: {type: string, minLength: 1, maxLength: 128}
+        startsAt: {type: string, format: date-time}
+        endsAt: {type: string, format: date-time}
+        requestLimit: {type: integer, minimum: 1, maximum: 10000}
+        inputByteLimit: {type: integer, minimum: 1, maximum: 1099511627776}
+        outputTokenLimit: {type: integer, minimum: 1, maximum: 1099511627776}
+    BudgetView:
+      type: object
+      additionalProperties: false
+      required: [ownerId, profileId, configured, active, policy, usage, remaining, outputReservationTokens]
+      properties:
+        ownerId: {type: string}
+        profileId: {type: string}
+        configured: {type: boolean}
+        active: {type: boolean}
+        outputReservationTokens: {type: integer, const: 8192}
+        policy:
+          oneOf:
+            - type: 'null'
+            - type: object
+              additionalProperties: false
+              required: [revision, windowId, startsAt, endsAt, requestLimit, inputByteLimit, outputTokenLimit]
+              properties:
+                revision: {type: integer, minimum: 1}
+                windowId: {type: string}
+                startsAt: {type: string, format: date-time}
+                endsAt: {type: string, format: date-time}
+                requestLimit: {type: integer}
+                inputByteLimit: {type: integer}
+                outputTokenLimit: {type: integer}
+        usage: {$ref: '#/components/schemas/Usage'}
+        remaining: {$ref: '#/components/schemas/Usage'}
