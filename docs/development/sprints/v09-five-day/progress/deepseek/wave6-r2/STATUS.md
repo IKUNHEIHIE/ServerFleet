@@ -1,7 +1,7 @@
 # V09-R6-DS-03 · Wave6-R2 状态（deepseek-06）
 
 - 任务 `V09-R6-DS-03`；会话 `deepseek-06`；分支 `feature/v09-r6-services-ds06`；基线 `c9013f4231c5f0a586eb0af26386f6e265996c0c`；审查 `codex-review-02`。
-- 代码提交 `cde4a21` `feat(services): add production publishing stages and durable acme cleanup`；文档 HEAD 以 `git log -1` 为准。
+- 代码提交 `cde4a21`（发布/清理/借用/黑盒）与 `3c3c4ef`（cleanup HTTP 候选）；文档 HEAD 以 `git log -1` 为准。
 - 未改 `internal/files`、apps 既有入口、根锁/CI/Proto/gen；新增 Agent/Controller 文件均按任务单授权，未合并 main、未操作 awskr、未使用真实外部账号。
 
 ## 1. 实际发布阶段与补偿
@@ -33,6 +33,7 @@
 - 新增 `internal/certificates/cleanup.go`：`CleanupJournal` 持久记录 order/domain/FQDN/provider record ID/value/state/attempts/next retry；`RecordFailure` 幂等、`List`、`Retry`（当前授权、有界 MaxAttempts/backoff）、`Cancel`、`RetryDue`（专用 cleanup-service 主体，需组合授权）；审计 `certificates.cleanup.*`；`DNSRecordCleaner` 必须校验 ID/FQDN/expected value 后才删除。
 - Controller 新增 `NewPublicationCleanupCleaner`（通过 dns 服务精确匹配 ID/name/content 后删除，不删除无关记录）。
 - DDL 候选 `certificates.CleanupMigrations()`（`ds/0062_acme_cleanup`），未登记历史/集中迁移；需总控接收并登记。
+- 新增 `certificates.RegisterCleanupHTTP`（GET 列表、POST retry/cancel，主体必须由 Controller 认证回调注入），测试覆盖列表/重试/已解决取消冲突；中心路由注册仍为 patch。
 - 测试：`go test ./internal/certificates/ -run TestCleanup -count=1` PASS（幂等记录、列表、重试成功/失败/预算耗尽、取消、拒绝、due 系统清理、审计）。真实清理记录 UNTESTED（无外部账号）；未验证证书不返回成功由 ACME client 现有路径保持。
 
 ## 5. 契约与黑盒文件

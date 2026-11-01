@@ -31,7 +31,7 @@ NGINX_BIN=C:/temp/nginx-portable/nginx.exe \
 1. 接收 `cde4a21`，按 SHARED-CHANGES 登记 `certificates.CleanupMigrations()`（ds/0062）、`v09-r7-services` OpenAPI 根配置；不改历史迁移/原候选。
 2. Agent：按第 1 节把 `newGatewayCapability(...).Actions()` 加入 `controlledCommandActions`，增加绝对路径 CLI 配置与 `gateway.nginx.v1` 能力；Controller `agentAllowedActions` 加两个 action schema；修改类继续走审批，不能让 standard 绕过。
 3. Controller：按第 2 节注入 `NewProductionPublishingBridge`、`gatewayTaskHost`、`GatewayArtifactUploader`、`CleanupJournal`；实现 `ProviderCredentialLookup` 并扩展 credential gate module/scope（第 3 节）。缺 artifacts/lookup 时保持失败关闭。
-4. ACME：在 `IssueDNS01` 失败且 `DNS01Records` 非空时写 cleanup journal；清理失败不能变成证书成功；`RetryDue` 的系统主体授权与 HTTP 候选路径由总控接。
+4. ACME：在 `IssueDNS01` 失败且 `DNS01Records` 非空时写 cleanup journal；清理失败不能变成证书成功；`RetryDue` 的系统主体授权与 HTTP 候选路径由总控接，清理路由可直接调用 `certificates.RegisterCleanupHTTP`。
 5. 文件：CX 本轮独占；DS 只用公共 ports 黑盒，不在本分支改 `internal/files`。当前 unsupported policies/续传/rename 的具体失败用例见黑盒测试和 SHARED-CHANGES 第 6 节。
 
 ## 实机/外部仍缺

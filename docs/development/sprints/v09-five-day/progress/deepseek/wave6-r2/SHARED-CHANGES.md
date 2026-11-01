@@ -82,7 +82,7 @@ s.CertificateCleanup = cleanupJournal
 ```
 
 - 在 ACME `IssueDNS01` 失败且 `issued.DNS01Records` 非空时调用 `cleanupJournal.RecordFailure(ctx, subject, requestID, planID, domain, records)`；成功后由管理员/系统重试清理；清理失败不能变成证书成功。
-- 建议 HTTP 注册（候选路径见 `api/openapi/revisions/v09-r7/services-candidate.yaml`）：`GET /api/v1/certificates/cleanup`、`POST .../{cleanupId}/retry`、`POST .../{cleanupId}/cancel`；主体/request ID 必须来自当前认证，不能用 Web 传入 owner。
+- `certificates.RegisterCleanupHTTP(mux, journal, auth)` 已提供：`GET /api/v1/certificates/cleanup`、`POST .../{cleanupId}/retry`、`POST .../{cleanupId}/cancel`；主体/request ID 必须由 Controller 认证回调注入，不能用 Web 传入 owner。中心 mux 注册仍为 patch（候选路径见 `api/openapi/revisions/v09-r7/services-candidate.yaml`）。
 - `RetryDue` 使用专用 `cleanup-service` 主体，需组合授予 `certificates.cleanup.retry`；`NewPublicationCleanupCleaner` 通过 dns 服务精确匹配 provider ID/FQDN/value，不删除无关记录。
 
 ## 3. 供应商秘密借用组合（server.go patch）
