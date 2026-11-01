@@ -167,3 +167,14 @@ message FileError {
 - 错误：401→`CredentialInvalid`、403/9109→`CredentialMissingPermissions`；`CloudflareError` 只含操作名/状态码/Cloudflare code，不含 provider 文本或令牌；`CredentialStatusFromCloudflare` 供 `TestAccount` 使用。
 - 接线：`apps/controller/server` 当前 `cfg.DNSProvider` 为空时失败关闭。建议总控在配置了秘密后端与 Cloudflare 账号时注入该 provider；未配置时保持失败关闭，不得用假 provider 关闭功能。
 - 证据：本地 `httptest.NewTLSServer` 验证 verify/分页/CRUD 请求体/401/403/redirect 拒绝/令牌不泄露，并通过真实 `dns.Service` 创建账号→TestAccount→CreateZone→CreateRecord→ListRecords。**未调用真实 Cloudflare 账号**（无授权秘密），真实 Zone 写入仍 UNTESTED/BLOCKED。
+
+## 7. SMTP / QQ Bot 发送适配（已在本包实现）
+
+- 文件：`internal/notifications/{secrets,smtp,qq}.go` 与对应测试、`provider_service_test.go`。
+- 构造：`notifications.NewSMTPMailer(SMTPConfig{Secrets, Dialer, RootCAs, Timeout, MaxMessageBytes})`、`notifications.NewQQBotSender(QQConfig{Client, TokenURL, APIBaseURL, Secrets, Timeout})`；分别实现既有 `SMTPSender` / `QQSender` 端口。
+- 秘密：新增 `notifications.SecretResolver`（`Resolve(ctx, secretRef) (string, error)`）。SMTP secret 支持 JSON `{username,password}`、`username:password` 或裸密码（用户名取 Sender）；QQ secret 为 AppSecret。秘密只在单次发送内驻留，不缓存/不写审计/不出现在错误。
+- SMTP：隐式 TLS（465）与 STARTTLS（587/25）两条路径；始终在 TLS 后 AUTH PLAIN；服务器未提供 STARTTLS 时失败关闭；主题 RFC2047、正文 base64、CRLF；连接/命令超时；仅服务器最终 `250` 之后返回 `provider_accepted`，DATA 之后断线返回 `delivery_unknown` 不自动重试；认证 535 标记凭据无效。
+- QQ：真实 `POST /app/getAppAccessToken` 后按 private/group 调 `/v2/users|groups/{id}/messages`；Bearer 为 `QQBot <token>`；正文 ≤2000 字节；401/403→凭据无效，429→限流，5xx/超时→unknown；拒绝所有重定向，避免 token 跨域；响应上限 64KiB、无环境代理。
+- 服务绑定：`TestChannel/SendAlert` 只在 `ProviderResult.Outcome=provider_accepted` 时记成功；`provider_service_test.go` 用真实 SMTP 服务器 + SQLite 验证 TestChannel→`provider_accepted`/`smtp_250`、凭据状态与审计。
+- 接线：`apps/controller/server` 目前 `notifications.NewService` 未注入 senders；建议总控注入真实 sender 并配置秘密后端。未注入时保持 `provider_unavailable` 失败关闭。
+- 未测：真实 QQ 官方账号/真实 SMTP 邮箱（无授权秘密）；TLS 证书异常主机、IPv6、退信/异步 DSN 未覆盖。QQ 主动消息权限未验证，真实账号验收 UNTESTED/BLOCKED。
