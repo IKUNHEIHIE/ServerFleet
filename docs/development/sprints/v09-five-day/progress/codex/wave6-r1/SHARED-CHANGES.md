@@ -13,3 +13,13 @@ FileParameters含transferId/relativePath/direction/size/sha256/conflictPolicy/cr
 只实现skip（新文件写入、已有常规目的则skipped）；rename/overwrite/createParents/resume_offset非0全部拒绝。32KiB chunk/64MiB总量/1在途请求。写完成回执丢失：目标可能已存在，ledgerUNKNOWN，重新连接同执行拒绝，须显式对账；不是重新执行/覆盖。源空文件在Open终结；目标空文件需要finish空chunk。
 
 transport语义改动处于CX允许目录、仅显式AllowFileFrames+minor>=1+capability才接受；应用共享patch并启用前须审查完整字段/兼容和逐帧门，默认拒绝回归保留。运行时/PRIV/G2未冻结，其他root/Shell保持关闭。
+
+## AI预算/审计/本地TLS验证
+
+controller-ai.patch新增Config.LocalAIProvider（只允许显式loopback TLS协议夹具）与AITypedAudit；AppendModelSettingsAudit和通用Audit.AppendTx共用当前Session DS Tx。默认外部provider不变，默认typed sink未启用时仍保留outbox。迁移后总控才启用AITypedAudit；不能先启用后忽略缺表。
+
+controller-ai-schema.patch新增迁移构造器，version由总控分配新不可变编号；SchemaStatements包含budget聚合、typed预算审计与model审计三表，作者未改共享DDL/历史迁移。预算绑定唯一OperationID与全请求摘要，只存元数据；单次输出预留8192，正文输入按字节计，明确不是token/费用估算。不得删除历史operation fence来“清理配额”。窗口变更由管理员显式CAS，旧窗口计数和fence保留，时钟回退失败关闭。
+
+组合方式：用同一storage.DB的BEGIN IMMEDIATE实现GenerationBudgetSQLBackend.InTx，绑定同一tx.Read/Exec及AppendGenerationBudgetAudit；构造PersistentGenerationBudget（当前管理员gate，当前Conversation.CheckGenerationBudget），注入Config.AIGenerationQuota=budget.Admit。配置策略必须校验真人当前管理员/owner/profile以及有效窗口，不能由AI输出或普通请求自报；missing policy拒绝。该组合构造在tests/integration/v09/platform/generation_budget_sql_test.go与带标签主控测试中完整演示。预算事务不嵌套Session写事务；私有观察/当前scope/profile在预算前后与秘密借用独立检查，授权失败不能继续供应商I/O。
+
+重现共享候选测试：先`node tests/poc/v09/platform/prepare-wave6-r1-overlays.mjs`，再`go test -tags cx_r1_controller -overlay reports/wave6-r1/combined-overlay.json ./tests/integration/v09/platform -run TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit`。准备器仅写忽略reports的.txt，不改共享源码；同时组合files和AI补丁。WSL入口`node tests/poc/v09/platform/run-wave6-r1-linux.mjs controller`。测试没有真实外部账号，仍不等于主线已接收/浏览器逐token/发布准入。

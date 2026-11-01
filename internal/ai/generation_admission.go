@@ -17,6 +17,17 @@ type generationObservation struct {
 	closed  atomic.Bool
 }
 
+// CheckGenerationBudget reuses the private live generation fence and current
+// owner/scope/profile checks. It does not reserve/borrow a credential; the real
+// credential revision is independently resolved and checked at provider I/O.
+func (c *ConversationService) CheckGenerationBudget(ctx context.Context, r GenerationRequest, digest string) error {
+	expected, err := generationDigest(r)
+	if err != nil || expected != digest {
+		return ErrToolDenied
+	}
+	return c.CheckCredentialOperation(ctx, auth.CredentialOperation{SubjectID: r.SubjectID, CredentialID: r.Profile.CredentialRef, OperationID: r.OperationID, PlanDigest: digest, Module: "ai", Source: "ai", Action: "use", ExpectedRevision: 1})
+}
+
 func observeGeneration(ctx context.Context, r GenerationRequest, nodes []string) (context.Context, func(), error) {
 	digest, err := generationDigest(r)
 	if err != nil {

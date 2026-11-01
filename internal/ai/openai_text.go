@@ -238,7 +238,7 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		}
 		input = append(input, item)
 	}
-	body, err := json.Marshal(map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": p.stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": 8192})
+	body, err := json.Marshal(map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": p.stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": ProviderMaxOutputTokens})
 	if err != nil || len(body) > 512<<10 {
 		return ErrToolDenied
 	}

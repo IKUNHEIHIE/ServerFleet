@@ -1,0 +1,69 @@
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -44,6 +44,8 @@
+ 	DBPath                 string
+ 	CredentialKeyDir       string
+ 	AIGenerationQuota      ai.GenerationQuota
++	LocalAIProvider *ai.LocalTLSProviderConfig
++	AITypedAudit bool
+ 	Origin                 string
+ 	StagingDir             string
+ 	Dispatcher             tasks.Dispatcher
+--- a/apps/controller/server/ai.go
++++ b/apps/controller/server/ai.go
+@@ -17,7 +17,7 @@
+ )
+ 
+ func (s *Server) setupAI(cfg Config) error {
+-	store, err := newAISessionStore(s.DB, s.Audit)
++	store, err := newAISessionStore(s.DB, s.Audit, cfg.AITypedAudit)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -34,7 +34,13 @@
+ 	if quota == nil {
+ 		quota = func(context.Context, ai.GenerationRequest) error { return ai.ErrModelUnavailable }
+ 	}
+-	backend, err := ai.NewBYOKRuntime(sessions, s.Credentials, s.aiContentFilter, quota)
++	factory := ai.NewBYOKRuntime
++	if cfg.LocalAIProvider != nil {
++		factory = func(sessions *ai.SessionService, credentials *auth.CredentialService, filter func(context.Context,ai.SessionView,string,string)(string,error),quota ai.GenerationQuota)(*ai.BYOKRuntime,error) {
++			return ai.NewLocalTLSBYOKRuntime(sessions,credentials,filter,quota,*cfg.LocalAIProvider)
++		}
++	}
++	backend, err := factory(sessions, s.Credentials, s.aiContentFilter, quota)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -70,7 +76,7 @@
+ 	return nil
+ }
+ 
+-func newAISessionStore(db *storage.DB, recorder *audit.SQLRecorder) (*ai.SQLSessionStore, error) {
++func newAISessionStore(db *storage.DB, recorder *audit.SQLRecorder, typedModelAudit bool) (*ai.SQLSessionStore, error) {
+ 	read := func(ctx context.Context, queryer storage.Queryer, query string, args ...any) ([]byte, error) {
+ 		var payload []byte
+ 		err := queryer.QueryRow(ctx, query, args...).Scan(&payload)
+@@ -83,6 +89,14 @@
+ 		InTx: func(ctx context.Context, fn func(ai.SessionSQLStatements) error) error {
+ 			return db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+ 				statements := ai.SessionSQLStatements{
++					AppendModelAudit: func(ctx context.Context, events []ai.ModelSettingsAuditEvent) error {
++						exec := func(ctx context.Context,q string,args ...any)(int64,error) { r,err:=tx.Exec(ctx,q,args...);if err!=nil{return 0,err};return r.RowsAffected() }
++						if err:=ai.AppendModelSettingsAudit(ctx,exec,events);err!=nil{return err}
++						for _,event:=range events {
++							if err:=recorder.AppendTx(ctx,tx,audit.Event{SubjectID:event.SubjectID,Action:event.Action,Result:"success",RequestID:newRequestID(),NodeIDs:[]string{},Source:audit.SourceAI,At:event.At.UTC()});err!=nil{return err}
++						}
++						return nil
++					},
+ 					Read: func(readCtx context.Context, query string, args ...any) ([]byte, error) {
+ 						return read(readCtx, tx, query, args...)
+ 					},
+@@ -121,6 +135,7 @@
+ 						return nil
+ 					},
+ 				}
++				if !typedModelAudit { statements.AppendModelAudit = nil }
+ 				return fn(statements)
+ 			})
+ 		},
