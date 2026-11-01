@@ -98,7 +98,7 @@ export function NodeAddPage() {
         <Panel title="1. 生成短期接入凭证" description="POST /api/v1/node-enrollment-tokens。令牌只在创建响应显示一次，服务端不得支持后续列表读取明文。">
           <div className="space-y-4 px-5 py-4">
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="有效期（分钟）" hint="服务端允许 1–10 分钟（ENROLLMENT_TOKEN_POLICY 硬约束）。">
+              <Field label="有效期（分钟）" hint="有效期为 1–10 分钟。">
                 {ids => (
                   <TextInput
                     id={ids.inputId}

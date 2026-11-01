@@ -19,7 +19,8 @@
  *      `tasks.command` 任务 → 真实派发/执行 → 任务 completed、执行 succeeded。
  *   4. B 组用例是"正向尝试"：若后端已支持则验证真实成功；当前基线未接线的适配器
  *      （跨节点字节通道、AI 模型、Xray 制品、发布器、更新源、恢复执行器）按服务端
- *      精确错误码记 BLOCKED，并在总控接线后由同一脚本自动翻转为真实成功断言。
+ *      精确错误码记 BLOCKED。B01—B06尚缺完整夹具/执行终态证据，接线后仍需补全测试；
+ *      入队、版本检查或恢复预演成功，均不得算完整功能成功。
  *
  * 退出码：存在 FAIL 才为 1；BLOCKED 不算失败（如实登记的缺口）。
  *
@@ -28,11 +29,12 @@
  *   （需 WSL 默认发行版可用；--distro 显式指定发行版名）
  */
 import { spawn } from "node:child_process";
+import { expectedUnavailable } from "./probe-status.mjs";
 import { existsSync } from "node:fs";
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 import { setTimeout as sleep } from "node:timers/promises";
 import { fileURLToPath } from "node:url";
 import {
@@ -128,7 +130,7 @@ async function waitForUrl(session, hash, timeoutMs = 20_000) {
 
 function runCommand(command, args, options = {}) {
   return new Promise((resolvePromise, reject) => {
-    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], ...options });
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"], windowsHide: true, ...options });
     let stdout = "";
     let stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; });
@@ -164,7 +166,7 @@ function toWslPath(windowsPath) {
 
 /** 长驻进程统一以脚本文件 + 直接 argv 启动（绕开 wsl.exe 对 `-c` 串的二次解析）。 */
 function wslSpawn(distro, scriptPath, args = []) {
-  return spawn("wsl.exe", ["-d", distro, "--", "sh", scriptPath, ...args], { stdio: ["ignore", "pipe", "pipe"] });
+  return spawn("wsl.exe", ["-d", distro, "--", "sh", scriptPath, ...args], { stdio: ["ignore", "pipe", "pipe"], windowsHide: true });
 }
 
 function goCommand() {
@@ -388,13 +390,30 @@ exec "$work/agent" -connect-once -controller-url "https://localhost:$apiPort" \\
 `;
 
 const KILL_PID_SCRIPT = `#!/bin/sh
+set -eu
 work="$1"
 name="$2"
+case "$name" in agent-connect|controller|webhost) ;; *) exit 2 ;; esac
 f="$work/pids/$name.pid"
 if [ -f "$f" ]; then
-  kill "$(cat "$f")" 2>/dev/null || true
+  pid=$(cat "$f")
+  case "$pid" in ''|*[!0-9]*) exit 2 ;; esac
+  if [ "$pid" -gt 1 ] && [ -r "/proc/$pid/cmdline" ] && tr '\\000' ' ' < "/proc/$pid/cmdline" | grep -F -- "$work/" >/dev/null; then
+    kill "$pid" 2>/dev/null || true
+  fi
   rm -f "$f"
 fi
+`;
+
+const CLEANUP_SCRIPT = `#!/bin/sh
+set -eu
+work="$1"
+base=$(basename -- "$work")
+printf '%s\\n' "$base" | grep -Eq '^sfqa-gm06-w6-[0-9]+-[0-9]+$' || exit 2
+[ "$(dirname -- "$work")" = "$HOME" ] || exit 2
+[ ! -L "$work" ] || exit 2
+[ "$(readlink -f -- "$work")" = "$work" ] || exit 2
+rm -rf -- "$work"
 `;
 
 const READ_FILE_SCRIPT = `#!/bin/sh
@@ -447,10 +466,13 @@ async function cleanup() {
       await killWorkloadPid(name).catch(() => {});
     }
     if (!keepTemp) {
-      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c", `rm -rf ${workDir}`]).catch(() => {});
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", `${toWslPath(tempDir)}/cleanup.sh`, workDir]).catch(() => {});
     }
   }
   if (tempDir && !keepTemp) {
+    if (dirname(resolve(tempDir)) !== resolve(tmpdir()) || !basename(tempDir).startsWith("gm-w6-positive-")) {
+      throw new Error("refusing cleanup outside this run's temporary directory");
+    }
     await rm(tempDir, { recursive: true, force: true }).catch(() => {});
   }
 }
@@ -489,15 +511,22 @@ async function main() {
   await writeFile(join(tempDir, "run-agent-enroll.sh"), RUN_AGENT_ENROLL_SCRIPT);
   await writeFile(join(tempDir, "run-agent-connect.sh"), RUN_AGENT_CONNECT_SCRIPT);
   await writeFile(join(tempDir, "kill-pid.sh"), KILL_PID_SCRIPT);
+  await writeFile(join(tempDir, "cleanup.sh"), CLEANUP_SCRIPT);
   await writeFile(join(tempDir, "read-file.sh"), READ_FILE_SCRIPT);
 
   // WSL 原生工作目录（SQLite WAL 语义正确、二进制可直接执行、Agent 状态目录私有）。
   // 目录名由 Windows 侧生成（纯 ASCII、无空格）；WSL 命令只用无引号 token。
   const workName = `sfqa-gm06-w6-${process.pid}-${Math.floor(Math.random() * 100000)}`;
+  const homeOut = await runCommand("wsl.exe", ["-d", distro, "--", "printenv", "HOME"]);
+  const linuxHome = cleanWslOutput(homeOut.stdout);
+  const uidOut = await runCommand("wsl.exe", ["-d", distro, "--", "id", "-u"]);
+  if (!/^\/home\/[A-Za-z0-9_.-]+$/.test(linuxHome) || !/^[1-9][0-9]*$/.test(cleanWslOutput(uidOut.stdout))) {
+    throw new Error("an existing ordinary-user WSL home is required");
+  }
   const setup = await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
     `mkdir -p $HOME/${workName}/pids && echo $HOME/${workName}`]);
   workDir = cleanWslOutput(setup.stdout).split(/\r?\n/).filter(Boolean).pop();
-  if (!workDir?.startsWith("/home/") && !workDir?.startsWith("/root/")) {
+  if (workDir !== `${linuxHome}/${workName}`) {
     throw new Error(`unexpected WSL work dir: ${workDir}`);
   }
   console.log(`wsl work dir: ${workDir}`);
@@ -765,114 +794,48 @@ async function main() {
   });
 
   // =====================================================================
-  // B 组：正向尝试——后端已支持则验证真实成功；未接线则按服务端精确错误码记 BLOCKED。
-  // 不把 501/503/502 的诚实拒绝当作功能完成；总控接线后重跑本脚本即自动翻转为 PASS。
+  // B组是尚未完成的正向流程：仅登记明确的环境/夹具缺口。
+  // 不把消息入队、更新检查、恢复预演或任何错误响应算作完整功能成功。
   // =====================================================================
 
   await attemptPositive("B01 cross-node byte transfer between real agents", async () => {
-    const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
-      sourceNodeId: ${JSON.stringify(nodeId)},
-      sourcePaths: ["/opt/serverfleet-qa/positive-sample.txt"],
-      destinationNodeId: ${JSON.stringify(nodeId)},
-      destinationDir: "/opt/serverfleet-qa/dst",
-      conflictPolicy: "overwrite",
-    }, { "Idempotency-Key": "positive-w6-transfer-01" })`);
-    if ([400, 401, 403, 404, 500, 501, 502, 503].includes(created.status)) {
-      throw blocked(`POST /api/v1/transfers -> ${created.status} ${JSON.stringify(created.body).slice(0, 220)}：当前基线跨节点文件字节通道未接线（CX/DS Wave 6 交付、总控集成），两端 Agent 字节互传在本机无法真实完成；500 internal_error 而非类型化拒绝已登记 SHARED-CHANGES 供总控/DS 核查`);
-    }
-    if (![200, 201, 202].includes(created.status)) {
-      throw new Error(`transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
-    }
-    const transferId = created.body?.id ?? created.body?.transferId;
-    if (!transferId) throw new Error(`transfer id missing: ${JSON.stringify(created.body).slice(0, 220)}`);
-    for (let attempt = 0; attempt < 20; attempt += 1) {
-      await sleep(1500);
-      const job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
-      const status = job?.status ?? job?.transfer?.status;
-      if (status === "completed") {
-        return `transfer ${transferId} completed through the real agent byte channel`;
-      }
-      if (status === "failed" || status === "canceled" || status === "unknown" || job?.error) {
-        throw blocked(`transfer ${transferId} did not complete (status=${status}, error=${JSON.stringify(job?.error ?? null).slice(0, 180)})：Agent 运行时当前只接受 tasks.command 自检动作（apps/agent connect.go controlledCommandActions），files.transfer 执行能力属 CX Wave 6 交付范围`);
-      }
-    }
-    throw blocked(`transfer ${transferId} still not completed after 30s：真实字节通道未在本基线打通（诚实未完成，不伪造成功）`);
+    throw blocked("HARNESS_INCOMPLETE: 本套件仅接入一个已退出的单次Agent，未准备两个在线端点和真实源文件；不发送同节点伪跨机请求，不凭completed状态关闭字节/SHA/双端任务验收");
   });
 
   await attemptPositive("B02 AI message generation with streaming", async () => {
     const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/ai/sessions', 'POST', {})`);
-    if (![200, 201].includes(created.status)) throw new Error(`ai session create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
-    const sessionId = created.body?.sessionId ?? created.body?.id;
-    const scopeRevision = created.body?.scopeRevision;
-    if (!sessionId) throw new Error(`ai session id missing: ${JSON.stringify(created.body).slice(0, 220)}`);
-    const sent = await evaluate(session, `(${PAGE_WRITE})('/api/v1/ai/sessions/${sessionId}/messages', 'POST', {
-      content: "列出当前节点的运行时间",
-      clientMessageId: "positive-w6-ai-01",
-      scopeRevision: ${JSON.stringify(scopeRevision ?? 0)},
-    }, { "Idempotency-Key": "positive-w6-ai-msg-01" })`);
-    if ([501, 502, 503].includes(sent.status)) {
-      throw blocked(`POST /api/v1/ai/sessions/{id}/messages -> ${sent.status} ${JSON.stringify(sent.body).slice(0, 220)}：AI 模型执行器未接线（CX Wave 6 交付、总控集成），本机只能证明 fail-closed，不能证明生成/流式成功`);
-    }
-    if (![200, 201, 202].includes(sent.status)) {
-      throw new Error(`ai message ${sent.status}: ${JSON.stringify(sent.body).slice(0, 220)}`);
-    }
-    const assistant = sent.body?.redactedContent ?? sent.body?.content ?? sent.body?.message;
-    if (!assistant) throw new Error(`no assistant content: ${JSON.stringify(sent.body).slice(0, 220)}`);
-    return `AI generated a real assistant response for session ${sessionId}`;
+    if (![200,201].includes(created.status)) throw new Error(`ai session create ${created.status}`);
+    const sessionId=created.body?.sessionId??created.body?.id;
+    if (!sessionId) throw new Error("ai session id missing");
+    const sent=await evaluate(session, `(${PAGE_WRITE})('/api/v1/ai/sessions/${sessionId}/messages','POST',{
+      content:"列出当前节点的运行时间",clientMessageId:"positive-w6-ai-01",scopeRevision:${JSON.stringify(created.body?.scopeRevision??0)}
+    },{"Idempotency-Key":"positive-w6-ai-msg-01"})`);
+    if(expectedUnavailable(sent,[[503,"MESSAGE_SOURCE_UNAVAILABLE"]])) throw blocked(`model unavailable: ${sent.status} ${JSON.stringify(sent.body)}`);
+    throw blocked("HARNESS_INCOMPLETE: 这里只证明用户消息已提交；未配置合成BYOK/本地TLS模型、调用generate并验证assistant终态/SSE，不能把排队或用户文本回显算生成成功");
   });
 
   await attemptPositive("B03 Xray installation against a real published artifact", async () => {
-    const refreshed = await evaluate(session, `(${PAGE_WRITE})('/api/v1/plugins/catalog/refresh', 'POST')`);
-    if (![200, 201, 202].includes(refreshed.status)) {
-      throw blocked(`POST /api/v1/plugins/catalog/refresh -> ${refreshed.status} ${JSON.stringify(refreshed.body).slice(0, 220)}：插件目录发行源未接线（PLUGIN_CATALOG_SOURCE_UNAVAILABLE），无已签名发行制品可安装，Xray 保持不可安装（诚实门控，不伪造安装成功）`);
-    }
-    const catalog = await evaluate(session, `(${PAGE_FETCH})('/api/v1/plugins/catalog')`);
-    const xray = (catalog.items ?? []).find(entry => entry.id === "xray-manager");
-    if (!xray?.sourceCommit || !xray?.artifactSha256) {
-      throw blocked("catalog exposes no installable xray artifact (sourceCommit/artifactSha256 missing)：发行制品未发布，安装不能伪造成功");
-    }
-    throw blocked("catalog exposes an xray artifact; the full install/config/user/traffic positive flow is exercised once CX Wave 6 wires the Xray executor and 总控集成后重跑本套件");
+    const response=await evaluate(session, `(${PAGE_WRITE})('/api/v1/plugins/catalog/refresh','POST')`);
+    if(expectedUnavailable(response,[[501,"PLUGIN_CATALOG_SOURCE_UNAVAILABLE"]])) throw blocked(`catalog unavailable: ${response.status} ${JSON.stringify(response.body)}`);
+    throw blocked("HARNESS_INCOMPLETE: 目录可用不代表安装完成；仍缺已准入安全制品与安装/配置/用户/流量实际执行证据");
   });
 
   await attemptPositive("B04 service publication succeeds end to end with compensation", async () => {
-    const groups = await evaluate(session, `(${PAGE_FETCH})('/api/v1/service-groups').then(data => data.items)`);
-    const group = (groups ?? [])[0];
-    if (!group) {
-      throw blocked("本套件数据集中无服务组/网关/DNS 真实数据集：发布正向链路需要它们；70 步回归已覆盖发布门控与补偿的诚实失败，真实成功属 DS Wave 6 交付 + 总控 awskr 实机范围");
-    }
-    const run = await evaluate(session, `(${PAGE_WRITE})('/api/v1/publications/${group.id}/run', 'POST', {})`);
-    if ([501, 502, 503].includes(run.status)) {
-      throw blocked(`POST /api/v1/publications/{id}/run -> ${run.status} ${JSON.stringify(run.body).slice(0, 220)}：外部发布器未接线，发布/补偿成功无法在本基线产生`);
-    }
-    if (![200, 202].includes(run.status)) throw new Error(`publication run ${run.status}: ${JSON.stringify(run.body).slice(0, 220)}`);
-    return `publication run accepted (${run.status})`;
+    throw blocked("HARNESS_INCOMPLETE: 未创建真实publication及网关/DNS/证书夹具，也未执行和验证补偿；不能把service-group ID当publication ID，或把202接收当发布完成");
   });
 
   await attemptPositive("B05 controller update executes with signature verification", async () => {
-    const check = await evaluate(session, `(${PAGE_WRITE})('/api/v1/system/updates/check', 'POST', { channel: "stable" })`);
-    if ([501, 503].includes(check.status)) {
-      throw blocked(`POST /api/v1/system/updates/check -> ${check.status} ${JSON.stringify(check.body).slice(0, 220)}：更新发行源/计划器未接线（UPDATE_SOURCE_UNAVAILABLE / UPDATE_PLANNER_UNAVAILABLE），签名校验与安装执行需发布基础设施，当前如实记 UNTESTED`);
-    }
-    if (check.status !== 200) throw new Error(`update check ${check.status}: ${JSON.stringify(check.body).slice(0, 220)}`);
-    return `update check returned ${check.status} with server-declared versions`;
+    const response=await evaluate(session, `(${PAGE_WRITE})('/api/v1/system/updates/check','POST',{channel:"stable"})`);
+    if(expectedUnavailable(response,[[503,"UPDATE_SOURCE_UNAVAILABLE"],[503,"UPDATE_PLANNER_UNAVAILABLE"]])) throw blocked(`update source unavailable: ${response.status} ${JSON.stringify(response.body)}`);
+    throw blocked("HARNESS_INCOMPLETE: 版本检查成功仅证明发行源可读；未执行签名安装、进程健康、升级后版本或失败回滚");
   });
 
   await attemptPositive("B06 disaster recovery executes against an isolated second controller", async () => {
-    const preview = await evaluate(session, `(${PAGE_WRITE})('/api/v1/disaster-recovery/preview', 'POST', {
-      backupId: "positive-w6-no-backup",
-      targetControllerId: "controller-positive-02",
-      oldControllerFenced: true,
-      recoveryKeyReference: "qa-key-ref-nonexistent",
+    const response=await evaluate(session, `(${PAGE_WRITE})('/api/v1/disaster-recovery/preview','POST',{
+      backupId:"positive-w6-no-backup",targetControllerId:"controller-positive-02",oldControllerFenced:true,recoveryKeyReference:"qa-key-ref-nonexistent"
     })`);
-    if (![200, 201].includes(preview.status)) {
-      throw blocked(`POST /api/v1/disaster-recovery/preview -> ${preview.status} ${JSON.stringify(preview.body).slice(0, 220)}：恢复预演需要真实备份与第二隔离主控（POC-08/实机），本机单实例无法提供隔离证据`);
-    }
-    const checks = preview.body?.checks ?? [];
-    const failedChecks = checks.filter(entry => entry.status !== "passed");
-    if (failedChecks.length > 0) {
-      throw blocked(`recovery preview checks not passed: ${failedChecks.map(entry => entry.code).join(", ")}——恢复执行需第二隔离主控实机（总控 awskr 范围），本地只能证明 fail-closed`);
-    }
-    return `recovery preview passed all checks (${checks.length})`;
+    if(expectedUnavailable(response,[[404,"BACKUP_NOT_FOUND"]])) throw blocked(`backup unavailable: ${response.status} ${JSON.stringify(response.body)}`);
+    throw blocked("HARNESS_INCOMPLETE: preview成功（即使checks为空）也不代表恢复；未构建第二隔离Controller、实际fence、隔离恢复及撤销不复活证明");
   });
 
   await session.close();
@@ -900,3 +863,7 @@ if (failed.length > 0) {
   for (const entry of failed) console.log(`  - ${entry.step}: ${entry.detail}`);
   process.exitCode = 1;
 }
+
+await mkdir(outDir,{recursive:true});
+await writeFile(join(outDir,"results.json"),JSON.stringify({status:failed.length?"FAIL":blockedCases.length?"PARTIAL":"PASS",complete:failed.length===0&&blockedCases.length===0,passed:passed.length,blocked:blockedCases.length,failed:failed.length,results},null,2)+"\n");
+if(hasFlag("require-complete")&&blockedCases.length)process.exitCode=1;
