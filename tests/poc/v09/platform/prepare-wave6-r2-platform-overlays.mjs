@@ -6,7 +6,7 @@ const folder=path.join(root,'reports/wave6-r2'),progress=path.join(root,'docs/de
 const overlay=JSON.parse(fs.readFileSync(path.join(folder,'combined-overlay.json'),'utf8'));const sources=new Map(),originals=new Map();
 function edit(name,before,after){const old=sources.get(name)??fs.readFileSync(overlay.Replace[path.join(root,name)]??path.join(root,name),'utf8');if(!originals.has(name))originals.set(name,old);if(old.split(before).length!==2)throw new Error('Nonunique platform patch context '+name+' '+before);sources.set(name,old.replace(before,after));}
 const server='apps/controller/server/server.go';
-edit(server,'\tUpdateCheck     func','\tRecoveryLatch *recovery.QuarantineLatch\n\tUpdateExecution *updates.TaskInstallWorkerOptions\n\tUpdateResolvePlan func(context.Context,updates.ApplyRequest)(updates.FrozenInstallPlan,error)\n\tUpdateCheck     func');
+edit(server,'\tUpdateCheck     func','\tRecoveryLatch *recovery.QuarantineLatch\n\tUpdateExecution *updates.TaskInstallWorkerOptions\n\tUpdateResolvePlan func(context.Context,updates.ApplyRequest)(updates.FrozenInstallPlan,error)\n\tUpdateJobs func(context.Context,updates.Principal)(updates.JobPage,error)\n\tUpdateJob func(context.Context,updates.Principal,string)(updates.ApplyResult,error)\n\tUpdateCheck     func');
 edit(server,'type Server struct {','type Server struct {\n\truntimeGate func(context.Context)error');
 edit(server,'func New(ctx context.Context, cfg Config) (*Server, error) {','func New(ctx context.Context, cfg Config) (*Server, error) {\n\truntimeGate,guardErr:=recovery.RuntimeGuard(ctx,cfg.DBPath,cfg.RecoveryLatch);if guardErr!=nil{return nil,guardErr}');
 edit(server,'s = &Server{','s = &Server{\n\t\truntimeGate: runtimeGate,');
@@ -20,14 +20,17 @@ edit(server,'\ttasksService, err := tasks.NewService(tasks.Options{',`\tif cfg.U
  options.Current=func(ctx context.Context,id,plan string)(tasks.Task,error){return s.Tasks.CheckExecution(ctx,id,plan)}
  options.Administrator=s.Identity.AuthorizeAdministrator
  worker,e:=updates.NewTaskInstallWorker(options);if e!=nil{return cleanup(e)};workers[updates.ActionInstall]=worker
+ projection,e:=updates.NewTaskJobProjection(tasksRepo,func(ctx context.Context,p updates.Principal,t tasks.Task)error{return (&composedTaskReadGate{identity:s.Identity,tasks:tasksRepo}).AuthorizeTaskRead(ctx,p.SubjectID,t.ID)});if e!=nil{return cleanup(e)}
+ cfg.UpdateJobs,cfg.UpdateJob=projection.Jobs,projection.Job
  cfg.UpdateApply=func(ctx context.Context,r updates.ApplyRequest)(updates.ApplyResult,error){
   if !r.Principal.Administrator || s.Identity.AuthorizeAdministrator(ctx,r.Principal.SubjectID)!=nil{return updates.ApplyResult{},updates.ErrArtifactRejected}
   p,e:=cfg.UpdateResolvePlan(ctx,r);if e!=nil||p.ID!=r.PlanID||p.SubjectID!=r.Principal.SubjectID||r.Confirmation!=p.Attempted.Version||r.BackupMode!="required"{return updates.ApplyResult{},updates.ErrArtifactRejected}
-  request,e:=p.TaskRequest(r.Principal.RequestID);if e!=nil{return updates.ApplyResult{},e};t,e:=s.Tasks.Submit(ctx,request);if e!=nil{return updates.ApplyResult{},e};return updates.ApplyResult{ID:p.ID,TaskID:t.ID,Status:string(t.Status),TargetVersion:p.Attempted.Version},nil
+  request,e:=p.TaskRequest(r.Principal.RequestID);if e!=nil{return updates.ApplyResult{},e};t,e:=s.Tasks.Submit(ctx,request);if e!=nil{return updates.ApplyResult{},e};return updates.ApplyResult{ID:t.ID,TaskID:t.ID,Status:string(t.Status),TargetVersion:p.Attempted.Version},nil
  }
  }
 \ttasksService, err := tasks.NewService(tasks.Options{\n\t\tRuntimeGate: runtimeGate,`);
 edit('apps/controller/server/enrollment.go','transport.ControllerLinkConfig{','transport.ControllerLinkConfig{\n\t\tRuntimeGate: s.runtimeGate,');
+edit('apps/controller/server/updates_recovery.go','\t\tCheck: cfg.UpdateCheck, Plan: cfg.UpdatePlan, Apply: cfg.UpdateApply,','\t\tCheck: cfg.UpdateCheck, Plan: cfg.UpdatePlan, Apply: cfg.UpdateApply,\n\t\tJobs: cfg.UpdateJobs, Job: cfg.UpdateJob,');
 const suffix=process.platform==='win32'?'.exe':'';let patch='';
 for(const[name,source]of sources){const before=path.join(folder,path.basename(name)+'.platform-before.txt'),after=path.join(folder,path.basename(name)+'.platform-after.txt');fs.writeFileSync(before,originals.get(name));fs.writeFileSync(after,source);for(const file of[before,after]){const r=spawnSync(path.join(path.dirname(go),'gofmt'+suffix),['-w',file],{cwd:root,env,encoding:'utf8',windowsHide:true});if(r.status!==0)throw new Error(r.stderr);}
 const diff=spawnSync('git',['diff','--no-index','--',path.relative(root,before),path.relative(root,after)],{cwd:root,encoding:'utf8',windowsHide:true});if(diff.status!==1)throw new Error('Platform diff failed');patch+=diff.stdout.replace(/^diff --git .*$/m,'diff --git a/'+name+' b/'+name).replace(/^--- .*$/m,'--- a/'+name).replace(/^\+\+\+ .*$/m,'+++ b/'+name);overlay.Replace[path.join(root,name)]=after;}
