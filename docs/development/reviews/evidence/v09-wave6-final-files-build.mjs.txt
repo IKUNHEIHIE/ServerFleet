@@ -1,0 +1,15 @@
+import {spawnSync} from 'node:child_process';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
+import path from 'node:path';
+import {root,go,env} from '../../scripts/lib.mjs';
+const head=spawnSync('git',['rev-parse','HEAD'],{cwd:root,encoding:'utf8'}).stdout.trim();
+if(head!=='9d3aa2a45bc3d5d45a788e708e1717aab08f83d5')throw new Error('unexpected final code');
+const name=path.join(root,'reports/wave6-remote/files-final.test');
+const built=spawnSync(go,['test','-mod=readonly','-c','-o',name,'./internal/files'],{cwd:root,env:{...env,GOOS:'linux',GOARCH:'amd64',CGO_ENABLED:'0'},encoding:'utf8',windowsHide:true});
+if(built.status!==0)throw new Error(built.stderr);
+const raw=readFileSync(name),data=gzipSync(raw),sha=b=>createHash('sha256').update(b).digest('hex');
+writeFileSync(name+'.gz',data);
+const manifest={head,package:'./internal/files',compressedBytes:data.length,compressedSHA256:sha(data),binaryBytes:raw.length,binarySHA256:sha(raw),scope:'final upload missing-channel failure audit and current write revocation regressions; no production data'};
+writeFileSync(path.join(root,'reports/wave6-remote/files-final-manifest.json'),JSON.stringify(manifest,null,2)+'\n');console.log(JSON.stringify(manifest));

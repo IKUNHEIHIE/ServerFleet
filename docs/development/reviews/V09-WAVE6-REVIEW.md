@@ -1,5 +1,7 @@
 # V09 Wave6 · CX/DS增量审查与主控接线
 
+> 本文是GM新提交到达前的CX/DS审查快照，保留当时SHA、结果及环境观察。三线最终结论、后续修复和ENV-W6-01以[最终审查](V09-WAVE6-COMBINED-REVIEW.md)及[最终机器结果](V09-WAVE6-COMBINED-RESULTS.json)为准。
+
 审查/集成：codex-review-02；日期2026-11-01；起点`73d5dd46fb29b3cf4a445b43b48186d5938fe781`。**接收CX/DS模块增量及本轮集成修复；Gemini待新SHA，完整v0.9未验收、未获发布准入。** 原作者提交与失败证据保留，没有改写历史或改动作者未提交文件。
 
 ## 精确范围

@@ -1,0 +1,64 @@
+import {readFileSync,writeFileSync,mkdirSync} from 'node:fs';
+import {gzipSync,gunzipSync} from 'node:zlib';
+import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import path from 'node:path';
+const root=process.cwd(),evidence=path.join(root,'docs/development/reviews/evidence');
+mkdirSync(evidence,{recursive:true});
+const read=f=>readFileSync(path.join(root,f));
+const json=f=>JSON.parse(read(f).toString().replace(/^\uFEFF/,''));
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const git=args=>{const r=spawnSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true});if(r.status!==0)throw Error(r.stderr);return r.stdout.trim();};
+const head=git(['rev-parse','HEAD']);
+if(head!=='9d3aa2a45bc3d5d45a788e708e1717aab08f83d5')throw Error('unexpected final code');
+const checks=json('reports/check-all.json'),security=json('reports/check-security.json');
+if(checks.results.length!==5||checks.results.some(r=>r.status!=='PASS')||security.results.some(r=>r.status!=='PASS'))throw Error('final gates incomplete');
+const rows=read('reports/wave6-release-candidate-check.log').toString().split(/\r?\n/).filter(l=>l.startsWith('{')).flatMap(l=>{try{return[JSON.parse(l)]}catch{return[]}});
+const passes=rows.filter(e=>e.Action==='pass'&&e.Test),fails=rows.filter(e=>e.Action==='fail'),skips=rows.filter(e=>e.Action==='skip'&&e.Test).map(e=>({package:e.Package,test:e.Test}));
+if(fails.length)throw Error('final Go failure');
+const suite=read('reports/web-junit.xml').toString().match(/<testsuites\b[^>]*>/)?.[0]??'';
+const attr=n=>Number(suite.match(new RegExp('\\b'+n+'="(\\d+)"'))?.[1]);
+const web={tests:attr('tests'),failures:attr('failures'),errors:attr('errors')};
+if(web.tests!==333||web.failures!==0||web.errors!==0)throw Error('final Web verification incomplete');
+const positive=json('reports/wave6-gm-positive-final/results.json');
+if(positive.passed!==12||positive.blocked!==6||positive.failed!==0||positive.complete!==false||positive.status!=='PARTIAL')throw Error('positive browser status misreported');
+if(!read('reports/wave6-browser-live-final.log').toString().includes('live controller acceptance: 70/70 steps passed'))throw Error('legacy browser regression incomplete');
+if(!read('reports/wave6-browser-stub.log').toString().includes('stub acceptance: 16/16 steps passed'))throw Error('stub regression incomplete');
+const finalFiles=json('reports/wave6-remote/download/files-final-result.json');
+if(finalFiles.sourceHead!==head||finalFiles.status!=='PASS'||finalFiles.uid!==1000||finalFiles.topLevelPass!==45||hash(read('reports/wave6-remote/download/files-final-test.log'))!==finalFiles.logSHA256)throw Error('final Linux upload verification incomplete');
+const env=json('reports/wave6-remote/existing-agent-state.json');
+if(env.observations.length!==2||Number(env.observations[1].NRestarts)<=Number(env.observations[0].NRestarts))throw Error('environment anomaly evidence incomplete');
+if(git(['diff','--name-only','73d5dd4',head,'--','docs/reference','api/openapi/g2-core-candidate.yaml','api/openapi/g2-merged-candidate.yaml','api/openapi/xray-candidate.yaml','tests/contracts/proto-baseline','docs/contracts/revisions/g2-r03']))throw Error('immutable sources changed');
+const artifacts=[];
+const archive=(file,label)=>{const b=read(file),encoded=gzipSync(b).toString('base64').match(/.{1,120}/g).join('\n')+'\n',artifact='v09-wave6-final-'+label+'.gz.b64';if(!gunzipSync(Buffer.from(encoded.replace(/\s/g,''),'base64')).equals(b))throw Error('roundtrip failed');writeFileSync(path.join(evidence,artifact),encoded);artifacts.push({source:file,artifact,encoding:'base64(gzip(original bytes))',bytes:b.length,sha256:hash(b),roundTrip:'PASS'});};
+for(const [file,label] of [
+ ['reports/wave6-release-candidate-check.log','check'],['reports/check-all.json','check-result'],['reports/wave6-release-candidate-security.log','security'],['reports/check-security.json','security-result'],
+ ['reports/wave6-gm-positive.log','positive-before-visual'],['reports/wave6-gm-positive-final.log','positive'],['reports/wave6-gm-positive-final/results.json','positive-result'],
+ ['reports/wave6-browser-live-before.log','live-before-audit-fix'],['reports/wave6-browser-live-final.log','live'],['reports/wave6-browser-stub.log','stub'],
+ ['reports/wave6-gm-render-before.log','render-before'],['reports/wave6-gm-render-after.log','render-after'],['reports/wave6-render-targeted-final.log','render-targeted'],
+ ['reports/wave6-upload-before.log','upload-before'],['reports/wave6-upload-after.log','upload-after'],['reports/wave6-probe-status-final.log','probe-policy'],
+ ['reports/wave6-all-three-check.log','async-first-fail'],['reports/wave6-gm-async-first-result.json','async-first-result'],
+ ['reports/wave6-remote/download/files-final-result.json','linux-files-result'],['reports/wave6-remote/download/files-final-test.log','linux-files'],['reports/wave6-remote/files-final-manifest.json','linux-files-manifest'],['reports/wave6-remote/existing-agent-state.json','existing-agent-metadata']
+])archive(file,label);
+for(const [file,artifact] of [
+ ['reports/wave6-gm-positive/positive-10-task-completed.png','v09-wave6-final-task-before.png'],['reports/wave6-gm-positive-final/positive-10-task-completed.png','v09-wave6-final-task-after.png'],
+ ['reports/wave6-remote/files-final-run.py','v09-wave6-final-files-run.py.txt'],['reports/wave6-remote/final-files.mjs','v09-wave6-final-files-build.mjs.txt'],['reports/archive-wave6-combined.mjs','v09-wave6-final-archive.mjs.txt']
+]){const b=read(file);writeFileSync(path.join(evidence,artifact),b);artifacts.push({source:file,artifact,bytes:b.length,sha256:hash(b)});}
+const counts={goTopLevel:passes.filter(e=>!e.Test.includes('/')).length,goSubtests:passes.filter(e=>e.Test.includes('/')).length,goFailed:0,goSkipped:skips.length,web};
+const report={task:'V09-WAVE6-REVIEW',reviewer:'codex-review-02',date:'2026-11-01',baseMain:'73d5dd46fb29b3cf4a445b43b48186d5938fe781',technicalHead:head,
+ authors:{codex:'4a3e31edad46051c2f9de3c9f54a16c843a3f93c',deepseek:'fd2e015b6de99349a34f8061bbb39485f119ab7c',gemini:'e88e9b034eeafce6680fc61e1f2351b0d8703098'},
+ result:'ACCEPT_REVIEWED_INCREMENTAL_CODE_AND_EVIDENCE_WITH_ROOT_FIXES; SIX_POSITIVE_WORKFLOWS_INCOMPLETE; FULL_V09_NOT_ACCEPTED',
+ priorCoreReview:'V09-WAVE6-REVIEW-RESULTS.json',checks,security,counts,skips,
+ browser:{positiveSourceHead:'cc36d594efe6478e4e2820c17b1b02ce7d7ed106',positive,legacy:{sourceHead:head,passed:70,total:70,scope:'negative/degraded regressions; missing file channel returns 503 plus failure audit; not remote bytes'},stub:{passed:16,total:16,scope:'candidate contract fixture only'},actualUIVerified:'task header uses canonical real jobId; successful agent result is execution notes, not an error'},
+ additionalFixes:[{id:'GM-R01',status:'FIXED',detail:'queue/feed/preview acceptance can no longer become generation/install/recovery success; invalid/500/auth responses cannot become generic blockers'},
+ {id:'GM-R02',status:'FIXED_LABEL; FULL_RELOAD_UNTESTED',detail:'P02 does not prove that auth/me returned a new CSRF token'},
+ {id:'GM-R03',status:'FIXED_AND_REGRESSION_TESTED',detail:'real batch jobId normalized into taskId; task undefined fixed; result message column renamed execution notes'},
+ {id:'GM-R04',status:'HARDENED',detail:'cleanup checks exact ordinary-user run root/temp parent and PID command identity; verification used --keep'},
+ {id:'W6-R05',status:'FIXED_AND_LINUX_TESTED',detail:'unavailable upload completion now audits failure; completion rechecks current write permission before node I/O'},
+ {id:'QA-R01',status:'FIXED',detail:'existing workflow error assertion now waits for asynchronous error while preserving the same rejection requirement'}],
+ finalLinuxFiles:finalFiles,environment:{id:'ENV-W6-01',existingAgent:env,status:'EXISTING_AGENT_AUTO_RESTART; NOT_MODIFIED_OR_DEPLOYED_BY_THIS_REVIEW',separateFromIsolatedTests:true},
+ artifacts,followup:'docs/development/sprints/v09-five-day/WAVE6-FOLLOWUP.md',shared:'docs/development/sprints/v09-five-day/WAVE6-SHARED.md',
+ protectedSourcesUnchanged:true,legacyProtocolBaselineUnchanged:true,fullReleaseReady:false,completeV09:false,g2Frozen:false,physicalCrossMachineFileTested:false,arm64RuntimeTested:false,hard1C1GTested:false,realExternalAccountsUsed:false,existingRemoteServicesModified:false,remotePushed:false,agentsAutomaticallyStarted:0,messagesSent:0,
+ finalBaselineRule:'final metadata/evidence main SHA and all three clean author worktree fast-forwards recorded in primary reports/v09-wave6-review-handoff.json and final user handoff'};
+writeFileSync(path.join(root,'docs/development/reviews/V09-WAVE6-COMBINED-RESULTS.json'),JSON.stringify(report,null,2)+'\n');
+console.log(JSON.stringify({technicalHead:head,counts,positive:{passed:12,blocked:6,failed:0,complete:false},live:70,stub:16,linuxFiles:45,artifacts:artifacts.length,existingAgentAutoRestart:true}));

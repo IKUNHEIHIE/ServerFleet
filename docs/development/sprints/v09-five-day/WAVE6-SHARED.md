@@ -1,6 +1,6 @@
 # Wave6 · 主控接收的共享增量
 
-总控/审查：codex-review-02；2026-11-01。来源CX `4a3e31edad46051c2f9de3c9f54a16c843a3f93c`、DS `fd2e015b6de99349a34f8061bbb39485f119ab7c`；精确集成SHA见本轮审查交接。本文件是增量组合说明，G2/D01—D07/P1-C10及生产准入仍OPEN。
+总控/审查：codex-review-02；2026-11-01。来源CX `4a3e31edad46051c2f9de3c9f54a16c843a3f93c`、DS `fd2e015b6de99349a34f8061bbb39485f119ab7c`、GM `e88e9b034eeafce6680fc61e1f2351b0d8703098`；最终技术检查点`9d3aa2a45bc3d5d45a788e708e1717aab08f83d5`，精确集成SHA见本轮审查交接。见[三线最终审查](../../reviews/V09-WAVE6-COMBINED-REVIEW.md)与[三线连续实施包](WAVE6-FOLLOWUP.md)。本文件是增量组合说明，G2/D01—D07/P1-C10及生产准入仍OPEN。
 
 ## 已接入的主控组合
 
@@ -16,6 +16,9 @@
 1. 新增撤销→重启负向复现；修复合法擦除密文导致启动失败。
 2. 文件协调器在每项读前、读完写前、写后检查当前授权；补第一项完成后撤权、第二项不得写入的回归。真正分块中的撤权仍须Agent/通道逐帧门控，尚未准入默认链路。
 3. ACME下载证书须绑定本次CSR公钥、申请域名和当前有效期，拒绝CA叶子；补不同公钥、域名和过期证书拒绝。完整信任链/异常授权域名/外部CA验收仍有后续项。
+4. 上传完成在开始及推送前复核当前写授权；缺真实通道503也记录有界失败审计。新增两条先FAIL后PASS回归并在awskr补验；AppendChunk/GetUpload当前授权、逐帧撤权与不确定写仍在DS/CX续作。
+5. Web任务详情把真实批任务`jobId`归一为`taskId`，避免“任务undefined”；Agent成功说明和失败文字都按实际值呈现，列名为“执行说明”。新增真实DTO测试，令牌提示只呈现用户所需期限。
+6. GM正向套件不再把入队、检查发行源、202或preview当生成/安装/发布/灾备完成；错误状态按明确代码判定，500/认证失败不能泛称环境BLOCKED。当前12 PASS / 6 BLOCKED、整体PARTIAL，`--require-complete`仍须拒绝。P02只验证导航保持会话，不证明完整reload恢复CSRF。清理前核对私有目录和进程归属；本轮使用`--keep`保留临时测试数据。
 
 ## 公共候选与兼容性
 
@@ -40,3 +43,5 @@ CX继续私有Agent/transport实现，DS继续files协调器；给总控可应�
 ## 未开启的外部能力
 
 awskr只用于普通用户独立目录、临时loopback端口及合成数据。已有Controller/Agent/nginx/MySQL不改、不重启；不新建云资源，不调用真实Cloudflare/SMTP/QQ/ACME账号，不安装安全FAIL的Xray工件。隔离Nginx渲染/代理验证只证明配置可运行，不能作为统一任务发布已实现的证据。
+
+ENV-W6-01：最终补验时只读观测原有Agent为auto-restart，3秒内NRestarts由3060到3062、退出码1；未诊断根因或修改服务。该环境问题单独登记，不混为普通用户隔离测试结果或部署就绪。仅总控后续排查，作者不得自行操作awskr。

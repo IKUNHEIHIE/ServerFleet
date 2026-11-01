@@ -1,0 +1,28 @@
+import gzip,hashlib,json,os,pathlib,signal,stat,subprocess,sys,time
+root=pathlib.Path(sys.argv[1])
+expected=pathlib.Path.home()/'.local/share/serverfleet-qa/wave6-review-20261101-cx02-6419888e6b'
+if root!=expected or root.is_symlink() or os.getuid()!=1000 or root.stat().st_uid!=1000 or stat.S_IMODE(root.stat().st_mode)!=0o700:raise SystemExit('unexpected QA root')
+manifest=json.loads((root/'files-final-manifest.json').read_text())
+if manifest['head']!='9d3aa2a45bc3d5d45a788e708e1717aab08f83d5':raise SystemExit('unexpected final source')
+packed=(root/'files-final.test.gz').read_bytes()
+if len(packed)!=manifest['compressedBytes'] or hashlib.sha256(packed).hexdigest()!=manifest['compressedSHA256']:raise SystemExit('transfer mismatch')
+raw=gzip.decompress(packed)
+if len(raw)!=manifest['binaryBytes'] or hashlib.sha256(raw).hexdigest()!=manifest['binarySHA256']:raise SystemExit('binary mismatch')
+exe=root/'files-final.test'
+with exe.open('xb') as f:f.write(raw)
+exe.chmod(0o700)
+services=['serverfleet-controller.service','serverfleet-agent.service','nginx.service','mysql.service']
+def states():return {name:subprocess.run(['systemctl','is-active',name],capture_output=True,text=True).stdout.strip() for name in services}
+before=states();start=time.time();logpath=root/'files-final-test.log'
+with logpath.open('x') as log:
+    p=subprocess.Popen([str(exe),'-test.v','-test.count=1','-test.timeout=120s'],cwd=root,env=dict(os.environ,TMPDIR=str(root/'tmp'),GOMAXPROCS='2',GOMEMLIMIT='256MiB'),stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+    try:code=p.wait(timeout=130)
+    except subprocess.TimeoutExpired:
+        os.killpg(p.pid,signal.SIGKILL);p.wait();code=124
+text=logpath.read_text();after=states()
+passed=sum(line.startswith('--- PASS:') for line in text.splitlines())
+skips=[line for line in text.splitlines() if line.startswith('--- SKIP:')]
+result={'sourceHead':manifest['head'],'uid':os.getuid(),'status':'PASS' if code==0 and before==after and passed>0 else 'FAIL','exitCode':code,'topLevelPass':passed,'skips':skips,'elapsedSeconds':round(time.time()-start,2),'logSHA256':hashlib.sha256(logpath.read_bytes()).hexdigest(),'servicesBefore':before,'servicesAfter':after,'scope':manifest['scope'],'existingServicesModified':False}
+(root/'files-final-result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result))
+if code!=0:print(text[-6000:])
+raise SystemExit(0 if result['status']=='PASS' else 1)

@@ -1,0 +1,557 @@
+{
+  "task": "V09-WAVE6-REVIEW",
+  "reviewer": "codex-review-02",
+  "date": "2026-11-01",
+  "baseMain": "73d5dd46fb29b3cf4a445b43b48186d5938fe781",
+  "technicalHead": "9d3aa2a45bc3d5d45a788e708e1717aab08f83d5",
+  "authors": {
+    "codex": "4a3e31edad46051c2f9de3c9f54a16c843a3f93c",
+    "deepseek": "fd2e015b6de99349a34f8061bbb39485f119ab7c",
+    "gemini": "e88e9b034eeafce6680fc61e1f2351b0d8703098"
+  },
+  "result": "ACCEPT_REVIEWED_INCREMENTAL_CODE_AND_EVIDENCE_WITH_ROOT_FIXES; SIX_POSITIVE_WORKFLOWS_INCOMPLETE; FULL_V09_NOT_ACCEPTED",
+  "priorCoreReview": "V09-WAVE6-REVIEW-RESULTS.json",
+  "checks": {
+    "executedAt": "2026-11-01T09:43:39.380Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      },
+      {
+        "name": "contracts",
+        "status": "PASS"
+      },
+      {
+        "name": "go",
+        "status": "PASS"
+      },
+      {
+        "name": "web",
+        "status": "PASS"
+      },
+      {
+        "name": "git",
+        "status": "PASS"
+      }
+    ]
+  },
+  "security": {
+    "executedAt": "2026-11-01T09:43:56.378Z",
+    "results": [
+      {
+        "name": "security",
+        "status": "PASS"
+      }
+    ]
+  },
+  "counts": {
+    "goTopLevel": 716,
+    "goSubtests": 1173,
+    "goFailed": 0,
+    "goSkipped": 18,
+    "web": {
+      "tests": 333,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "skips": [
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentExecutorRejectsNonPrivateLedgerOnLinux"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentFileBytesResumeHashAndIndependentReadGate"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/poc/v09/services/cloudflare",
+      "test": "TestCloudflareDNS"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/files",
+      "test": "TestLocalStagingRejectsSymlinkedDirectories"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/files",
+      "test": "TestLocalStagingRejectsSymlinkedTargetFile"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/recovery",
+      "test": "TestQuarantineRejectsNonPrivateLinuxDirectory"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestPinnedXrayActualConfigTestAndLoopbackStart"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestCustomActualTargetValidationAndProxyCannotReachAPI"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestPinnedXrayActualVisionTrafficStatsAndProcessReset"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6ControllerAndResidentAgentCLI"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialRestartRotationAndFailureClosed"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialConcurrentInitialization"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialRejectDirectoryAndSymlink"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestWave6RevokedCredentialDoesNotPreventRestart"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6IsolatedNginxProxy"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations"
+    }
+  ],
+  "browser": {
+    "positiveSourceHead": "cc36d594efe6478e4e2820c17b1b02ce7d7ed106",
+    "positive": {
+      "status": "PARTIAL",
+      "complete": false,
+      "passed": 12,
+      "blocked": 6,
+      "failed": 0,
+      "results": [
+        {
+          "step": "P01 bootstrap initializes the real controller admin",
+          "state": "PASS",
+          "detail": "POST /api/v1/auth/bootstrap (204) + auto-login completed against the real controller"
+        },
+        {
+          "step": "P02 navigation preserves the authenticated writable session",
+          "state": "PASS",
+          "detail": "navigation preserves the current writable session; this step does not prove full-reload CSRF recovery"
+        },
+        {
+          "step": "P03 UI issues a one-time enrollment token (shown once only)",
+          "state": "PASS",
+          "detail": "POST /api/v1/node-enrollment-tokens -> 201; token rendered once and absent from list responses"
+        },
+        {
+          "step": "P04 real Linux agent enrolls and lands in pending approval",
+          "state": "PASS",
+          "detail": "agent CLI (linux/amd64) enrolled over real HTTPS: state=pending"
+        },
+        {
+          "step": "P05 administrator approves the pending enrollment through the UI",
+          "state": "PASS",
+          "detail": "POST /api/v1/node-enrollments/{id}/decision approve -> 200; node inventory created server-side"
+        },
+        {
+          "step": "P06 same one-time token fetches the issued identity with a nodeId",
+          "state": "PASS",
+          "detail": "identity issued server-side: nodeId=9bb1f58f2c80a5d91abaa4c8d0c3f4f7"
+        },
+        {
+          "step": "P07 admin grants the enrolled node through the UI resource grants",
+          "state": "PASS",
+          "detail": "granted 7 permissions on 9bb1f58f2c80a5d91abaa4c8d0c3f4f7 through POST /api/v1/resource-grants"
+        },
+        {
+          "step": "P08 real agent opens the controlled WSS+mTLS link and the node reports online",
+          "state": "PASS",
+          "detail": "real agent heartbeat/metrics over WSS+mTLS; node 9bb1f58f2c80a5d91abaa4c8d0c3f4f7 online and listed in the console"
+        },
+        {
+          "step": "P09 UI submits a standard tasks.command task for the enrolled node",
+          "state": "PASS",
+          "detail": "POST /api/v1/tasks -> 202 tsk_9a6aba0027db6cfeca9d6c85 (standard class, no approval required, real dispatcher)"
+        },
+        {
+          "step": "P10 real agent executes the task; task completes with a succeeded execution",
+          "state": "PASS",
+          "detail": "task tsk_9a6aba0027db6cfeca9d6c85 -> completed; execution state=succeeded; agent one-shot reports tasksExecuted=1 (real TaskOffer/TaskFinished over the link)"
+        },
+        {
+          "step": "P11 node page reflects the real connection lifecycle honestly",
+          "state": "PASS",
+          "detail": "node 9bb1f58f2c80a5d91abaa4c8d0c3f4f7 rendered from server truth: online during the link (P08), honestly offline after the one-shot agent exit"
+        },
+        {
+          "step": "P12 audit records the real enrollment and task chain",
+          "state": "PASS",
+          "detail": "GET /api/v1/audit/events covers enrollment.token/request/decide + tasks.submit"
+        },
+        {
+          "step": "B01 cross-node byte transfer between real agents",
+          "state": "BLOCKED",
+          "detail": "HARNESS_INCOMPLETE: 本套件仅接入一个已退出的单次Agent，未准备两个在线端点和真实源文件；不发送同节点伪跨机请求，不凭completed状态关闭字节/SHA/双端任务验收"
+        },
+        {
+          "step": "B02 AI message generation with streaming",
+          "state": "BLOCKED",
+          "detail": "model unavailable: 503 {\"code\":\"MESSAGE_SOURCE_UNAVAILABLE\",\"requestId\":\"fcd3d9b168a06e0c82feb2095914d6c5\",\"status\":503,\"title\":\"Service Unavailable\",\"type\":\"about:blank\"}"
+        },
+        {
+          "step": "B03 Xray installation against a real published artifact",
+          "state": "BLOCKED",
+          "detail": "catalog unavailable: 501 {\"code\":\"PLUGIN_CATALOG_SOURCE_UNAVAILABLE\",\"status\":501,\"title\":\"Not Implemented\",\"type\":\"about:blank\"}"
+        },
+        {
+          "step": "B04 service publication succeeds end to end with compensation",
+          "state": "BLOCKED",
+          "detail": "HARNESS_INCOMPLETE: 未创建真实publication及网关/DNS/证书夹具，也未执行和验证补偿；不能把service-group ID当publication ID，或把202接收当发布完成"
+        },
+        {
+          "step": "B05 controller update executes with signature verification",
+          "state": "BLOCKED",
+          "detail": "update source unavailable: 503 {\"code\":\"UPDATE_SOURCE_UNAVAILABLE\",\"status\":503,\"title\":\"Service Unavailable\",\"type\":\"about:blank\"}"
+        },
+        {
+          "step": "B06 disaster recovery executes against an isolated second controller",
+          "state": "BLOCKED",
+          "detail": "backup unavailable: 404 {\"code\":\"BACKUP_NOT_FOUND\",\"status\":404,\"title\":\"Not Found\",\"type\":\"about:blank\"}"
+        }
+      ]
+    },
+    "legacy": {
+      "sourceHead": "9d3aa2a45bc3d5d45a788e708e1717aab08f83d5",
+      "passed": 70,
+      "total": 70,
+      "scope": "negative/degraded regressions; missing file channel returns 503 plus failure audit; not remote bytes"
+    },
+    "stub": {
+      "passed": 16,
+      "total": 16,
+      "scope": "candidate contract fixture only"
+    },
+    "actualUIVerified": "task header uses canonical real jobId; successful agent result is execution notes, not an error"
+  },
+  "additionalFixes": [
+    {
+      "id": "GM-R01",
+      "status": "FIXED",
+      "detail": "queue/feed/preview acceptance can no longer become generation/install/recovery success; invalid/500/auth responses cannot become generic blockers"
+    },
+    {
+      "id": "GM-R02",
+      "status": "FIXED_LABEL; FULL_RELOAD_UNTESTED",
+      "detail": "P02 does not prove that auth/me returned a new CSRF token"
+    },
+    {
+      "id": "GM-R03",
+      "status": "FIXED_AND_REGRESSION_TESTED",
+      "detail": "real batch jobId normalized into taskId; task undefined fixed; result message column renamed execution notes"
+    },
+    {
+      "id": "GM-R04",
+      "status": "HARDENED",
+      "detail": "cleanup checks exact ordinary-user run root/temp parent and PID command identity; verification used --keep"
+    },
+    {
+      "id": "W6-R05",
+      "status": "FIXED_AND_LINUX_TESTED",
+      "detail": "unavailable upload completion now audits failure; completion rechecks current write permission before node I/O"
+    },
+    {
+      "id": "QA-R01",
+      "status": "FIXED",
+      "detail": "existing workflow error assertion now waits for asynchronous error while preserving the same rejection requirement"
+    }
+  ],
+  "finalLinuxFiles": {
+    "sourceHead": "9d3aa2a45bc3d5d45a788e708e1717aab08f83d5",
+    "uid": 1000,
+    "status": "PASS",
+    "exitCode": 0,
+    "topLevelPass": 45,
+    "skips": [
+      "--- SKIP: TestLocalStagingWindowsReservedNames (0.00s)"
+    ],
+    "elapsedSeconds": 0.91,
+    "logSHA256": "7fadb63f60f0ad6d2e28200f0eb3fb82897eef563c4917ccc9b93aca8d7bc1a1",
+    "servicesBefore": {
+      "serverfleet-controller.service": "active",
+      "serverfleet-agent.service": "activating",
+      "nginx.service": "active",
+      "mysql.service": "active"
+    },
+    "servicesAfter": {
+      "serverfleet-controller.service": "active",
+      "serverfleet-agent.service": "activating",
+      "nginx.service": "active",
+      "mysql.service": "active"
+    },
+    "scope": "final upload missing-channel failure audit and current write revocation regressions; no production data",
+    "existingServicesModified": false
+  },
+  "environment": {
+    "id": "ENV-W6-01",
+    "existingAgent": {
+      "unit": "serverfleet-agent.service",
+      "observations": [
+        {
+          "MainPID": "0",
+          "Result": "exit-code",
+          "NRestarts": "3060",
+          "ExecMainStatus": "1",
+          "ActiveState": "activating",
+          "SubState": "auto-restart"
+        },
+        {
+          "MainPID": "0",
+          "Result": "exit-code",
+          "NRestarts": "3062",
+          "ExecMainStatus": "1",
+          "ActiveState": "activating",
+          "SubState": "auto-restart"
+        }
+      ],
+      "readOnly": true,
+      "serviceModified": false
+    },
+    "status": "EXISTING_AGENT_AUTO_RESTART; NOT_MODIFIED_OR_DEPLOYED_BY_THIS_REVIEW",
+    "separateFromIsolatedTests": true
+  },
+  "artifacts": [
+    {
+      "source": "reports/wave6-release-candidate-check.log",
+      "artifact": "v09-wave6-final-check.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 2089723,
+      "sha256": "8c68ed7ead840dd1540286b8576d16d37bc1e76d230b932c92934a0721cd833d",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/check-all.json",
+      "artifact": "v09-wave6-final-check-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 359,
+      "sha256": "aca13271292b7d7ad0438f93c0d589f18f2429686c8ca4e3ca0ed7fa5881d832",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-release-candidate-security.log",
+      "artifact": "v09-wave6-final-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/check-security.json",
+      "artifact": "v09-wave6-final-security-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 128,
+      "sha256": "32d8b2c9e7cc783f1252f85cc3358d8e0bc8e60c240c11547e50c49bfeb08916",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-positive.log",
+      "artifact": "v09-wave6-final-positive-before-visual.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 5518,
+      "sha256": "b8e4d9026e44855993616a9e34b3eb87e3f11995e2238cc3a5b90c5d18f29075",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-positive-final.log",
+      "artifact": "v09-wave6-final-positive.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 5600,
+      "sha256": "5f5ccccb44d41a41c79f09df62ba65e9881b8ea0ff12db80089ae9ccc1be1fe4",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-positive-final/results.json",
+      "artifact": "v09-wave6-final-positive-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 4712,
+      "sha256": "d800f5894ede0a5e73f95aef6ca1d3fc9e4e39b2eebcc64d70107ed271489bb9",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-browser-live-before.log",
+      "artifact": "v09-wave6-final-live-before-audit-fix.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 10470,
+      "sha256": "d529e296e0007d945f31762ae0c91b02b4c423bf1e1ede449971081d4608a13e",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-browser-live-final.log",
+      "artifact": "v09-wave6-final-live.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 10370,
+      "sha256": "d73f3cb49cdb0925835f68a0cad7bf1f6348420bf2b0b8c3827dc0e322ead03d",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-browser-stub.log",
+      "artifact": "v09-wave6-final-stub.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 1837,
+      "sha256": "1398a9094e4644aa81900747cf4b7e9ba959eb31aeb03dafd4e78c6782f24851",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-render-before.log",
+      "artifact": "v09-wave6-final-render-before.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 22652,
+      "sha256": "612ce04b5ca3dfb70a0f2e9a59b21dc5f78ebefc7f5096bcb49837d772a233af",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-render-after.log",
+      "artifact": "v09-wave6-final-render-after.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 471,
+      "sha256": "6381165b85dfc4f044b366142342f0c03a1ffb2178c042f8268887b05b4c77ae",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-render-targeted-final.log",
+      "artifact": "v09-wave6-final-render-targeted.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 674,
+      "sha256": "455c10f95a1e064fa2045fa534151b406c5fb4d2d17164a3a59afb432e5ad7fd",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-upload-before.log",
+      "artifact": "v09-wave6-final-upload-before.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 374,
+      "sha256": "e8e9331f5714cc7b0b20eaf9001222fa5d4c347397642656597866070201c664",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-upload-after.log",
+      "artifact": "v09-wave6-final-upload-after.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 58,
+      "sha256": "c6513d3c2ba73e8155401a772a41b9334f26a23dcb32a1a2c01ec3a6f1aa2bc2",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-probe-status-final.log",
+      "artifact": "v09-wave6-final-probe-policy.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 398,
+      "sha256": "1208e466f61bd4e2f43ed63a4a611a82c5fcaee8b504cc66eb563c22e7bab260",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-all-three-check.log",
+      "artifact": "v09-wave6-final-async-first-fail.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 2097332,
+      "sha256": "a16925d22e1b078a72562bfdf04435bdc34736b8cc56b10acd9ffada79e1767b",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-async-first-result.json",
+      "artifact": "v09-wave6-final-async-first-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 403,
+      "sha256": "0ec01a787307ca810a51c018c5ff3da369f030e2e10870813e732caad0e9dd89",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/files-final-result.json",
+      "artifact": "v09-wave6-final-linux-files-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 845,
+      "sha256": "9597b9b4f8b7bfb4b7c92336de88b038af6789421070415eb6d36e8774ddce53",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/files-final-test.log",
+      "artifact": "v09-wave6-final-linux-files.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 7375,
+      "sha256": "7fadb63f60f0ad6d2e28200f0eb3fb82897eef563c4917ccc9b93aca8d7bc1a1",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/files-final-manifest.json",
+      "artifact": "v09-wave6-final-linux-files-manifest.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 442,
+      "sha256": "f4517ad40fd2da4b5fc6246057aa6b40fccec7fe2d1adf398198a98b3b7a0248",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/existing-agent-state.json",
+      "artifact": "v09-wave6-final-existing-agent-metadata.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 384,
+      "sha256": "367f72aebffc4240ba4d4fbb2b6cdfe545f1d96170619fa5f5b837273dcb6aae",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-gm-positive/positive-10-task-completed.png",
+      "artifact": "v09-wave6-final-task-before.png",
+      "bytes": 88917,
+      "sha256": "9a87262cfb8d01caf43efbb0390c8f8fd9c0fe20cbe3db38145e59657620fb81"
+    },
+    {
+      "source": "reports/wave6-gm-positive-final/positive-10-task-completed.png",
+      "artifact": "v09-wave6-final-task-after.png",
+      "bytes": 95060,
+      "sha256": "bd90ef02156fe3d335a01977ce36b191a5fe284ffc91c0f1d9e636c2a5cc3ab4"
+    },
+    {
+      "source": "reports/wave6-remote/files-final-run.py",
+      "artifact": "v09-wave6-final-files-run.py.txt",
+      "bytes": 2455,
+      "sha256": "2022da912dd4de13404f5cb977b83a4aa7862913462271de6fe408036262ee3a"
+    },
+    {
+      "source": "reports/wave6-remote/final-files.mjs",
+      "artifact": "v09-wave6-final-files-build.mjs.txt",
+      "bytes": 1298,
+      "sha256": "667c2f7ab86052d913a6bbb0d8bd2c816dcb6823b87369867ed6fa782293493a"
+    },
+    {
+      "source": "reports/archive-wave6-combined.mjs",
+      "artifact": "v09-wave6-final-archive.mjs.txt",
+      "bytes": 8925,
+      "sha256": "7a3376799fb94742f6b07b978d1c4b70fe31a44f3e89ee8fdc40ab0b6300dd85"
+    }
+  ],
+  "followup": "docs/development/sprints/v09-five-day/WAVE6-FOLLOWUP.md",
+  "shared": "docs/development/sprints/v09-five-day/WAVE6-SHARED.md",
+  "protectedSourcesUnchanged": true,
+  "legacyProtocolBaselineUnchanged": true,
+  "fullReleaseReady": false,
+  "completeV09": false,
+  "g2Frozen": false,
+  "physicalCrossMachineFileTested": false,
+  "arm64RuntimeTested": false,
+  "hard1C1GTested": false,
+  "realExternalAccountsUsed": false,
+  "existingRemoteServicesModified": false,
+  "remotePushed": false,
+  "agentsAutomaticallyStarted": 0,
+  "messagesSent": 0,
+  "finalBaselineRule": "final metadata/evidence main SHA and all three clean author worktree fast-forwards recorded in primary reports/v09-wave6-review-handoff.json and final user handoff"
+}
