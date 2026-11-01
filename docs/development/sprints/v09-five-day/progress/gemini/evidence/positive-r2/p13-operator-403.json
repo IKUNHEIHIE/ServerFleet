@@ -1,0 +1,39 @@
+{
+  "approverId": "CPk_XHiXxBR1i5WWjrdB5Z5MnAQ_MmtLRiouoB_vpFc",
+  "nodeId": "84789e6206bb355282dc515f76f08c30",
+  "taskId": "tsk_78fa04c70df0e3dfcc22e7d0",
+  "identityStore": "{\"approverUser\":{\"roleIds\":[\"operator\"],\"epoch\":1},\"approverIdPresent\":true,\"grantCount\":3,\"allGrants\":[{\"Value\":{\"grantId\":\"BFH4NCPNY19J8LlPoAdfTQtDMlokI_NsJwaqz-Ln7_c\",\"principalId\":\"CPk_XHiXxBR1i5WWjrdB5Z5MnAQ_MmtLRiouoB_vpFc\",\"resourceType\":\"node\",\"resourceId\":\"84789e6206bb355282dc515f76f08c30\",\"permissions\":[\"tasks.approve\",\"tasks.read\"],\"createdAt\":\"2026-11-01T15:13:49.934481496Z\"},\"Nodes\":[\"84789e6206bb355282dc515f76f08c30\"]},{\"Value\":{\"grantId\":\"IhVNdWx12iS8Zr8ejq73O4WPBSbMahP6-fAH1V1l9tc\",\"principalId\":\"-0W52mh65l_pgVhuOCR16hXTHjHichTkygnXaY-FusI\",\"resourceType\":\"node\",\"resourceId\":\"84789e6206bb355282dc515f76f08c30\",\"permissions\":[\"nodes.read\",\"nodes.write\",\"groups.write\",\"tasks.submit\",\"tasks.read\",\"tasks.command\",\"files.read\",\"files.write\",\"files.transfer\",\"servicegroups.read\",\"servicegroups.write\",\"gateway.read\",\"gateway.write\",\"gateway.provision\",\"publishing.read\",\"publishing.write\"],\"createdAt\":\"2026-11-01T15:11:26.785669048Z\"},\"Nodes\":[\"84789e6206bb355282dc515f76f08c30\"]},{\"Value\":{\"grantId\":\"dWbAGM3I2t_K0DC5ARKE4ywuNyJjNQ13kGWDG4kUsvQ\",\"principalId\":\"-0W52mh65l_pgVhuOCR16hXTHjHichTkygnXaY-FusI\",\"resourceType\":\"node\",\"resourceId\":\"bc402d89c5a839bab98d4627531c5fa8\",\"permissions\":[\"nodes.read\",\"tasks.submit\",\"tasks.read\",\"tasks.command\",\"files.read\",\"files.write\",\"files.transfer\"],\"createdAt\":\"2026-11-01T15:13:06.980373365Z\"},\"Nodes\":[\"bc402d89c5a839bab98d4627531c5fa8\"]}]}",
+  "http": {
+    "capturedAt": "2026-11-01T15:14:02.362Z",
+    "identity": {
+      "userId": "CPk_XHiXxBR1i5WWjrdB5Z5MnAQ_MmtLRiouoB_vpFc",
+      "roles": [
+        "operator"
+      ]
+    },
+    "taskRead": {
+      "status": 403,
+      "requestId": null,
+      "body": {
+        "error": {
+          "code": "forbidden",
+          "message": "request is not permitted"
+        }
+      }
+    },
+    "grants": [
+      {
+        "grantId": "BFH4NCPNY19J8LlPoAdfTQtDMlokI_NsJwaqz-Ln7_c",
+        "principalId": "CPk_XHiXxBR1i5WWjrdB5Z5MnAQ_MmtLRiouoB_vpFc",
+        "resourceType": "node",
+        "resourceId": "84789e6206bb355282dc515f76f08c30",
+        "permissions": [
+          "tasks.approve",
+          "tasks.read"
+        ],
+        "createdAt": "2026-11-01T15:13:49.934481496Z"
+      }
+    ],
+    "nodes": []
+  }
+}

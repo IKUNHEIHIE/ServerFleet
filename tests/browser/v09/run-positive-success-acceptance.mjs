@@ -70,6 +70,7 @@ const outDir = resolve(argValue("out", join(repoRoot, "docs", "development", "sp
 const skipBuild = hasFlag("skip-build");
 const keepTemp = hasFlag("keep");
 const DISTRO = argValue("distro", "");
+const aiHostMode = hasFlag("ai-host");
 
 const ADMIN_USER = "admin";
 const ADMIN_PASSWORD = "positive-admin-strong-password-01";
@@ -329,8 +330,8 @@ server.listen(Number(process.env.WEB_PORT), "0.0.0.0", () => console.log("webhos
 const PKI_SCRIPT = `
 set -eu
 work="$1"
-mkdir -p "$work/pki" "$work/db" "$work/logs" "$work/fixtures/src" "$work/fixtures/dst" "$work/agent-state-01" "$work/agent-state-02"
-chmod 700 "$work/agent-state-01" "$work/agent-state-02"
+mkdir -p "$work/pki" "$work/db" "$work/logs" "$work/fixtures/src" "$work/fixtures/dst" "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02"
+chmod 700 "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02"
 # localpki load() 兼容的本地 Agent CA：EC P-256、PKCS8 私钥、自签 CA（>12h 有效）。
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$work/pki/local-agent-ca-key.pem" 2>/dev/null
 openssl req -x509 -new -key "$work/pki/local-agent-ca-key.pem" -sha256 \\
@@ -345,6 +346,14 @@ printf "subjectAltName=DNS:localhost,IP:127.0.0.1\\nbasicConstraints=CA:FALSE\\n
 openssl x509 -req -in "$work/cert.csr" -CA "$work/pki/local-agent-ca.pem" -CAkey "$work/pki/local-agent-ca-key.pem" \\
   -days 2 -extfile "$work/cert-ext.cnf" -out "$work/cert.pem" 2>/dev/null
 openssl verify -CAfile "$work/pki/local-agent-ca.pem" "$work/cert.pem" >/dev/null
+# AI 上游证书：同一本地 CA 签发，SAN 覆盖 127.0.0.1/localhost（LocalTLSProviderConfig.Roots 信任）。
+openssl req -new -newkey ec -pkeyopt ec_paramgen_curve:P-256 -nodes \\
+  -keyout "$work/ai-upstream-key.pem" -subj "/CN=127.0.0.1" -out "$work/ai-upstream.csr" 2>/dev/null
+printf "subjectAltName=IP:127.0.0.1,DNS:localhost\nbasicConstraints=CA:FALSE\nkeyUsage=digitalSignature,keyEncipherment\nextendedKeyUsage=serverAuth
+" > "$work/ai-upstream-ext.cnf"
+openssl x509 -req -in "$work/ai-upstream.csr" -CA "$work/pki/local-agent-ca.pem" -CAkey "$work/pki/local-agent-ca-key.pem" \\
+  -days 2 -extfile "$work/ai-upstream-ext.cnf" -out "$work/ai-upstream-cert.pem" 2>/dev/null
+openssl verify -CAfile "$work/pki/local-agent-ca.pem" "$work/ai-upstream-cert.pem" >/dev/null
 echo pki-ready
 `;
 
@@ -376,6 +385,27 @@ exec "$work/controller" -db "$work/db/controller.db" -agent-pki-dir "$work/pki" 
   -tls-cert "$work/cert.pem" -tls-key "$work/cert-key.pem" \\
   -agent-authority "localhost:$apiPort" -agent-server-name localhost \\
   > "$work/logs/controller.log" 2>&1
+`;
+
+const RUN_FIXTUREHOST_SCRIPT = `#!/bin/sh
+set -eu
+work="$1"
+apiPort="$2"
+base="$3"
+fixturePort="$4"
+aiUpstreamPort="$5"
+cd "$work"
+# 测试专用验收宿主：同一组合（含 Agent 链路）+ LocalAIProvider + AIBudget。
+exec "$work/fixturehost" -db "$work/db/controller.db" -agent-pki-dir "$work/pki" \\
+  -listen "0.0.0.0:$apiPort" -origin "$base" \\
+  -tls-cert "$work/cert.pem" -tls-key "$work/cert-key.pem" \\
+  -agent-authority "localhost:$apiPort" -agent-server-name localhost \\
+  -ai-upstream-origin "https://127.0.0.1:$aiUpstreamPort" \\
+  -ai-upstream-ca "$work/pki/local-agent-ca.pem" \\
+  -ai-upstream-cert "$work/ai-upstream-cert.pem" -ai-upstream-key "$work/ai-upstream-key.pem" \\
+  -ai-upstream-listen "127.0.0.1:$aiUpstreamPort" \\
+  -fixture-listen "0.0.0.0:$fixturePort" \\
+  > "$work/logs/fixturehost.log" 2>&1
 `;
 
 const RUN_AGENT_ENROLL_SCRIPT = `#!/bin/sh
@@ -539,7 +569,18 @@ async function main() {
   console.log(`positive evidence out dir: ${outDir}`);
   console.log(`windows temp dir: ${tempDir}`);
 
-  console.log("cross-building linux/amd64 controller + agent (CGO_ENABLED=0 GOOS=linux)...");
+  console.log(aiHostMode
+    ? "cross-building linux/amd64 fixturehost + agent (CGO_ENABLED=0 GOOS=linux)..."
+    : "cross-building linux/amd64 controller + agent (CGO_ENABLED=0 GOOS=linux)...");
+  if (aiHostMode) {
+    await runCommand(goCommand(), ["build", "-o", join(tempDir, "fixturehost"), "./tests/browser/v09/fixturehost"], {
+      cwd: repoRoot, env: { ...process.env, CGO_ENABLED: "0", GOOS: "linux", GOARCH: "amd64" },
+    });
+  } else {
+    await runCommand(goCommand(), ["build", "-o", join(tempDir, "controller"), "./apps/controller"], {
+      cwd: repoRoot, env: { ...process.env, CGO_ENABLED: "0", GOOS: "linux", GOARCH: "amd64" },
+    });
+  }
   await runCommand(goCommand(), ["build", "-o", join(tempDir, "controller"), "./apps/controller"], {
     cwd: repoRoot, env: { ...process.env, CGO_ENABLED: "0", GOOS: "linux", GOARCH: "amd64" },
   });
@@ -552,6 +593,7 @@ async function main() {
   await writeFile(join(tempDir, "pki.sh"), PKI_SCRIPT.trimStart());
   await writeFile(join(tempDir, "run-webhost.sh"), RUN_WEBHOST_SCRIPT);
   await writeFile(join(tempDir, "run-controller.sh"), RUN_CONTROLLER_SCRIPT);
+  await writeFile(join(tempDir, "run-fixturehost.sh"), RUN_FIXTUREHOST_SCRIPT);
   await writeFile(join(tempDir, "run-agent-enroll.sh"), RUN_AGENT_ENROLL_SCRIPT);
   await writeFile(join(tempDir, "run-agent-connect.sh"), RUN_AGENT_CONNECT_SCRIPT);
   await writeFile(join(tempDir, "kill-pid.sh"), KILL_PID_SCRIPT);
@@ -579,11 +621,22 @@ async function main() {
 
   const wslTemp = toWslPath(tempDir);
   await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
-    `cp ${wslTemp}/controller ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/controller ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && sh ${workDir}/pki.sh ${workDir}`]);
+    `cp ${wslTemp}/${aiHostMode ? "fixturehost" : "controller"} ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/${aiHostMode ? "fixturehost" : "controller"} ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-fixturehost.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && sh ${workDir}/pki.sh ${workDir}`]);
   console.log("staged controller/agent/dist and prepared local PKI + localhost server certificate");
 
   const apiPort = await freePort();
   const webPort = await freePort();
+  const aiUpstreamPort = aiHostMode ? await freePort() : 0;
+  const fixturePort = aiHostMode ? await freePort() : 0;
+  const fixtureHostBase = () => new URL(base).hostname;
+  // 控制面统一走 WSL 内 curl：与 fixturehost 同命名空间，不依赖 Windows→WSL
+  // 的 per-port 转发（新端口转发在 NAT 模式下有延迟）；查询参数均为无空格 ID。
+  async function fixtureControl(path) {
+    const result = await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+      `curl -s "http://127.0.0.1:${fixturePort}${path}"`]).catch(error => ({ stdout: "", failed: error }));
+    if (result.failed) return { ok: false, error: String(result.failed.message ?? result.failed) };
+    try { return JSON.parse(cleanWslOutput(result.stdout)); } catch { return { ok: false, error: `unparseable control response: ${cleanWslOutput(result.stdout).slice(0, 160)}` }; }
+  }
 
   // Web 宿主先起（WSL 内 0.0.0.0），再从 Windows 探测可达基址：localhost 转发优先，回退 WSL IP。
   track(wslSpawn(distro, `${workDir}/run-webhost.sh`, [workDir, String(webPort), String(apiPort)]));
@@ -600,8 +653,17 @@ async function main() {
   }
   console.log(`browser base: ${base}; controller api (inside WSL): 127.0.0.1:${apiPort}`);
 
-  track(wslSpawn(distro, `${workDir}/run-controller.sh`, [workDir, String(apiPort), base]));
-  await waitForHttps(`${base}/healthz`, "controller through webhost", 60_000);
+  if (aiHostMode) {
+    track(wslSpawn(distro, `${workDir}/run-fixturehost.sh`, [workDir, String(apiPort), base, String(fixturePort), String(aiUpstreamPort)]));
+  } else {
+    track(wslSpawn(distro, `${workDir}/run-controller.sh`, [workDir, String(apiPort), base]));
+  }
+  await waitForHttps(`${base}/healthz`, "composed API through webhost", 60_000);
+  if (aiHostMode) {
+    const health = await fixtureControl("/fixture/health");
+    if (!health?.ok) throw new Error(`fixture control plane health failed: ${JSON.stringify(health).slice(0, 200)}`);
+    console.log("fixture control plane ready (via WSL loopback)");
+  }
 
   // 本机安装器：以 WSL node 写入 setup token 摘要（算法与 internal/auth credentialDigest 一致）。
   const tokenOut = await runCommand("wsl.exe", ["-d", distro, "--", "node", `${workDir}/setup-token.mjs`, `${workDir}/db/controller.db`]);
@@ -1004,10 +1066,24 @@ async function main() {
       }).then(() => evaluate(session, "document.body.innerText.includes('批准')")).catch(() => false);
     }
     if (!approved) {
-      // 失败取证：直接读身份存储真值（user 记录 + 全部 grants），区分状态错误与校验错误。
+      // 失败取证（GM-W6-R2）：保留 operator 角色不改；保存请求/响应/关联 ID 与
+      // 当次角色、授权、节点快照；403 是真实拒绝，必须 FAIL 而非 BLOCKED。
       const dump = await runCommand("wsl.exe", ["-d", distro, "--", "node", `${workDir}/identity-dump.mjs`, workDir, approverId, nodeId]).catch(error => ({ stdout: "", failed: error }));
+      const evidence = await evaluate(session, `(async () => {
+        const me = await fetch("/api/v1/auth/me", { headers: { "X-Requested-With": "ServerFleetWeb" }, credentials: "include", cache: "no-store" }).then(r => r.json());
+        const grants = await fetch("/api/v1/resource-grants", { headers: { "X-Requested-With": "ServerFleetWeb" }, credentials: "include", cache: "no-store" }).then(r => r.json()).catch(() => null);
+        const read = await fetch("/api/v1/tasks/\${failedTaskId}", { headers: { "X-Requested-With": "ServerFleetWeb" }, credentials: "include", cache: "no-store" });
+        const body = await read.json().catch(() => null);
+        const nodes = await fetch("/api/v1/nodes", { headers: { "X-Requested-With": "ServerFleetWeb" }, credentials: "include", cache: "no-store" }).then(r => r.json()).catch(() => null);
+        return { capturedAt: new Date().toISOString(), identity: { userId: me.userId, roles: me.roles },
+          taskRead: { status: read.status, requestId: body && body.requestId ? body.requestId : null, body: body },
+          grants: grants && grants.items ? grants.items.filter(entry => entry.principalId === me.userId) : null,
+          nodes: nodes && nodes.items ? nodes.items.map(entry => ({ id: entry.id, online: entry.online })) : null };
+      })()`).catch(error => ({ error: String(error) }));
+      await mkdir(outDir, { recursive: true });
+      await writeFile(join(outDir, "p13-operator-403.json"), JSON.stringify({ approverId, nodeId, taskId: failedTaskId, identityStore: cleanWslOutput(dump.stdout), http: evidence }, null, 2) + "\n");
       // 预期授权下的持续403是产品/夹具故障，不能降为环境阻塞。
-      throw new Error(`approver task read failed; this is not an environmental blocker — state dump: ${cleanWslOutput(dump.stdout).slice(0, 600)}`);
+      throw new Error(`approver task read failed; this is not an environmental blocker — http evidence: ${JSON.stringify(evidence && evidence.taskRead).slice(0, 240)}; state dump: ${cleanWslOutput(dump.stdout).slice(0, 400)}`);
     }
     await clickText(session, "批准", { exact: true });
     await fillField(session, "原因（可选）", "peer approved for rejection probe");
@@ -1116,6 +1192,14 @@ async function main() {
     if (readBack?.enabled !== true || readBack?.credentialRef !== credentialRef) {
       throw new Error(`model settings read-back mismatch: ${JSON.stringify(readBack).slice(0, 200)}`);
     }
+    const profileId = readBack?.id;
+    if (typeof profileId !== "string" || profileId.length === 0) throw new Error("model settings profile id missing");
+    if (aiHostMode) {
+      // 测试宿主模式：通过宿主控制面触发真实 AIBudget.Configure（admin gate 仍走
+      // 服务端管理员/owner/profile 校验），上游秘密只在此登记用于 Bearer 校验。
+      const configure = await fixtureControl(`/fixture/configure?owner=${adminUserId}&profile=${profileId}&secret=${syntheticKey}`);
+      if (!configure?.ok) throw new Error(`fixture budget configure failed: ${JSON.stringify(configure).slice(0, 200)}`);
+    }
     const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/ai/sessions', 'POST', {})`);
     if (![200, 201].includes(created.status)) throw new Error(`ai session create ${created.status}`);
     const sessionId = created.body?.sessionId ?? created.body?.id;
@@ -1137,6 +1221,19 @@ async function main() {
     if (generated.status === 200) {
       const text = generated.body?.redactedContent ?? generated.body?.content;
       if (!text) throw new Error("generate 200 without assistant content");
+      if (aiHostMode) {
+        if (text !== "fixture-assistant-terminal-ok") {
+          throw new Error(`assistant text mismatch: ${JSON.stringify(text).slice(0, 200)}`);
+        }
+        const messages = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/sessions/${sessionId}/messages')`);
+        const assistant = (messages.items ?? []).find(entry => entry.messageId === generated.body?.messageId && entry.role === "assistant");
+        if (!assistant || assistant.redactedContent !== text) throw new Error("assistant message not persisted verbatim");
+        const upstream = await fixtureControl("/fixture/upstream");
+        if (!upstream?.ok || upstream.requestCount < 1 || upstream.lastBearerOk !== true || upstream.lastModel !== "local-test-model") {
+          throw new Error(`fixture upstream evidence missing: ${JSON.stringify(upstream).slice(0, 200)}`);
+        }
+        return `AI generation reached a REAL terminal assistant message via LocalAIProvider + AIBudget (upstream requests=${upstream.requestCount}, bearer verified, model=${upstream.lastModel}); session ${sessionId}`;
+      }
       const messages = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/sessions/${sessionId}/messages')`);
       const assistant = (messages.items ?? []).find(entry => entry.messageId === generated.body?.messageId && entry.role === "assistant");
       if (!assistant) throw new Error("assistant message not persisted after generate");
