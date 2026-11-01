@@ -63,7 +63,7 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 	if !filepath.IsAbs(agentBinary) {
 		t.Fatal("explicit prebuilt actual Agent binary is required")
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 160*time.Second)
 	defer cancel()
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
@@ -462,13 +462,21 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 	host.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{pki.serverCert}, ClientAuth: tls.VerifyClientCertIfGiven, ClientCAs: pki.roots}
 	host.StartTLS()
 	for _, p := range processes {
-		deadline := time.Now().Add(10 * time.Second)
+		// Multiple intentional link failures above accumulate the resident
+		// Agent's real bounded backoff (up to 30s + jitter). Include its bounded
+		// handshake allowance; do not change production retry policy.
+		deadline := time.Now().Add(45 * time.Second)
 		for {
+			select {
+			case <-p.done:
+				t.Fatalf("resident Agent exited before reconnect: %s", readLogTail(filepath.Join(dir, "agent-0.log"))+readLogTail(filepath.Join(dir, "agent-1.log")))
+			default:
+			}
 			if _, e := composed.Links.FileConnection(ctx, p.node); e == nil {
 				break
 			}
 			if time.Now().After(deadline) {
-				t.Fatal("actual resident Agent did not reconnect")
+				t.Fatalf("actual resident Agent did not reconnect within bounded backoff/handshake: %s", readLogTail(filepath.Join(dir, "agent-0.log"))+readLogTail(filepath.Join(dir, "agent-1.log")))
 			}
 			time.Sleep(30 * time.Millisecond)
 		}
