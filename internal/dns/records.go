@@ -2,6 +2,9 @@ package dns
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/storage"
 )
@@ -57,7 +60,13 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionRecordCreate, "success", requestID, nil, ""))
 	})
 	if err != nil {
-		return Record{}, err
+		compCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		compErr := provider.DeleteRecord(compCtx, credential, zone.ProviderZoneID, providerID)
+		cancel()
+		if compErr != nil {
+			return Record{}, fmt.Errorf("dns: persist record failed and provider cleanup did not complete: %v", err)
+		}
+		return Record{}, fmt.Errorf("dns: persist record: %w", err)
 	}
 	return record, nil
 }
@@ -100,7 +109,13 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionRecordUpdate, "success", requestID, nil, ""))
 	})
 	if err != nil {
-		return Record{}, err
+		compCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		compErr := provider.UpdateRecord(compCtx, credential, zone.ProviderZoneID, current.ID, recordInputFrom(current))
+		cancel()
+		if compErr != nil {
+			return Record{}, fmt.Errorf("dns: persist record update failed and provider rollback did not complete: %v", err)
+		}
+		return Record{}, fmt.Errorf("dns: persist record update: %w", err)
 	}
 	return updated, nil
 }
@@ -124,13 +139,33 @@ func (s *Service) DeleteRecord(ctx context.Context, subjectID, requestID, record
 	if err != nil {
 		return err
 	}
+	providerAbsent := false
 	if err := provider.DeleteRecord(ctx, credential, zone.ProviderZoneID, current.ID); err != nil {
-		return ErrProviderFailed
+		if !errors.Is(err, ErrProviderNotFound) {
+			return ErrProviderFailed
+		}
+		providerAbsent = true
 	}
 	return s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		if err := s.repo.deleteRecord(txCtx, tx, recordID); err != nil {
 			return err
 		}
-		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionRecordDelete, "success", requestID, nil, ""))
+		reason := ""
+		if providerAbsent {
+			reason = "provider_record_absent"
+		}
+		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionRecordDelete, "success", requestID, nil, reason))
 	})
+}
+
+func recordInputFrom(record Record) RecordInput {
+	input := RecordInput{
+		Type: record.Type, Name: record.Name, Content: record.Content,
+		TTL: record.TTL, Proxied: record.Proxied,
+	}
+	if record.Type == RecordMX {
+		priority := record.Priority
+		input.Priority = &priority
+	}
+	return input
 }

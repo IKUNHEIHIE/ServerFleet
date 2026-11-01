@@ -13,17 +13,18 @@ import (
 )
 
 const (
-	ActionRead     = "publishing.read"
-	ActionWrite    = "publishing.write"
-	ActionCreate   = "publishing.plan_create"
-	ActionStage    = "publishing.stage"
-	ActionRun      = "publishing.run"
-	ActionRollback = "publishing.rollback"
+	ActionRead        = "publishing.read"
+	ActionWrite       = "publishing.write"
+	ActionCreate      = "publishing.plan_create"
+	ActionStage       = "publishing.stage"
+	ActionRun         = "publishing.run"
+	ActionRollback    = "publishing.rollback"
+	ActionRollbackAll = "publishing.rollback_all"
 )
 
 // ServiceActions returns the audit action catalog this domain emits.
 func ServiceActions() []string {
-	return []string{ActionCreate, ActionRead, ActionRollback, ActionRun, ActionStage, ActionWrite}
+	return []string{ActionCreate, ActionRead, ActionRollback, ActionRollbackAll, ActionRun, ActionStage, ActionWrite}
 }
 
 // AuditSink is the durable audit port. Final mutations append in the same

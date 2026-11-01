@@ -104,8 +104,9 @@ type rollbackCall struct {
 }
 
 type fakeStage struct {
-	kind publishing.StageKind
-	log  *callLog
+	kind        publishing.StageKind
+	log         *callLog
+	rollbackLog *callLog
 
 	mu            sync.Mutex
 	publishCount  int
@@ -136,6 +137,9 @@ func (f *fakeStage) recordRollback(planID string, result publishing.StageResult)
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.rollbackCalls = append(f.rollbackCalls, rollbackCall{PlanID: planID, Result: result})
+	if f.rollbackLog != nil {
+		f.rollbackLog.add(f.kind)
+	}
 	return f.rollbackErr
 }
 
@@ -206,23 +210,26 @@ func (f *fakeGateway) Rollback(_ context.Context, planID string, result publishi
 }
 
 type publicationPorts struct {
-	groups  *fakeGroupLookup
-	dns     *fakeDNS
-	cert    *fakeCertificate
-	gateway *fakeGateway
-	callLog *callLog
+	groups      *fakeGroupLookup
+	dns         *fakeDNS
+	cert        *fakeCertificate
+	gateway     *fakeGateway
+	callLog     *callLog
+	rollbackLog *callLog
 }
 
 func defaultPublicationPorts() *publicationPorts {
 	log := &callLog{}
+	rollbackLog := &callLog{}
 	return &publicationPorts{
 		groups: &fakeGroupLookup{refs: map[string]publishing.GroupRef{
 			"sg1": {ID: "sg1", Revision: 3, NodeIDs: []string{"n2", "n1"}},
 		}},
-		dns:     &fakeDNS{&fakeStage{kind: publishing.StageDNS, log: log, result: publishing.StageResult{Summary: "dns ok"}}},
-		cert:    &fakeCertificate{&fakeStage{kind: publishing.StageCertificate, log: log, result: publishing.StageResult{Summary: "certificate ok"}}},
-		gateway: &fakeGateway{&fakeStage{kind: publishing.StageGateway, log: log, result: publishing.StageResult{Summary: "gateway ok"}}},
-		callLog: log,
+		dns:         &fakeDNS{&fakeStage{kind: publishing.StageDNS, log: log, rollbackLog: rollbackLog, result: publishing.StageResult{Summary: "dns ok"}}},
+		cert:        &fakeCertificate{&fakeStage{kind: publishing.StageCertificate, log: log, rollbackLog: rollbackLog, result: publishing.StageResult{Summary: "certificate ok"}}},
+		gateway:     &fakeGateway{&fakeStage{kind: publishing.StageGateway, log: log, rollbackLog: rollbackLog, result: publishing.StageResult{Summary: "gateway ok"}}},
+		callLog:     log,
+		rollbackLog: rollbackLog,
 	}
 }
 

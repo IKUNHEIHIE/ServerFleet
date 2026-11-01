@@ -376,3 +376,47 @@ func pubDecode(t *testing.T, body []byte, destination any) {
 		t.Fatalf("decode %s: %v", body, err)
 	}
 }
+
+func TestHTTPRollbackAllReversesExecutedStages(t *testing.T) {
+	fixture := newPublicationFixture(t)
+	server := newPublishingServer(t, fixture)
+	create := pubJSON(t, server.URL+"/api/v1/publications", http.MethodPost, publicationDraft())
+	if create.StatusCode != http.StatusAccepted {
+		t.Fatalf("create status = %d body=%s", create.StatusCode, create.Body)
+	}
+	var created struct {
+		ID string `json:"id"`
+	}
+	pubDecode(t, create.Body, &created)
+	run := pubJSON(t, server.URL+"/api/v1/publications/"+created.ID+"/run", http.MethodPost, nil)
+	if run.StatusCode != http.StatusOK {
+		t.Fatalf("run status = %d body=%s", run.StatusCode, run.Body)
+	}
+	rollback := pubJSON(t, server.URL+"/api/v1/publications/"+created.ID+"/rollback-all", http.MethodPost, nil)
+	if rollback.StatusCode != http.StatusOK {
+		t.Fatalf("rollback-all status = %d body=%s", rollback.StatusCode, rollback.Body)
+	}
+	var body struct {
+		Status string `json:"status"`
+		Stages []struct {
+			Name   string `json:"name"`
+			Status string `json:"status"`
+		} `json:"stages"`
+	}
+	pubDecode(t, rollback.Body, &body)
+	if body.Status != "failed" || len(body.Stages) != 3 {
+		t.Fatalf("rollback-all body = %+v", body)
+	}
+	if plan, _ := fixture.plan(t, created.ID); plan.Status != publishing.PlanCanceled {
+		t.Fatalf("persisted plan = %+v", plan)
+	}
+	for _, stage := range body.Stages {
+		if stage.Status != "rolled_back" {
+			t.Fatalf("stage = %+v", stage)
+		}
+	}
+	if order := fixture.ports.rollbackLog.snapshot(); len(order) != 3 ||
+		order[0] != publishing.StageGateway || order[1] != publishing.StageCertificate || order[2] != publishing.StageDNS {
+		t.Fatalf("rollback order = %v", order)
+	}
+}

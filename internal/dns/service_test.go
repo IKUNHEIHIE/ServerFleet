@@ -29,6 +29,7 @@ type fakeProvider struct {
 	testErr     error
 	zoneErr     error
 	createErr   error
+	deleteErr   error
 	createCalls int
 	updateCalls int
 	deleteCalls int
@@ -70,7 +71,7 @@ func (p *fakeProvider) UpdateRecord(context.Context, dns.CredentialRef, string, 
 
 func (p *fakeProvider) DeleteRecord(context.Context, dns.CredentialRef, string, string) error {
 	p.deleteCalls++
-	return nil
+	return p.deleteErr
 }
 
 type dnsFixture struct {
