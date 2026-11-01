@@ -498,22 +498,25 @@ func parseJWK(raw json.RawMessage) (*ecdsa.PublicKey, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &ecdsa.PublicKey{Curve: elliptic.P256(), X: new(big.Int).SetBytes(x), Y: new(big.Int).SetBytes(y)}, nil
+	point := make([]byte, 0, 65)
+	point = append(point, 4)
+	point = append(point, x...)
+	point = append(point, y...)
+	return ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
 }
 
 func canonicalJWK(public *ecdsa.PublicKey) []byte {
-	padded := func(value *big.Int) []byte {
-		buffer := make([]byte, 32)
-		copy(buffer[32-len(value.Bytes()):], value.Bytes())
-		return buffer
+	raw, err := public.Bytes()
+	if err != nil || len(raw) != 65 {
+		return nil
 	}
-	raw, _ := json.Marshal(struct {
+	encoded, _ := json.Marshal(struct {
 		Crv string `json:"crv"`
 		Kty string `json:"kty"`
 		X   string `json:"x"`
 		Y   string `json:"y"`
-	}{Crv: "P-256", Kty: "EC", X: base64.RawURLEncoding.EncodeToString(padded(public.X)), Y: base64.RawURLEncoding.EncodeToString(padded(public.Y))})
-	return raw
+	}{Crv: "P-256", Kty: "EC", X: base64.RawURLEncoding.EncodeToString(raw[1:33]), Y: base64.RawURLEncoding.EncodeToString(raw[33:])})
+	return encoded
 }
 
 func writeACMEMap(w http.ResponseWriter, value any) {

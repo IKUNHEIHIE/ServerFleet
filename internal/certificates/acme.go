@@ -730,13 +730,17 @@ func findDNS01(challenges []acmeChallenge) (acmeChallenge, bool) {
 
 func acmeJWKFromKey(publicKey crypto.PublicKey) (*acmeJWK, error) {
 	key, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok || key.Curve != elliptic.P256() || key.X == nil || key.Y == nil {
+	if !ok || key.Curve != elliptic.P256() {
 		return nil, fmt.Errorf("%w: only ecdsa p-256 is supported", ErrACMESigner)
+	}
+	raw, err := key.Bytes()
+	if err != nil || len(raw) != 65 || raw[0] != 4 {
+		return nil, fmt.Errorf("%w: unsupported public key encoding", ErrACMESigner)
 	}
 	return &acmeJWK{
 		Crv: "P-256", Kty: "EC",
-		X: base64.RawURLEncoding.EncodeToString(pad32(key.X)),
-		Y: base64.RawURLEncoding.EncodeToString(pad32(key.Y)),
+		X: base64.RawURLEncoding.EncodeToString(raw[1:33]),
+		Y: base64.RawURLEncoding.EncodeToString(raw[33:]),
 	}, nil
 }
 
@@ -747,13 +751,6 @@ func acmeThumbprint(jwk *acmeJWK) (string, error) {
 	}
 	sum := sha256.Sum256(canonical)
 	return base64.RawURLEncoding.EncodeToString(sum[:]), nil
-}
-
-func pad32(value *big.Int) []byte {
-	raw := value.Bytes()
-	out := make([]byte, 32)
-	copy(out[32-len(raw):], raw)
-	return out
 }
 
 func parseACMEChain(chain []byte) (ACMEIssued, error) {
@@ -796,10 +793,7 @@ func normalizeACMEDomain(raw string) (string, error) {
 	if len(domain) > 253 {
 		return "", fmt.Errorf("%w: common name", ErrACMEConfig)
 	}
-	base := domain
-	if strings.HasPrefix(base, "*.") {
-		base = base[2:]
-	}
+	base := strings.TrimPrefix(domain, "*.")
 	labels := strings.Split(base, ".")
 	if len(labels) < 2 {
 		return "", fmt.Errorf("%w: common name", ErrACMEConfig)
