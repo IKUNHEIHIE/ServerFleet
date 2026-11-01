@@ -13,3 +13,5 @@ apis:
     root: api/openapi/g2-merged-candidate.yaml
   xray:
     root: api/openapi/xray-candidate.yaml
+  v09-r6-ai:
+    root: api/openapi/revisions/v09-r6/ai-candidate.yaml

@@ -49,8 +49,10 @@ func main() {
 		Handler:           handler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
-		WriteTimeout:      10 * time.Second,
-		IdleTimeout:       30 * time.Second,
+		// Explicit AI generation is bounded at 35s, including provider and
+		// post-borrow checks. Allow its verified response to reach the browser.
+		WriteTimeout: 40 * time.Second,
+		IdleTimeout:  30 * time.Second,
 	}
 	go func() {
 		<-ctx.Done()

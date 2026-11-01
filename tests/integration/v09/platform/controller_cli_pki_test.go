@@ -464,6 +464,15 @@ func runAgentCLI(t *testing.T, ctx context.Context, binary string, args ...strin
 // binary from pending enrollment through mTLS WSS admission, one heartbeat and
 // metrics sample, one controlled tasks.command offer and a clean disconnect.
 func TestWave5ControllerAndAgentCLIFullLoopWSSAndTask(t *testing.T) {
+	runControllerAgentCLILoop(t, false)
+}
+
+func TestWave6ControllerAndResidentAgentCLI(t *testing.T) {
+	runControllerAgentCLILoop(t, true)
+}
+
+func runControllerAgentCLILoop(t *testing.T, resident bool) {
+	t.Helper()
 	if runtime.GOOS != "linux" {
 		t.Skip("Controller Agent enrollment and WSS admission are Linux-only by policy; run this test on Linux (WSL Ubuntu) for full-loop evidence")
 	}
@@ -743,10 +752,13 @@ func TestWave5ControllerAndAgentCLIFullLoopWSSAndTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	connectCmd := exec.Command(agentBinary,
-		"-connect-once", "-state-dir", stateDir, "-controller-url", origin,
-		"-root-cert", material.CertificatePath, "-node-name", "wave5-cli-node", "-wait-task-ms", "60000",
-	)
+	connectArgs := []string{"-state-dir", stateDir, "-controller-url", origin, "-root-cert", material.CertificatePath, "-node-name", "wave5-cli-node"}
+	if resident {
+		connectArgs = append(connectArgs, "-serve")
+	} else {
+		connectArgs = append(connectArgs, "-connect-once", "-wait-task-ms", "60000")
+	}
+	connectCmd := exec.Command(agentBinary, connectArgs...)
 	connectCmd.Stdout, connectCmd.Stderr = connectOut, connectErr
 	if err := connectCmd.Start(); err != nil {
 		t.Fatal(err)
@@ -829,27 +841,29 @@ func TestWave5ControllerAndAgentCLIFullLoopWSSAndTask(t *testing.T) {
 		t.Fatalf("missing job id: %s", data)
 	}
 
-	var connectErrResult error
-	select {
-	case connectErrResult = <-connectDone:
-	case <-time.After(70 * time.Second):
-		t.Fatalf("agent -connect-once did not exit: %s", readLogTail(connectErrPath))
-	}
-	stopConnect()
-	if connectErrResult != nil {
-		t.Fatalf("agent -connect-once failed: %v out=%s err=%s controller=%s", connectErrResult, readLogTail(connectOutPath), readLogTail(connectErrPath), readLogTail(logPath))
-	}
-	var connectResult struct {
-		NodeID        string `json:"nodeId"`
-		ConnectionID  string `json:"connectionId"`
-		HeartbeatSent bool   `json:"heartbeatSent"`
-		MetricsSent   bool   `json:"metricsSent"`
-		TasksExecuted int    `json:"tasksExecuted"`
-		NodeName      string `json:"nodeName"`
-	}
-	decode(t, []byte(readLogTail(connectOutPath)), &connectResult)
-	if connectResult.NodeID != issued.NodeID || connectResult.ConnectionID == "" || !connectResult.HeartbeatSent || !connectResult.MetricsSent || connectResult.TasksExecuted != 1 || connectResult.NodeName != "wave5-cli-node" {
-		t.Fatalf("connect result = %s", readLogTail(connectOutPath))
+	if !resident {
+		var connectErrResult error
+		select {
+		case connectErrResult = <-connectDone:
+		case <-time.After(70 * time.Second):
+			t.Fatalf("agent -connect-once did not exit: %s", readLogTail(connectErrPath))
+		}
+		stopConnect()
+		if connectErrResult != nil {
+			t.Fatalf("agent -connect-once failed: %v out=%s err=%s controller=%s", connectErrResult, readLogTail(connectOutPath), readLogTail(connectErrPath), readLogTail(logPath))
+		}
+		var connectResult struct {
+			NodeID        string `json:"nodeId"`
+			ConnectionID  string `json:"connectionId"`
+			HeartbeatSent bool   `json:"heartbeatSent"`
+			MetricsSent   bool   `json:"metricsSent"`
+			TasksExecuted int    `json:"tasksExecuted"`
+			NodeName      string `json:"nodeName"`
+		}
+		decode(t, []byte(readLogTail(connectOutPath)), &connectResult)
+		if connectResult.NodeID != issued.NodeID || connectResult.ConnectionID == "" || !connectResult.HeartbeatSent || !connectResult.MetricsSent || connectResult.TasksExecuted != 1 || connectResult.NodeName != "wave5-cli-node" {
+			t.Fatalf("connect result = %s", readLogTail(connectOutPath))
+		}
 	}
 
 	taskDeadline := time.Now().Add(30 * time.Second)
@@ -919,6 +933,66 @@ func TestWave5ControllerAndAgentCLIFullLoopWSSAndTask(t *testing.T) {
 	agentEvents := auditItems("action=nodes.agent_update&resourceId=" + issued.NodeID)
 	if len(agentEvents) < 2 {
 		t.Fatalf("agent state audit = %+v", agentEvents)
+	}
+	if resident {
+		// Observe another heartbeat AND metrics update on the existing link,
+		// then execute another task without restarting the Agent.
+		deadline := time.Now().Add(45 * time.Second)
+		for len(auditItems("action=nodes.agent_update&resourceId="+issued.NodeID)) < len(agentEvents)+2 {
+			select {
+			case <-connectWaited:
+				t.Fatal("resident Agent exited between tasks")
+			default:
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("resident heartbeat/metrics did not continue")
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		status, data = doReq(admin, "POST", "/api/v1/tasks", map[string]any{
+			"name": "wave6 resident second task", "command": "tasks.command", "dryRun": false,
+			"target": map[string]any{"type": "node_ids", "nodeIds": []string{issued.NodeID}},
+		}, csrf)
+		if status != http.StatusAccepted {
+			t.Fatalf("second task = %d: %s", status, data)
+		}
+		decode(t, data, &submitted)
+		deadline = time.Now().Add(20 * time.Second)
+		for {
+			status, data = doReq(admin, "GET", "/api/v1/tasks/"+submitted.JobID, nil, "")
+			if status != http.StatusOK {
+				t.Fatalf("second task lookup = %d: %s", status, data)
+			}
+			var detail struct {
+				State   string `json:"state"`
+				Results []struct {
+					State string `json:"state"`
+				} `json:"results"`
+			}
+			decode(t, data, &detail)
+			if detail.State == "completed" {
+				if len(detail.Results) != 1 || detail.Results[0].State != "succeeded" {
+					t.Fatalf("second task target = %s", data)
+				}
+				break
+			}
+			if detail.State == "failed" || detail.State == "unknown" || time.Now().After(deadline) {
+				t.Fatalf("second task = %s", data)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		if err := connectCmd.Process.Signal(os.Interrupt); err != nil {
+			t.Fatal(err)
+		}
+		select {
+		case err := <-connectDone:
+			if err != nil {
+				t.Fatalf("resident Agent stop = %v: %s", err, readLogTail(connectErrPath))
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatal("resident Agent did not stop on signal")
+		}
+		stopConnect()
 	}
 
 	offlineDeadline := time.Now().Add(10 * time.Second)

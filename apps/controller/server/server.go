@@ -42,6 +42,8 @@ import (
 // Config configures the composed Controller management runtime.
 type Config struct {
 	DBPath                 string
+	CredentialKeyDir       string
+	AIGenerationQuota      ai.GenerationQuota
 	Origin                 string
 	StagingDir             string
 	Dispatcher             tasks.Dispatcher
@@ -52,6 +54,9 @@ type Config struct {
 	CertificateIssuer      certificates.Issuer
 	PublishingBridge       publishing.LocalBridgeConfig
 	UploadTransport        files.UploadTransport
+	DownloadTransport      files.DownloadTransport
+	SMTPSender             notifications.SMTPSender
+	QQSender               notifications.QQSender
 	Now                    func() time.Time
 
 	// Agent transport composition. Enrollment and the Agent WSS link stay
@@ -67,7 +72,13 @@ type Config struct {
 	PluginTrustCapabilities map[string]bool
 
 	// BackupDir defaults to a private directory beside the SQLite database.
-	BackupDir string
+	BackupDir       string
+	UpdateCheck     func(context.Context, string) (updates.CheckResult, error)
+	UpdatePlan      func(context.Context, string) (updates.Plan, error)
+	UpdateApply     func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
+	RecoveryExecute func(context.Context, recovery.Plan) (string, error)
+	PluginRuntime   plugins.AdmittedRuntime
+	XrayTaskHost    *plugins.XrayTaskHost
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
@@ -105,11 +116,14 @@ type Server struct {
 	Links                *transport.ControllerLinks
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
-	AI             *ai.SessionService
-	AIConversation *ai.ConversationService
-	AIManagement   *ai.ManagementHTTP
-	AIMessagesHTTP *ai.MessagesHTTP
-	AIEventsHTTP   *ai.MessageEventsHTTP
+	AI               *ai.SessionService
+	AIConversation   *ai.ConversationService
+	AIRuntime        *ai.BYOKRuntime
+	AIModelsHTTP     *ai.ModelSettingsHTTP
+	AIGenerationHTTP *ai.GenerationHTTP
+	AIManagement     *ai.ManagementHTTP
+	AIMessagesHTTP   *ai.MessagesHTTP
+	AIEventsHTTP     *ai.MessageEventsHTTP
 
 	Plugins          *plugins.LifecycleManager
 	PluginRepository plugins.RepositoryStore
@@ -380,6 +394,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	var s *Server
 	cleanup := func(cause error) (*Server, error) {
+		if s != nil && s.AIRuntime != nil {
+			s.AIRuntime.Close()
+		}
 		if s != nil && s.PluginVault != nil {
 			_ = s.PluginVault.Close()
 			s.PluginVault = nil
@@ -501,12 +518,27 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return cleanup(err)
 	}
-	credentialsService, err := auth.NewCredentialService(
-		identityService,
-		"local-default",
-		map[string][]byte{"local-default": []byte("0123456789abcdef0123456789abcdef")},
-		func(context.Context, auth.CredentialOperation) error { return auth.ErrDenied },
-		func(context.Context, string, string) ([]string, error) { return []string{}, nil },
+	var aiConversation *ai.ConversationService
+	keyDir := cfg.CredentialKeyDir
+	if keyDir == "" {
+		absoluteDB, pathErr := filepath.Abs(cfg.DBPath)
+		if pathErr != nil {
+			return cleanup(pathErr)
+		}
+		keyDir = filepath.Join(filepath.Dir(absoluteDB), "credential-keys")
+	}
+	if err := auth.EnsureCredentialKeyDirectory(keyDir); err != nil {
+		return cleanup(err)
+	}
+	credentialsService, err := auth.NewPersistentCredentialService(
+		ctx, identityService, keyDir,
+		func(ctx context.Context, op auth.CredentialOperation) error {
+			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" {
+				return auth.ErrDenied
+			}
+			return aiConversation.CheckCredentialOperation(ctx, op)
+		},
+		nil, // No registered reference reader: report unavailable, never a false empty list.
 	)
 	if err != nil {
 		return cleanup(err)
@@ -601,9 +633,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err := s.setupWorkflows(); err != nil {
 		return cleanup(err)
 	}
-	if err := s.setupAI(); err != nil {
+	if err := s.setupAI(cfg); err != nil {
 		return cleanup(err)
 	}
+	aiConversation = s.AIConversation
 	if err := s.setupPlugins(cfg); err != nil {
 		return cleanup(err)
 	}
@@ -613,13 +646,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 
 	taskBridge := &composedTaskBridge{tasks: tasksService}
 	uploads := cfg.UploadTransport
-	if uploads == nil {
-		localTransport, err := files.NewLocalStagingTransport(filepath.Join(stagingDir, "nodes"))
-		if err != nil {
-			return cleanup(err)
-		}
-		s.FilesTransport = localTransport
-		uploads = localTransport
+	if localTransport, ok := uploads.(*files.LocalStagingTransport); ok {
+		s.FilesTransport = localTransport // Explicit local test adapter only.
+	}
+	downloads := cfg.DownloadTransport
+	if downloads == nil {
+		downloads, _ = uploads.(files.DownloadTransport)
 	}
 	filesService, err := files.NewService(files.Options{
 		DB:         db,
@@ -629,6 +661,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Submitter:  taskBridge,
 		Canceller:  taskBridge,
 		Uploads:    uploads,
+		Downloads:  downloads,
 		StagingDir: stagingDir,
 		Now:        now,
 	})
@@ -653,6 +686,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Repo:       notificationsRepo,
 		Audit:      auditRecorder,
 		Authorizer: authorizer,
+		SMTPSender: cfg.SMTPSender,
+		QQSender:   cfg.QQSender,
 		Now:        now,
 	})
 	if err != nil {
@@ -780,6 +815,9 @@ func (s *Server) Close() error {
 			return errors.New("controller: task scheduler did not stop")
 		}
 		s.runCancel = nil
+	}
+	if s.AIRuntime != nil {
+		s.AIRuntime.Close()
 	}
 	if s.PluginVault != nil {
 		_ = s.PluginVault.Close()
@@ -996,6 +1034,13 @@ func (s *Server) registerAIRoutes() {
 		} {
 			s.mux.Handle(pattern, s.AIManagement)
 		}
+	}
+	if s.AIModelsHTTP != nil {
+		s.mux.Handle("GET /api/v1/ai/model-settings", s.AIModelsHTTP)
+		s.mux.Handle("PUT /api/v1/ai/model-settings", s.AIModelsHTTP)
+	}
+	if s.AIGenerationHTTP != nil {
+		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate", s.AIGenerationHTTP)
 	}
 	if s.AIMessagesHTTP != nil {
 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)

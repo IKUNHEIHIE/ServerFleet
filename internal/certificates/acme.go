@@ -1,6 +1,7 @@
 package certificates
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -326,6 +327,25 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 	if err != nil {
 		_ = cleanup()
 		return ACMEIssued{}, err
+	}
+	// A successful ACME order is not proof that its download belongs to our
+	// request. Bind the result to this CSR, domain and current validity window.
+	block, _ := pem.Decode(issued.CertificatePEM)
+	leaf, leafErr := x509.ParseCertificate(block.Bytes)
+	requestCSR, csrErr := x509.ParseCertificateRequest(csr)
+	now := time.Now()
+	nameOK := leafErr == nil && leaf.VerifyHostname(commonName) == nil
+	if strings.HasPrefix(commonName, "*.") && leafErr == nil {
+		nameOK = false
+		for _, name := range leaf.DNSNames {
+			if strings.EqualFold(name, commonName) {
+				nameOK = true
+			}
+		}
+	}
+	if leafErr != nil || csrErr != nil || !nameOK || !bytes.Equal(leaf.RawSubjectPublicKeyInfo, requestCSR.RawSubjectPublicKeyInfo) || leaf.IsCA || now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) {
+		_ = cleanup()
+		return ACMEIssued{}, ErrACMEIssuance
 	}
 	if cleanupErr := cleanup(); cleanupErr != nil {
 		return issued, fmt.Errorf("%w: dns cleanup: %v", ErrACMEChallenge, cleanupErr)

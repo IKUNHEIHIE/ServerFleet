@@ -16,7 +16,7 @@ import (
 	"serverfleet.local/serverfleet/internal/tasks"
 )
 
-func (s *Server) setupAI() error {
+func (s *Server) setupAI(cfg Config) error {
 	store, err := newAISessionStore(s.DB, s.Audit)
 	if err != nil {
 		return err
@@ -30,18 +30,26 @@ func (s *Server) setupAI() error {
 	if err != nil {
 		return err
 	}
-	conversation, err := ai.NewConversationService(sessions, ai.ConversationConfig{
-		Profile: func(context.Context, string) (ai.ModelProfile, error) {
-			return ai.ModelProfile{}, ai.ErrModelUnavailable
-		},
-		Filter: s.aiContentFilter,
-		Generate: func(context.Context, ai.GenerationRequest, func(string) error) error {
-			return ai.ErrModelUnavailable
-		},
-	})
+	quota := cfg.AIGenerationQuota
+	if quota == nil {
+		quota = func(context.Context, ai.GenerationRequest) error { return ai.ErrModelUnavailable }
+	}
+	backend, err := ai.NewBYOKRuntime(sessions, s.Credentials, s.aiContentFilter, quota)
 	if err != nil {
 		return err
 	}
+	conversation := backend.Conversation
+	modelsHTTP, err := ai.NewModelSettingsHTTP(backend.Models, s.aiAuthenticate)
+	if err != nil {
+		backend.Close()
+		return err
+	}
+	generationHTTP, err := ai.NewGenerationHTTP(conversation, s.aiActorContext, s.aiCommitGate)
+	if err != nil {
+		backend.Close()
+		return err
+	}
+	s.AIRuntime, s.AIModelsHTTP, s.AIGenerationHTTP = backend, modelsHTTP, generationHTTP
 	messages, err := ai.NewMessagesHTTP(conversation, s.aiActorContext, s.aiCommitGate)
 	if err != nil {
 		return err

@@ -242,7 +242,7 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 		if progress != nil {
 			progress(outcome)
 		}
-		copied, destinationPath, resultStatus, err := c.transferItem(itemCtx, c.spoolDir, source.Download, destination.Upload, transfer, item)
+		copied, destinationPath, resultStatus, err := c.transferItem(itemCtx, c.spoolDir, source.Download, destination.Upload, transfer, item, execution)
 		outcome.Items[len(outcome.Items)-1] = ItemUpdate{
 			SourcePath: item.SourcePath, DestinationPath: destinationPath, Status: resultStatus,
 			BytesCopied: copied, ErrorCode: "", ErrorMessage: "",
@@ -275,7 +275,10 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 	return outcome, nil
 }
 
-func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string, download DownloadTransport, upload UploadTransport, transfer Transfer, item TransferItem) (int64, string, ItemStatus, error) {
+func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string, download DownloadTransport, upload UploadTransport, transfer Transfer, item TransferItem, execution TransferExecution) (int64, string, ItemStatus, error) {
+	if err := c.authorizeExecution(ctx, execution, transfer); err != nil {
+		return 0, item.DestinationPath, ItemFailed, ErrAgentUnauthorized
+	}
 	spool, err := os.CreateTemp(spoolDir, "spool-*")
 	if err != nil {
 		return 0, item.DestinationPath, ItemFailed, fmt.Errorf("%w: %v", ErrSpoolUnavailable, err)
@@ -304,6 +307,10 @@ func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string,
 		return written, item.DestinationPath, ItemFailed, fmt.Errorf("%w: %v", ErrSpoolUnavailable, err)
 	}
 	digest := hex.EncodeToString(hasher.Sum(nil))
+	// A slow source read must not keep destination write authority alive.
+	if err := c.authorizeExecution(ctx, execution, transfer); err != nil {
+		return written, item.DestinationPath, ItemFailed, ErrAgentUnauthorized
+	}
 	destinationPath := item.DestinationPath
 	var result UploadResult
 	if policyUpload, ok := upload.(PolicyUploadTransport); ok {
@@ -330,6 +337,9 @@ func (c *TransferCoordinator) transferItem(ctx context.Context, spoolDir string,
 	}
 	if result.Bytes != written || result.SHA256 != digest {
 		return written, destinationPath, ItemFailed, ErrAgentChecksum
+	}
+	if err := c.authorizeExecution(ctx, execution, transfer); err != nil {
+		return written, destinationPath, ItemFailed, ErrAgentUnauthorized
 	}
 	return written, destinationPath, ItemCopied, nil
 }

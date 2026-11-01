@@ -37,7 +37,8 @@ func (s *Server) setupUpdatesRecovery(cfg Config) error {
 			}
 			return updates.Principal{SubjectID: identity.SubjectID, RequestID: requestID, Administrator: identity.Administrator}, nil
 		},
-		Now: s.now,
+		Now:   s.now,
+		Check: cfg.UpdateCheck, Plan: cfg.UpdatePlan, Apply: cfg.UpdateApply,
 	})
 	if err != nil {
 		return err
@@ -51,6 +52,7 @@ func (s *Server) setupUpdatesRecovery(cfg Config) error {
 			return recovery.Principal{SubjectID: identity.SubjectID, RequestID: requestID, Administrator: identity.Administrator}, nil
 		},
 		VerifyBackup: s.verifyBackupFile,
+		Execute:      cfg.RecoveryExecute,
 		Now:          s.now,
 	})
 	if err != nil {

@@ -52,7 +52,7 @@ func (s *Server) setupPlugins(cfg Config) error {
 		}
 		return nil
 	}
-	manager, err := plugins.NewLifecycleManager(store, vault, trust, gate, nil)
+	manager, err := plugins.NewLifecycleManager(store, vault, trust, gate, cfg.PluginRuntime)
 	if err != nil {
 		return err
 	}
@@ -74,7 +74,13 @@ func (s *Server) setupPlugins(cfg Config) error {
 	if err != nil {
 		return err
 	}
-	xray, err := plugins.NewXrayDeclarativeHTTP(func(r *http.Request) (plugins.LifecyclePrincipal, error) {
+	newXrayHTTP := plugins.NewXrayDeclarativeHTTP
+	if cfg.XrayTaskHost != nil {
+		newXrayHTTP = func(a plugins.PluginAuthenticator, state func(context.Context) (plugins.Installation, error), nodes func(context.Context) ([]plugins.XrayNodeView, error)) (*plugins.XrayDeclarativeHTTP, error) {
+			return plugins.NewXrayHTTPWithTaskHost(a, state, nodes, *cfg.XrayTaskHost)
+		}
+	}
+	xray, err := newXrayHTTP(func(r *http.Request) (plugins.LifecyclePrincipal, error) {
 		identity, requestID, err := s.authenticateIdentity(r)
 		if err != nil {
 			return plugins.LifecyclePrincipal{}, err

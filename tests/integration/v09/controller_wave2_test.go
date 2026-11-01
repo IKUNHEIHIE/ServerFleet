@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/server"
+	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/nodes"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
@@ -41,14 +42,19 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	dir := t.TempDir()
 	dbPath := filepath.Join(dir, "controller-wave2.db")
 	dispatcher := &wave2Dispatcher{}
+	localFiles, err := files.NewLocalStagingTransport(filepath.Join(dir, "local-file-fixture"))
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	tlsServer := httptest.NewUnstartedServer(nil)
 	origin := "https://" + tlsServer.Listener.Addr().String()
 	composed, err := server.New(ctx, server.Config{
-		DBPath:     dbPath,
-		Origin:     origin,
-		StagingDir: filepath.Join(dir, "staging"),
-		Dispatcher: dispatcher,
+		DBPath:          dbPath,
+		Origin:          origin,
+		StagingDir:      filepath.Join(dir, "staging"),
+		Dispatcher:      dispatcher,
+		UploadTransport: localFiles,
 	})
 	if err != nil {
 		t.Fatalf("server.New: %v", err)
@@ -529,9 +535,9 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		t.Fatalf("list publications = %d: %s", resp.StatusCode, data)
 	}
 
-	// 6. Verify Wave 5 composed defaults: NetProber, LocalStagingTransport, and Workflows
+	// 6. Verify the explicitly injected local file fixture, NetProber and workflows.
 	if composed.FilesTransport == nil {
-		t.Fatal("expected default FilesTransport (LocalStagingTransport) to be wired on composed Server")
+		t.Fatal("explicit local file fixture was not wired")
 	}
 	uploadContent := []byte("wave5-composed-local-staging-payload")
 	uploadDigest := sha256.Sum256(uploadContent)

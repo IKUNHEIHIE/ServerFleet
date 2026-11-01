@@ -38,7 +38,7 @@ func privateKeyRoot(dir string) (*os.Root, error) {
 		return nil, ErrIdentityUnavailable
 	}
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || !credentialPrivateOwner(info, true) {
+	if err != nil || !info.IsDir() || !credentialPrivateOwner(info, true, dir) {
 		return nil, ErrIdentityUnavailable
 	}
 	root, err := os.OpenRoot(dir)
@@ -46,7 +46,7 @@ func privateKeyRoot(dir string) (*os.Root, error) {
 		return nil, ErrIdentityUnavailable
 	}
 	info, err = root.Stat(".")
-	if err != nil || !credentialPrivateOwner(info, true) {
+	if err != nil || !credentialPrivateOwner(info, true, dir) {
 		root.Close()
 		return nil, ErrIdentityUnavailable
 	}
@@ -58,7 +58,7 @@ func readKeyring(root *os.Root) (*CredentialKeyring, error) {
 	if os.IsNotExist(err) {
 		return nil, os.ErrNotExist
 	}
-	if err != nil || !info.Mode().IsRegular() || info.Size() > 16384 || !credentialPrivateOwner(info, false) {
+	if err != nil || !info.Mode().IsRegular() || info.Size() > 16384 || !credentialPrivateOwner(info, false, filepath.Join(root.Name(), "credential-keys.json")) {
 		return nil, ErrIdentityUnavailable
 	}
 	f, err := root.Open("credential-keys.json")
@@ -67,7 +67,7 @@ func readKeyring(root *os.Root) (*CredentialKeyring, error) {
 	}
 	defer f.Close()
 	opened, err := f.Stat()
-	if err != nil || !os.SameFile(info, opened) || !credentialPrivateOwner(opened, false) {
+	if err != nil || !os.SameFile(info, opened) || !credentialPrivateOwner(opened, false, filepath.Join(root.Name(), "credential-keys.json")) {
 		return nil, ErrIdentityUnavailable
 	}
 	raw, err := io.ReadAll(io.LimitReader(f, 16385))
@@ -150,29 +150,30 @@ func publishKeyring(root *os.Root, k *CredentialKeyring, replace bool) error {
 	if err != nil || closeErr != nil {
 		return ErrIdentityUnavailable
 	}
-	if replace {
-		err = root.Rename(name, "credential-keys.json")
-	} else {
-		err = root.Link(name, "credential-keys.json")
+	return publishCredentialFile(root, name, replace)
+}
+
+// EnsureCredentialKeyDirectory creates only the final directory, with private
+// permissions at creation. Existing directories are verified, never repaired or
+// followed through a symlink. It does not create or replace any key material.
+func EnsureCredentialKeyDirectory(dir string) error {
+	if !filepath.IsAbs(dir) || filepath.Clean(dir) != dir {
+		return ErrIdentityUnavailable
 	}
+	if err := makeCredentialDirectory(dir); err != nil && !os.IsExist(err) {
+		return ErrIdentityUnavailable
+	}
+	root, err := privateKeyRoot(dir)
 	if err != nil {
 		return err
 	}
-	dir, err := root.Open(".")
-	if err != nil {
-		return ErrIdentityUnavailable
-	}
-	defer dir.Close()
-	if dir.Sync() != nil {
-		return ErrIdentityUnavailable
-	}
-	return nil
+	return root.Close()
 }
 
 // NewPersistentCredentialService creates keys only for an untouched identity
 // store. Missing keys for ANY initialized store, unknown versions or inaccessible
 // ciphertext fail closed. The caller creates a dedicated 0700 directory first.
-// Linux ownership/modes are verified; other OSes need a reviewed ACL adapter.
+// Linux ownership/modes and Windows owner/DACL are verified. Other OSes fail closed.
 func NewPersistentCredentialService(ctx context.Context, identity *IdentityService, dir string, gate CredentialOperationGate, references CredentialReferenceReader) (*CredentialService, error) {
 	if ctx == nil || identity == nil || ctx.Err() != nil {
 		return nil, ErrIdentityUnavailable
@@ -219,6 +220,11 @@ func NewPersistentCredentialService(ctx context.Context, identity *IdentityServi
 			}
 		}
 		for _, r := range st.Credentials {
+			// Revocation deliberately erases ciphertext. It must remain revoked,
+			// and cannot be treated as a corrupt live credential at startup.
+			if r.Revoked && len(r.Sealed.Ciphertext) == 0 {
+				continue
+			}
 			binding, e := credentialBindingFor(r)
 			if e != nil {
 				return e

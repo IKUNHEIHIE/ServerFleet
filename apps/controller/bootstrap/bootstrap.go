@@ -20,14 +20,15 @@ import (
 
 // Options are the Controller CLI flags.
 type Options struct {
-	Listen          string
-	DBPath          string
-	Origin          string
-	TLSCert         string
-	TLSKey          string
-	AgentPKIDir     string
-	AgentAuthority  string
-	AgentServerName string
+	Listen           string
+	DBPath           string
+	Origin           string
+	TLSCert          string
+	TLSKey           string
+	AgentPKIDir      string
+	AgentAuthority   string
+	AgentServerName  string
+	CredentialKeyDir string
 }
 
 // ParseOptions parses Controller flags. It returns flag.ErrHelp for -h.
@@ -43,6 +44,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.AgentPKIDir, "agent-pki-dir", "", "local Agent CA directory (default: pki beside -db)")
 	flags.StringVar(&options.AgentAuthority, "agent-authority", "", "Agent-facing authority host:port (default: derived from -listen)")
 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
+	flags.StringVar(&options.CredentialKeyDir, "credential-key-dir", "", "private credential key directory (default: credential-keys beside -db)")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
 	}
@@ -136,6 +138,7 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 	}
 	composed, err := server.New(ctx, server.Config{
 		DBPath:           options.DBPath,
+		CredentialKeyDir: options.CredentialKeyDir,
 		Origin:           options.Origin,
 		EnrollmentIssuer: material.Issuer,
 		AgentAuthority:   authority,
