@@ -56,14 +56,16 @@ func (f NodeFileTransportsFunc) ForNode(ctx context.Context, nodeID string) (Nod
 // TransferOutcome is the per-item result the controller reports through the
 // unified task pipeline. It is never a substitute for the task's own status.
 type TransferOutcome struct {
-	TaskID      string
-	Status      TransferStatus
-	Items       []ItemUpdate
-	TotalBytes  int64
-	CopiedBytes int64
-	Message     string
-	StartedAt   time.Time
-	CompletedAt time.Time
+	TaskID            string
+	SourceNodeID      string
+	DestinationNodeID string
+	Status            TransferStatus
+	Items             []ItemUpdate
+	TotalBytes        int64
+	CopiedBytes       int64
+	Message           string
+	StartedAt         time.Time
+	CompletedAt       time.Time
 }
 
 func (o TransferOutcome) TaskUpdate() TaskUpdate {
@@ -188,7 +190,8 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 	}
 
 	outcome := TransferOutcome{
-		TaskID: taskID, Status: TransferRunning, StartedAt: c.now(),
+		TaskID: taskID, SourceNodeID: transfer.SourceNodeID, DestinationNodeID: transfer.DestinationNodeID,
+		Status: TransferRunning, StartedAt: c.now(),
 		Items: make([]ItemUpdate, 0, len(transfer.Items)),
 	}
 	aborted := ""

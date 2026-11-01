@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
@@ -13,7 +14,34 @@ import (
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/storage/testkit"
+	"serverfleet.local/serverfleet/internal/tasks"
 )
+
+type reporterCall struct {
+	taskID  string
+	nodeID  string
+	code    tasks.NodeResultCode
+	message string
+}
+
+type fakeTaskReporter struct {
+	mu    sync.Mutex
+	calls []reporterCall
+	err   error
+}
+
+func (r *fakeTaskReporter) RecordResult(_ context.Context, taskID, nodeID string, code tasks.NodeResultCode, message string) (tasks.Task, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.calls = append(r.calls, reporterCall{taskID: taskID, nodeID: nodeID, code: code, message: message})
+	return tasks.Task{}, r.err
+}
+
+func (r *fakeTaskReporter) snapshot() []reporterCall {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]reporterCall(nil), r.calls...)
+}
 
 type coordinatorFixture struct {
 	agent       *fakeAgent
@@ -23,6 +51,7 @@ type coordinatorFixture struct {
 	service     *files.Service
 	runner      *files.Service
 	coordinator *files.TransferCoordinator
+	reporter    *fakeTaskReporter
 	spoolDir    string
 }
 
@@ -69,16 +98,17 @@ func newCoordinatorFixture(t *testing.T, authorizer auth.Authorizer) *coordinato
 	if err != nil {
 		t.Fatal(err)
 	}
+	reporter := &fakeTaskReporter{}
 	runner, err := files.NewService(files.Options{
 		DB: db, Repo: repo, Audit: recorder, Authorizer: execAuthorizer,
 		Submitter: &fakeSubmitter{taskID: "task-transfer"}, Canceller: &fakeCanceller{},
-		StagingDir: t.TempDir(), MaxUploadBytes: 1 << 20, Coordinator: coordinator,
+		StagingDir: t.TempDir(), MaxUploadBytes: 1 << 20, Coordinator: coordinator, Tasks: reporter,
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
 	return &coordinatorFixture{agent: agent, transport: transport, repo: repo, audit: recorder,
-		service: service, runner: runner, coordinator: coordinator, spoolDir: spool}
+		service: service, runner: runner, coordinator: coordinator, reporter: reporter, spoolDir: spool}
 }
 
 func (f *coordinatorFixture) createTransfer(t *testing.T, policy files.ConflictPolicy, sources []string) files.Transfer {
@@ -294,6 +324,32 @@ func TestServiceExecuteTransferTaskSeam(t *testing.T) {
 	}
 	if stored, _ := f.agent.file("node-dst", "/srv/app/blob.bin"); string(stored) != "payload" {
 		t.Fatalf("stored = %q", stored)
+	}
+	calls := f.reporter.snapshot()
+	if len(calls) != 2 || calls[0].code != tasks.NodeResultSucceeded || calls[1].code != tasks.NodeResultSucceeded {
+		t.Fatalf("task reporter calls = %+v", calls)
+	}
+	if calls[0].nodeID != "node-src" || calls[1].nodeID != "node-dst" || calls[0].taskID != transfer.TaskID {
+		t.Fatalf("task reporter identity = %+v", calls)
+	}
+}
+
+func TestServiceReportsUnknownForPartialTransfer(t *testing.T) {
+	f := newCoordinatorFixture(t, nil)
+	f.agent.putFile("node-src", "/etc/present.bin", []byte("present"))
+	f.createTransfer(t, files.ConflictOverwrite, []string{"/etc/present.bin", "/etc/missing.bin"})
+	updated, err := f.runner.ExecuteTransferTask(context.Background(), "task-transfer", files.TransferExecution{
+		SubjectID: "user-1", RequestID: "req-run", ExecutionID: "exec-1",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != files.TransferPartialFailure {
+		t.Fatalf("transfer = %+v", updated)
+	}
+	calls := f.reporter.snapshot()
+	if len(calls) != 2 || calls[0].code != tasks.NodeResultUnknown || calls[1].code != tasks.NodeResultUnknown {
+		t.Fatalf("task reporter calls = %+v", calls)
 	}
 }
 
