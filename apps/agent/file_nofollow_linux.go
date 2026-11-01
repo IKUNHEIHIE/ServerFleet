@@ -53,3 +53,23 @@ func agentFilePublish(root *os.Root, source, destination string) error {
 	}
 	return dst.Sync()
 }
+
+func agentFileSpace(root *os.Root, bytes int64) error {
+	if bytes < 0 || bytes > 64<<20 {
+		return errFileCapability
+	}
+	dir, err := root.Open(".")
+	if err != nil {
+		return errFileCapability
+	}
+	defer dir.Close()
+	var stat unix.Statfs_t
+	if unix.Fstatfs(int(dir.Fd()), &stat) != nil || stat.Bsize <= 0 {
+		return errFileCapability
+	}
+	needed := (uint64(bytes) + (1 << 20) + uint64(stat.Bsize) - 1) / uint64(stat.Bsize)
+	if uint64(stat.Bavail) < needed || (stat.Files > 0 && stat.Ffree == 0) {
+		return errFileCapability
+	}
+	return nil
+}

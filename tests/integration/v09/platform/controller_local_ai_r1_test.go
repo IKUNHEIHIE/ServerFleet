@@ -14,7 +14,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"sync/atomic"
@@ -23,7 +22,6 @@ import (
 
 	"serverfleet.local/serverfleet/apps/controller/server"
 	"serverfleet.local/serverfleet/internal/ai"
-	"serverfleet.local/serverfleet/internal/auth"
 )
 
 // Uses only the minimal proposed Controller patch through Go overlay. The test
@@ -155,22 +153,11 @@ func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
 	if login.Identity.UserID == "" || model.ID == "" {
 		t.Fatal("fixture metadata identity/profile missing")
 	}
-	originURL, _ := url.Parse(origin)
-	var sessionSecret string
-	for _, cookie := range jar.Cookies(originURL) {
-		if cookie.Name == auth.SessionCookieName {
-			sessionSecret = cookie.Value
-		}
-	}
 	budget, err = ai.NewPersistentGenerationBudget(newSQLBudget(t, composed.DB, new(atomic.Bool), new(atomic.Bool)), func(ctx context.Context, actor string, p ai.GenerationBudgetPolicy) error {
 		if actor != p.OwnerID {
 			return ai.ErrToolDenied
 		}
-		identity, err := composed.Identity.Authenticate(ctx, sessionSecret, "", false)
-		if err != nil || !identity.Administrator || identity.SubjectID != actor {
-			return ai.ErrToolDenied
-		}
-		return nil
+		return composed.Identity.AuthorizeAdministrator(ctx, actor)
 	}, composed.AIConversation.CheckGenerationBudget)
 	if err != nil {
 		t.Fatal(err)

@@ -10,7 +10,7 @@ Agent `-file-root` 显式 Linux 非root私有根；与 `-serve`/`-connect-once`�
 
 Linux逐组件NOFOLLOW+目录fd锚定；1000次父目录/符号链接并发换位未读到兄弟路径；写后校验发布对象身份与SHA。完成回执丢失时确有目标字节、执行ledger记录UNKNOWN；断开并重新建立真实WSS后，同执行重开拒绝，未重复写。
 
-验证：Windows agent/runtime/transport PASS（Linux项SKIP）；本机非root WSL agent 41顶层 PASS/0 SKIP，包括两个实际mTLS+WSS Agent会话传递84KB左右字节、源路径内容更换后仍传冻结快照、取消终态、当前授权撤销、重复执行、完成回执丢失/重连/UNKNOWN和符号链接竞态。授权回调是明确合成fixture，**不等于主控HTTP/DS真实任务中心组合完成**。
+验证：Windows agent/runtime/transport PASS（Linux项SKIP）；本机非root WSL agent 41顶层 PASS/0 SKIP，包括两个实际mTLS+WSS Agent会话传递87,500字节、源路径内容更换后仍传冻结快照、取消终态、当前授权撤销、重复执行、完成回执丢失/重连/UNKNOWN和符号链接竞态。授权回调是明确合成fixture，**不等于主控HTTP/DS真实任务中心组合完成**。
 
 首次WSS负向夹具FAIL：收到取消分块回执后立即发下一任务，尚未收到TaskFinished而被正确AGENT_BUSY拒绝；修复测试等待取消终态，并回收已finished worker计数，不弱化任务门控。
 
@@ -33,3 +33,21 @@ AppendModelSettingsAudit保留SubjectID/ProfileID/revision/action/time；接Sess
 首次负向fixture取消测试未消费request body，供应商等待Context取消导致测试清理hang；限时诊断FAIL保留，修夹具读body并限定等待后PASS，仅停止本人精确匹配的旧测试进程。另两次主控夹具失败分别是误把audit action当role permission、错把已有message POST的200当失败；改为真实当前管理员会话验证和真实现有HTTP状态，未降低任何产品安全门。
 
 后续继续平台独立适配/资源负向。真实外部模型、浏览器逐token和主线DDL/接线仍待接收。
+
+检查点2 SHA：8bbe64e7f72c42577bd13a4146df9a4d0e34dc07。
+
+## 检查点3：实际子进程更新回滚、文件资源限制与恢复新代次
+
+新增Linux非root OwnedProcessSupervisor，绑定当前task/approval gate及实际Ready回调；只操作本对象启动的进程句柄，不接管外部PID/服务。验证私有active文件的实际SHA/大小，以已验证fd启动；无继承环境、无Shell，实际/proc进程镜像与PID/start/nonce健康观察。启动前独占持久reservation，重建对象不能在未对账时启动第二进程；停止已观察到退出且reservation摘要一致才清除。该标记是本机防重，不等于旧远端Controller fence或正式沙箱。
+
+实际非root子进程测试使用签名的当前测试二进制作为可控工件，真实启动1.0→真实备份/switch→尝试2.0但进程实际报告1.0→明确不健康→实际停止/还原/启动旧版并观察新PID，PASS；任务审批/审计提交/storage兼容hook为明确double，未部署Controller/Agent产品发行物。当前固定Go提供的os/exec与os.Root文档已通过Context7核查。
+
+文件读快照与写块前读取真实Fstatfs可用空间/空闲inode，保留1MiB余量；子进程RLIMIT_FSIZE=1024导致4096字节写实际仅落1024私有partial并返回失败、目标未发布。该证据是EFBIG，不冒充真实ENOSPC/磁盘填满。取消后FileSession封闭，失败/未知frame关闭本地session，不能在同会话重发；任务worker仍负责持久UNKNOWN对账。
+
+预算配置在序列化事务内再次核当前管理员，提交后再核；增加只读IdentityService.AuthorizeAdministrator，不能把它当Cookie/CSRF/资源/root审批。共享DB门内禁止调用会打开writer的Authenticate。真实SQLite回归在预查后模拟管理员撤销，配置和审计均未推进。
+
+恢复新增回归先FAIL：快照与当前authority同trust代次仍可到达Commit。RestoreIsolated现强制current.TrustGeneration严格大于snapshot代次，且满足intent下限；相同旧代次在Commit前拒绝。修复后真实SQLite隔离恢复/撤销合并/UNKNOWN/quarantine和旧代次负向PASS，仍不能释放隔离或证明旧主控已fence。原始失败留reports/wave6-r1-linux/restore-before-fix.log。
+
+初验WSL Agent42 PASS/1 helper SKIP、updates15 PASS/1 helper SKIP、budget1/restore1 PASS/0 SKIP；helper由父测试实际另起子进程运行，不是被跳过的功能。固定提交与整包复验另列HANDOFF/EVIDENCE。
+
+Xray固定26.10.29静态审查重试在下载阶段报Pinned public archive unavailable，BLOCKED，未执行任何Xray二进制。历史两候选安全FAIL不失效；本轮无新工件扫描PASS，不开放运行时/安装以绕过。

@@ -33,6 +33,7 @@ type FileSession struct {
 	responses    chan *agentv1.Envelope
 	closed       bool
 	opened       bool
+	started      bool
 	finished     bool
 	size, offset uint64
 	digest       string
@@ -98,7 +99,14 @@ func (s *FileSession) Close() error {
 	s.client.mu.Unlock()
 	return nil
 }
-func (s *FileSession) exchange(ctx context.Context, e *agentv1.Envelope, kind string) (*agentv1.Envelope, error) {
+func (s *FileSession) exchange(ctx context.Context, e *agentv1.Envelope, kind string) (result *agentv1.Envelope, err error) {
+	// Any uncertain frame closes this execution's local session. Reconciliation
+	// belongs to the unified task worker, never a second write attempt here.
+	defer func() {
+		if err != nil {
+			_ = s.Close()
+		}
+	}()
 	s.mu.Lock()
 	if s.closed || s.waiting != "" {
 		s.mu.Unlock()
@@ -135,9 +143,10 @@ func (s *FileSession) exchange(ctx context.Context, e *agentv1.Envelope, kind st
 func (s *FileSession) Open(ctx context.Context) (*agentv1.FileOpenReply, error) {
 	s.opMu.Lock()
 	defer s.opMu.Unlock()
-	if s.opened {
+	if s.started {
 		return nil, ErrLinkRejected
 	}
+	s.started = true
 	e, err := s.exchange(ctx, &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: proto.Clone(s.offer).(*agentv1.TaskOffer)}}, "ack")
 	if err != nil {
 		return nil, err
@@ -190,6 +199,7 @@ func (s *FileSession) Chunk(ctx context.Context, r *agentv1.FileChunkRequest) (*
 		if reply.ResultCode != "canceled" || len(reply.Data) != 0 {
 			return nil, ErrLinkRejected
 		}
+		s.finished = true
 		return reply, nil
 	}
 	if reply.ResultCode != "ok" || reply.NextOffset != next || s.parameters.Direction == "read" && uint32(len(reply.Data)) != r.ReadBytes || s.parameters.Direction == "write" && len(reply.Data) != 0 || reply.Complete != (next == s.size && (s.parameters.Direction == "read" || r.Finish)) {

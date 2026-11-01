@@ -74,4 +74,13 @@ func TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations(t *testing.T) {
 	if _, err = recovery.RestoreIsolated(ctx, root, job, source, hooks); err == nil || commits != 1 {
 		t.Fatal("corrupt backup reached commit")
 	}
+	job.ID = "job-old-epoch"
+	job.Intent.SnapshotSHA256 = hex.EncodeToString(hash[:])
+	job.Intent.MinTrustGeneration = 1
+	hooks.Authority = func(context.Context, recovery.RestoreJob) (recovery.Authority, error) {
+		return recovery.Authority{RootSPKISHA256: intent.RootSPKISHA256, TrustGeneration: 1, RevocationSequence: 7, RevokedSerials: []string{"new-revoked"}}, nil
+	}
+	if _, err = recovery.RestoreIsolated(ctx, root, job, source, hooks); err == nil || commits != 1 {
+		t.Fatal("old snapshot trust epoch reached restore commit")
+	}
 }

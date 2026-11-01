@@ -137,6 +137,9 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	if !validAgentFileBinding(b, "write") || offset < 0 || offset > b.Size || len(chunk) > agentFileChunkBytes || int64(len(chunk)) > b.Size-offset || len(chunk) == 0 && !finish || f.check(ctx, b, "write") != nil || f.safePath(b.RelativePath, true) != nil {
 		return errFileCapability
 	}
+	if agentFileSpace(f.root, int64(len(chunk))+4096) != nil {
+		return errFileCapability
+	}
 	dir := ".sf-" + b.TransferID
 	err := f.root.Mkdir(dir, 0700)
 	if err != nil && !os.IsExist(err) {
@@ -239,6 +242,9 @@ func (f *agentFileCapability) Snapshot(ctx context.Context, b agentFileBinding) 
 	defer src.Close()
 	info, err := src.Stat()
 	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > 64<<20 {
+		return b, errFileCapability
+	}
+	if agentFileSpace(f.root, info.Size()) != nil {
 		return b, errFileCapability
 	}
 	name := ".sf-read-" + b.TransferID

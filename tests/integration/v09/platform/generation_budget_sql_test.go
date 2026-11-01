@@ -54,6 +54,16 @@ func generationBudgetRequest(n int) ai.GenerationRequest {
 	id := fmt.Sprintf("message-%d", n)
 	return ai.GenerationRequest{SubjectID: "owner", SessionID: "session", MessageID: id, OperationID: "ai-generation-" + id, ScopeRevision: 1, Profile: ai.ModelProfile{ID: "profile", Model: "fixture-model", CredentialRef: "reference", Revision: 1}, Messages: []ai.Message{{MessageID: id, SessionID: "session", Role: "user", RedactedContent: "synthetic content must not be persisted in budget", CreatedAt: time.Now().UTC(), TaskIDs: []string{}}}}
 }
+
+type budgetBeforeUpdate struct {
+	ai.GenerationBudgetStore
+	before func()
+}
+
+func (s budgetBeforeUpdate) Update(ctx context.Context, fn func([]byte) ([]byte, []ai.GenerationBudgetAudit, error)) error {
+	s.before()
+	return s.GenerationBudgetStore.Update(ctx, fn)
+}
 func TestPersistentGenerationBudgetSQLiteConcurrencyRollbackRestartAndUnknown(t *testing.T) {
 	ctx := context.Background()
 	path := filepath.Join(t.TempDir(), "budget.db")
@@ -139,5 +149,26 @@ func TestPersistentGenerationBudgetSQLiteConcurrencyRollbackRestartAndUnknown(t 
 	b = newBudget()
 	if b.Admit(ctx, request) == nil {
 		t.Fatal("unknown reservation replayed")
+	}
+	// Admission may change while waiting for the writer. An initial admin
+	// observation alone must not configure the next window. The authority change
+	// is a controlled double; aggregate/audit rollback below uses real SQLite.
+	allowed := true
+	guarded, err := ai.NewPersistentGenerationBudget(budgetBeforeUpdate{newSQLBudget(t, db, failAudit, uncertain), func() { allowed = false }}, func(context.Context, string, ai.GenerationBudgetPolicy) error {
+		if !allowed {
+			return ai.ErrToolDenied
+		}
+		return nil
+	}, func(context.Context, ai.GenerationRequest, string) error { return nil })
+	if err != nil {
+		t.Fatal(err)
+	}
+	policy.Revision = 3
+	policy.WindowID = "revoked-window"
+	if guarded.Configure(ctx, "budget-admin", 2, policy) == nil {
+		t.Fatal("stale admin observation configured budget")
+	}
+	if err = db.QueryRow(ctx, `SELECT count(*) FROM cx_ai_budget_audit WHERE policy_revision=3`).Scan(&count); err != nil || count != 0 {
+		t.Fatal("revoked administrator mutated budget", count, err)
 	}
 }

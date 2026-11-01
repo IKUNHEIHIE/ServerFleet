@@ -308,6 +308,10 @@ func TestActualWSSFileTwoAgentsBytesCancelRevokeAndUnknown(t *testing.T) {
 			case <-ctx.Done():
 				t.Fatal("cancel terminal timed out")
 			}
+			frames := destination.frames.Load()
+			if _, err = s.Chunk(ctx, &agentv1.FileChunkRequest{TaskId: o.TaskId, ExecutionId: o.ExecutionId, TransferId: p.TransferID, Cancel: true}); err == nil || destination.frames.Load() != frames {
+				t.Fatal("canceled session emitted another frame")
+			}
 		}
 		s.Close()
 		if _, e := os.Stat(filepath.Join(dstRoot, p.RelativePath)); !os.IsNotExist(e) {

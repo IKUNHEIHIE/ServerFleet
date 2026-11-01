@@ -126,7 +126,7 @@ func RestoreIsolated(ctx context.Context, directory string, job RestoreJob, sour
 	if err != nil {
 		return out, ErrQuarantined
 	}
-	if current.RootSPKISHA256 != job.Intent.RootSPKISHA256 || current.TrustGeneration < job.Intent.MinTrustGeneration || current.RevocationSequence < job.Intent.MinRevocationSequence {
+	if current.RootSPKISHA256 != job.Intent.RootSPKISHA256 || current.TrustGeneration <= snapshot.TrustGeneration || current.TrustGeneration < job.Intent.MinTrustGeneration || current.RevocationSequence < job.Intent.MinRevocationSequence {
 		return out, ErrQuarantined
 	}
 	plan, err := Reconcile(snapshot, current, time.Now().UTC())

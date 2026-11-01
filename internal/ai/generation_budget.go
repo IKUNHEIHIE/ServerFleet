@@ -41,6 +41,9 @@ type generationBudgetState struct {
 type GenerationBudgetStore interface {
 	Update(context.Context, func([]byte) ([]byte, []GenerationBudgetAudit, error)) error
 }
+
+// Admin gate must be read-only and use the same coordinator DB/transaction
+// authority; it must never start another write transaction or trust HTTP claims.
 type GenerationBudgetAdminGate func(context.Context, string, GenerationBudgetPolicy) error
 type GenerationBudgetGate func(context.Context, GenerationRequest, string) error
 type PersistentGenerationBudget struct {
@@ -127,7 +130,7 @@ func (b *PersistentGenerationBudget) Configure(ctx context.Context, actor string
 	if b == nil || ctx == nil || !exactID(actor) || !validBudgetPolicy(p) || p.Revision != expected+1 || expected == math.MaxUint64 || b.admin(ctx, actor, p) != nil {
 		return ErrToolDenied
 	}
-	return b.store.Update(ctx, func(raw []byte) ([]byte, []GenerationBudgetAudit, error) {
+	err := b.store.Update(ctx, func(raw []byte) ([]byte, []GenerationBudgetAudit, error) {
 		s, err := decodeBudget(raw)
 		if err != nil {
 			return nil, nil, err
@@ -135,6 +138,9 @@ func (b *PersistentGenerationBudget) Configure(ctx context.Context, actor string
 		key := budgetKey(p.OwnerID, p.ProfileID)
 		if s.Policies[key].Revision != expected {
 			return nil, nil, ErrModelRevisionConflict
+		}
+		if b.admin(ctx, actor, p) != nil {
+			return nil, nil, ErrToolDenied
 		}
 		now := b.now().UTC()
 		if now.IsZero() || now.Before(s.ClockFloor) {
@@ -150,6 +156,13 @@ func (b *PersistentGenerationBudget) Configure(ctx context.Context, actor string
 		event := GenerationBudgetAudit{ActorID: actor, OwnerID: p.OwnerID, ProfileID: p.ProfileID, WindowID: p.WindowID, Action: "ai.budget.configure", PolicyRevision: p.Revision, At: now}
 		return next, []GenerationBudgetAudit{event}, err
 	})
+	if err != nil {
+		return err
+	}
+	if ctx.Err() != nil || b.admin(ctx, actor, p) != nil {
+		return ErrGenerationUnknown
+	}
+	return nil
 }
 
 // Admit is directly compatible with server.Config.AIGenerationQuota. A unique
