@@ -1,0 +1,187 @@
+{
+  "task": "V09-R6-CX",
+  "session": "codex-06",
+  "reviewer": "codex-review-02",
+  "base": "73d5dd46fb29b3cf4a445b43b48186d5938fe781",
+  "testedCodeHead": "c2b2b85d6bbb369484d93460868d9678efba9328",
+  "result": "INDEPENDENT_INCREMENTS_DELIVERED_SHARED_AND_ADMISSION_BLOCKED",
+  "root": {
+    "check": 0,
+    "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+    "security": 0
+  },
+  "go": {
+    "passedTopLevel": 645,
+    "passedSubtests": 1138,
+    "skippedTopLevel": 15,
+    "failed": 0
+  },
+  "goSkips": [
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentExecutorRejectsNonPrivateLedgerOnLinux"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentFileBytesResumeHashAndIndependentReadGate"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/files",
+      "test": "TestLocalStagingRejectsSymlinkedDirectories"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/files",
+      "test": "TestLocalStagingRejectsSymlinkedTargetFile"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/poc/v09/services/cloudflare",
+      "test": "TestCloudflareDNS"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/recovery",
+      "test": "TestQuarantineRejectsNonPrivateLinuxDirectory"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestPinnedXrayActualConfigTestAndLoopbackStart"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestCustomActualTargetValidationAndProxyCannotReachAPI"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestPinnedXrayActualVisionTrafficStatsAndProcessReset"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialRestartRotationAndFailureClosed"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialConcurrentInitialization"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialRejectDirectoryAndSymlink"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations"
+    }
+  ],
+  "web": {
+    "name": "vitest tests",
+    "tests": "329",
+    "failures": "0",
+    "errors": "0",
+    "time": "88.8117881"
+  },
+  "nativeWSL": [
+    {
+      "target": "auth",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "1e22d227801982a7148313dbb074daffecc9d7d04aadc80ae4dd4170394551ec",
+      "passed": 71,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    },
+    {
+      "target": "agent",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "d10942b4fbc8bb92b32ef941909df445887a3a5e1f13998db682d2d8f130565e",
+      "passed": 38,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    },
+    {
+      "target": "ai",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "99d1b8cf74d24827b49c98f53831092701c6a9868a7b58e9ffd22cf85eb18556",
+      "passed": 33,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    },
+    {
+      "target": "plugins",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "73029bf5f2d456b2bf1efa9cf11fc1e69c5523325478713df14288af4d46b117",
+      "passed": 12,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    },
+    {
+      "target": "updates",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "b35cf766cac631754014c96e86ee26f7cac4bdff2cb7d83e21c8cab2318ed24e",
+      "passed": 14,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    },
+    {
+      "target": "recovery",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "7a52de8722b5509bcdf134d97aafacb1ad5e384951d5f0855c34eb8320623f85",
+      "passed": 5,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    },
+    {
+      "target": "restore",
+      "uid": "1000",
+      "head": "c2b2b85d6bbb369484d93460868d9678efba9328",
+      "binarySHA256": "35f914dd5567f72047e5f0294e360d452c3237aff78fb056ce9953900f974b22",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64; no remote, arm64 or external-provider evidence"
+    }
+  ],
+  "nativePassedTotal": 174,
+  "artifacts": {
+    "reports/wave6-linux/agent-linux-amd64": "e13dca68f401e0d29216fb7bb5ac0530ad12916ca0f854579061ba327c3c1787",
+    "reports/wave6-linux/agent-linux-arm64": "922028ab72f40bef44a5775974f864f8487ccaf93a62735807bea69092169c2e"
+  },
+  "logsSHA256": {
+    "reports/wave6-final-check.log": "86a2c4cf7cec494e9913896a33d19175576f08951dde653d9f644ca16f4315ac",
+    "reports/wave6-final-security.log": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+    "reports/go-tests.log": "3981b977ccc6eeeca253ba5e4bf5623feea5826d03e9fbdc5f63b397e1df298f",
+    "reports/web-junit.xml": "5276f66b9ccf372bee99e2c04a58ba43f8cc2ade8dc26779a9a24819c6f9d98e"
+  },
+  "initialFailures": [
+    "Windows file directory sync unsupported: Linux-only capability explicitly enforced; Windows tests SKIP and native WSL PASS",
+    "Restore test fixture missing migration ledger: corrected fixture, actual ledger verification unchanged",
+    "Generated overlay .go file under reports discovered by govulncheck as independent package: renamed .txt; full checks rerun PASS",
+    "Generated patch CRLF context failed git apply --check: normalized LF; all patch checks PASS"
+  ],
+  "limitations": [
+    "No main merge or remote operations; only allowed module/test/progress paths changed",
+    "Controller/API/Proto changes remain concrete proposed patches; no shared generated code or runtime integration claimed",
+    "File WSS two-agent transfer awaits unified task/Proto/DS acceptance; private local byte tests are not cross-node evidence",
+    "Normal shell/root execution remains closed pending PRIV/sandbox/current approval admission",
+    "OpenAI upstream HTTP/SSE tested with controlled local TLS provider only; no external account or browser token stream claim",
+    "Xray task Host only proves unified task submission; signed artifact security FAIL/runtime/ABI admission still block real execution",
+    "Update process supervisor/health and restore current authority/fencing/atomic domain commit are explicit adapters/doubles; no live disaster recovery acceptance",
+    "Linux amd64 native WSL only; arm64 compile only; no physical cross-machine/1C1G or awskr operation"
+  ]
+}
