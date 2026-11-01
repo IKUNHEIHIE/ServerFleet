@@ -2,114 +2,36 @@
 
 公共 Proto/生成代码、Controller 组合入口、依赖锁、迁移编号仍由总控单写。以下为可运行的作者侧差异与所需接线，批准前不是冻结契约。
 
-## 1. Agent 文件通道 Proto（申请新增）
+## 1. Agent 文件通道：与 CX 9d63de0 的合并契约（最高优先级协调）
 
-现状：仅 `TaskOffer/TaskOutput`，输出片上限 32KiB 且进入任务日志/截断语义，无法表达偏移、校验、恢复、取消与非文本字节。文件传输若复用输出流会污染任务日志并丢失续传。
+**本包早先的 oneof 40–47 提案作废，不应应用到主线。** CX 已在 `feature/v09-r6-platform-cx06` 提交 `9d63de0`：`apps/agent/file_capability.go` + `agent-file-proto.patch`，已提议 `FileChunkRequest/FileChunkReply`（oneof 33/34），32KiB 数据片、64MiB 单文件、root-relative 路径、完整 SHA、不可变 binding、不可覆盖硬链接、字节不进 TaskOutput。以下是与该实现的合并建议，最终由总控裁决；本包控制器侧代码可适配该帧形。
 
-建议在 `proto/serverfleet/agent/v1/agent.proto` 的 `Envelope.oneof` 末尾追加（不修改任何已有字段号）：
+双方一致、不再另造：
 
-```proto
-    FileOpen file_open = 40;
-    FileOpenAck file_open_ack = 41;
-    FileChunk file_chunk = 42;
-    FileAck file_ack = 43;
-    FileComplete file_complete = 44;
-    FileCompleteAck file_complete_ack = 45;
-    FileCancel file_cancel = 46;
-    FileError file_error = 47;
-```
+- 文件字节走独立 oneof 帧，绝不放进 `TaskOutput`、任务日志、审计或 SSE。
+- `task_id + execution_id + transfer_id + 节点身份` 绑定；源读/目标写分别由 Agent 当前 gate 授权；帧内 ID 不是独立授权。
+- 不可变 size/SHA；Agent 用 `os.Root`/逐段 `Lstat` 拒绝绝对路径、`..`、符号链接；最终 0600、目录 0700、fsync。
+- 单文件上限 64MiB；数据片 ≤32KiB、帧 ≤64KiB；续传以已确认 offset 为准；未知结果不自动重跑。
+- 本包 `internal/files` 的帧是控制器内部表示，不是已冻结线格式；控制器适配器负责 root-relative 映射与 CX 帧互转。
 
-```proto
-enum FileDirection {
-  FILE_DIRECTION_UNSPECIFIED = 0;
-  FILE_DIRECTION_UPLOAD = 1;
-  FILE_DIRECTION_DOWNLOAD = 2;
-}
-enum FileConflictPolicy {
-  FILE_CONFLICT_POLICY_UNSPECIFIED = 0;
-  FILE_CONFLICT_POLICY_SKIP = 1;
-  FILE_CONFLICT_POLICY_OVERWRITE = 2;
-  FILE_CONFLICT_POLICY_RENAME = 3;
-}
+DS 需要 CX 补齐的差异（缺失时跨节点文件不能按完整需求验收）：
 
-message FileOpen {
-  string transfer_id = 1;          // controller-scoped, reused across reconnects
-  string execution_id = 2;         // task execution identity
-  string task_id = 3;
-  FileDirection direction = 4;
-  string path = 5;                 // absolute POSIX path inside the agent jail
-  uint64 offset = 6;               // download resume offset; 0 first attempt
-  uint64 size = 7;                 // upload declared size; 0 for download
-  string sha256 = 8;               // upload expected digest
-  FileConflictPolicy conflict_policy = 9;
-  bool create_parents = 10;
-  uint32 mode = 11;                // final file mode, must be 0600
-  uint32 protocol_minor = 12;
-}
-message FileOpenAck {
-  string transfer_id = 1;
-  string execution_id = 2;
-  uint64 size = 3;
-  string sha256 = 4;
-  uint64 resume_offset = 5;
-  string resolved_path = 6;
-  bool skipped = 7;
-}
-message FileChunk {
-  string transfer_id = 1;
-  string execution_id = 2;
-  uint64 offset = 3;
-  bytes data = 4;                  // <= 32 KiB; default 16 KiB
-}
-message FileAck {
-  string transfer_id = 1;
-  string execution_id = 2;
-  uint64 next_offset = 3;
-}
-message FileComplete {
-  string transfer_id = 1;
-  string execution_id = 2;
-  uint64 size = 3;
-  string sha256 = 4;
-}
-message FileCompleteAck {
-  string transfer_id = 1;
-  string execution_id = 2;
-  uint64 size = 3;
-  string sha256 = 4;
-}
-message FileCancel {
-  string transfer_id = 1;
-  string execution_id = 2;
-  string reason_code = 3;
-}
-message FileError {
-  string transfer_id = 1;
-  string execution_id = 2;
-  string error_code = 3;           // stable, no upstream text
-  string summary = 4;              // redacted, bounded
-}
-```
+1. **读元数据 / open 握手**：CX 的读 binding 要求预先知道 size/SHA，而 DS 的传输请求只有可选 checksum、没有可靠 size。请新增 `FileOpenRequest/FileOpenReply`（建议 oneof 35/36）：
+   - Request：`task_id, execution_id, transfer_id, direction(read|write), relative_path, size(write), sha256(write), conflict_policy(write)`。
+   - Reply：`size, sha256, resume_offset, resolved_path, skipped, result_code`。
+   - read：Agent 在 gate 后返回当前 size/SHA 并锁定本会话；控制器逐片校验并在 complete 时校验整文件摘要。若总控不采用 open 帧，则必须提供等价的 `FileStatRequest/Reply`，并在提交传输任务前取得权威 size/SHA；否则 DS 下载只能失败关闭。
+   - write：返回 Agent 已持久 partial 的 `resume_offset`；控制器从该偏移续传（本包 transport 已按此实现）。
+2. **冲突策略**：CX 当前硬链接提交拒绝覆盖，DS 的 `skip/overwrite/rename` 无法表达。请把 `conflict_policy` 纳入写 binding：`skip` 回 `skipped=true`；`rename` 回 `resolved_path`；`overwrite` 必须原子替换（partial fsync 后 rename，旧文件保留到新文件就绪）。若安全评审不接受 overwrite，则 DS 只开放“目标不存在”并诚实拒绝其他策略，不得静默当 overwrite。
+3. **结果码**：`FileChunkReply.result_code` 固定词汇建议 `ok/skipped/conflict/path_rejected/symlink_forbidden/insufficient_space/checksum_mismatch/unauthorized/io_error/canceled/complete`，不含路径、provider 文本、秘钥。
+4. **写目录**：父目录逐段 0700、拒绝 symlink；取消/过期清理 `.sf-<transfer_id>`；单路径单写者与限流。
+5. **执行 ID**：`tasks.Command` 仍无 `ExecutionID`；本包协调器在缺失时使用 `task_<taskID>_<transferID>` 稳定替代；CX 暴露后必须原样透传到 open/chunk 帧。
 
-方向矩阵（`Established` 阶段）：
+本包已实现（控制器侧真实实现，测试用同帧边界 fake agent）：
 
-| 操作 | Controller→Agent | Agent→Controller |
-|---|---|---|
-| upload | `file_open`, `file_chunk`, `file_complete`, `file_cancel` | `file_open_ack`, `file_ack`, `file_complete_ack`, `file_error`, `file_cancel` |
-| download | `file_open`, `file_ack`, `file_complete_ack`, `file_cancel` | `file_open_ack`, `file_chunk`, `file_complete`, `file_error`, `file_cancel` |
-
-语义：
-
-- `transfer_id` 在同一文件传输的多次重连中稳定；控制器实现使用 `<transferID>:<itemSequence>`，重连后 Agent 以该 ID + `execution_id` 做持久去重。
-- upload：`file_open_ack.resume_offset` 是 Agent 已持久的分片字节数（0 或已有 part）；控制器从该偏移续读；每片一个 `file_ack`（`next_offset` 严格等于已收字节数）；`file_complete` 后 Agent 校验整文件大小与 SHA-256，原子改名并回 `file_complete_ack`（回显真实大小/摘要）。
-- download：`file_open.offset` 为续传起点；Agent 必须回相同 `resume_offset` 与整文件大小/摘要；每片由控制器写盘成功后回 `file_ack`；Agent 以 `file_complete` 结束，控制器回 `file_complete_ack`。
-- 冲突策略：`skip` 回 `skipped=true`；`overwrite` 原子替换；`rename` 回 `resolved_path`（同目录内）。
-- 取消：任一端 `file_cancel` 终止；Agent 删除未完成 part；已改名完成的文件不回滚。
-- 错误码固定集合：`path_rejected`、`symlink_forbidden`、`insufficient_space`、`checksum_mismatch`、`conflict`、`unauthorized`、`io_error`、`protocol_error`、`frame_too_large`、`canceled`。`summary` 必须脱敏，不含路径以外的敏感值、不含文件内容。
-- 帧上限沿用现有 64KiB；`file_chunk.data` ≤ 32KiB（默认 16KiB），防止 base64/日志/内存放大。
-- 新增能力标识 `files.transfer.v1`：AgentHello 声明，ControllerHello 只在配置允许时授予；未授予时拒绝任何 `file_*` 帧。
-
-生成：由总控用固定 buf/工具重新生成 `gen/go`；本包未改 Proto/生成物。
+- `internal/files/channel.go`：版本化内部帧、边界/错误码/任务/执行/传输身份；`WithChannelTask` 绑定统一任务 ID；文件上限默认 64MiB。
+- `internal/files/channel_transport.go`：上传/下载、每片 ACK、断线续传、整文件 SHA-256、冲突策略、取消、错误映射、未注入失败关闭。
+- `internal/files/coordinator.go`：从任务 ID 加载传输、执行期重新授权、源下载→私有 spool→目标上传、逐项部分结果、审计、取消、任务终态回写。
+- 线格式适配器由总控/CX 按上述合并帧实现；本包没有修改 Proto/gen，也不声称真实 WSS 已通。
 
 ## 2. Controller/Transport 接线（申请，代码不在本包）
 

@@ -8,7 +8,7 @@
 
 ### 1.1 文件通道（需 CX 先落 Proto + transport opener）
 
-1. 按 `SHARED-CHANGES.md` 第 1 节新增 `FileOpen/FileOpenAck/FileChunk/FileAck/FileComplete/FileCompleteAck/FileCancel/FileError` 与 Envelope oneof 40–47；固定工具重新生成 `gen/go`。
+1. 与 CX `9d63de0` 的 `agent-file-proto.patch` 合并：以 `FileChunkRequest/FileChunkReply`（oneof 33/34）为基，补 `FileOpenRequest/FileOpenReply`（建议 35/36）或等价 stat，解决下载 size/SHA、上传续传偏移和冲突策略；**不要应用本包早先的 oneof 40–47**。固定工具重新生成 `gen/go`。参见 `SHARED-CHANGES.md` 第 1 节。
 2. `internal/transport` 增加文件会话 opener（建议签名，需安全审查）：
    ```go
    type FileSession struct {
@@ -22,6 +22,7 @@
    }
    ```
    - 用已 mTLS 认证的 `LinkObservation.Identity.NodeID` 绑定节点，不能信任帧里的 node_id。
+   - 帧必须携带 `task_id + execution_id + transfer_id`；路径映射为 Agent file root 下的 relative path（`fs.ValidPath`），不得把控制器绝对路径直接下传。
    - 在 `ControllerLinkConfig.Event` 收到 `File*` 帧时按 `transfer_id` 路由到会话；未匹配的帧拒绝并审计；不得把文件数据交给普通任务日志。
    - `Open` 前必须确认：该节点已接受 action `files.transfer` 的 `TaskOffer`、execution_id 匹配、能力 `files.transfer.v1` 已授予。
 3. `apps/controller/server` 构造：

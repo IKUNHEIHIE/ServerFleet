@@ -20,6 +20,7 @@
 | `7699b4e` | `feat(dns): add acme challenge publisher and provider consistency guards` |
 | `eeabb99` | `feat(files): report transfer terminal results to unified tasks` |
 | `9d25dc1` | `fix(gateway): bound nginx task parameters` |
+| `8f65537` | `feat(files): align channel identity with cx file frames` |
 
 以上均在作者分支本地；未推送、未合并 main。
 
@@ -29,6 +30,7 @@
 
 - 代码：`internal/files/{channel,channel_transport,coordinator}.go`、`service.go`（`ExecuteTransferTask` 接缝）、测试 `channel_transport_test.go`、`coordinator_test.go`、`fake_agent_test.go`。
 - 能力：版本化有界帧；上传/下载；每片 ACK；断线续传（源可 seek）；整文件 SHA-256 双端校验；冲突 skip/overwrite/rename；取消；尺寸/片大小/路径/节点/身份限制；错误码映射；执行期重新授权（源 `files.read`、目标 `files.write`、两端 `files.transfer`）；拒绝审计；从任务 ID 加载传输记录，不接受调用方传路径；逐项部分结果；源下载→私有 spool→目标上传；`files.transfer_execute` 审计；取消不重跑未知副作用。
+- **与 CX 的协议协调**：只读核对 CX `9d63de0` / `agent-file-proto.patch` 后，**撤回早先 oneof 40–47 提案**；以 CX 的 `FileChunkRequest/FileChunkReply`（33/34）为基，请求补 `FileOpenRequest/Reply`（35/36）或等价 stat 以解决下载 size/SHA、上传续传偏移与冲突策略；本包内部帧增加统一 task ID（`WithChannelTask`）并把默认文件上限对齐 64MiB。未接收这些共享差异前，真实双机文件传输不成立，不能把 fake agent 测试当远端验收。详见 SHARED-CHANGES 第 1 节。
 - 命令/结果：
   - `./.tools/go/bin/go test ./internal/files/ -count=1` → PASS（含新增通道与协调器用例）。
   - `./.tools/go/bin/go test ./... -count=1` → 全包 PASS（2026-11-01，含 architecture/contracts/integration/POC）。
