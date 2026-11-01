@@ -15,7 +15,7 @@ const ChannelProtocolVersion = 1
 const (
 	DefaultChannelChunkBytes = 16 << 10
 	MaxChannelChunkBytes     = 32 << 10
-	DefaultChannelFileBytes  = 2 << 30
+	DefaultChannelFileBytes  = 64 << 20 // matches the CX agent file capability ceiling
 	DefaultChannelAttempts   = 3
 )
 
@@ -61,6 +61,7 @@ type ChannelFrame struct {
 	Version        int
 	Type           ChannelFrameType
 	Direction      ChannelDirection
+	TaskID         string
 	TransferID     string
 	ExecutionID    string
 	Path           string
@@ -177,6 +178,9 @@ func validateChannelFrame(frame ChannelFrame, maxChunk int, maxFile int64) error
 	if !validChannelToken(frame.TransferID, 128) || !validChannelToken(frame.ExecutionID, 160) {
 		return ErrChannelProtocol
 	}
+	if frame.TaskID != "" && !validChannelToken(frame.TaskID, 128) {
+		return ErrChannelProtocol
+	}
 	if frame.Type == FrameOpen {
 		if err := ValidateRemotePath(frame.Path); err != nil {
 			return ErrAgentPathRejected
@@ -224,6 +228,7 @@ func validChannelToken(value string, max int) bool {
 type channelIdentityKey struct{}
 
 type channelIdentity struct {
+	taskID      string
 	transferID  string
 	executionID string
 }
@@ -231,7 +236,19 @@ type channelIdentity struct {
 // WithChannelIdentity binds a stable transfer and execution id to one transport
 // call so retries after a reconnect reuse the agent's durable dedupe key.
 func WithChannelIdentity(ctx context.Context, transferID, executionID string) context.Context {
-	return context.WithValue(ctx, channelIdentityKey{}, channelIdentity{transferID: transferID, executionID: executionID})
+	identity := channelIdentityFrom(ctx)
+	identity.transferID = transferID
+	identity.executionID = executionID
+	return context.WithValue(ctx, channelIdentityKey{}, identity)
+}
+
+// WithChannelTask adds the unified task id used by the CX FileChunk frames. The
+// wire adapter must include it in every request/reply; it is never authority by
+// itself.
+func WithChannelTask(ctx context.Context, taskID string) context.Context {
+	identity := channelIdentityFrom(ctx)
+	identity.taskID = taskID
+	return context.WithValue(ctx, channelIdentityKey{}, identity)
 }
 
 func channelIdentityFrom(ctx context.Context) channelIdentity {

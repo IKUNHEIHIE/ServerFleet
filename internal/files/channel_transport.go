@@ -123,11 +123,11 @@ func (t *ChannelTransport) PushFileWithPolicy(ctx context.Context, nodeID, desti
 	if destinationPath == "/" {
 		return UploadResult{}, ErrInvalidTransfer
 	}
-	transferID, executionID := channelIDs(ctx)
+	taskID, transferID, executionID := channelIDs(ctx)
 	seeker, seekable := content.(io.Seeker)
 	var lastErr error
 	for attempt := 1; attempt <= t.maxAttempts; attempt++ {
-		result, err := t.pushOnce(ctx, nodeID, destinationPath, policy, content, seeker, seekable, size, sha256Hex, transferID, executionID)
+		result, err := t.pushOnce(ctx, nodeID, destinationPath, policy, content, seeker, seekable, size, sha256Hex, taskID, transferID, executionID)
 		if err == nil {
 			return result, nil
 		}
@@ -145,7 +145,7 @@ func (t *ChannelTransport) PushFileWithPolicy(ctx context.Context, nodeID, desti
 	return UploadResult{}, lastErr
 }
 
-func (t *ChannelTransport) pushOnce(ctx context.Context, nodeID, destinationPath string, policy ConflictPolicy, content io.Reader, seeker io.Seeker, seekable bool, size int64, sha256Hex, transferID, executionID string) (UploadResult, error) {
+func (t *ChannelTransport) pushOnce(ctx context.Context, nodeID, destinationPath string, policy ConflictPolicy, content io.Reader, seeker io.Seeker, seekable bool, size int64, sha256Hex, taskID, transferID, executionID string) (UploadResult, error) {
 	session, err := t.channel.OpenFileChannel(ctx, nodeID, transferID, executionID)
 	if err != nil {
 		return UploadResult{}, fmt.Errorf("%w: %v", ErrChannelDisconnected, err)
@@ -154,7 +154,7 @@ func (t *ChannelTransport) pushOnce(ctx context.Context, nodeID, destinationPath
 
 	err = t.send(ctx, session, ChannelFrame{
 		Version: ChannelProtocolVersion, Type: FrameOpen, Direction: ChannelUpload,
-		TransferID: transferID, ExecutionID: executionID, Path: destinationPath,
+		TaskID: taskID, TransferID: transferID, ExecutionID: executionID, Path: destinationPath,
 		Size: size, SHA256: sha256Hex, ConflictPolicy: policy, CreateParents: true,
 	})
 	if err != nil {
@@ -207,7 +207,7 @@ func (t *ChannelTransport) pushOnce(ctx context.Context, nodeID, destinationPath
 		}
 		if err := t.send(ctx, session, ChannelFrame{
 			Version: ChannelProtocolVersion, Type: FrameChunk, Direction: ChannelUpload,
-			TransferID: transferID, ExecutionID: executionID, Offset: offset,
+			TaskID: taskID, TransferID: transferID, ExecutionID: executionID, Offset: offset,
 			Data: buffer[:want],
 		}); err != nil {
 			return UploadResult{}, err
@@ -229,7 +229,7 @@ func (t *ChannelTransport) pushOnce(ctx context.Context, nodeID, destinationPath
 	}
 	if err := t.send(ctx, session, ChannelFrame{
 		Version: ChannelProtocolVersion, Type: FrameComplete, Direction: ChannelUpload,
-		TransferID: transferID, ExecutionID: executionID, Size: size, SHA256: sha256Hex,
+		TaskID: taskID, TransferID: transferID, ExecutionID: executionID, Size: size, SHA256: sha256Hex,
 	}); err != nil {
 		return UploadResult{}, err
 	}
@@ -268,7 +268,7 @@ func (t *ChannelTransport) PullFile(ctx context.Context, nodeID, remotePath stri
 	if remotePath == "/" {
 		return 0, ErrInvalidTransfer
 	}
-	transferID, executionID := channelIDs(ctx)
+	taskID, transferID, executionID := channelIDs(ctx)
 	var (
 		written      int64
 		expectedSize int64 = -1
@@ -277,7 +277,7 @@ func (t *ChannelTransport) PullFile(ctx context.Context, nodeID, remotePath stri
 		lastErr      error
 	)
 	for attempt := 1; attempt <= t.maxAttempts; attempt++ {
-		finished, err := t.pullOnce(ctx, nodeID, remotePath, sink, hasher, &written, &expectedSize, &expectedSHA, transferID, executionID)
+		finished, err := t.pullOnce(ctx, nodeID, remotePath, sink, hasher, &written, &expectedSize, &expectedSHA, taskID, transferID, executionID)
 		if err == nil && finished {
 			digest := hex.EncodeToString(hasher.Sum(nil))
 			if written != expectedSize {
@@ -299,7 +299,7 @@ func (t *ChannelTransport) PullFile(ctx context.Context, nodeID, remotePath stri
 	return written, lastErr
 }
 
-func (t *ChannelTransport) pullOnce(ctx context.Context, nodeID, remotePath string, sink io.Writer, hasher io.Writer, written *int64, expectedSize *int64, expectedSHA *string, transferID, executionID string) (bool, error) {
+func (t *ChannelTransport) pullOnce(ctx context.Context, nodeID, remotePath string, sink io.Writer, hasher io.Writer, written *int64, expectedSize *int64, expectedSHA *string, taskID, transferID, executionID string) (bool, error) {
 	session, err := t.channel.OpenFileChannel(ctx, nodeID, transferID, executionID)
 	if err != nil {
 		return false, fmt.Errorf("%w: %v", ErrChannelDisconnected, err)
@@ -308,7 +308,7 @@ func (t *ChannelTransport) pullOnce(ctx context.Context, nodeID, remotePath stri
 
 	if err := t.send(ctx, session, ChannelFrame{
 		Version: ChannelProtocolVersion, Type: FrameOpen, Direction: ChannelDownload,
-		TransferID: transferID, ExecutionID: executionID, Path: remotePath, Offset: *written,
+		TaskID: taskID, TransferID: transferID, ExecutionID: executionID, Path: remotePath, Offset: *written,
 	}); err != nil {
 		return false, err
 	}
@@ -356,7 +356,7 @@ func (t *ChannelTransport) pullOnce(ctx context.Context, nodeID, remotePath stri
 			*written += int64(len(frame.Data))
 			if err := t.send(ctx, session, ChannelFrame{
 				Version: ChannelProtocolVersion, Type: FrameAck, Direction: ChannelDownload,
-				TransferID: transferID, ExecutionID: executionID, Offset: *written,
+				TaskID: taskID, TransferID: transferID, ExecutionID: executionID, Offset: *written,
 			}); err != nil {
 				return false, err
 			}
@@ -366,7 +366,7 @@ func (t *ChannelTransport) pullOnce(ctx context.Context, nodeID, remotePath stri
 			}
 			if err := t.send(ctx, session, ChannelFrame{
 				Version: ChannelProtocolVersion, Type: FrameCompleteAck, Direction: ChannelDownload,
-				TransferID: transferID, ExecutionID: executionID, Size: *expectedSize, SHA256: *expectedSHA,
+				TaskID: taskID, TransferID: transferID, ExecutionID: executionID, Size: *expectedSize, SHA256: *expectedSHA,
 			}); err != nil {
 				return false, err
 			}
@@ -430,11 +430,15 @@ func retryableChannelError(err error) bool {
 	return errors.Is(err, ErrChannelDisconnected)
 }
 
-func channelIDs(ctx context.Context) (string, string) {
+func channelIDs(ctx context.Context) (string, string, string) {
 	identity := channelIdentityFrom(ctx)
 	if validChannelToken(identity.transferID, 128) && validChannelToken(identity.executionID, 160) {
-		return identity.transferID, identity.executionID
+		taskID := identity.taskID
+		if taskID == "" {
+			taskID = "task_" + identity.transferID
+		}
+		return taskID, identity.transferID, identity.executionID
 	}
 	transferID := newID("xfer")
-	return transferID, "exec_" + transferID
+	return "task_" + transferID, transferID, "exec_" + transferID
 }

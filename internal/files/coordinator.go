@@ -236,7 +236,7 @@ func (c *TransferCoordinator) ExecuteTask(ctx context.Context, taskID string, ex
 			}
 			return outcome, err
 		}
-		itemCtx := WithChannelIdentity(ctx, transfer.ID+":"+strconv.Itoa(item.Sequence), executionID)
+		itemCtx := WithChannelTask(WithChannelIdentity(ctx, transfer.ID+":"+strconv.Itoa(item.Sequence), executionID), taskID)
 		update.Status = ItemCopying
 		outcome.Items = append(outcome.Items, update)
 		if progress != nil {
