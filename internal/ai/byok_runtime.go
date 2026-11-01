@@ -19,6 +19,9 @@ type BYOKRuntime struct {
 }
 
 func NewBYOKRuntime(sessions *SessionService, credentials *auth.CredentialService, filter func(context.Context, SessionView, string, string) (string, error), quota GenerationQuota) (*BYOKRuntime, error) {
+	return newBYOKRuntime(sessions, credentials, filter, quota, NewOpenAIStreamingTextProvider)
+}
+func newBYOKRuntime(sessions *SessionService, credentials *auth.CredentialService, filter func(context.Context, SessionView, string, string) (string, error), quota GenerationQuota, factory func(*auth.CredentialService, CredentialResolver) (*OpenAITextProvider, error)) (*BYOKRuntime, error) {
 	if credentials == nil || quota == nil || filter == nil {
 		return nil, ErrModelUnavailable
 	}
@@ -26,7 +29,7 @@ func NewBYOKRuntime(sessions *SessionService, credentials *auth.CredentialServic
 	if err != nil {
 		return nil, err
 	}
-	provider, err := NewOpenAIStreamingTextProvider(credentials, models.ResolveCredential)
+	provider, err := factory(credentials, models.ResolveCredential)
 	if err != nil {
 		return nil, err
 	}

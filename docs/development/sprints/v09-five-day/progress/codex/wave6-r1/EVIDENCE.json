@@ -1,0 +1,511 @@
+{
+  "task": "V09-R6-CX-02",
+  "session": "codex-06",
+  "reviewer": "codex-review-02",
+  "generatedAt": "2026-11-01T11:29:14.162Z",
+  "branch": "feature/v09-r6-platform-cx06",
+  "synchronizedBase": "379d5e0e4818844eb44d8ac13010f251d215d8c0",
+  "testedCodeSHA": "8336e56426d2016707b89f4cd80bd8b46f221687",
+  "workingTreeAtVerification": "CLEAN",
+  "commits": [
+    {
+      "sha": "d58020c67d9ac798ec502853015e2f392c62cd49",
+      "scope": "WSS file sessions and Agent actual I/O"
+    },
+    {
+      "sha": "8bbe64e7f72c42577bd13a4146df9a4d0e34dc07",
+      "scope": "Persistent AI budgets, typed audit, local TLS Controller HTTP proof"
+    },
+    {
+      "sha": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "scope": "Owned process update rollback, resource limit, fresh restore epoch"
+    }
+  ],
+  "changedFiles": [
+    "apps/agent/connect.go",
+    "apps/agent/file_capability.go",
+    "apps/agent/file_capacity_linux_test.go",
+    "apps/agent/file_nofollow_linux.go",
+    "apps/agent/file_nofollow_other.go",
+    "apps/agent/file_race_linux_test.go",
+    "apps/agent/file_session.go",
+    "apps/agent/file_wss_test.go",
+    "apps/agent/runtime/runtime.go",
+    "apps/agent/session.go",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/SHARED-CHANGES.md",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/STATUS.md",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/controller-ai-schema.patch",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/controller-ai.patch",
+    "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/controller-files.patch",
+    "internal/ai/budget_sql.go",
+    "internal/ai/byok_runtime.go",
+    "internal/ai/generation_admission.go",
+    "internal/ai/generation_budget.go",
+    "internal/ai/local_tls_provider.go",
+    "internal/ai/local_tls_provider_test.go",
+    "internal/ai/model_audit_sql.go",
+    "internal/ai/openai_text.go",
+    "internal/auth/administrator_check.go",
+    "internal/recovery/restore_executor.go",
+    "internal/transport/controller_link.go",
+    "internal/transport/file_client.go",
+    "internal/transport/file_protocol.go",
+    "internal/transport/file_protocol_test.go",
+    "internal/transport/validation.go",
+    "internal/updates/supervisor_linux.go",
+    "internal/updates/supervisor_linux_test.go",
+    "tests/integration/v09/platform/controller_local_ai_r1_test.go",
+    "tests/integration/v09/platform/generation_budget_sql_test.go",
+    "tests/integration/v09/platform/restore_executor_test.go",
+    "tests/poc/v09/platform/prepare-wave6-r1-overlays.mjs",
+    "tests/poc/v09/platform/run-wave6-r1-linux.mjs"
+  ],
+  "mandatory": {
+    "setup": [
+      {
+        "command": "npm ci",
+        "status": "PASS",
+        "note": "buf postinstall allowScripts warning retained; subsequent fixed Buf checks actually execute"
+      },
+      {
+        "command": "npm run tools:install",
+        "status": "PASS"
+      }
+    ],
+    "check": {
+      "executedAt": "2026-11-01T11:28:38.015Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        },
+        {
+          "name": "contracts",
+          "status": "PASS"
+        },
+        {
+          "name": "go",
+          "status": "PASS"
+        },
+        {
+          "name": "web",
+          "status": "PASS"
+        },
+        {
+          "name": "git",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-11-01T11:26:02.738Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "linuxVulnerabilityScan": {
+      "command": "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 .tools/bin/govulncheck.exe ./...",
+      "status": "PASS",
+      "output": "No vulnerabilities found."
+    },
+    "linuxVet": {
+      "command": "GOOS=linux GOARCH=amd64 go vet ./apps/agent/... ./internal/auth ./internal/transport ./internal/ai ./internal/updates ./internal/recovery",
+      "status": "PASS"
+    },
+    "go": {
+      "topLevelPass": 720,
+      "subtestPass": 1177,
+      "failed": [],
+      "skipped": [
+        {
+          "package": "serverfleet.local/serverfleet/apps/agent",
+          "test": "TestAgentExecutorRejectsNonPrivateLedgerOnLinux",
+          "reason": "=== RUN   TestAgentExecutorRejectsNonPrivateLedgerOnLinux\n    executor_test.go:176: Linux directory permission check\n--- SKIP: TestAgentExecutorRejectsNonPrivateLedgerOnLinux (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/apps/agent",
+          "test": "TestAgentFileBytesResumeHashAndIndependentReadGate",
+          "reason": "=== RUN   TestAgentFileBytesResumeHashAndIndependentReadGate\n    file_capability_test.go:20: Linux non-root byte capability\n--- SKIP: TestAgentFileBytesResumeHashAndIndependentReadGate (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/apps/agent",
+          "test": "TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel",
+          "reason": "=== RUN   TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel\n    file_capability_test.go:75: Linux non-root byte capability\n--- SKIP: TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/apps/agent",
+          "test": "TestActualWSSCompletionLossAndReconnectCannotRepeatWrite",
+          "reason": "=== RUN   TestActualWSSCompletionLossAndReconnectCannotRepeatWrite\n    file_wss_test.go:171: Linux non-root actual WSS\n--- SKIP: TestActualWSSCompletionLossAndReconnectCannotRepeatWrite (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/apps/agent",
+          "test": "TestActualWSSFileTwoAgentsBytesCancelRevokeAndUnknown",
+          "reason": "=== RUN   TestActualWSSFileTwoAgentsBytesCancelRevokeAndUnknown\n    file_wss_test.go:218: Linux non-root real file sessions\n--- SKIP: TestActualWSSFileTwoAgentsBytesCancelRevokeAndUnknown (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/files",
+          "test": "TestLocalStagingRejectsSymlinkedDirectories",
+          "reason": "=== RUN   TestLocalStagingRejectsSymlinkedDirectories\n    local_transport_test.go:131: symlinks unavailable: symlink C:\\Users\\姜维\\AppData\\Local\\Temp\\TestLocalStagingRejectsSymlinkedDirectories1464676284\\002 C:\\Users\\姜维\\AppData\\Local\\Temp\\TestLocalStagingRejectsSymlinkedDirectories1464676284\\001\\node-staging\\node-1\\srv: A required privilege is not held by the client.\n--- SKIP: TestLocalStagingRejectsSymlinkedDirectories (0.15s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/files",
+          "test": "TestLocalStagingRejectsSymlinkedTargetFile",
+          "reason": "=== RUN   TestLocalStagingRejectsSymlinkedTargetFile\n    local_transport_test.go:158: symlinks unavailable: symlink C:\\Users\\姜维\\AppData\\Local\\Temp\\TestLocalStagingRejectsSymlinkedTargetFile1718471774\\002\\outside.txt C:\\Users\\姜维\\AppData\\Local\\Temp\\TestLocalStagingRejectsSymlinkedTargetFile1718471774\\001\\node-staging\\node-1\\srv\\app\\target: A required privilege is not held by the client.\n--- SKIP: TestLocalStagingRejectsSymlinkedTargetFile (0.03s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/tests/poc/v09/services/cloudflare",
+          "test": "TestCloudflareDNS",
+          "reason": "=== RUN   TestCloudflareDNS\n    cloudflare_test.go:180: CLOUDFLARE_API_TOKEN is not set\n--- SKIP: TestCloudflareDNS (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/recovery",
+          "test": "TestQuarantineRejectsNonPrivateLinuxDirectory",
+          "reason": "=== RUN   TestQuarantineRejectsNonPrivateLinuxDirectory\n    quarantine_test.go:24: Linux directory permission check\n--- SKIP: TestQuarantineRejectsNonPrivateLinuxDirectory (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+          "test": "TestPinnedXrayActualConfigTestAndLoopbackStart",
+          "reason": "=== RUN   TestPinnedXrayActualConfigTestAndLoopbackStart\n    config_binary_test.go:51: UNTESTED: explicit pinned local Xray binary not supplied\n--- SKIP: TestPinnedXrayActualConfigTestAndLoopbackStart (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+          "test": "TestCustomActualTargetValidationAndProxyCannotReachAPI",
+          "reason": "=== RUN   TestCustomActualTargetValidationAndProxyCannotReachAPI\n    config_binary_test.go:159: UNTESTED: explicit pinned local Xray binary not supplied\n--- SKIP: TestCustomActualTargetValidationAndProxyCannotReachAPI (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+          "test": "TestPinnedXrayActualVisionTrafficStatsAndProcessReset",
+          "reason": "=== RUN   TestPinnedXrayActualVisionTrafficStatsAndProcessReset\n    stats_binary_test.go:32: UNTESTED: explicit pinned local Xray binary not supplied\n--- SKIP: TestPinnedXrayActualVisionTrafficStatsAndProcessReset (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+          "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask",
+          "reason": "=== RUN   TestWave5ControllerAndAgentCLIFullLoopWSSAndTask\n    controller_cli_pki_test.go:467: Controller Agent enrollment and WSS admission are Linux-only by policy; run this test on Linux (WSL Ubuntu) for full-loop evidence\n--- SKIP: TestWave5ControllerAndAgentCLIFullLoopWSSAndTask (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+          "test": "TestWave6ControllerAndResidentAgentCLI",
+          "reason": "=== RUN   TestWave6ControllerAndResidentAgentCLI\n    controller_cli_pki_test.go:471: Controller Agent enrollment and WSS admission are Linux-only by policy; run this test on Linux (WSL Ubuntu) for full-loop evidence\n--- SKIP: TestWave6ControllerAndResidentAgentCLI (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/auth",
+          "test": "TestPersistentCredentialRestartRotationAndFailureClosed",
+          "reason": "=== RUN   TestPersistentCredentialRestartRotationAndFailureClosed\n    credential_keyring_test.go:14: requires Linux owner and mode checks\n--- SKIP: TestPersistentCredentialRestartRotationAndFailureClosed (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/auth",
+          "test": "TestPersistentCredentialConcurrentInitialization",
+          "reason": "=== RUN   TestPersistentCredentialConcurrentInitialization\n    credential_keyring_test.go:92: requires Linux owner and mode checks\n--- SKIP: TestPersistentCredentialConcurrentInitialization (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/auth",
+          "test": "TestPersistentCredentialRejectDirectoryAndSymlink",
+          "reason": "=== RUN   TestPersistentCredentialRejectDirectoryAndSymlink\n    credential_keyring_test.go:134: requires Linux owner and mode checks\n--- SKIP: TestPersistentCredentialRejectDirectoryAndSymlink (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/internal/auth",
+          "test": "TestWave6RevokedCredentialDoesNotPreventRestart",
+          "reason": "=== RUN   TestWave6RevokedCredentialDoesNotPreventRestart\n    credential_restart_review_test.go:12: Linux private-key store\n--- SKIP: TestWave6RevokedCredentialDoesNotPreventRestart (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+          "test": "TestWave6IsolatedNginxProxy",
+          "reason": "=== RUN   TestWave6IsolatedNginxProxy\n    nginx_wave6_test.go:24: Linux isolated nginx\n--- SKIP: TestWave6IsolatedNginxProxy (0.00s)"
+        },
+        {
+          "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+          "test": "TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations",
+          "reason": "=== RUN   TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations\n    restore_executor_test.go:22: Linux non-root restore executor\n--- SKIP: TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations (0.00s)"
+        }
+      ]
+    },
+    "web": {
+      "tests": 333,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "linux": [
+    {
+      "target": "agent",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "da5f4c2eb905553101b52d4a2cc26ef4e4f7ef29932f0e01e93c0bca8daee4f2",
+      "passed": 42,
+      "skipped": 1,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs agent",
+      "nativeLog": "reports/wave6-r1-linux/agent-native.log",
+      "nativeLogSHA256": "a81e5b310728831a6bbcf4751a8bbdc69302eb52446d9c3033d3f56d368a1ab4",
+      "skipLines": [
+        "--- SKIP: TestFileCapacityChild (0.00s)"
+      ]
+    },
+    {
+      "target": "transport",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "51b91194781a95565367cd0e891e06a27fc476097feb0d6fc3e33a327341e46e",
+      "passed": 58,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs transport",
+      "nativeLog": "reports/wave6-r1-linux/transport-native.log",
+      "nativeLogSHA256": "52a645e4d586728a8a632cd85d90edc5995c755ec5e3ec6c86fe72dfa834e1c7",
+      "skipLines": []
+    },
+    {
+      "target": "ai",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "72153545a155822fef83d1f960c6b3120b0a4fffe95a8498f258b82230872184",
+      "passed": 34,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs ai",
+      "nativeLog": "reports/wave6-r1-linux/ai-native.log",
+      "nativeLogSHA256": "a7c15d96da2d3e198f8723214ca159af5f90f5d1db1da357c53e109d19764207",
+      "skipLines": []
+    },
+    {
+      "target": "budget",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "912f1e29abab66da7c5f8d09c712e253a26b7f5b261aa470421a2d330e00c531",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs budget",
+      "nativeLog": "reports/wave6-r1-linux/budget-native.log",
+      "nativeLogSHA256": "fbb5be45c922751bcb3eac0ba4fad409c80a19d7870deeee72ed1c139ec07176",
+      "skipLines": []
+    },
+    {
+      "target": "controller",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "06d9fb89733642c17152fb743870b3da50324625fbc32d2a74a23606f9663322",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs controller",
+      "nativeLog": "reports/wave6-r1-linux/controller-native.log",
+      "nativeLogSHA256": "6a631a46431a2134d8e4fcdfe8ad999f7c1da50a4e6d4bd1c8bf3259011ce9f3",
+      "skipLines": []
+    },
+    {
+      "target": "updates",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "021680861a4362909d7433c7dcee80a0367d21ab42793a7840f0c380075d7a2f",
+      "passed": 15,
+      "skipped": 1,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs updates",
+      "nativeLog": "reports/wave6-r1-linux/updates-native.log",
+      "nativeLogSHA256": "30d64fe6602447a0b896c6eed5a672514bd099839504008c8d4c212f25e25248",
+      "skipLines": [
+        "--- SKIP: TestOwnedSupervisorChild (0.00s)"
+      ]
+    },
+    {
+      "target": "recovery",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "d0f6f0324d3747bbbbb817791f9105b2d6af39ff3181a50a8a85fd62277758db",
+      "passed": 5,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs recovery",
+      "nativeLog": "reports/wave6-r1-linux/recovery-native.log",
+      "nativeLogSHA256": "bca9bcd2c4b0aaf2bfd9ca6658b133e19bf47913dfa22deb5400b05fc2a76917",
+      "skipLines": []
+    },
+    {
+      "target": "restore",
+      "uid": "1000",
+      "head": "8336e56426d2016707b89f4cd80bd8b46f221687",
+      "workingTree": "",
+      "binarySHA256": "912f1e29abab66da7c5f8d09c712e253a26b7f5b261aa470421a2d330e00c531",
+      "passed": 1,
+      "skipped": 0,
+      "status": "PASS",
+      "limits": "Local WSL amd64 only. Controller target uses explicit unadopted shared patches through Go overlay.",
+      "command": "node tests/poc/v09/platform/run-wave6-r1-linux.mjs restore",
+      "nativeLog": "reports/wave6-r1-linux/restore-native.log",
+      "nativeLogSHA256": "62ae8cad759edca6c573cd6c5b9dd9d9e5c79f77688d04683d16e623874d1b5c",
+      "skipLines": []
+    }
+  ],
+  "crossCompile": [
+    {
+      "command": "GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -mod=readonly -o reports/wave6-r1/agent-linux-amd64 ./apps/agent",
+      "status": "PASS",
+      "sha256": "50aeea3fa5fde9d767c1ca60aced5dd7fb6252efcaa108645e88b0e99f8bfbfd",
+      "runtimeEvidence": "WSL tests run on amd64; production deployment untested"
+    },
+    {
+      "command": "GOOS=linux GOARCH=arm64 CGO_ENABLED=0 go build -mod=readonly -o reports/wave6-r1/agent-linux-arm64 ./apps/agent",
+      "status": "PASS",
+      "sha256": "667f7b28b3d03de658174482adb9385204030f35aba854ebd306a3c303a16def",
+      "runtimeEvidence": "UNTESTED"
+    }
+  ],
+  "sharedCandidates": {
+    "patches": [
+      {
+        "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/controller-files.patch",
+        "sha256": "c1e294c42cff866cdcc8ff130932df06412e03fa84c8e63860db65e77427498b",
+        "applicability": "PASS"
+      },
+      {
+        "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/controller-ai.patch",
+        "sha256": "4cf3e4f183ed7b91d319655fde388a9ee6f10623311ab43069819addf623e6e9",
+        "applicability": "PASS"
+      },
+      {
+        "path": "docs/development/sprints/v09-five-day/progress/codex/wave6-r1/controller-ai-schema.patch",
+        "sha256": "b8005cfa9baeb0e20c0d0f18ca1b55ac7454b78f9edd810c879b25b86014baf2",
+        "applicability": "PASS"
+      }
+    ],
+    "composition": "files+AI patches tested via combined Go overlay using actual Controller HTTPS + actual local TLS provider. Schema helper additionally compiled via schema-overlay.json; no actual shared source edits or assigned migration version."
+  },
+  "knownInitialFailures": [
+    {
+      "case": "WSS cancel fixture dispatched next offer before TaskFinished",
+      "result": "FAIL then fixed fixture waits terminal; finished worker entries pruned; no grant weakened"
+    },
+    {
+      "case": "TLS cancellation fixture did not consume request body",
+      "result": "Diagnostic test timeout; fixed body consumption and bounded fixture wait; stopped only exact own stale test PID",
+      "log": "reports/wave6-r1/local-provider-diagnostic.log"
+    },
+    {
+      "case": "Controller fixture assumed incorrect permission action and message POST status",
+      "result": "FAIL then fixed fixture to current admin check and existing HTTP 200 contract"
+    },
+    {
+      "case": "Restore same trust epoch reached commit",
+      "result": "Regression FAIL before fix, PASS after strict current > snapshot check",
+      "log": "reports/wave6-r1-linux/restore-before-fix.log"
+    }
+  ],
+  "remaining": [
+    {
+      "status": "BLOCKED",
+      "item": "Controller unified file worker + DS explicit path mapping/stable per-item IDs/current task and separate source-read/destination-write authorizations; patch acceptance and integration owner required"
+    },
+    {
+      "status": "BLOCKED",
+      "item": "Shared AI migration number/DDL registration and actual runtime budget/typed-audit composition; candidate overlay proof is not main integration"
+    },
+    {
+      "status": "UNTESTED",
+      "item": "Actual ENOSPC or genuinely full filesystem. Actual RLIMIT_FSIZE EFBIG partial write and Fstatfs preflight are verified separately"
+    },
+    {
+      "status": "UNTESTED",
+      "item": "awskr/physical cross-machine, arm64 runtime, real external models, browser per-token display, real product signed release update and resource profile"
+    },
+    {
+      "status": "BLOCKED",
+      "item": "Update production readiness/storage compatibility/atomic commit adapters; root action schemas and sandbox admission remain closed"
+    },
+    {
+      "status": "BLOCKED",
+      "item": "Restore real offline authority, new key/trust generation, old remote Controller fence and explicit quarantine release; current result remains restored_quarantined"
+    },
+    {
+      "status": "BLOCKED",
+      "item": "Xray 26.10.29 pinned public archive unavailable before static scan; historical candidate security FAILs remain, no new scan PASS or executed binary"
+    },
+    {
+      "status": "UNIMPLEMENTED_REJECTED",
+      "item": "File rename/overwrite/createParents/nonzero resume offset; only skip/new destination supported"
+    },
+    {
+      "status": "UNTESTED",
+      "item": "Standalone Controller/Agent full CLI and resident CLI were skipped on Windows and not rerun on current SHA in WSL: native Go executable unavailable (environment probe exit127). Existing actual WSS Agent sessions run as native cross-compiled test binaries."
+    }
+  ],
+  "constraints": {
+    "noMainMerge": true,
+    "noSSHOrAwskr": true,
+    "noCloudOrRealExternalCredentials": true,
+    "noOtherAgentOrMessages": true,
+    "sharedFilesEdited": false,
+    "completeV09OrG2Admission": false
+  },
+  "logs": [
+    {
+      "path": "reports/wave6-r1/final-npm-ci.log",
+      "sha256": "7df1f10882a62cc98fda7b85629b81916ae52745af90b42f5b491d4df0f416d8"
+    },
+    {
+      "path": "reports/wave6-r1/final-tools-install.log",
+      "sha256": "e889f4db965670aef2d2ded045e8bfe7105b4a3f51e26909061794c1d330cec0"
+    },
+    {
+      "path": "reports/wave6-r1/final-check.log",
+      "sha256": "5695e9dd85535e46a4a0bcda2327628d3dea2001d3436c5912d5a1fc7b23bb82"
+    },
+    {
+      "path": "reports/wave6-r1/final-security.log",
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2"
+    },
+    {
+      "path": "reports/wave6-r1/linux-security.log",
+      "sha256": "0353520b9540385330271a83670eb660b057d25bb4db4982ef7c8337156c9f21"
+    },
+    {
+      "path": "reports/wave6-r1/linux-vet.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "reports/wave6-r1/schema-overlay-compile.log",
+      "sha256": "8279a1fdc6523abece311631be30b59de6e5526290bf540cd24c9cdcf19f55b9"
+    },
+    {
+      "path": "reports/wave6-r1/xray-static-audit.log",
+      "sha256": "b43b5159329a56bcf8f898706c68030fe1d9d04ba5f32db822df81809c4a2bef"
+    },
+    {
+      "path": "reports/wave6-r1/local-provider-diagnostic.log",
+      "sha256": "b9000570aad3b0a470500c786e308a076fb6ac63849b50ec54ac0c9e43ee4f18"
+    },
+    {
+      "path": "reports/go-tests.log",
+      "sha256": "fcca6432caec340bb992eba3d5e903e8df1badbddbffadf41c4f88404fc674fa"
+    },
+    {
+      "path": "reports/web-junit.xml",
+      "sha256": "2338912781f5c571a66ac2811a1d4615da11364e4aba6ba7f07c12c422a9f1d5"
+    },
+    {
+      "path": "reports/wave6-r1-linux/restore-before-fix.log",
+      "sha256": "ed75c729c8515bc294fcb2a00d49a6bee2a3a889cadd457156d78cdb1fb96267"
+    },
+    {
+      "path": "reports/wave6-r1/linux-cli-toolchain.log",
+      "sha256": "8fd55053ee8505b56f3c518dce0899afc4405044175f94c5fbefe6721807e9f3"
+    }
+  ]
+}

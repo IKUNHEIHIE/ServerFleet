@@ -69,6 +69,7 @@ type ConnectRequest struct {
 	WaitTaskMillis  int
 	AgentVersion    string
 	Persistent      bool
+	FileRoot        string
 }
 
 // ConnectResult is the observed single-shot connection outcome.
@@ -108,6 +109,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	enrollToken := flags.String("enroll-token", "", "one-time enrollment token")
 	connectOnce := flags.Bool("connect-once", false, "open one controlled WSS+mTLS connection, sample once and exit")
 	serve := flags.Bool("serve", false, "maintain WSS+mTLS with bounded reconnect; stop with SIGTERM")
+	fileRoot := flags.String("file-root", "", "explicit private Linux file root (enables reviewed files.transfer.v1 profile)")
 	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
 	waitTaskMS := flags.Int("wait-task-ms", 0, "one-shot wait window for one TaskOffer after sampling (0..600000)")
 	agentVersion := flags.String("agent-version", DefaultVersion, "Agent version reported during enrollment and connection")
@@ -116,6 +118,9 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	}
 	if flags.NArg() != 0 {
 		fmt.Fprintln(stderr, "agent: unexpected positional arguments")
+		return 2
+	}
+	if *fileRoot != "" && (!filepath.IsAbs(*fileRoot) || !(*serve || *connectOnce)) {
 		return 2
 	}
 
@@ -162,7 +167,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
 			return 1
 		}
-		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true}); err != nil {
+		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, FileRoot: *fileRoot}); err != nil {
 			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
 			return 1
 		}
@@ -226,6 +231,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			return 2
 		}
 		result, err := deps.Connect(ctx, ConnectRequest{
+			FileRoot:        *fileRoot,
 			ControllerURL:   origin,
 			StateDir:        *stateDir,
 			RootPin:         resolvedPin,

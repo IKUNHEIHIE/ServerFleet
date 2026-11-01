@@ -28,9 +28,10 @@ type agentFileBinding struct {
 }
 type agentFileGate func(context.Context, agentFileBinding, string) error
 type agentFileCapability struct {
-	mu   sync.Mutex
-	root *os.Root
-	gate agentFileGate
+	mu        sync.Mutex
+	root      *os.Root
+	gate      agentFileGate
+	snapshots map[string]*os.File
 }
 
 func openAgentFileCapability(directory string, gate agentFileGate) (*agentFileCapability, error) {
@@ -45,9 +46,16 @@ func openAgentFileCapability(directory string, gate agentFileGate) (*agentFileCa
 	if err != nil {
 		return nil, errFileCapability
 	}
-	return &agentFileCapability{root: r, gate: gate}, nil
+	return &agentFileCapability{root: r, gate: gate, snapshots: map[string]*os.File{}}, nil
 }
-func (f *agentFileCapability) Close() error { return f.root.Close() }
+func (f *agentFileCapability) Close() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, file := range f.snapshots {
+		file.Close()
+	}
+	return f.root.Close()
+}
 func validAgentFileBinding(b agentFileBinding, direction string) bool {
 	h, err := hex.DecodeString(b.SHA256)
 	return executionIDPattern.MatchString(b.TaskID) && executionIDPattern.MatchString(b.ExecutionID) && executionIDPattern.MatchString(b.TransferID) && executionIDPattern.MatchString(b.NodeID) && b.Direction == direction && fs.ValidPath(b.RelativePath) && b.RelativePath != "." && !strings.Contains(b.RelativePath, "\\") && !strings.Contains(b.RelativePath, ":") && !strings.HasPrefix(b.RelativePath, ".sf-") && len(b.RelativePath) <= 1024 && b.Size >= 0 && b.Size <= 64<<20 && err == nil && len(h) == 32 && hex.EncodeToString(h) == b.SHA256
@@ -94,11 +102,19 @@ func (f *agentFileCapability) Read(ctx context.Context, b agentFileBinding, offs
 	if !validAgentFileBinding(b, "read") || offset < 0 || offset > b.Size || length <= 0 || length > agentFileChunkBytes || int64(length) > b.Size-offset || f.check(ctx, b, "read") != nil || f.safePath(b.RelativePath, false) != nil {
 		return nil, errFileCapability
 	}
-	file, err := f.root.Open(b.RelativePath)
+	file, err := agentFileOpen(f.root, b.RelativePath, os.O_RDONLY, 0)
+	if snapshot := f.snapshots[b.TransferID]; snapshot != nil {
+		if file != nil {
+			file.Close()
+		}
+		file, err = snapshot, nil
+	}
 	if err != nil {
 		return nil, errFileCapability
 	}
-	defer file.Close()
+	if f.snapshots[b.TransferID] == nil {
+		defer file.Close()
+	}
 	if hashAgentFile(file, b.Size, b.SHA256) != nil {
 		return nil, errFileCapability
 	}
@@ -121,6 +137,9 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	if !validAgentFileBinding(b, "write") || offset < 0 || offset > b.Size || len(chunk) > agentFileChunkBytes || int64(len(chunk)) > b.Size-offset || len(chunk) == 0 && !finish || f.check(ctx, b, "write") != nil || f.safePath(b.RelativePath, true) != nil {
 		return errFileCapability
 	}
+	if agentFileSpace(f.root, int64(len(chunk))+4096) != nil {
+		return errFileCapability
+	}
 	dir := ".sf-" + b.TransferID
 	err := f.root.Mkdir(dir, 0700)
 	if err != nil && !os.IsExist(err) {
@@ -128,7 +147,7 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	}
 	encoded, _ := json.Marshal(b)
 	if err == nil {
-		file, e := f.root.OpenFile(dir+"/binding.json", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+		file, e := agentFileOpen(f.root, dir+"/binding.json", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 		if e != nil {
 			return errFileCapability
 		}
@@ -152,7 +171,7 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	if _, e := f.root.Lstat(dir + "/complete"); e == nil || !os.IsNotExist(e) {
 		return errFileCapability
 	}
-	file, err := f.root.OpenFile(dir+"/partial", os.O_RDWR|os.O_CREATE, 0600)
+	file, err := agentFileOpen(f.root, dir+"/partial", os.O_RDWR|os.O_CREATE, 0600)
 	if err != nil {
 		return errFileCapability
 	}
@@ -174,7 +193,18 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 		return errFileCapability
 	}
 	// No automatic retry after this point: a lost acknowledgement is UNKNOWN.
-	if f.root.Link(dir+"/partial", b.RelativePath) != nil {
+	if agentFilePublish(f.root, dir+"/partial", b.RelativePath) != nil {
+		return errFileCapability
+	}
+	published, err := agentFileOpen(f.root, b.RelativePath, os.O_RDONLY, 0)
+	if err != nil {
+		return errFileCapability
+	}
+	before, _ := file.Stat()
+	after, statErr := published.Stat()
+	verifyErr := hashAgentFile(published, b.Size, b.SHA256)
+	published.Close()
+	if statErr != nil || !os.SameFile(before, after) || verifyErr != nil {
 		return errFileCapability
 	}
 	marker, err := f.root.OpenFile(dir+"/complete", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -195,6 +225,76 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 		return errFileCapability
 	}
 	return nil
+}
+
+// Snapshot freezes actual source bytes before the first chunk. Subsequent reads
+// use this private descriptor, even if the source pathname is replaced/changed.
+func (f *agentFileCapability) Snapshot(ctx context.Context, b agentFileBinding) (agentFileBinding, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if b.Direction != "read" || f.snapshots[b.TransferID] != nil || f.check(ctx, b, "stat") != nil || f.safePath(b.RelativePath, false) != nil {
+		return b, errFileCapability
+	}
+	src, err := agentFileOpen(f.root, b.RelativePath, os.O_RDONLY, 0)
+	if err != nil {
+		return b, errFileCapability
+	}
+	defer src.Close()
+	info, err := src.Stat()
+	if err != nil || !info.Mode().IsRegular() || info.Size() < 0 || info.Size() > 64<<20 {
+		return b, errFileCapability
+	}
+	if agentFileSpace(f.root, info.Size()) != nil {
+		return b, errFileCapability
+	}
+	name := ".sf-read-" + b.TransferID
+	dst, err := agentFileOpen(f.root, name, os.O_CREATE|os.O_EXCL|os.O_RDWR, 0600)
+	if err != nil {
+		return b, errFileCapability
+	}
+	accepted := false
+	defer func() {
+		if !accepted {
+			dst.Close()
+		}
+	}()
+	h := sha256.New()
+	buffer := make([]byte, agentFileChunkBytes)
+	defer clear(buffer)
+	var size int64
+	for {
+		if f.check(ctx, b, "snapshot") != nil {
+			return b, errFileCapability
+		}
+		n, e := src.Read(buffer)
+		size += int64(n)
+		if size > 64<<20 {
+			return b, errFileCapability
+		}
+		if n > 0 {
+			h.Write(buffer[:n])
+			if _, e := dst.Write(buffer[:n]); e != nil {
+				return b, errFileCapability
+			}
+		}
+		if e == io.EOF {
+			break
+		}
+		if e != nil || n == 0 {
+			return b, errFileCapability
+		}
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	if b.SHA256 != "" && (b.Size != size || b.SHA256 != digest) || dst.Sync() != nil || syncAgentFileDirectory(f.root, ".") != nil {
+		return b, errFileCapability
+	}
+	b.Size, b.SHA256 = size, digest
+	if f.check(ctx, b, "snapshot-complete") != nil {
+		return b, errFileCapability
+	}
+	f.snapshots[b.TransferID] = dst
+	accepted = true
+	return b, nil
 }
 
 func syncAgentFileDirectory(root *os.Root, name string) error {
