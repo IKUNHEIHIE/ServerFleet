@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-WAVE6-REVIEW | IN_PROGRESS：精确审查CX 4a3e31e、DS fd2e015；GM旧SHA已确认中断，等待新增量；独立组合与隔离awskr验证 | codex-review-02 | integration/v09-wave6-review-cx02 / `.worktrees/integration--v09-wave6-review-cx02` | 本轮三线增量审查、必要安全修复与apps/controller组合接线、共享差异协调、专用验证/证据及任务交接；不改作者未提交内容或awskr既有服务 | 项目负责人；起始73d5dd4；完成已收到增量的审查/安全集成/验证及剩余任务交接后停止 |
 | V09-CONTROL-RESUME | 本次接管/awskr实机CLI基线及本地组合安全检查完成；总控身份持续，后续接收Wave6检查点 | codex-review-02 | integration/v09-control-resume-cx01 / `.worktrees/integration--v09-control-resume-cx01` | 独立审查接收、当前授权/任务/证据、隔离测试部署与必要集成接线；仅awskr指定主机，不改其既有服务/数据库/站点/防火墙，不创建云资源或扩展其他主机 | 项目负责人；起始2da203c；见reviews/V09-CONTROL-RESUME.md；本次交接后报告 |
 | V09-R6-CX | READY，待负责人交给作者，不自动启动 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6.md的凭据密钥/Agent常驻与能力/AI模型/Xray及更新恢复平台，专用测试/progress；apps/controller及共享契约总控接线 | codex-review-02+安全/契约；共同精确基线随最终交接给出 |
 | V09-R6-DS | READY，待负责人交给作者，不自动启动 | deepseek-06 | feature/v09-r6-services-ds06 / `.worktrees/feature--v09-r6-services-ds06` | WAVE6.md的真实文件通道/供应商与发布补偿/任务数据接缝、专用测试/progress；不改CX/GM目录/主控入口 | codex-review-02+安全/契约；共同精确基线随最终交接给出 |
