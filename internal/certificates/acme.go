@@ -237,7 +237,7 @@ type acmeJWS struct {
 // IssueDNS01 obtains one certificate through a DNS-01 challenge. The returned
 // chain is only produced after the CA reports the order as valid and the leaf
 // parses; no local self-signed fallback exists.
-func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEIssued, error) {
+func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (result ACMEIssued, resultErr error) {
 	if c == nil {
 		return ACMEIssued{}, ErrACMEConfig
 	}
@@ -291,11 +291,18 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 		}
 		return errors.Join(failures...)
 	}
+	defer func() {
+		// A failed order may still leave provider records behind. Preserve both
+		// failures and their durable record identities on every exit path.
+		result.DNS01Records = append([]ACMEDNS01Record(nil), records...)
+		if cleanupErr := cleanup(); cleanupErr != nil {
+			resultErr = errors.Join(resultErr, fmt.Errorf("%w: %w", ErrACMEDNSCleanup, cleanupErr))
+		}
+	}()
 	wildcard := strings.HasPrefix(commonName, "*.")
 	for _, authzURL := range order.Authorizations {
 		authz, err := c.fetchAuthorization(ctx, accountURL, authzURL, commonName, wildcard)
 		if err != nil {
-			_ = cleanup()
 			return ACMEIssued{}, err
 		}
 		if authz.Status == "valid" {
@@ -303,56 +310,43 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEI
 		}
 		challenge, ok := findDNS01(authz.Challenges)
 		if !ok {
-			_ = cleanup()
 			return ACMEIssued{}, fmt.Errorf("%w: no dns-01 challenge", ErrACMEChallenge)
 		}
 		if err := c.authorizeChallenge(ctx, accountURL, authz, challenge, thumbprint, &cleanups, &records); err != nil {
-			_ = cleanup()
 			return ACMEIssued{}, err
 		}
 		if err := c.waitAuthorization(ctx, accountURL, authzURL, commonName, wildcard); err != nil {
-			_ = cleanup()
 			return ACMEIssued{}, err
 		}
 	}
 	csr, err := c.createCSR(ctx, commonName, request.KeyRef)
 	if err != nil {
-		_ = cleanup()
 		return ACMEIssued{}, err
 	}
 	finalized, err := c.finalize(ctx, accountURL, order.Finalize, csr)
 	if err != nil {
-		_ = cleanup()
 		return ACMEIssued{}, err
 	}
 	if finalized.Status != "valid" {
 		finalized, err = c.waitOrder(ctx, accountURL, orderURL)
 		if err != nil {
-			_ = cleanup()
 			return ACMEIssued{}, err
 		}
 	}
 	if finalized.Certificate == "" {
-		_ = cleanup()
 		return ACMEIssued{}, fmt.Errorf("%w: order has no certificate url", ErrACMEIssuance)
 	}
 	chain, err := c.downloadCertificate(ctx, accountURL, finalized.Certificate)
 	if err != nil {
-		_ = cleanup()
 		return ACMEIssued{}, err
 	}
 	issued, err := parseACMEChain(chain)
 	if err != nil {
-		_ = cleanup()
 		return ACMEIssued{}, err
 	}
 	issued.DNS01Records = append([]ACMEDNS01Record(nil), records...)
 	if err := c.verifyIssuedChain(issued, csr, commonName, wildcard, time.Now()); err != nil {
-		_ = cleanup()
 		return ACMEIssued{}, err
-	}
-	if cleanupErr := cleanup(); cleanupErr != nil {
-		return issued, fmt.Errorf("%w: %v", ErrACMEDNSCleanup, cleanupErr)
 	}
 	return issued, nil
 }

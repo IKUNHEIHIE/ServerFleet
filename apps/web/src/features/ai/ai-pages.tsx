@@ -117,7 +117,7 @@ export function AIPage() {
           )}
         </AsyncPanel>
       </Panel>
-      <ModelSettingsPanel />
+      <ModelSettingsPanel key={session.viewEpoch} />
     </div>
   );
 }
@@ -131,6 +131,7 @@ export function AIPage() {
  */
 function ModelSettingsPanel() {
   const session = useSession();
+  const [conflict, setConflict] = useState(false);
   const settings = useResource(`ai:model-settings:${session.viewEpoch}`, signal =>
     modelSettingsApi.get(signal).then(result => result.data),
   );
@@ -146,6 +147,11 @@ function ModelSettingsPanel() {
       title="AI 模型设置（当前用户）"
       description="GET/PUT /api/v1/ai/model-settings；PUT 是 owner CAS，仅当前真人管理员可写。保存的配置不代表供应商健康。"
     >
+      {conflict ? (
+        <Notice tone="error" title="配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）">
+          已重新读取服务端最新修订；请核对后再次提交，不要覆盖他人变更。
+        </Notice>
+      ) : null}
       <AsyncPanel state={settings.state} onRetry={settings.reload} errorTitle="模型设置加载失败">
         {data => (
           <ModelSettingsForm
@@ -154,8 +160,8 @@ function ModelSettingsPanel() {
             aiKeys={aiKeys}
             isAdmin={isAdmin}
             writesLocked={session.writesLocked}
-            onSaved={() => settings.reload()}
-            onConflict={() => settings.refreshSilent()}
+            onSaved={() => { setConflict(false); settings.reload(); }}
+            onConflict={() => { setConflict(true); settings.refreshSilent(); }}
           />
         )}
       </AsyncPanel>
@@ -181,7 +187,6 @@ function ModelSettingsForm({
   const [enabled, setEnabled] = useState(data.enabled);
   const [model, setModel] = useState(data.model);
   const [credentialRef, setCredentialRef] = useState(data.credentialRef);
-  const [conflict, setConflict] = useState(false);
   const selected = aiKeys.find(credential => credential.id === credentialRef) ?? null;
 
   const save = useAction((body: {
@@ -207,10 +212,8 @@ function ModelSettingsForm({
     // 成功后的新 revision 由 key 重建表单；409 用静默刷新保住提示并取回服务端最新
     // 修订（旧 revision 已被服务端拒绝，本地绝不覆盖他人变更）。
     if (result.ok) {
-      setConflict(false);
       onSaved();
-    } else {
-      setConflict(true);
+    } else if (result.error?.status === 409 && result.error.code === "MODEL_REVISION_CONFLICT") {
       onConflict();
     }
   }
@@ -253,11 +256,6 @@ function ModelSettingsForm({
         />
         启用本用户的模型生成（显式触发；不产生自动调用）
       </label>
-      {conflict || saveErrorCode.includes("MODEL_REVISION_CONFLICT") ? (
-        <Notice tone="error" title="配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）">
-          已重新读取服务端最新修订；请核对后再次提交，不要覆盖他人变更。
-        </Notice>
-      ) : null}
       {saveError && !saveErrorCode.includes("MODEL_REVISION_CONFLICT") ? (
         <Notice tone="error" title="保存失败">{describeApiError(saveError)}</Notice>
       ) : null}

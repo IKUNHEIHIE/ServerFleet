@@ -180,6 +180,30 @@ describe("AI model settings (GM-W6-R1)", () => {
     await waitFor(() => expect(calls.filter(call => call.url === "/api/v1/ai/model-settings" && call.method === "GET").length).toBeGreaterThanOrEqual(2));
   });
 
+  it("does not report provider unavailability as a revision conflict", async () => {
+    await renderAuthenticated("/ai", {
+      ...entryRoutes(SETTINGS_EMPTY),
+      "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "AI_SOURCE_UNAVAILABLE", status: 503 }, 503),
+    }, ADMIN_IDENTITY);
+    await screen.findByRole("option", { name: /本地模型 Key/ });
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    expect(await screen.findByText("保存失败")).toBeVisible();
+    expect(screen.queryByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeNull();
+  });
+
+  it("retains the conflict explanation after receiving the actual newer revision", async () => {
+    let reads = 0;
+    await renderAuthenticated("/ai", {
+      ...entryRoutes(SETTINGS_EMPTY),
+      "GET /api/v1/ai/model-settings": () => jsonResponse(reads++ === 0 ? SETTINGS_EMPTY : { ...SETTINGS_EMPTY, revision: 1, model: "other-admin-model" }),
+      "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "MODEL_REVISION_CONFLICT", status: 409 }, 409),
+    }, ADMIN_IDENTITY);
+    await screen.findByRole("option", { name: /本地模型 Key/ });
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    await waitFor(() => expect(screen.getByLabelText("模型标识")).toHaveValue("other-admin-model"));
+    expect(screen.getByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
+  });
+
   it("keeps the panel read-only for a non-administrator identity", async () => {
     const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), { ...IDENTITY, roles: ["reader"] });
     await screen.findByText("当前身份不是管理员：只能查看本页配置，不能修改（服务端强制）。");
