@@ -93,6 +93,7 @@ type Options struct {
 	Authorizer      auth.Authorizer
 	Dispatcher      Dispatcher
 	Workers         map[string]Worker
+	RuntimeGate     func(context.Context) error
 	Approvals       ApprovalConsumer
 	Nodes           NodeLookup
 	Now             func() time.Time
@@ -105,6 +106,7 @@ type Options struct {
 }
 
 type Service struct {
+	runtimeGate     func(context.Context) error
 	db              *storage.DB
 	repo            *Repo
 	audit           AuditSink
@@ -176,7 +178,8 @@ func NewService(options Options) (*Service, error) {
 		workers[action] = worker
 	}
 	return &Service{
-		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
+		runtimeGate: options.RuntimeGate,
+		db:          options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
 		dispatcher: options.Dispatcher, approvals: options.Approvals, nodes: options.Nodes, now: now,
 		approvalTTL: approvalTTL, unstartedTTL: unstartedTTL, interval: interval,
 		concurrency: concurrency, requireApproval: require, onError: onError,

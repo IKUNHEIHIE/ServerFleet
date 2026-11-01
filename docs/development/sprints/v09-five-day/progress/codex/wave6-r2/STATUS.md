@@ -31,3 +31,15 @@ Module checks files/tasks/transport/Agent PASS. Actual non-root WSL Controller +
 
 Remaining: central files registration/0008 acceptance, true ENOSPC capacity fixture, physical two-machine/ARM runtime and production admission. Continue independent updates/recovery/Xray review; no awskr or other service touched.
 
+# Checkpoint 4 — update worker and restore admission
+
+File cancellation runnable checkpoint: `199d678591d71fe30beec547090634af389b540d`.
+
+Added `updates.TaskInstallWorker` in the sole scheduler: canonical frozen previous/attempted manifest, owner/target, backup hash and trust-policy hash; modifying class and independent human approval mandatory. Current task/plan/administrator/actual backup are checked at each installer phase. Child execution is deterministic, filesystem reservations and task UNKNOWN fences are retained. `SQLInstallJournal` commits installed provenance, maximum attempted sequence (also on rollback), receipt and audit in one DS transaction. Its schema is a NEW unregistered candidate; existing installed provenance must be independently established, never inferred from HTTP or an old backup.
+
+Real non-root WSL composition PASS: actual signed test executable, task approval, real process/PID/image/version/nonce health, actual SQLite backup/hash/user_version compatibility, exact backup rollback/new PID, and SQLite installed provenance/floor/audit together. Actual storage user_version changed to 2 prevents restarting the old executable and leaves UNKNOWN plus durable reservation/no receipt. Role/online and bootstrap/cleanup authority adapters are explicit test doubles. This is a controlled executable PoC, not product Agent/Controller release admission. Windows task/SQLite audit failure rollback and restarted service no replay also PASS. First fixture migration namespace error preserved at `reports/wave6-r2/update-worker-first-fixture-fail.log`.
+
+Added restore RuntimeGuard before database open/migration: adjacent restore hold cannot be omitted, reused for another directory or implicitly released. Runtime loss of current clearance blocks HTTP, scheduler admission and both directions of Agent frames. Actual restored SQLite + Controller HTTPS test PASS for explicit offline release and all route families; old authority/fence verifier is explicitly a double, not a real old-Controller fencing claim. Candidate migration upgrade 21→23 and reapply PASS, preserving old migration checksums.
+
+`controller-platform.patch` applies AFTER files + AI registration patches, never edited central sources. It registers candidate cx/0009, admin-only update action/program adapters and recovery guards. No runtime, external secrets or remote services enabled. Remaining authority/key governance and old-Controller fence require approved UPDATE/PRIV/WC/PKI-OPS sources and total-controller action; no author default grant substitutes for them. Xray pinned static retry is still BLOCKED at public archive acquisition; historical security FAIL remains, no Xray binary executed. Continue final fixed-SHA and root checks, then hand off exact remaining items.
+

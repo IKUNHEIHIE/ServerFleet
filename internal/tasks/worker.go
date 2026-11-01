@@ -22,6 +22,11 @@ type workerRun struct {
 }
 
 func (s *Service) startWorker(ctx context.Context, task Task, pending []Target, worker Worker) error {
+	if s.runtimeGate != nil {
+		if err := s.runtimeGate(ctx); err != nil {
+			return err
+		}
+	}
 	s.workerMu.Lock()
 	full := len(s.workerRuns) >= s.concurrency
 	s.workerMu.Unlock()
@@ -150,6 +155,11 @@ func (s *Service) stopWorkers() {
 // child frame. Unsupported automation/plugin scopes are rejected by the worker
 // until an explicitly registered scope gate exists; no implicit AI authority.
 func (s *Service) CheckExecution(ctx context.Context, id, plan string) (Task, error) {
+	if s.runtimeGate != nil {
+		if err := s.runtimeGate(ctx); err != nil {
+			return Task{}, err
+		}
+	}
 	t, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return Task{}, err

@@ -51,6 +51,11 @@ func (s *Service) RunOnce(ctx context.Context) error {
 }
 
 func (s *Service) process(ctx context.Context, taskID string) error {
+	if s.runtimeGate != nil {
+		if err := s.runtimeGate(ctx); err != nil {
+			return err
+		}
+	}
 	unlock := s.lockTask(taskID)
 	defer unlock()
 	task, err := s.repo.Get(ctx, taskID)
