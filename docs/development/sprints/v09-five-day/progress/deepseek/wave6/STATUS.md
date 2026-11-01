@@ -72,9 +72,9 @@
 
 - `npm run check:go`（build/test/vet/staticcheck）→ PASS（最终代码 `814f1db`）。
 - `npm run check:policy` → PASS；`npm run check:security` → npm audit 0、govulncheck 无已知漏洞。
-- `npm run check` 完整运行（2026-11-01T06:12:23Z，代码 `eeabb99`）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
-- `npm run check:security`（`eeabb99`）：npm audit 0，govulncheck 无已知漏洞。
-- `9d25dc1` 仅收紧 Nginx 任务参数边界（gateway），随后 `npm run check:go` PASS；web/contracts 未变。最终 HEAD 以 `git log -1` 为准。
+- `npm run check` 完整运行（2026-11-01T06:18:29Z，HEAD `baf627e`，工作区干净）：`policy/contracts/go/web/git` 均 PASS（web 37 文件/329 项）；Go 全包含 architecture/contracts/integration/POC PASS。
+- `npm run check:security`（同 HEAD `baf627e`）：npm audit 0，govulncheck 无已知漏洞。
+- 最终代码 `8f65537`；文档 HEAD `baf627e`。最终提交以 `git log -1` 为准。
 - `go test -race`：**UNTESTED**，本机 CGO_ENABLED=0 且无 gcc；不能声称 race 通过。
 - 迁移：**未新增**；AMCE/Nginx/文件通道均不依赖新表。`publishing.rollback-all` HTTP 路由为候选，未改 OpenAPI/Proto/gen。
 
