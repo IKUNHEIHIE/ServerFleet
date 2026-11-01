@@ -25,6 +25,10 @@ import (
 // Exercises the adopted Controller composition, registered migrations and
 // default persistent budget, with no overlay or manually created schema.
 func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
+	runControllerHTTPBorrowedBYOKBudget(t, false)
+}
+
+func runControllerHTTPBorrowedBYOKBudget(t *testing.T, budgetHTTP bool) {
 	ctx := context.Background()
 	const key = "synthetic-r1-local-provider-key"
 	var calls atomic.Int32
@@ -151,7 +155,88 @@ func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
 	if budget.Configure(ctx, "another-actor", 0, policy) == nil {
 		t.Fatal("budget accepted another owner")
 	}
-	if err = budget.Configure(ctx, login.Identity.UserID, 0, policy); err != nil {
+	budgetPath := "/api/v1/ai/model-settings/" + model.ID + "/budget"
+	budgetInput := map[string]any{"expectedRevision": 0, "windowId": policy.WindowID, "startsAt": policy.StartsAt, "endsAt": policy.EndsAt, "requestLimit": policy.RequestLimit, "inputByteLimit": policy.InputByteLimit, "outputTokenLimit": policy.OutputTokenLimit}
+	if budgetHTTP {
+		status, raw = request("GET", budgetPath, nil, login.CSRF)
+		var empty ai.GenerationBudgetView
+		json.Unmarshal(raw, &empty)
+		if status != 200 || empty.Configured || empty.Policy != nil {
+			t.Fatal("missing policy not explicit", status, string(raw))
+		}
+		if status, _ = request("PUT", budgetPath, budgetInput, ""); status != 403 {
+			t.Fatal("budget bypassed CSRF", status)
+		}
+		if status, _ = request("GET", "/api/v1/ai/model-settings/another-profile/budget", nil, login.CSRF); status != 403 {
+			t.Fatal("budget accepted another profile", status)
+		}
+		budgetInput["ownerId"] = "other-owner"
+		if status, _ = request("PUT", budgetPath, budgetInput, login.CSRF); status != 400 {
+			t.Fatal("budget accepted body owner", status)
+		}
+		delete(budgetInput, "ownerId")
+		status, raw = request("PUT", budgetPath, budgetInput, login.CSRF)
+		if status != 200 {
+			t.Fatal(status, string(raw))
+		}
+		status, raw = request("PUT", budgetPath, budgetInput, login.CSRF)
+		if status != 409 || !bytes.Contains(raw, []byte("BUDGET_REVISION_CONFLICT")) {
+			t.Fatal("budget CAS missing", status, string(raw))
+		}
+		if _, err = composed.DB.Exec(ctx, `CREATE TRIGGER reject_r2_budget_audit BEFORE INSERT ON cx_ai_budget_audit WHEN NEW.action='ai.budget.configure' BEGIN SELECT RAISE(ABORT,'forced budget audit boundary'); END`); err != nil {
+			t.Fatal(err)
+		}
+		budgetInput["expectedRevision"] = 1
+		if status, _ = request("PUT", budgetPath, budgetInput, login.CSRF); status != 503 {
+			t.Fatal("budget audit failure did not reject", status)
+		}
+		composed.DB.Exec(ctx, `DROP TRIGGER reject_r2_budget_audit`)
+		status, raw = request("GET", budgetPath, nil, login.CSRF)
+		var view ai.GenerationBudgetView
+		json.Unmarshal(raw, &view)
+		if status != 200 || view.Policy == nil || view.Policy.Revision != 1 {
+			t.Fatal("audit failure advanced budget", status, string(raw))
+		}
+		adminClient := client
+		for _, role := range []string{"administrator", "operator"} {
+			client = adminClient
+			status, raw = request("POST", "/api/v1/users", map[string]any{"username": "budget-" + role, "password": "synthetic-second-owner-password", "roleIds": []string{role}}, login.CSRF)
+			if status != 200 {
+				t.Fatal(status, string(raw))
+			}
+			jar, _ := cookiejar.New(nil)
+			client = newTestHTTPClient(pki, net.JoinHostPort("127.0.0.1", port), jar)
+			status, raw = request("POST", "/api/v1/auth/login", map[string]any{"username": "budget-" + role, "password": "synthetic-second-owner-password"}, "")
+			if status != 200 {
+				t.Fatal(status, string(raw))
+			}
+			var other struct {
+				CSRF string `json:"csrfToken"`
+			}
+			json.Unmarshal(raw, &other)
+			if status, _ = request("GET", budgetPath, nil, other.CSRF); status != 403 {
+				t.Fatal("other owner read budget", role, status)
+			}
+			if status, _ = request("PUT", budgetPath, budgetInput, other.CSRF); status != 403 {
+				t.Fatal("other owner configured budget", role, status)
+			}
+		}
+		client = adminClient
+		encoded, _ := json.Marshal(budgetInput)
+		req, _ := http.NewRequestWithContext(ctx, "PUT", origin+budgetPath, bytes.NewReader(encoded))
+		req.Header.Set("Origin", "https://wrong-origin.invalid")
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-CSRF-Token", login.CSRF)
+		response, e := client.Do(req)
+		if e != nil {
+			t.Fatal(e)
+		}
+		io.Copy(io.Discard, response.Body)
+		response.Body.Close()
+		if response.StatusCode != 403 {
+			t.Fatal("budget bypassed Origin", response.StatusCode)
+		}
+	} else if err = budget.Configure(ctx, login.Identity.UserID, 0, policy); err != nil {
 		t.Fatal(err)
 	}
 	status, raw = request("POST", "/api/v1/ai/sessions", map[string]any{}, login.CSRF)
@@ -180,6 +265,39 @@ func TestR1ControllerHTTPBorrowedBYOKLocalTLSBudgetAndTypedAudit(t *testing.T) {
 	}
 	if calls.Load() != 1 {
 		t.Fatal("quota performed extra HTTP call", calls.Load())
+	}
+	if budgetHTTP {
+		status, raw = request("GET", budgetPath, nil, login.CSRF)
+		var view ai.GenerationBudgetView
+		json.Unmarshal(raw, &view)
+		if status != 200 || view.Usage.Requests != 1 || view.Usage.OutputTokens != 8192 || view.Remaining.Requests != 0 {
+			t.Fatal("budget usage missing", status, string(raw))
+		}
+		var before, after []byte
+		if err = composed.DB.QueryRow(ctx, `SELECT payload FROM cx_ai_generation_budget`).Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		budgetInput["expectedRevision"] = 1
+		budgetInput["requestLimit"] = 2
+		status, raw = request("PUT", budgetPath, budgetInput, login.CSRF)
+		json.Unmarshal(raw, &view)
+		if status != 200 || view.Usage.Requests != 1 || view.Remaining.Requests != 1 || view.Policy.Revision != 2 {
+			t.Fatal("CAS reset existing window usage", status, string(raw))
+		}
+		if err = composed.DB.QueryRow(ctx, `SELECT payload FROM cx_ai_generation_budget`).Scan(&after); err != nil {
+			t.Fatal(err)
+		}
+		var first, last map[string]json.RawMessage
+		json.Unmarshal(before, &first)
+		json.Unmarshal(after, &last)
+		if !bytes.Equal(first["Operations"], last["Operations"]) || !bytes.Equal(first["Counters"], last["Counters"]) {
+			t.Fatal("policy CAS changed operation fences/counters")
+		}
+		budgetInput["usage"] = map[string]int{"requests": 0}
+		if status, _ = request("PUT", budgetPath, budgetInput, login.CSRF); status != 400 {
+			t.Fatal("HTTP accepted counter reset", status)
+		}
+		delete(budgetInput, "usage")
 	}
 	var profile string
 	var revision uint64
