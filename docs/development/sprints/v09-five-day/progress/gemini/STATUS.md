@@ -4,6 +4,7 @@
 
 > **Wave 4（gemini-04）**：起始基线 `0f9a75e416a82a9589a29d4d9cf8a52bf0266066`（main，总控已挂载 Wave 3 全部路由）。本轮交付见文末「Wave 4 检查点（gemini-04）」一节。
 > **Wave 5（gemini-05）**：起始基线 `3adf891f3155b6452f06f25df53fd20f553742ae`（main，Wave 4 复审合入）。本轮交付见文末「Wave 5 检查点（gemini-05）」一节。
+> **Wave 6（gemini-06）**：起始基线 `73d5dd46fb29b3cf4a445b43b48186d5938fe781`（main，总控接回+awskr 授权后；新分支 `feature/v09-r6-console-gm06`、新目录 `.worktrees/feature--v09-r6-console-gm06`）。本轮交付见 `wave6/STATUS.md`、`wave6/AC-EVIDENCE-WAVE6.md`；要点：新增 18 步正常成功用例套件（真实 Linux Agent 端到端：接入→审批→WSS+mTLS→真实任务执行完成，12 PASS / 6 BLOCKED / 0 FAIL），任务详情执行错误列 + 3 项新单测（Web 332 项），接入令牌提示对齐服务端 1–10 分钟硬约束。
 
 ## 检查点
 
