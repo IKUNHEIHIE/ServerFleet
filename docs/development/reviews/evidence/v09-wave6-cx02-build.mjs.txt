@@ -1,0 +1,26 @@
+import {spawnSync} from 'node:child_process';
+import {mkdirSync,writeFileSync,readFileSync} from 'node:fs';
+import {createHash,randomBytes} from 'node:crypto';
+import {gzipSync} from 'node:zlib';
+import path from 'node:path';
+import {root,go,env} from '../../scripts/lib.mjs';
+const dir=path.join(root,'reports/wave6-remote');mkdirSync(dir,{recursive:true});
+const run=(exe,args,extra={})=>{const r=spawnSync(exe,args,{cwd:root,env,encoding:'utf8',timeout:180000,maxBuffer:8<<20,windowsHide:true,...extra});if(r.status!==0)throw new Error(`${exe} ${args.join(' ')}: ${r.stderr??''}`);return r.stdout??'';};
+const head=run('git',['rev-parse','HEAD']).trim();
+if(head!=='de38c5fab036287d9a12f814e06a8b9e44db44ff')throw new Error('Technical source changed');
+const manifest={sourceHead:head,runId:'wave6-review-20261101-cx02-'+randomBytes(5).toString('hex'),files:{},tests:[],scope:'isolated ordinary-user tests; no existing service changes; not full v0.9, two machines, arm64 or 1C1G'};
+const sha=b=>createHash('sha256').update(b).digest('hex');
+for(const name of ['auth','agent','files','dns','notifications','gateway','publishing','certificates','platform']){
+  const pkg=name==='agent'?'./apps/agent':name==='platform'?'./tests/integration/v09/platform':'./internal/'+name;
+  const binary=path.join(dir,name+'.test');
+  const output=run(go,['test','-mod=readonly','-c','-o',binary,pkg],{env:{...env,GOOS:'linux',GOARCH:'amd64',CGO_ENABLED:'0',GOFLAGS:'-p=2',GOMAXPROCS:'4'}});
+  writeFileSync(path.join(dir,name+'-build.log'),output);
+  const raw=readFileSync(binary),z=gzipSync(raw);writeFileSync(binary+'.gz',z);
+  manifest.files[name+'.test.gz']={bytes:z.length,sha256:sha(z),uncompressedBytes:raw.length,uncompressedSHA256:sha(raw)};
+  manifest.tests.push({name,package:pkg,run:name==='platform'?'^TestWave6|^TestWave5ControllerAndAgentCLIFullLoopWSSAndTask$':'.'});
+  console.log(name+' linux/amd64 built');
+}
+run('git',['archive','--format=tar.gz','--output='+path.join(dir,'source.tar.gz'),head,'apps','internal','gen/go','go.mod','go.sum','tests/integration/v09/platform']);
+const src=readFileSync(path.join(dir,'source.tar.gz'));manifest.files['source.tar.gz']={bytes:src.length,sha256:sha(src)};
+writeFileSync(path.join(dir,'manifest.json'),JSON.stringify(manifest,null,2)+'\n');
+console.log(JSON.stringify({head,runId:manifest.runId,artifacts:Object.keys(manifest.files).length,compressedBytes:Object.values(manifest.files).reduce((s,f)=>s+f.bytes,0)}));

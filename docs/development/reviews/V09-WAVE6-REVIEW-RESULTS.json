@@ -1,0 +1,555 @@
+{
+  "task": "V09-WAVE6-REVIEW",
+  "reviewer": "codex-review-02",
+  "date": "2026-11-01",
+  "baseMain": "73d5dd46fb29b3cf4a445b43b48186d5938fe781",
+  "technicalHead": "eb1c9812ddb7a3c99618ab8f84669337b1f53c30",
+  "authors": {
+    "codex": "4a3e31edad46051c2f9de3c9f54a16c843a3f93c",
+    "deepseek": "fd2e015b6de99349a34f8061bbb39485f119ab7c",
+    "gemini": {
+      "provided": "639eff20526a12acee8900abcac62a5d4376b732",
+      "status": "OLD_ALREADY_IN_MAIN; user confirmed interruption; waiting for R6 SHA; author directory untouched"
+    }
+  },
+  "result": "ACCEPT_CX_DS_INCREMENTS_WITH_INTEGRATION_FIXES; GM_PENDING; FULL_V09_NOT_ACCEPTED",
+  "fixes": [
+    {
+      "id": "W6-R01",
+      "problem": "revoked ciphertext erased legitimately but blocked persistent-key restart",
+      "status": "FIXED_AND_REGRESSION_TESTED"
+    },
+    {
+      "id": "W6-R02",
+      "problem": "file coordinator wrote subsequent items after current permission revocation",
+      "status": "FIXED_BETWEEN_ITEMS_AND_IO_PHASES; per-frame runtime still pending"
+    },
+    {
+      "id": "W6-R03",
+      "problem": "ACME returned wrong-domain/key or expired leaf as issued",
+      "status": "FIXED_AND_REGRESSION_TESTED; full chain trust still pending"
+    },
+    {
+      "id": "W6-R04",
+      "problem": "AI OpenAPI flow-map descriptions with commas produced six struct errors",
+      "status": "FIXED; original candidate sources unchanged"
+    }
+  ],
+  "checks": {
+    "executedAt": "2026-11-01T07:20:15.337Z",
+    "results": [
+      {
+        "name": "policy",
+        "status": "PASS"
+      },
+      {
+        "name": "contracts",
+        "status": "PASS"
+      },
+      {
+        "name": "go",
+        "status": "PASS"
+      },
+      {
+        "name": "web",
+        "status": "PASS"
+      },
+      {
+        "name": "git",
+        "status": "PASS"
+      }
+    ]
+  },
+  "security": {
+    "executedAt": "2026-11-01T07:20:57.160Z",
+    "results": [
+      {
+        "name": "security",
+        "status": "PASS"
+      }
+    ]
+  },
+  "counts": {
+    "goTopLevel": 714,
+    "goSubtests": 1173,
+    "goFailures": 0,
+    "goSkipped": 18,
+    "web": {
+      "tests": 329,
+      "failures": 0,
+      "errors": 0
+    }
+  },
+  "skips": [
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentExecutorRejectsNonPrivateLedgerOnLinux"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentFileBytesResumeHashAndIndependentReadGate"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/apps/agent",
+      "test": "TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/poc/v09/services/cloudflare",
+      "test": "TestCloudflareDNS"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/files",
+      "test": "TestLocalStagingRejectsSymlinkedDirectories"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/files",
+      "test": "TestLocalStagingRejectsSymlinkedTargetFile"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/recovery",
+      "test": "TestQuarantineRejectsNonPrivateLinuxDirectory"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestPinnedXrayActualConfigTestAndLoopbackStart"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestCustomActualTargetValidationAndProxyCannotReachAPI"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/plugins/xray-manager",
+      "test": "TestPinnedXrayActualVisionTrafficStatsAndProcessReset"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6ControllerAndResidentAgentCLI"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialRestartRotationAndFailureClosed"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialConcurrentInitialization"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestPersistentCredentialRejectDirectoryAndSymlink"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/internal/auth",
+      "test": "TestWave6RevokedCredentialDoesNotPreventRestart"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6IsolatedNginxProxy"
+    },
+    {
+      "package": "serverfleet.local/serverfleet/tests/integration/v09/platform",
+      "test": "TestWave6IsolatedSQLiteRestoreKeepsQuarantineAndRevocations"
+    }
+  ],
+  "remote": {
+    "sourceHead": "de38c5fab036287d9a12f814e06a8b9e44db44ff",
+    "qaRoot": "/home/admin/.local/share/serverfleet-qa/wave6-review-20261101-cx02-6419888e6b",
+    "uid": 1000,
+    "platform": "Linux",
+    "architecture": "x86_64",
+    "results": [
+      {
+        "name": "auth",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 72,
+        "skipped": [],
+        "elapsedSeconds": 45.88,
+        "logSHA256": "de3b59bf39a4ed04ce7f50538a9084ea9b517adf85040a952ec68d5f33254b4b"
+      },
+      {
+        "name": "agent",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 38,
+        "skipped": [],
+        "elapsedSeconds": 1.87,
+        "logSHA256": "6ea5c41a9ed3a63399147b6160b13067b857a58d3ca5bf1f9e823ce66fa1cbfe"
+      },
+      {
+        "name": "files",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 43,
+        "skipped": [
+          "TestLocalStagingWindowsReservedNames (0.00s)"
+        ],
+        "elapsedSeconds": 0.67,
+        "logSHA256": "e25f25ce22f453295a87283422d2453743230f493ae4236728bb2c94cc8adea2"
+      },
+      {
+        "name": "dns",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 24,
+        "skipped": [],
+        "elapsedSeconds": 0.37,
+        "logSHA256": "b33e9719061f4a3ea5a3dde48d0d761bbecb1456ec1b105a60676590fa7ae05b"
+      },
+      {
+        "name": "notifications",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 26,
+        "skipped": [],
+        "elapsedSeconds": 0.72,
+        "logSHA256": "4a670c540d8b88a1f6f9fed3f8236357e0c143e7a95ae5e798bd8ecceda874b0"
+      },
+      {
+        "name": "gateway",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 26,
+        "skipped": [],
+        "elapsedSeconds": 0.37,
+        "logSHA256": "c18cd4bc487f1595041b60b31bf429dcfde65361834c14a31b888e375ead323a"
+      },
+      {
+        "name": "publishing",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 27,
+        "skipped": [],
+        "elapsedSeconds": 0.62,
+        "logSHA256": "c8c9dee2c3476469ca5959459e0dd3d0e7f1f96c1c22ccdba20642245b750bfe"
+      },
+      {
+        "name": "certificates",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 22,
+        "skipped": [],
+        "elapsedSeconds": 0.47,
+        "logSHA256": "67cdff704a4f447aaa092b8480e064242f2045698c467de5f355d6674bbfebf7"
+      },
+      {
+        "name": "platform",
+        "exitCode": 0,
+        "status": "PASS",
+        "topLevelPass": 5,
+        "skipped": [],
+        "elapsedSeconds": 127.2,
+        "logSHA256": "36aad4837de64182848b3c4125ae1777932f6d714b672b141f1a883519217469"
+      }
+    ],
+    "elapsedSeconds": 178.17,
+    "maxChildRSSKiB": 487276,
+    "servicesBefore": {
+      "serverfleet-controller.service": "active",
+      "serverfleet-agent.service": "active",
+      "nginx.service": "active",
+      "mysql.service": "active"
+    },
+    "servicesAfter": {
+      "serverfleet-controller.service": "active",
+      "serverfleet-agent.service": "active",
+      "nginx.service": "active",
+      "mysql.service": "active"
+    },
+    "existingServicesModified": false,
+    "scope": "isolated ordinary-user tests; no existing service changes; not full v0.9, two machines, arm64 or 1C1G",
+    "status": "PASS"
+  },
+  "wsl": {
+    "head": "eb1c9812ddb7a3c99618ab8f84669337b1f53c30",
+    "platform": "WSL Ubuntu Linux amd64",
+    "uid": "1000",
+    "exitCode": 0,
+    "topLevelPass": 56,
+    "skips": 0,
+    "binarySHA256": "212249967018be84e6c77719069f879e81a91eb3fa5a4ccf0652c89335a8a861",
+    "logSHA256": "c06508f40a7bd8b87e5859d61c615fea3003ff2145eed4772e67105adbbf634c",
+    "scope": "final R6 schema roundtrip/default deny and legacy transport regression; no file runtime enabled"
+  },
+  "remoteToFinalDelta": {
+    "businessRuntimeFilesUnchanged": true,
+    "additionalGeneratedFileCandidateAndTests": true,
+    "legacyBaselineUnchanged": true,
+    "defaultFileRuntimeGranted": false
+  },
+  "artifacts": [
+    {
+      "source": "reports/wave6-review-npm-ci.log",
+      "artifact": "v09-wave6-cx02-npm-ci.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 341,
+      "sha256": "4b5662e5b8a33c3e6145c454d1f62df4969e14afa703ac8fcebe5e1d6f36cd7f",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-tools.log",
+      "artifact": "v09-wave6-cx02-tools.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 393,
+      "sha256": "e889f4db965670aef2d2ded045e8bfe7105b4a3f51e26909061794c1d330cec0",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-regressions-before.log",
+      "artifact": "v09-wave6-cx02-regressions-before.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 888,
+      "sha256": "8a8677ed4ceebb63c927a5fb5e65ff31031a3bd057323ddbc5689053fb109952",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-auth-before.log",
+      "artifact": "v09-wave6-cx02-wsl-cli-first-fail.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 3006,
+      "sha256": "0d180cdd2894faa1e0ed8203a3471bcf81455ae63095f079542a32d0889a2dfa",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-auth-before-retry.log",
+      "artifact": "v09-wave6-cx02-revoked-key-before.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 414,
+      "sha256": "0c2693242b88496515887ec794f8ecea1d5691c46680c7fb9c22deeb2e638f6b",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-check.log",
+      "artifact": "v09-wave6-cx02-contract-format-first-fail.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 2031461,
+      "sha256": "26a68c4f7b853199aa21220cb771533fd7579c92b5b9ddf1f07438142b9d8153",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-check-first-result.json",
+      "artifact": "v09-wave6-cx02-contract-format-first-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 406,
+      "sha256": "6a0fc896951ff10aaa3a789e2bb90c7fbcb7b82edacb5e027437c34972a1b2bc",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-schema-first.log",
+      "artifact": "v09-wave6-cx02-schema-inventory-first-fail.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 2034815,
+      "sha256": "acb0c26aacb445336d35b51f3bb0c1d70227085a5aa44e2d7022b4762d318c29",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-schema-first-result.json",
+      "artifact": "v09-wave6-cx02-schema-inventory-first-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 461,
+      "sha256": "3f9b083e4eeae6e13ec9e89fddddecb8b3de415f9a891cf3811827ab5fe6f898",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-check-final.log",
+      "artifact": "v09-wave6-cx02-check-final.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 2089188,
+      "sha256": "d266c4e2a4ddb57f22bbff888c6e5db4864261c1305e82dd5b191e28c33fa512",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/check-all.json",
+      "artifact": "v09-wave6-cx02-check-final-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 359,
+      "sha256": "ed4eb8ba40fcda61903d5ddb78bd9d2f1ece73a85b99e8ed5bc85857811ccb6a",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-review-security-final.log",
+      "artifact": "v09-wave6-cx02-security-final.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/check-security.json",
+      "artifact": "v09-wave6-cx02-security-final-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 128,
+      "sha256": "bc6651f84cf5d64c48bbe452f8158487eedf89092faaa65def375b0dc7ecab32",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-r6-compat-targeted.log",
+      "artifact": "v09-wave6-cx02-compat-targeted.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 2170,
+      "sha256": "a9c7c701e45c85029caf12fac87db058d95ca72e4226a5f49a9ad45c8e348546",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-r6-go-targeted.log",
+      "artifact": "v09-wave6-cx02-proto-go-targeted.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 127,
+      "sha256": "dc43f057c0e2e4508a6556bc2c9cd4498fc72ee34a05957c79d243971551b43e",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-schema-linux.log",
+      "artifact": "v09-wave6-cx02-schema-linux.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 39457,
+      "sha256": "c06508f40a7bd8b87e5859d61c615fea3003ff2145eed4772e67105adbbf634c",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-schema-linux.json",
+      "artifact": "v09-wave6-cx02-schema-linux-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 446,
+      "sha256": "e748bcf56e1ef9e188664dcf6b8685834db39ce3930ce387bf771227d52872da",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/manifest.json",
+      "artifact": "v09-wave6-cx02-remote-manifest.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 3783,
+      "sha256": "b9a167c83cdab0cc5705bda02fcc353b524042cd7b3c78d7dcb9be20119b8d96",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/root.json",
+      "artifact": "v09-wave6-cx02-remote-root.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 282,
+      "sha256": "fa70b4ba26e6e4322396e3e8935b92b95242c6fc28b9125468aecdc6bd74364e",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/result.json",
+      "artifact": "v09-wave6-cx02-remote-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 3108,
+      "sha256": "b83b7fc87490150d420815130f77eb69df76e5b51b639344e8e56427b61b3c87",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/auth-test.log",
+      "artifact": "v09-wave6-cx02-remote-auth.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 48301,
+      "sha256": "de3b59bf39a4ed04ce7f50538a9084ea9b517adf85040a952ec68d5f33254b4b",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/agent-test.log",
+      "artifact": "v09-wave6-cx02-remote-agent.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 11946,
+      "sha256": "6ea5c41a9ed3a63399147b6160b13067b857a58d3ca5bf1f9e823ce66fa1cbfe",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/files-test.log",
+      "artifact": "v09-wave6-cx02-remote-files.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 7071,
+      "sha256": "e25f25ce22f453295a87283422d2453743230f493ae4236728bb2c94cc8adea2",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/dns-test.log",
+      "artifact": "v09-wave6-cx02-remote-dns.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 4865,
+      "sha256": "b33e9719061f4a3ea5a3dde48d0d761bbecb1456ec1b105a60676590fa7ae05b",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/notifications-test.log",
+      "artifact": "v09-wave6-cx02-remote-notifications.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 5749,
+      "sha256": "4a670c540d8b88a1f6f9fed3f8236357e0c143e7a95ae5e798bd8ecceda874b0",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/gateway-test.log",
+      "artifact": "v09-wave6-cx02-remote-gateway.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 5983,
+      "sha256": "c18cd4bc487f1595041b60b31bf429dcfde65361834c14a31b888e375ead323a",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/publishing-test.log",
+      "artifact": "v09-wave6-cx02-remote-publishing.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 4629,
+      "sha256": "c8c9dee2c3476469ca5959459e0dd3d0e7f1f96c1c22ccdba20642245b750bfe",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/certificates-test.log",
+      "artifact": "v09-wave6-cx02-remote-certificates.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 4041,
+      "sha256": "67cdff704a4f447aaa092b8480e064242f2045698c467de5f355d6674bbfebf7",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/download/platform-test.log",
+      "artifact": "v09-wave6-cx02-remote-platform.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 594,
+      "sha256": "36aad4837de64182848b3c4125ae1777932f6d714b672b141f1a883519217469",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/wave6-remote/build.mjs",
+      "artifact": "v09-wave6-cx02-build.mjs.txt",
+      "bytes": 2467,
+      "sha256": "dfc23e41ccbead33771551b4b45555dcd36bfb00c64c89253fa6149eb84bc658"
+    },
+    {
+      "source": "reports/wave6-remote/run.py",
+      "artifact": "v09-wave6-cx02-run.py.txt",
+      "bytes": 4666,
+      "sha256": "77b0e1f28e4b6d3788ddbc03eedb569f7cdf94ad447dd8e8cf22c18e44003888"
+    },
+    {
+      "source": "reports/wave6-schema-linux.mjs",
+      "artifact": "v09-wave6-cx02-schema-linux.mjs.txt",
+      "bytes": 1807,
+      "sha256": "9cd43f865512e79334663344e8d1e3401a1b3e14db2f5a7befb6fcb131e8ea3b"
+    },
+    {
+      "source": "reports/archive-wave6.mjs",
+      "artifact": "v09-wave6-cx02-archive.mjs.txt",
+      "bytes": 8323,
+      "sha256": "1badafcd125c202a7992315a8300a7ca7457bfd2ae7532a32e34cdcc7e949fe7"
+    }
+  ],
+  "followup": "docs/development/sprints/v09-five-day/WAVE6-FOLLOWUP.md",
+  "shared": "docs/development/sprints/v09-five-day/WAVE6-SHARED.md",
+  "g2Frozen": false,
+  "completeV09": false,
+  "productionApproved": false,
+  "arm64RuntimeTested": false,
+  "hard1C1GTested": false,
+  "realExternalProvidersTested": false,
+  "realCrossMachineFileTransferTested": false,
+  "existingRemoteServicesModified": false,
+  "agentsStarted": 0,
+  "messagesSent": 0,
+  "remotePushed": false,
+  "finalBaselineRule": "Final documentation/evidence SHA and author worktree fast-forward receipt are in primary reports/v09-wave6-review-handoff.json and user handoff"
+}

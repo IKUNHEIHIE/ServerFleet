@@ -1,0 +1,20 @@
+import {spawnSync} from 'node:child_process';
+import {readFileSync,writeFileSync} from 'node:fs';
+import {createHash} from 'node:crypto';
+import path from 'node:path';
+import {root,go,env} from '../scripts/lib.mjs';
+const run=(exe,args,options={})=>{const r=spawnSync(exe,args,{cwd:root,env,windowsHide:true,timeout:180000,...options});if(r.status!==0)throw new Error(`${exe} failed: ${r.stderr?.toString()}`);return r;};
+const uid=run('wsl.exe',['-d','Ubuntu','--exec','id','-u']).stdout.toString().trim();
+if(uid!=='1000')throw new Error('Expected existing ordinary WSL user');
+const head=run('git',['rev-parse','HEAD']).stdout.toString().trim();
+const exe=path.join(root,'reports/wave6-schema-linux.test');
+run(go,['test','-mod=readonly','-c','-o',exe,'./internal/transport'],{env:{...env,GOOS:'linux',GOARCH:'amd64',CGO_ENABLED:'0'}});
+const linux='/mnt/'+exe[0].toLowerCase()+'/'+exe.slice(3).replaceAll('\\','/');
+const result=run('wsl.exe',['-d','Ubuntu','--exec','env','-u','TMPDIR','-u','TMP','-u','TEMP',linux,'-test.v','-test.timeout=120s']);
+writeFileSync(path.join(root,'reports/wave6-schema-linux.log'),result.stdout);
+writeFileSync(path.join(root,'reports/wave6-schema-linux.stderr'),result.stderr);
+const log=result.stdout.toString();
+const summary={head,platform:'WSL Ubuntu Linux amd64',uid,exitCode:0,topLevelPass:(log.match(/^--- PASS:/gm)??[]).length,skips:(log.match(/^--- SKIP:/gm)??[]).length,
+ binarySHA256:createHash('sha256').update(readFileSync(exe)).digest('hex'),logSHA256:createHash('sha256').update(result.stdout).digest('hex'),
+ scope:'final R6 schema roundtrip/default deny and legacy transport regression; no file runtime enabled'};
+writeFileSync(path.join(root,'reports/wave6-schema-linux.json'),JSON.stringify(summary,null,2)+'\n');console.log(JSON.stringify(summary));

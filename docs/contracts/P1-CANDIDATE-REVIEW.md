@@ -58,7 +58,7 @@ YAML 输入有大量正常锚点重用，默认库别名上限曾触发拒绝；
 
 P1-C10补记（完整v0.9五日冲刺）：负责人明确“五天内完整v0.9”，本地实施授权扩为CX/DS/GM三个复合包，旧W07待批并入GM-03；不再受旧三设计仅文档限制。具体兼容/安全/来源/状态/错误/撤权仍需第一批接缝及后续增量证据审查，完整产品范围不自动批准D01–D07/G2、WASM/Eino或外部真实执行。五日目标风险和24项验收/PoC责任见sprints/v09-five-day/PLAN.md、ACCEPTANCE.json；原始资料/候选/历史ADR不改，不以mock或缺环境替代通过。
 
-P1-C10补记（2026-11-01 Wave6增量组合）：独立AI设置/显式生成候选位于`api/openapi/revisions/v09-r6/ai-candidate.yaml`，原三候选/69原文不改。当前管理HTTP采用`__Host-sf_session`，旧候选`sf_session`仍是未关闭的迁移/冻结差异；新增候选明确真实Cookie名，不视为D01—D07批准。DS的rollback-all路由保持实现候选；文件帧33—36、能力/minor、TaskOffer绑定、路径/ID兼容尚未接收，不改Proto/gen。已登记主控持久密钥/AI与平台注入接缝，默认远端文件缺通道失败关闭；详见development/sprints/v09-five-day/WAVE6-SHARED.md。本地与指定awskr隔离测试获当前授权，真实高权限、生产与外部账号仍未准入。
+P1-C10补记（2026-11-01 Wave6增量组合）：独立AI设置/显式生成候选位于`api/openapi/revisions/v09-r6/ai-candidate.yaml`，原三候选/69原文不改。当前管理HTTP采用`__Host-sf_session`，旧候选`sf_session`仍是未关闭的迁移/冻结差异；新增候选明确真实Cookie名，不视为D01—D07批准。DS的rollback-all路由保持实现候选；文件能力/minor、TaskOffer绑定及路径/ID兼容仍待运行时审查，编译候选接收情况见下一条。已登记主控持久密钥/AI与平台注入接缝，默认远端文件缺通道失败关闭；详见development/sprints/v09-five-day/WAVE6-SHARED.md。本地与指定awskr隔离测试获当前授权，真实高权限、生产与外部账号仍未准入。
 
 Wave6后续共享检查点：Proto FileChunk33/34、FileOpen35/36已按固定工具接收为可编译候选（非G2冻结），chunk另加cancel=8，open携带plan digest且必须与已接收TaskOffer核对。默认Validator/CLI仍拒绝文件动作；不改旧字段号/基线/r03 provenance，不授权运行时。旧未知字段负向改用仍未知的100并新增四种文件消息往返及两个方向默认拒绝，具体字段与后续门控见WAVE6-SHARED。
 

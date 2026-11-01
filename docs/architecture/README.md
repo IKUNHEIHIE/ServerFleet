@@ -14,4 +14,4 @@ G1 的 PLUGIN v0.3 替代旧编译期内置业务插件条款；DEPLOY v0.3 扩�
 
 资料包未独立收录 PRIV、WC、PKI-OPS、UPDATE 的所有原始 ADR。涉及其详细实现前需从原项目归档核验；P1 不实施这些业务，也不捏造条款。历史包不展开到源码中。
 
-1 vCPU / 1GB RAM 是目标，未压测；WASM/Eino 未锁定；mTLS、授权、SQLite 和真实任务安全尚未实现。编译和静态检查不能证明这些能力。
+1 vCPU / 1GB RAM 仍待硬限制/实机验收；WASM/Eino 未锁定。当前已有SQLite、授权、WSS+mTLS、持久随机密钥与固定自检任务的本地/指定awskr隔离证据，真实文件/通用执行和全量验收仍有缺口。最新状态以`../development/TASK-BOARD.md`与`../development/reviews/V09-WAVE6-REVIEW.md`为准；编译和静态检查不能代替运行时安全验证。

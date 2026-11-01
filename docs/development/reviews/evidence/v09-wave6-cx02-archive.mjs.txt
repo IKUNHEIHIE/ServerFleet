@@ -1,0 +1,71 @@
+import {readFileSync,writeFileSync,mkdirSync,existsSync} from 'node:fs';
+import {gzipSync,gunzipSync} from 'node:zlib';
+import {createHash} from 'node:crypto';
+import {spawnSync} from 'node:child_process';
+import path from 'node:path';
+const root=process.cwd(), evidence=path.join(root,'docs/development/reviews/evidence');
+mkdirSync(evidence,{recursive:true});
+const read=p=>readFileSync(path.join(root,p));
+const json=p=>JSON.parse(read(p).toString().replace(/^\uFEFF/,''));
+const sha=b=>createHash('sha256').update(b).digest('hex');
+const git=args=>{const r=spawnSync('git',args,{cwd:root,encoding:'utf8',windowsHide:true});if(r.status!==0)throw new Error(r.stderr);return r.stdout.trim();};
+const head=git(['rev-parse','HEAD']);
+if(head!=='eb1c9812ddb7a3c99618ab8f84669337b1f53c30')throw new Error('unexpected technical head');
+const checks=json('reports/check-all.json'),security=json('reports/check-security.json');
+if(checks.results.length!==5||checks.results.some(x=>x.status!=='PASS')||security.results.some(x=>x.status!=='PASS'))throw new Error('final gates not PASS');
+const remote=json('reports/wave6-remote/download/result.json'),manifest=json('reports/wave6-remote/manifest.json'),wsl=json('reports/wave6-schema-linux.json');
+if(remote.status!=='PASS'||remote.uid!==1000||remote.sourceHead!==manifest.sourceHead||remote.results.length!==9||remote.results.some(r=>r.status!=='PASS'))throw new Error('remote evidence incomplete');
+if(wsl.head!==head||wsl.exitCode!==0||wsl.skips!==0||wsl.topLevelPass!==56)throw new Error('final Linux schema evidence incomplete');
+for(const row of remote.results){if(sha(read('reports/wave6-remote/download/'+row.name+'-test.log'))!==row.logSHA256)throw new Error('downloaded log hash mismatch');}
+for(const [name,f] of Object.entries(manifest.files)){const b=read('reports/wave6-remote/'+name);if(b.length!==f.bytes||sha(b)!==f.sha256)throw new Error('transfer artifact changed');}
+if(sha(read('reports/wave6-schema-linux.log'))!==wsl.logSHA256)throw new Error('WSL log changed');
+const protectedPaths=['docs/reference','api/openapi/g2-core-candidate.yaml','api/openapi/g2-merged-candidate.yaml','api/openapi/xray-candidate.yaml','tests/contracts/proto-baseline','docs/contracts/revisions/g2-r03'];
+if(git(['diff','--name-only','73d5dd4',head,'--',...protectedPaths]))throw new Error('immutable source or compatibility baseline changed');
+const coreDiff=git(['diff','--name-only',remote.sourceHead,head,'--','apps','internal','go.mod','go.sum']);
+if(coreDiff.split(/\r?\n/).filter(Boolean).some(f=>!f.endsWith('_test.go')))throw new Error('remote baseline does not cover final business code');
+const goRows=read('reports/wave6-review-check-final.log').toString().split(/\r?\n/).filter(l=>l.startsWith('{')).flatMap(l=>{try{return [JSON.parse(l)];}catch{return [];}});
+const pass=goRows.filter(e=>e.Action==='pass'&&e.Test),fail=goRows.filter(e=>e.Action==='fail');
+if(fail.length)throw new Error('Go failures in final check');
+const skips=goRows.filter(e=>e.Action==='skip'&&e.Test).map(e=>({package:e.Package,test:e.Test}));
+const xml=read('reports/web-junit.xml').toString(),suite=xml.match(/<testsuites\b[^>]*>/)?.[0]??'';
+const attribute=name=>Number(suite.match(new RegExp('\\b'+name+'="(\\d+)"'))?.[1]??NaN);
+const web={tests:attribute('tests'),failures:attribute('failures'),errors:attribute('errors')};
+if(web.tests!==329||web.failures!==0||web.errors!==0)throw new Error('Web evidence incomplete');
+const artifacts=[];
+const archive=(file,label)=>{
+ const b=read(file),z=gzipSync(b),artifact='v09-wave6-cx02-'+label+'.gz.b64';
+ const encoded=Buffer.from(z).toString('base64').match(/.{1,120}/g).join('\n')+'\n';
+ const decoded=gunzipSync(Buffer.from(encoded.replace(/\s/g,''),'base64'));
+ if(!decoded.equals(b))throw new Error('archive roundtrip failed');
+ writeFileSync(path.join(evidence,artifact),encoded);artifacts.push({source:file,artifact,encoding:'base64(gzip(original bytes))',bytes:b.length,sha256:sha(b),roundTrip:'PASS'});
+};
+for(const [file,label] of [
+ ['reports/wave6-review-npm-ci.log','npm-ci'],['reports/wave6-review-tools.log','tools'],
+ ['reports/wave6-review-regressions-before.log','regressions-before'],['reports/wave6-review-auth-before.log','wsl-cli-first-fail'],['reports/wave6-review-auth-before-retry.log','revoked-key-before'],
+ ['reports/wave6-review-check.log','contract-format-first-fail'],['reports/wave6-review-check-first-result.json','contract-format-first-result'],
+ ['reports/wave6-review-schema-first.log','schema-inventory-first-fail'],['reports/wave6-review-schema-first-result.json','schema-inventory-first-result'],
+ ['reports/wave6-review-check-final.log','check-final'],['reports/check-all.json','check-final-result'],
+ ['reports/wave6-review-security-final.log','security-final'],['reports/check-security.json','security-final-result'],
+ ['reports/wave6-r6-compat-targeted.log','compat-targeted'],['reports/wave6-r6-go-targeted.log','proto-go-targeted'],
+ ['reports/wave6-schema-linux.log','schema-linux'],['reports/wave6-schema-linux.json','schema-linux-result'],
+ ['reports/wave6-remote/manifest.json','remote-manifest'],['reports/wave6-remote/root.json','remote-root'],['reports/wave6-remote/download/result.json','remote-result']
+])archive(file,label);
+for(const row of remote.results)archive('reports/wave6-remote/download/'+row.name+'-test.log','remote-'+row.name);
+for(const [file,artifact] of [['reports/wave6-remote/build.mjs','v09-wave6-cx02-build.mjs.txt'],['reports/wave6-remote/run.py','v09-wave6-cx02-run.py.txt'],['reports/wave6-schema-linux.mjs','v09-wave6-cx02-schema-linux.mjs.txt'],['reports/archive-wave6.mjs','v09-wave6-cx02-archive.mjs.txt']]){
+ const b=read(file);writeFileSync(path.join(evidence,artifact),b);artifacts.push({source:file,artifact,bytes:b.length,sha256:sha(b)});
+}
+const counts={goTopLevel:pass.filter(e=>!e.Test.includes('/')).length,goSubtests:pass.filter(e=>e.Test.includes('/')).length,goFailures:fail.length,goSkipped:skips.length,web};
+const report={task:'V09-WAVE6-REVIEW',reviewer:'codex-review-02',date:'2026-11-01',baseMain:'73d5dd46fb29b3cf4a445b43b48186d5938fe781',technicalHead:head,
+ authors:{codex:'4a3e31edad46051c2f9de3c9f54a16c843a3f93c',deepseek:'fd2e015b6de99349a34f8061bbb39485f119ab7c',gemini:{provided:'639eff20526a12acee8900abcac62a5d4376b732',status:'OLD_ALREADY_IN_MAIN; user confirmed interruption; waiting for R6 SHA; author directory untouched'}},
+ result:'ACCEPT_CX_DS_INCREMENTS_WITH_INTEGRATION_FIXES; GM_PENDING; FULL_V09_NOT_ACCEPTED',
+ fixes:[{id:'W6-R01',problem:'revoked ciphertext erased legitimately but blocked persistent-key restart',status:'FIXED_AND_REGRESSION_TESTED'},
+ {id:'W6-R02',problem:'file coordinator wrote subsequent items after current permission revocation',status:'FIXED_BETWEEN_ITEMS_AND_IO_PHASES; per-frame runtime still pending'},
+ {id:'W6-R03',problem:'ACME returned wrong-domain/key or expired leaf as issued',status:'FIXED_AND_REGRESSION_TESTED; full chain trust still pending'},
+ {id:'W6-R04',problem:'AI OpenAPI flow-map descriptions with commas produced six struct errors',status:'FIXED; original candidate sources unchanged'}],
+ checks,security,counts,skips,remote,wsl,remoteToFinalDelta:{businessRuntimeFilesUnchanged:true,additionalGeneratedFileCandidateAndTests:true,legacyBaselineUnchanged:true,defaultFileRuntimeGranted:false},
+ artifacts,followup:'docs/development/sprints/v09-five-day/WAVE6-FOLLOWUP.md',shared:'docs/development/sprints/v09-five-day/WAVE6-SHARED.md',
+ g2Frozen:false,completeV09:false,productionApproved:false,arm64RuntimeTested:false,hard1C1GTested:false,realExternalProvidersTested:false,realCrossMachineFileTransferTested:false,existingRemoteServicesModified:false,
+ agentsStarted:0,messagesSent:0,remotePushed:false,finalBaselineRule:'Final documentation/evidence SHA and author worktree fast-forward receipt are in primary reports/v09-wave6-review-handoff.json and user handoff'};
+writeFileSync(path.join(root,'docs/development/reviews/V09-WAVE6-REVIEW-RESULTS.json'),JSON.stringify(report,null,2)+'\n');
+writeFileSync(path.join(root,'reports/wave6-review-counts.json'),JSON.stringify(counts,null,2)+'\n');
+console.log(JSON.stringify({technicalHead:head,counts,remoteTopLevel:remote.results.reduce((s,r)=>s+r.topLevelPass,0),wslTopLevel:wsl.topLevelPass,artifacts:artifacts.length}));

@@ -1,0 +1,65 @@
+import gzip,hashlib,json,os,pathlib,resource,signal,stat,subprocess,sys,tarfile,time
+
+root=pathlib.Path(sys.argv[1])
+home=pathlib.Path.home().resolve()
+parent=home/'.local/share/serverfleet-qa'
+if os.getuid()!=1000 or root.is_symlink() or not root.resolve().is_relative_to(parent) or root.parent!=parent:
+    raise SystemExit('unexpected test directory or identity')
+if root.stat().st_uid!=os.getuid() or stat.S_IMODE(root.stat().st_mode)!=0o700:
+    raise SystemExit('test directory must be private')
+manifest=json.loads((root/'manifest.json').read_text())
+allowed={row['name']+'.test.gz' for row in manifest['tests']}|{'source.tar.gz'}
+if set(manifest['files'])!=allowed:raise SystemExit('unexpected artifacts')
+for name,expected in manifest['files'].items():
+    data=(root/name).read_bytes()
+    if len(data)!=expected['bytes'] or hashlib.sha256(data).hexdigest()!=expected['sha256']:
+        raise SystemExit('artifact integrity mismatch: '+name)
+    if name.endswith('.test.gz'):
+        raw=gzip.decompress(data)
+        if len(raw)!=expected['uncompressedBytes'] or len(raw)>64<<20 or hashlib.sha256(raw).hexdigest()!=expected['uncompressedSHA256']:
+            raise SystemExit('binary integrity mismatch')
+        out=root/name[:-3]
+        with out.open('xb') as file:file.write(raw)
+        out.chmod(0o700)
+src=root/'src';src.mkdir(mode=0o700)
+with tarfile.open(root/'source.tar.gz','r:gz') as archive:
+    members=archive.getmembers()
+    if sum(m.size for m in members)>64<<20:raise SystemExit('source too large')
+    for member in members:
+        path=pathlib.PurePosixPath(member.name)
+        if path.is_absolute() or '..' in path.parts or not(member.isfile() or member.isdir()):raise SystemExit('unsafe archive')
+        if not(member.name in ('go.mod','go.sum') or member.isdir() and member.name in ('apps','internal','gen','tests') or member.name.startswith(('apps/','internal/','gen/','tests/'))):raise SystemExit('unexpected source')
+    archive.extractall(src,filter='data')
+for directory in ('tmp','cache','cache/build','cache/modules'):(root/directory).mkdir(mode=0o700,exist_ok=True)
+old_cache=subprocess.check_output(['go','env','GOMODCACHE'],text=True).strip()
+env=dict(os.environ,GOCACHE=str(root/'cache/build'),GOMODCACHE=str(root/'cache/modules'),
+         GOPROXY='file://'+old_cache+'/cache/download,https://proxy.golang.org',TMPDIR=str(root/'tmp'),
+         GOTOOLCHAIN='local',GOFLAGS='-p=2',GOMAXPROCS='2',GOMEMLIMIT='256MiB')
+services=['serverfleet-controller.service','serverfleet-agent.service','nginx.service','mysql.service']
+def states():return {s:subprocess.run(['systemctl','is-active',s],capture_output=True,text=True).stdout.strip() for s in services}
+before=states();results=[];began=time.time()
+for test in manifest['tests']:
+    start=time.time();logpath=root/(test['name']+'-test.log')
+    with logpath.open('x') as log:
+        process=subprocess.Popen([str(root/(test['name']+'.test')),'-test.run='+test['run'],'-test.v','-test.count=1','-test.timeout=5m'],
+                                 cwd=src,env=env,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+        try:code=process.wait(timeout=330)
+        except subprocess.TimeoutExpired:
+            os.killpg(process.pid,signal.SIGTERM)
+            try:process.wait(timeout=5)
+            except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+            code=124
+    text=logpath.read_text(errors='replace')
+    passed=sum(line.startswith('--- PASS:') for line in text.splitlines())
+    skipped=[line.split(': ',1)[1] for line in text.splitlines() if line.startswith('--- SKIP:')]
+    row={'name':test['name'],'exitCode':code,'status':'PASS' if code==0 and passed>0 else 'FAIL','topLevelPass':passed,'skipped':skipped,
+         'elapsedSeconds':round(time.time()-start,2),'logSHA256':hashlib.sha256(logpath.read_bytes()).hexdigest()}
+    results.append(row);print(json.dumps(row),flush=True)
+    if code!=0:print(text[-8000:],flush=True)
+after=states()
+result={'sourceHead':manifest['sourceHead'],'qaRoot':str(root),'uid':os.getuid(),'platform':os.uname().sysname,'architecture':os.uname().machine,
+        'results':results,'elapsedSeconds':round(time.time()-began,2),'maxChildRSSKiB':resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss,
+        'servicesBefore':before,'servicesAfter':after,'existingServicesModified':False,'scope':manifest['scope'],
+        'status':'PASS' if all(r['status']=='PASS' for r in results) and before==after else 'FAIL'}
+(root/'result.json').write_text(json.dumps(result,indent=2)+'\n');print(json.dumps(result),flush=True)
+raise SystemExit(0 if result['status']=='PASS' else 1)
