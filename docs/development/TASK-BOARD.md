@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-WAVE6-R1-REVIEW | IN PROGRESS：审查三位CX/DS/GM-02提交、组合补丁及正常/负向验证；完成本轮接收与续派交接后停止 | codex-review-02 | integration/v09-wave6-r1-review-cx02 / `.worktrees/integration--v09-wave6-r1-review-cx02` | 本轮增量必要修复、Controller组合/共享差异、验证/证据及后续任务；仅既有授权awskr隔离测试，不改原服务 | 项目负责人；起始379d5e0；来源CX17017a6、DS3610982、GM27c92be |
 | V09-WAVE6-REVIEW | 三线增量审查、组合修复、根安全/浏览器/awskr与WSL验证完成；三作者干净目录快进同步；本轮交接后停止 | codex-review-02 | integration/v09-wave6-review-cx02 / `.worktrees/integration--v09-wave6-review-cx02` | 本轮收到增量的必要修复/主控组合、共享差异、隔离验证与证据/续作任务；不改作者未提交内容或awskr既有服务 | 项目负责人；起始73d5dd4；最终技术9d3aa2；见reviews/V09-WAVE6-COMBINED-REVIEW.md |
 | V09-R6-CX-02 | READY：接收最终main后继续真实文件通道/AI配额审计及平台独立项；不自动启动 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6-FOLLOWUP.md的CX续作，原允许目录、progress/codex/wave6-r1；共享入口/DDL/Proto变更交patch | codex-review-02+安全/通信；精确基线随本次最终交接 |
 | V09-R6-DS-02 | READY：接收最终main后继续文件一致性/CA信任/真实发布与秘密接缝；不自动启动 | deepseek-06 | feature/v09-r6-services-ds06 / `.worktrees/feature--v09-r6-services-ds06` | WAVE6-FOLLOWUP.md的DS续作，原允许目录、progress/deepseek/wave6-r1；共享入口/DDL交patch | codex-review-02+安全/数据；精确基线随本次最终交接 |
