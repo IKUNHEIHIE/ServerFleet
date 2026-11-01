@@ -415,6 +415,9 @@ func (p *CloudflareProvider) doRecord(ctx context.Context, method, path string, 
 			Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus,
 		}
 	}
+	if response.StatusCode == http.StatusNotFound {
+		return cloudflareRecordEnvelope{}, ErrProviderNotFound
+	}
 	if response.StatusCode < 200 || response.StatusCode > 299 || decodeErr != nil || !envelope.Success {
 		return cloudflareRecordEnvelope{}, &cloudflareAPIError{
 			Operation: operation, StatusCode: response.StatusCode, Code: firstCloudflareCode(envelope.Errors),

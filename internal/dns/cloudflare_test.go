@@ -251,3 +251,16 @@ func TestCloudflareRejectsInvalidRecordInput(t *testing.T) {
 		}
 	}
 }
+
+func TestCloudflareNotFoundIsTyped(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = io.WriteString(w, `{"success":false,"errors":[{"code":81044,"message":"record not found"}]}`)
+	}))
+	defer server.Close()
+	provider := cloudflareServerProvider(t, server)
+	if err := provider.DeleteRecord(context.Background(), "secret/cf-1", "zone-1", "record-1"); !errors.Is(err, dns.ErrProviderNotFound) {
+		t.Fatalf("err = %v", err)
+	}
+}
