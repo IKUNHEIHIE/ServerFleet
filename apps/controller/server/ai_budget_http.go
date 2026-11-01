@@ -2,7 +2,8 @@ package server
 
 import "serverfleet.local/serverfleet/internal/ai"
 
-func (s *Server) registerAIBudgetRoutes() error {
+// RegisterAIBudgetRoutes is the program assembly port used by the central patch.
+func (s *Server) RegisterAIBudgetRoutes() error {
 	handler, err := ai.NewBudgetHTTP(s.AIBudget, s.AIRuntime.Models, s.aiAuthenticate)
 	if err != nil {
 		return err

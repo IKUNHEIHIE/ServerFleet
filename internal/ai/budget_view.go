@@ -82,7 +82,7 @@ func (b *PersistentGenerationBudget) Read(ctx context.Context, profile string) (
 		out.Configured = true
 		out.Active = !now.Before(p.StartsAt) && now.Before(p.EndsAt)
 		out.Policy = &BudgetPolicyView{p.Revision, p.WindowID, p.StartsAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), p.EndsAt.UTC().Format("2006-01-02T15:04:05.999999999Z07:00"), p.RequestLimit, p.InputByteLimit, p.OutputTokenLimit}
-		out.Usage = BudgetUsage{c.Requests, c.InputBytes, c.OutputTokens}
+		out.Usage = BudgetUsage(c)
 		out.Remaining = BudgetUsage{remainingBudget(p.RequestLimit, c.Requests), remainingBudget(p.InputByteLimit, c.InputBytes), remainingBudget(p.OutputTokenLimit, c.OutputTokens)}
 		return nil
 	})

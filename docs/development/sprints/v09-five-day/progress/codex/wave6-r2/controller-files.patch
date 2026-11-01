@@ -1,5 +1,5 @@
 diff --git a/apps/controller/server/server.go b/apps/controller/server/server.go
-index 8a66314..d63315b 100644
+index 8a66314..dca8ee6 100644
 --- a/apps/controller/server/server.go
 +++ b/apps/controller/server/server.go
 @@ -67,6 +67,7 @@ type Config struct {
@@ -34,7 +34,7 @@ index 8a66314..d63315b 100644
 +		if cfg.AgentFileGate != nil || cfg.EnrollmentIssuer == nil || cfg.AgentAuthority == "" {
 +			return cleanup(files.ErrTransferExecution)
 +		}
-+		s.FileWorker, err = newFileExecutionWorker(s, filesRepo, authorizer, *cfg.FileExecution)
++		s.FileWorker, err = NewFileExecutionWorker(s, filesRepo, authorizer, *cfg.FileExecution)
 +		if err != nil {
 +			return cleanup(err)
 +		}

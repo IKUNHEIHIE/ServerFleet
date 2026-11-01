@@ -1,5 +1,5 @@
 diff --git a/apps/controller/server/server.go b/apps/controller/server/server.go
-index e441643..dfebee8 100644
+index 5703725..9b1ca03 100644
 --- a/apps/controller/server/server.go
 +++ b/apps/controller/server/server.go
 @@ -75,17 +75,21 @@ type Config struct {
@@ -132,20 +132,15 @@ index e441643..dfebee8 100644
  	})
  	if err != nil {
  		return cleanup(err)
-@@ -881,6 +927,13 @@ func (s *Server) Close() error {
- 
- // ServeHTTP sets security headers and a request ID before dispatching to the composed mux.
- func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-+	if s.runtimeGate != nil && s.runtimeGate(r.Context()) != nil {
-+		w.Header().Set("Cache-Control", "no-store")
-+		w.Header().Set("Content-Type", "application/problem+json")
-+		w.WriteHeader(503)
-+		_ = json.NewEncoder(w).Encode(map[string]any{"type": "about:blank", "title": "Service Unavailable", "status": 503, "code": "CONTROLLER_QUARANTINED"})
-+		return
-+	}
- 	w.Header().Set("Cache-Control", "no-store")
- 	w.Header().Set("X-Content-Type-Options", "nosniff")
+@@ -886,7 +932,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
  	reqID := newRequestID()
+ 	w.Header().Set("X-Request-ID", reqID)
+ 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
+-	s.mux.ServeHTTP(w, r.WithContext(ctx))
++	recovery.RuntimeHTTP(s.mux, s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))
+ }
+ 
+ func (s *Server) registerRoutes() error {
 diff --git a/apps/controller/server/enrollment.go b/apps/controller/server/enrollment.go
 index 08e428e..05426c7 100644
 --- a/apps/controller/server/enrollment.go

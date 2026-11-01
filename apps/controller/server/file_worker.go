@@ -41,7 +41,11 @@ type fileTaskPlan struct {
 	Items                                   []filePlanItem
 }
 
-func newFileExecutionWorker(s *Server, repo *files.Repo, authorizer auth.Authorizer, cfg FileExecutionConfig) (*FileExecutionWorker, error) {
+// NewFileExecutionWorker is the program assembly port used by the central patch.
+func NewFileExecutionWorker(s *Server, repo *files.Repo, authorizer auth.Authorizer, cfg FileExecutionConfig) (*FileExecutionWorker, error) {
+	if s == nil || repo == nil || authorizer == nil {
+		return nil, files.ErrTransferExecution
+	}
 	if cfg.Paths == nil || cfg.SpoolDir == "" {
 		return nil, files.ErrPathMappingUnavailable
 	}

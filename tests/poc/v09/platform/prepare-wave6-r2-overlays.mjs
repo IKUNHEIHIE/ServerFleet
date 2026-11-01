@@ -13,7 +13,7 @@ replace(server,'\tAgentFiles           *transport.FileClient','\tAgentFiles     
 replace(server,'\t\tfiles.Migrations(),','\t\tfiles.Migrations(),\n\t\t{files.ExecutionBindingsMigration()},');
 replace(server,'\tagentBridge, err := s.setupAgentTransport(cfg, nodesService, tasksRepo)',`\tif cfg.FileExecution != nil {
   if cfg.AgentFileGate != nil || cfg.EnrollmentIssuer == nil || cfg.AgentAuthority == "" {return cleanup(files.ErrTransferExecution)}
-  s.FileWorker, err = newFileExecutionWorker(s,filesRepo,authorizer,*cfg.FileExecution)
+  s.FileWorker, err = NewFileExecutionWorker(s,filesRepo,authorizer,*cfg.FileExecution)
   if err != nil {return cleanup(err)}
   cfg.AgentFileGate = s.FileWorker.Gate
  }

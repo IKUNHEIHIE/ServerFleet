@@ -10,7 +10,7 @@ edit(server,'\tUpdateCheck     func','\tRecoveryLatch *recovery.QuarantineLatch\
 edit(server,'type Server struct {','type Server struct {\n\truntimeGate func(context.Context)error');
 edit(server,'func New(ctx context.Context, cfg Config) (*Server, error) {','func New(ctx context.Context, cfg Config) (*Server, error) {\n\truntimeGate,guardErr:=recovery.RuntimeGuard(ctx,cfg.DBPath,cfg.RecoveryLatch);if guardErr!=nil{return nil,guardErr}');
 edit(server,'s = &Server{','s = &Server{\n\t\truntimeGate: runtimeGate,');
-edit(server,'func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {','func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n\tif s.runtimeGate!=nil && s.runtimeGate(r.Context())!=nil {w.Header().Set("Cache-Control","no-store");w.Header().Set("Content-Type","application/problem+json");w.WriteHeader(503);_ = json.NewEncoder(w).Encode(map[string]any{"type":"about:blank","title":"Service Unavailable","status":503,"code":"CONTROLLER_QUARANTINED"});return}');
+edit(server,'\ts.mux.ServeHTTP(w, r.WithContext(ctx))','\trecovery.RuntimeHTTP(s.mux,s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))');
 edit(server,'\t\tfiles.Migrations(),','\t\tfiles.Migrations(),\n\t\t{{Version:"cx/0009_update_journal",Name:"review candidate installed provenance and audited receipts",Statements:updates.InstallJournalSchemaStatements()}},');
 edit(server,'\t\t"ai.budget.configure",','\t\tupdates.ActionInstall,\n\t\t"ai.budget.configure",');
 edit(server,'return []auth.PermissionDefinition{','return []auth.PermissionDefinition{\n\t\t{Key:updates.ActionInstall,Description:"Install verified releases on granted owned targets",ResourceType:"node",AdminOnly:true},');

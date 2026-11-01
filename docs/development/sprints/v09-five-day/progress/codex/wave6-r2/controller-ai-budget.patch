@@ -1,12 +1,12 @@
 diff --git a/apps/controller/server/server.go b/apps/controller/server/server.go
-index 8a66314..3a34f8b 100644
+index 8a66314..03d1f80 100644
 --- a/apps/controller/server/server.go
 +++ b/apps/controller/server/server.go
 @@ -869,6 +869,9 @@ func (s *Server) registerRoutes() error {
  
  	s.registerEnrollmentRoutes()
  	s.registerAIRoutes()
-+	if err := s.registerAIBudgetRoutes(); err != nil {
++	if err := s.RegisterAIBudgetRoutes(); err != nil {
 +		return err
 +	}
  	s.registerPluginRoutes()

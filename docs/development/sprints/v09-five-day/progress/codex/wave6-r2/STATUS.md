@@ -43,3 +43,13 @@ Added restore RuntimeGuard before database open/migration: adjacent restore hold
 
 `controller-platform.patch` applies AFTER files + AI registration patches, never edited central sources. It registers candidate cx/0009, admin-only update action/program adapters and recovery guards. No runtime, external secrets or remote services enabled. Remaining authority/key governance and old-Controller fence require approved UPDATE/PRIV/WC/PKI-OPS sources and total-controller action; no author default grant substitutes for them. Xray pinned static retry is still BLOCKED at public archive acquisition; historical security FAIL remains, no Xray binary executed. Continue final fixed-SHA and root checks, then hand off exact remaining items.
 
+# Final verification corrections
+
+Platform runnable checkpoint `804993887de9b9f413a27310e9b14cc0b70cf889`; reproducible runner `41a5f5827a24b560914051176cbe829a19b4a986`; bounded reconnect fixture `544c048d15fce906c88629ddff60476748f8589b`.
+
+First full combination failed the fixture's 10-second reconnect limit after multiple intentional failures accumulated Agent's real backoff (maximum 30 seconds plus jitter). The fixture now includes bounded backoff + handshake allowance (45 seconds), records early process exit/logs and keeps production retry limits unchanged. Original failure retained at `reports/wave6-r2/combined-reconnect-deadline-first-fail.log`; on clean 544c048 the combined five tests and all eight Linux groups passed.
+
+First root check: policy/contracts/Web/git PASS; Go tests/vet PASS but staticcheck FAIL because central patch-only assembly left two private constructors unused, plus a struct conversion suggestion. Exposed explicit program assembly ports `NewFileExecutionWorker` and `RegisterAIBudgetRoutes`, updated exact patches, converted BudgetUsage directly; no linter exclusions. Initial outputs preserved `root-first-staticcheck-fail.log`, `staticcheck-first-fail.log`. Also added live response write/flush gates for already open SSE/downloads and preserved WSS hijack with independent frame gates. Fence loss before headers clears prepared cookies/download headers. Recovery module tests pass, staticcheck has no remaining diagnostics; final clean-code checks follow.
+
+`npm ci` PASS (127 packages). First tools install failed official proxy connection; GOPROXY=off also failed the install command's deprecation lookup. Re-running the unchanged pinned installer with GOPROXY pointing at this worktree's pre-existing module download cache succeeded for all four exact versions, without disabling checksum verification, changing pins or root config. Both failed outputs retained alongside `tools-install-cached-proxy.log`.
+

@@ -8,7 +8,7 @@ const report=path.join(root,'reports/wave6-r2');
 const progress=path.join(root,'docs/development/sprints/v09-five-day/progress/codex/wave6-r2');
 const server='apps/controller/server/server.go';
 const before='\ts.registerAIRoutes()';
-const after=before+'\n\tif err := s.registerAIBudgetRoutes(); err != nil {return err}';
+const after=before+'\n\tif err := s.RegisterAIBudgetRoutes(); err != nil {return err}';
 function replaceOnce(source){if(source.split(before).length!==2)throw new Error('Nonunique AI registration context');return source.replace(before,after);}
 function candidate(name,source,output){
  const target=path.join(report,output);fs.writeFileSync(target,source);
