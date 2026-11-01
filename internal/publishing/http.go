@@ -50,6 +50,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/publishing/publications/{publicationId}", api.get)
 	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/run", api.run)
 	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/rollback", api.rollback)
+	mux.HandleFunc("POST /api/v1/publishing/publications/{publicationId}/rollback-all", api.rollbackAll)
 	// The v0.9 candidate contract and the web client use the unprefixed paths.
 	mux.HandleFunc("POST /api/v1/publications/preview", api.preview)
 	mux.HandleFunc("GET /api/v1/publications", api.list)
@@ -57,6 +58,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/publications/{publicationId}", api.get)
 	mux.HandleFunc("POST /api/v1/publications/{publicationId}/run", api.run)
 	mux.HandleFunc("POST /api/v1/publications/{publicationId}/rollback", api.rollback)
+	mux.HandleFunc("POST /api/v1/publications/{publicationId}/rollback-all", api.rollbackAll)
 	return nil
 }
 
@@ -246,6 +248,25 @@ func (api *httpAPI) rollback(w http.ResponseWriter, r *http.Request) {
 	}
 	detail, err := api.service.RollbackDetail(r.Context(), principal.SubjectID, principal.RequestID,
 		r.PathValue("publicationId"), StageKind(body.Stage))
+	if err == nil {
+		writeJSON(w, http.StatusOK, operationFromDetail(detail))
+		return
+	}
+	if detail.Plan.ID == "" || isPublishingAuthorizationError(err) {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, publicationErrorStatus(err), operationWithError(detail, err))
+}
+
+// rollbackAll compensates every executed stage in reverse order. A failure stops
+// the sequence and returns the persisted partial state.
+func (api *httpAPI) rollbackAll(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	detail, err := api.service.RollbackAllDetail(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("publicationId"))
 	if err == nil {
 		writeJSON(w, http.StatusOK, operationFromDetail(detail))
 		return

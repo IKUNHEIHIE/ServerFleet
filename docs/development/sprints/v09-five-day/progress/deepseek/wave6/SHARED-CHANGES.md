@@ -178,3 +178,13 @@ message FileError {
 - 服务绑定：`TestChannel/SendAlert` 只在 `ProviderResult.Outcome=provider_accepted` 时记成功；`provider_service_test.go` 用真实 SMTP 服务器 + SQLite 验证 TestChannel→`provider_accepted`/`smtp_250`、凭据状态与审计。
 - 接线：`apps/controller/server` 目前 `notifications.NewService` 未注入 senders；建议总控注入真实 sender 并配置秘密后端。未注入时保持 `provider_unavailable` 失败关闭。
 - 未测：真实 QQ 官方账号/真实 SMTP 邮箱（无授权秘密）；TLS 证书异常主机、IPv6、退信/异步 DSN 未覆盖。QQ 主动消息权限未验证，真实账号验收 UNTESTED/BLOCKED。
+
+## 8. Nginx 受控站点与反序补偿（已在本包实现）
+
+- 文件：`internal/gateway/nginx.go`、`internal/gateway/nginx_test.go`、`internal/publishing/rollback_all.go`、`internal/publishing/rollback_all_test.go`、`internal/publishing/http.go`（新增候选路由）。
+- Nginx：`RenderNginxSite(NginxSiteRequest)` 生成确定性 conf（HTTP/HTTPS、直连 upstream 或服务组成员 upstream、ACME challenge、HSTS、代理头），校验域名/upstream/路径注入与既有站点接管双门（`ExistingSite` 必须同时有 `TakeoverApproved` 与 `ApprovalRef`）；输出 `Path`、`ArtifactPath`、`Digest`。
+- 任务：`BuildNginxApplyTask/BuildNginxRemoveTask` 只把 **artifact 路径 + SHA-256 + site 路径**放入统一任务参数，不把配置正文/私钥/证书内容塞进任务参数或日志；参数满足 tasks 现有 ≤1024B/键、≤32KB 总量、无控制字符限制。新增动作 `gateway.nginx.site_apply` / `gateway.nginx.site_remove`（需 CX/Agent 注册授权与降权；root reload 仍按审批规则）。
+- 控制器接线（申请）：先用文件通道把 `site.Config` 推到 `site.ArtifactPath`（`files.PolicyUploadTransport`，overwrite，SHA=`site.Digest`），再提交 apply 任务；Agent 必须校验 artifact 摘要、原子落 `site.Path`、`nginx -t` 通过后 reload、失败恢复旧文件；remove 仅在磁盘摘要等于 `config_sha256` 时删除。
+- 既有站点保护：渲染前拒绝未批准接管；Agent 动作必须再次检查 `takeover_approved`/`approval_ref`，不能只依赖控制器。
+- 反向补偿：`publishing.RollbackAll` 按 gateway→certificate→dns 逆序调用已执行阶段；失败即停止（避免下游还 live 时先撤上游），已成功补偿阶段立即持久化、下次从首个未补偿阶段继续；不重写阶段摘要，不宣称 DNS 缓存即时回滚。新增 `POST /api/v1/publications/{id}/rollback-all` 与 `/api/v1/publishing/publications/{id}/rollback-all`（候选，不在 g2-merged 契约内，需总控决定是否接收）。
+- 证据：本地测试覆盖渲染注入/接管门/摘要确定性/任务参数安全/逆序顺序/首次失败停止与续跑/部分计划/授权/运行中拒绝/HTTP 路由。**未在真实 Nginx 执行**：awskr 隔离目录步骤见 HANDOFF。
