@@ -90,11 +90,9 @@ type fakeSession struct {
 	uploadSHA    string
 	uploadPolicy files.ConflictPolicy
 	uploadBuffer []byte
-	uploadFailed int
 
 	downloadData   []byte
 	downloadOffset int64
-	downloadFailed int
 	downloadSize   int64
 }
 

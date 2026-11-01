@@ -225,9 +225,7 @@ func (s *smtpServer) handle(conn net.Conn) {
 
 type mailerOptions struct {
 	secret     string
-	rootCAs    *x509.CertPool
 	maxMessage int
-	rejectAuth bool
 }
 
 func newTestMailer(t *testing.T, server *smtpServer, pool *x509.CertPool, options mailerOptions) *notifications.SMTPMailer {
