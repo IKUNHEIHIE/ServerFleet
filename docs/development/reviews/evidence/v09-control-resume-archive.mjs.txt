@@ -1,0 +1,58 @@
+import {readFileSync,writeFileSync,mkdirSync,copyFileSync,existsSync} from 'node:fs';
+import {execFileSync} from 'node:child_process';
+import {createHash} from 'node:crypto';
+import {gzipSync,gunzipSync} from 'node:zlib';
+import path from 'node:path';
+const base='2da203cac40ccc2bfc4c7bb644978005cd99dab1';
+const tested='3bfb9e66c0aa615c055e54fcc784f639aa7d97ca';
+const root='D:/admin/desktop/codex/myproject/ks';
+const evidence='docs/development/reviews/evidence';mkdirSync(evidence,{recursive:true});
+const read=p=>readFileSync(p,'utf8').replace(/^\uFEFF/,'');
+const parse=p=>JSON.parse(read(p));
+const hash=b=>createHash('sha256').update(b).digest('hex');
+const save=(p,v)=>writeFileSync(p,JSON.stringify(v,null,2)+'\n');
+const git=(...a)=>execFileSync('git',a,{encoding:'utf8'}).trim();
+const checks=parse('reports/check-all.json'),security=parse('reports/check-security.json');
+if([...checks.results,...security.results].some(x=>x.status!=='PASS'))throw new Error('Local checks did not pass');
+const remote=parse('reports/control-resume-remote-result.json');if(remote.status!=='PASS'||remote.exitCode!==0||remote.uid!==1000)throw new Error('Remote test did not pass');
+const manifest=parse('reports/control-resume-bundle/manifest.json');
+for(const[name,expected]of Object.entries(manifest.files)){if(hash(readFileSync(`reports/control-resume-bundle/${name}`))!==expected.sha256)throw new Error('Bundle hash mismatch');}
+git('diff','--exit-code',base,'HEAD','--','apps','internal','api','proto','gen','tests','scripts','go.mod','go.sum','package.json','package-lock.json','docs/reference');
+git('diff','--exit-code','--','apps','internal','api','proto','gen','tests','scripts','go.mod','go.sum','package.json','package-lock.json','docs/reference');
+const packages=[
+ {task:'V09-R6-CX',session:'codex-06',branch:'feature/v09-r6-platform-cx06',directory:`${root}/.worktrees/feature--v09-r6-platform-cx06`},
+ {task:'V09-R6-DS',session:'deepseek-06',branch:'feature/v09-r6-services-ds06',directory:`${root}/.worktrees/feature--v09-r6-services-ds06`},
+ {task:'V09-R6-GM',session:'gemini-06',branch:'feature/v09-r6-console-gm06',directory:`${root}/.worktrees/feature--v09-r6-console-gm06`}
+];
+for(const p of packages){if(git('-C',p.directory,'rev-parse','HEAD')!==tested||git('-C',p.directory,'status','--porcelain'))throw new Error('Prepared author directory changed');p.preparedFrom=tested;p.status='READY_NOT_AUTO_STARTED';p.npmCi='PASS';}
+const changed=new Set([...git('diff','--name-only',base,'HEAD').split('\n'),...git('diff','--name-only').split('\n'),...git('diff','--cached','--name-only').split('\n')].filter(Boolean));
+let links=0;
+for(const file of changed){if(!file.endsWith('.md'))continue;for(const[,target]of read(file).matchAll(/(?<!!)\[[^\]\n]+\]\(([^)\n]+)\)/g)){if(/^(https?:|mailto:|#)/.test(target))continue;const resolved=path.resolve(path.dirname(file),target.split('#')[0]);if(!existsSync(resolved))throw new Error(`Broken link ${file}: ${target}`);links++;}}
+const sources=[
+ ['local-check','reports/control-resume-check.log'],['security','reports/control-resume-security.log'],['counts','reports/control-resume-counts.json'],
+ ['tools-first-fail','reports/control-resume-tools-first-fail.log'],['tools-pass','reports/control-resume-tools.log'],['npm-ci','reports/control-resume-npm-ci.log'],
+ ['remote-archive-first-fail','reports/control-resume-archive-member-first-fail.log'],['remote-result','reports/control-resume-remote-result.json'],
+ ['remote-baseline','reports/control-resume-remote-baseline.log'],['remote-inventory','reports/control-resume-remote-inventory.json'],
+ ['services-after','reports/control-resume-existing-services-after.log'],['bundle-manifest','reports/control-resume-bundle/manifest.json'],
+ ...packages.map(p=>[`${p.session}-setup`,`${p.directory}/reports/wave6-setup.log`])
+];
+const artifacts=[];
+for(const[label,source]of sources){const raw=readFileSync(source),name=`v09-control-resume-${label}.gz.b64`;
+ writeFileSync(`${evidence}/${name}`,gzipSync(raw).toString('base64').match(/.{1,76}/g).join('\n')+'\n');
+ if(hash(gunzipSync(Buffer.from(read(`${evidence}/${name}`),'base64')))!==hash(raw))throw new Error('Archive mismatch');
+ artifacts.push({source,artifact:name,encoding:'base64(gzip(original bytes))',bytes:raw.length,sha256:hash(raw),roundTrip:'PASS'});
+}
+copyFileSync('reports/control-resume-bundle/run_baseline.py',`${evidence}/v09-control-resume-remote-runner.py.txt`);
+copyFileSync('reports/control-resume-bundle/archive_results.mjs',`${evidence}/v09-control-resume-archive.mjs.txt`);
+save('docs/development/reviews/V09-CONTROL-RESUME-RESULTS.json',{
+ task:'V09-CONTROL-RESUME',reviewer:'codex-review-02',date:'2026-11-01',timezone:'Asia/Shanghai',baseMain:base,testedTechnicalHead:tested,
+ authorization:'User explicitly resumes Codex coordination and authorizes saved SSH Host awskr for Controller testing',
+ remote:{...remote,sshAlias:'awskr',inventory:parse('reports/control-resume-remote-inventory.json'),transferManifest:manifest,
+  scopeLimits:['not full v0.9 acceptance','not 1C1G or arm64 evidence','not multi-machine file transfer','no existing service/site/database/firewall changes','no AWS API/resource creation','no other SSH hosts','no production or third-party secrets'],
+  privateSSHKeyReadOrCopied:false,hostKeyVerification:'StrictHostKeyChecking=yes',existingServicesAfterTest:'Controller, Agent, nginx and MySQL active'},
+ checks:{npmCi:'PASS',toolsInstall:'PASS_AFTER_VERIFIED_CACHE_RETRY',combined:checks,security,counts:parse('reports/control-resume-counts.json'),localMarkdownLinks:links},
+ packages,finalAuthorBaselineRule:'Fast-forward only clean prepared author branches to final checked main; exact SHA in primary reports/v09-wave6-handoff.json and final user handoff',
+ artifacts,businessCodeChanged:false,immutableSourcesOrContractsChanged:false,g2Frozen:false,completeV09Claimed:false,
+ mergeConflict:'Task board preserved both takeover and completed-audit rows; no side discarded',agentsAutomaticallyStarted:0,messagesSent:0,remotePushed:false
+});
+console.log(JSON.stringify({status:'PASS',remote:remote.status,remoteSeconds:remote.elapsedSeconds,authorDirectories:packages.length,archives:artifacts.length,localLinks:links},null,2));

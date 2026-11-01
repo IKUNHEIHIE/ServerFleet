@@ -1,0 +1,300 @@
+{
+  "task": "V09-CONTROL-RESUME",
+  "reviewer": "codex-review-02",
+  "date": "2026-11-01",
+  "timezone": "Asia/Shanghai",
+  "baseMain": "2da203cac40ccc2bfc4c7bb644978005cd99dab1",
+  "testedTechnicalHead": "3bfb9e66c0aa615c055e54fcc784f639aa7d97ca",
+  "authorization": "User explicitly resumes Codex coordination and authorizes saved SSH Host awskr for Controller testing",
+  "remote": {
+    "sourceHead": "2da203cac40ccc2bfc4c7bb644978005cd99dab1",
+    "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask",
+    "exitCode": 0,
+    "status": "PASS",
+    "elapsedSeconds": 103.84,
+    "uid": 1000,
+    "platform": "Linux",
+    "architecture": "x86_64",
+    "qaRoot": "/home/admin/.local/share/serverfleet-qa/control-20261101-cx02-bd9cc2c8",
+    "existingServicesModified": false,
+    "scope": "isolated actual Controller/Agent enrollment, WSS+mTLS, heartbeat/metrics and fixed self-check; not full v0.9 or 1C1G acceptance",
+    "sshAlias": "awskr",
+    "inventory": {
+      "sshAlias": "awskr",
+      "date": "2026-11-01",
+      "access": "saved SSH configuration; BatchMode=yes; StrictHostKeyChecking=yes",
+      "osRelease": "PRETTY_NAME=\"Debian GNU/Linux 13 (trixie)\"\nNAME=\"Debian GNU/Linux\"\nVERSION_ID=\"13\"\nVERSION=\"13 (trixie)\"\nVERSION_CODENAME=trixie\nDEBIAN_VERSION_FULL=13.6\nID=debian\nHOME_URL=\"https://www.debian.org/\"\nSUPPORT_URL=\"https://www.debian.org/support\"\nBUG_REPORT_URL=\"https://bugs.debian.org/\"\n",
+      "architecture": "x86_64",
+      "testUID": 1000,
+      "cpuCount": 2,
+      "memoryMiB": "total        used        free      shared  buff/cache   available\nMem:            3862        1013         938           1        2190        2848\nSwap:           1535          97        1438",
+      "filesystem": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/nvme0n1p1   79G  6.3G   69G   9% /",
+      "goVersion": "go version go1.27.3 linux/amd64",
+      "nodeVersion": "v24.22.1",
+      "systemd": "running",
+      "existingServices": {
+        "serverfleet-controller.service": {
+          "User": "serverfleet",
+          "Group": "serverfleet",
+          "ActiveState": "active",
+          "FragmentPath": "/etc/systemd/system/serverfleet-controller.service"
+        },
+        "serverfleet-agent.service": {
+          "User": "root",
+          "Group": "root",
+          "ActiveState": "active",
+          "FragmentPath": "/etc/systemd/system/serverfleet-agent.service"
+        },
+        "nginx.service": {
+          "User": "",
+          "Group": "",
+          "ActiveState": "active",
+          "FragmentPath": "/usr/lib/systemd/system/nginx.service"
+        },
+        "mysql.service": {
+          "User": "mysql",
+          "Group": "mysql",
+          "ActiveState": "active",
+          "FragmentPath": "/usr/lib/systemd/system/mysql.service"
+        }
+      },
+      "existingConfigurationChangedByTest": false,
+      "qaNamespace": "~/.local/share/serverfleet-qa/control-20261101-cx02-*"
+    },
+    "transferManifest": {
+      "date": "2026-11-01",
+      "sourceHead": "2da203cac40ccc2bfc4c7bb644978005cd99dab1",
+      "runId": "control-20261101-cx02-bd9cc2c8",
+      "test": "TestWave5ControllerAndAgentCLIFullLoopWSSAndTask",
+      "files": {
+        "platform.test": {
+          "sha256": "5cea720fd7e88ae71d18c1ccd3ddd941dcdc64f85b46c6513cac3b46a3af362b",
+          "bytes": 26023329
+        },
+        "source.tar.gz": {
+          "sha256": "1eaff9c706baee56e86aa3f2f4823ea5f931c46c2daa89dd471eec5f23d06b52",
+          "bytes": 891051
+        }
+      }
+    },
+    "scopeLimits": [
+      "not full v0.9 acceptance",
+      "not 1C1G or arm64 evidence",
+      "not multi-machine file transfer",
+      "no existing service/site/database/firewall changes",
+      "no AWS API/resource creation",
+      "no other SSH hosts",
+      "no production or third-party secrets"
+    ],
+    "privateSSHKeyReadOrCopied": false,
+    "hostKeyVerification": "StrictHostKeyChecking=yes",
+    "existingServicesAfterTest": "Controller, Agent, nginx and MySQL active"
+  },
+  "checks": {
+    "npmCi": "PASS",
+    "toolsInstall": "PASS_AFTER_VERIFIED_CACHE_RETRY",
+    "combined": {
+      "executedAt": "2026-11-01T04:43:35.788Z",
+      "results": [
+        {
+          "name": "policy",
+          "status": "PASS"
+        },
+        {
+          "name": "contracts",
+          "status": "PASS"
+        },
+        {
+          "name": "go",
+          "status": "PASS"
+        },
+        {
+          "name": "web",
+          "status": "PASS"
+        },
+        {
+          "name": "git",
+          "status": "PASS"
+        }
+      ]
+    },
+    "security": {
+      "executedAt": "2026-11-01T04:43:43.247Z",
+      "results": [
+        {
+          "name": "security",
+          "status": "PASS"
+        }
+      ]
+    },
+    "counts": {
+      "goTopLevel": 636,
+      "goSubtests": 1134,
+      "goFailures": 0,
+      "goSkipped": 9,
+      "webTests": "329",
+      "webFailures": "0"
+    },
+    "localMarkdownLinks": 56
+  },
+  "packages": [
+    {
+      "task": "V09-R6-CX",
+      "session": "codex-06",
+      "branch": "feature/v09-r6-platform-cx06",
+      "directory": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-r6-platform-cx06",
+      "preparedFrom": "3bfb9e66c0aa615c055e54fcc784f639aa7d97ca",
+      "status": "READY_NOT_AUTO_STARTED",
+      "npmCi": "PASS"
+    },
+    {
+      "task": "V09-R6-DS",
+      "session": "deepseek-06",
+      "branch": "feature/v09-r6-services-ds06",
+      "directory": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-r6-services-ds06",
+      "preparedFrom": "3bfb9e66c0aa615c055e54fcc784f639aa7d97ca",
+      "status": "READY_NOT_AUTO_STARTED",
+      "npmCi": "PASS"
+    },
+    {
+      "task": "V09-R6-GM",
+      "session": "gemini-06",
+      "branch": "feature/v09-r6-console-gm06",
+      "directory": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-r6-console-gm06",
+      "preparedFrom": "3bfb9e66c0aa615c055e54fcc784f639aa7d97ca",
+      "status": "READY_NOT_AUTO_STARTED",
+      "npmCi": "PASS"
+    }
+  ],
+  "finalAuthorBaselineRule": "Fast-forward only clean prepared author branches to final checked main; exact SHA in primary reports/v09-wave6-handoff.json and final user handoff",
+  "artifacts": [
+    {
+      "source": "reports/control-resume-check.log",
+      "artifact": "v09-control-resume-local-check.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 1965088,
+      "sha256": "126b5cfc376180524b082d63a79e0cc3e7a568b4407af6a287bdbe96989bf269",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-security.log",
+      "artifact": "v09-control-resume-security.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 285,
+      "sha256": "752777ff5656eba99ff9d80090b089e048acc262dac9bcf436bd4a33eabc87b2",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-counts.json",
+      "artifact": "v09-control-resume-counts.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 134,
+      "sha256": "8ebd370530d60809f33a824e76406b24737ae54ead1ea78ac4cd6bb26ae01058",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-tools-first-fail.log",
+      "artifact": "v09-control-resume-tools-first-fail.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 1421,
+      "sha256": "bb8d90c629818121f12f0200f9b5441863cfcc9ebf4d27fedc10304f599c52f7",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-tools.log",
+      "artifact": "v09-control-resume-tools-pass.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 393,
+      "sha256": "e889f4db965670aef2d2ded045e8bfe7105b4a3f51e26909061794c1d330cec0",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-npm-ci.log",
+      "artifact": "v09-control-resume-npm-ci.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 341,
+      "sha256": "b3f1ab18ee66409176c1f736b71d38a197befe22b5d224b56c7c33b2058dd6cd",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-archive-member-first-fail.log",
+      "artifact": "v09-control-resume-remote-archive-first-fail.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 26,
+      "sha256": "0b630c92b98e48c33dffcbb08bb0aaa68919f619622127e61bc943c65ffb65d3",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-remote-result.json",
+      "artifact": "v09-control-resume-remote-result.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 521,
+      "sha256": "20a85490f2e5110f81e005228f16099cd8355e62d837889392e7ecfafbc050dc",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-remote-baseline.log",
+      "artifact": "v09-control-resume-remote-baseline.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 133,
+      "sha256": "198dfd0d0d10385b0c89746840c4ccf3700664ac06fd0ca3b559bfdb0e0d6b8c",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-remote-inventory.json",
+      "artifact": "v09-control-resume-remote-inventory.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 1827,
+      "sha256": "44741ec06410df45d22848fe59f2061989f1c45774a3777b17265169dbd8e502",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-existing-services-after.log",
+      "artifact": "v09-control-resume-services-after.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 683,
+      "sha256": "cdee146b460f6e8d610c0c1b3fd9b73214a26bd9315a8f0efdc54efa307795cb",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "reports/control-resume-bundle/manifest.json",
+      "artifact": "v09-control-resume-bundle-manifest.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 485,
+      "sha256": "5245badef3209c2c4102ef5a22a361c2680ec3db353cfb82b239eb626a8af64d",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-r6-platform-cx06/reports/wave6-setup.log",
+      "artifact": "v09-control-resume-codex-06-setup.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 341,
+      "sha256": "4b5662e5b8a33c3e6145c454d1f62df4969e14afa703ac8fcebe5e1d6f36cd7f",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-r6-services-ds06/reports/wave6-setup.log",
+      "artifact": "v09-control-resume-deepseek-06-setup.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 341,
+      "sha256": "4b5662e5b8a33c3e6145c454d1f62df4969e14afa703ac8fcebe5e1d6f36cd7f",
+      "roundTrip": "PASS"
+    },
+    {
+      "source": "D:/admin/desktop/codex/myproject/ks/.worktrees/feature--v09-r6-console-gm06/reports/wave6-setup.log",
+      "artifact": "v09-control-resume-gemini-06-setup.gz.b64",
+      "encoding": "base64(gzip(original bytes))",
+      "bytes": 341,
+      "sha256": "4b5662e5b8a33c3e6145c454d1f62df4969e14afa703ac8fcebe5e1d6f36cd7f",
+      "roundTrip": "PASS"
+    }
+  ],
+  "businessCodeChanged": false,
+  "immutableSourcesOrContractsChanged": false,
+  "g2Frozen": false,
+  "completeV09Claimed": false,
+  "mergeConflict": "Task board preserved both takeover and completed-audit rows; no side discarded",
+  "agentsAutomaticallyStarted": 0,
+  "messagesSent": 0,
+  "remotePushed": false
+}

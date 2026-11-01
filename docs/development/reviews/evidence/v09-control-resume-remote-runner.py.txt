@@ -1,0 +1,55 @@
+import hashlib,json,os,pathlib,signal,stat,subprocess,tarfile,time
+
+root=pathlib.Path('/home/admin/.local/share/serverfleet-qa/control-20261101-cx02-bd9cc2c8')
+home=pathlib.Path.home().resolve()
+if root.is_symlink() or not root.resolve().is_relative_to(home/'.local/share/serverfleet-qa'):
+    raise SystemExit('unexpected QA directory')
+if root.stat().st_uid!=os.getuid() or stat.S_IMODE(root.stat().st_mode)&0o077:
+    raise SystemExit('QA directory must be private and owned by test user')
+manifest=json.loads((root/'manifest.json').read_text())
+for name,expected in manifest['files'].items():
+    if name not in ('source.tar.gz','platform.test'):raise SystemExit('unexpected artifact')
+    raw=(root/name).read_bytes()
+    if len(raw)!=expected['bytes'] or hashlib.sha256(raw).hexdigest()!=expected['sha256']:
+        raise SystemExit('artifact integrity mismatch')
+src=root/'src'
+if src.exists():
+    if src.is_symlink() or any(src.iterdir()):raise SystemExit('source directory must be empty')
+else:src.mkdir(mode=0o700)
+with tarfile.open(root/'source.tar.gz','r:gz') as archive:
+    members=archive.getmembers()
+    for member in members:
+        path=pathlib.PurePosixPath(member.name)
+        if path.is_absolute() or '..' in path.parts or not (member.isfile() or member.isdir()):
+            raise SystemExit('unsafe archive member')
+        if not (member.name in ('go.mod','go.sum') or member.isdir() and member.name in ('apps','internal','gen','tests') or member.name.startswith(('apps/','internal/','gen/','tests/'))):
+            raise SystemExit('unexpected source member '+member.name)
+    archive.extractall(src,filter='data')
+(root/'platform.test').chmod(0o700)
+for name in ('tmp','cache','cache/build','cache/modules'):
+    (root/name).mkdir(mode=0o700,exist_ok=True)
+old_cache=subprocess.check_output(['go','env','GOMODCACHE'],text=True).strip()
+env=dict(os.environ,GOCACHE=str(root/'cache/build'),GOMODCACHE=str(root/'cache/modules'),
+         GOPROXY='file://'+old_cache+'/cache/download,https://proxy.golang.org',
+         TMPDIR=str(root/'tmp'),GOTOOLCHAIN='local',GOFLAGS='-p=2',GOMAXPROCS='2',GOMEMLIMIT='256MiB')
+start=time.time()
+with (root/'baseline-test.log').open('x') as log:
+    process=subprocess.Popen([str(root/'platform.test'),'-test.run=^TestWave5ControllerAndAgentCLIFullLoopWSSAndTask$',
+                              '-test.v','-test.count=1','-test.timeout=5m'],cwd=src,env=env,
+                             stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+    try: code=process.wait(timeout=330)
+    except subprocess.TimeoutExpired:
+        os.killpg(process.pid,signal.SIGTERM)
+        try: process.wait(timeout=5)
+        except subprocess.TimeoutExpired:os.killpg(process.pid,signal.SIGKILL);process.wait()
+        code=124
+text=(root/'baseline-test.log').read_text(errors='replace')
+result={'sourceHead':manifest['sourceHead'],'test':manifest['test'],'exitCode':code,
+        'status':'PASS' if code==0 and '--- PASS: TestWave5ControllerAndAgentCLIFullLoopWSSAndTask' in text else 'FAIL',
+        'elapsedSeconds':round(time.time()-start,2),'uid':os.getuid(),'platform':os.uname().sysname,
+        'architecture':os.uname().machine,'qaRoot':str(root),'existingServicesModified':False,
+        'scope':'isolated actual Controller/Agent enrollment, WSS+mTLS, heartbeat/metrics and fixed self-check; not full v0.9 or 1C1G acceptance'}
+(root/'result.json').write_text(json.dumps(result,indent=2)+'\n')
+print(json.dumps(result))
+print(text[-6000:])
+raise SystemExit(0 if result['status']=='PASS' else 1)
