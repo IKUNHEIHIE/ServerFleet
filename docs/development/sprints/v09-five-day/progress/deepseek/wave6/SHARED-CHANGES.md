@@ -157,3 +157,13 @@ message FileError {
 - 真实 WSS 字节链路需 CX/总控按上述端口与 Proto 接线；本包仅用同帧边界的 fake agent 验证字节/续传/校验/错误/部分结果，属控制器侧真实实现而非双机实机证据。
 - 目标盘空间、符号链接竞态、跨文件系统 rename、IPv6/跨架构节点需 awskr 双进程/真实 Agent 验收。
 - `tasks.Command.ExecutionID` 未接收前无法把文件会话绑定到 CX 真实执行 ID；已登记稳定替代值。
+
+## 6. Cloudflare Provider 适配（已在本包实现）
+
+- 文件：`internal/dns/cloudflare.go`、`internal/dns/cloudflare_test.go`、`internal/dns/cloudflare_service_test.go`。
+- 构造：`dns.NewCloudflareProvider(dns.CloudflareConfig{Client, BaseURL, Secrets, Timeout, UserAgent})`，实现 `dns.Provider`。
+- 秘密：新增 `dns.SecretResolver` 端口（`Resolve(ctx, CredentialRef) (string, error)`）。总控/CX 接到秘密存储时只返回当次请求的令牌；适配器不缓存、不写日志、不把令牌放进错误。
+- 真实 HTTP：Cloudflare v4 `GET /user/tokens/verify`、`GET /zones`（分页 50/页、上限 100 页、按 ID 去重）、`POST/PATCH/DELETE /zones/{zone}/dns_records`；Bearer 头、TLS≥1.2、拒绝任何重定向（避免 Authorization 跨域）、响应上限 1MiB、无环境代理。
+- 错误：401→`CredentialInvalid`、403/9109→`CredentialMissingPermissions`；`CloudflareError` 只含操作名/状态码/Cloudflare code，不含 provider 文本或令牌；`CredentialStatusFromCloudflare` 供 `TestAccount` 使用。
+- 接线：`apps/controller/server` 当前 `cfg.DNSProvider` 为空时失败关闭。建议总控在配置了秘密后端与 Cloudflare 账号时注入该 provider；未配置时保持失败关闭，不得用假 provider 关闭功能。
+- 证据：本地 `httptest.NewTLSServer` 验证 verify/分页/CRUD 请求体/401/403/redirect 拒绝/令牌不泄露，并通过真实 `dns.Service` 创建账号→TestAccount→CreateZone→CreateRecord→ListRecords。**未调用真实 Cloudflare 账号**（无授权秘密），真实 Zone 写入仍 UNTESTED/BLOCKED。
