@@ -51,3 +51,5 @@ AppendModelSettingsAudit保留SubjectID/ProfileID/revision/action/time；接Sess
 初验WSL Agent42 PASS/1 helper SKIP、updates15 PASS/1 helper SKIP、budget1/restore1 PASS/0 SKIP；helper由父测试实际另起子进程运行，不是被跳过的功能。固定提交与整包复验另列HANDOFF/EVIDENCE。
 
 Xray固定26.10.29静态审查重试在下载阶段报Pinned public archive unavailable，BLOCKED，未执行任何Xray二进制。历史两候选安全FAIL不失效；本轮无新工件扫描PASS，不开放运行时/安装以绕过。
+
+检查点3 SHA：8336e56426d2016707b89f4cd80bd8b46f221687；该干净提交上整包check/security、额外Linux vet/security、WSL八组和双架构编译均通过。根Go720顶层+1177子测试PASS、20 SKIP；Web333 PASS；WSL157 PASS、2个父测试实际运行的helper入口SKIP。详细证据/初次失败/候选接收及剩余BLOCKED/UNTESTED见HANDOFF.md、EVIDENCE.json。当前完整独立CLI未在该提交重跑，WSL native Go环境探查exit127；不扩大为完整v0.9/G2通过。独立实施收口，交证据后停止，未越权接线/合并/实机。
