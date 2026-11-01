@@ -1,0 +1,24 @@
+--- a/apps/controller/server/server.go
++++ b/apps/controller/server/server.go
+@@ -42,6 +42,7 @@
+ // Config configures the composed Controller management runtime.
+ type Config struct {
+ 	DBPath                 string
++	CredentialKeyDir       string
+ 	Origin                 string
+ 	StagingDir             string
+ 	Dispatcher             tasks.Dispatcher
+@@ -501,10 +502,9 @@
+ 	if err != nil {
+ 		return cleanup(err)
+ 	}
+-	credentialsService, err := auth.NewCredentialService(
+-		identityService,
+-		"local-default",
+-		map[string][]byte{"local-default": []byte("0123456789abcdef0123456789abcdef")},
++	// Require an operator-owned Linux 0700 directory. No legacy key fallback.
++	credentialsService, err := auth.NewPersistentCredentialService(
++		ctx, identityService, cfg.CredentialKeyDir,
+ 		func(context.Context, auth.CredentialOperation) error { return auth.ErrDenied },
+ 		func(context.Context, string, string) ([]string, error) { return []string{}, nil },
+ 	)

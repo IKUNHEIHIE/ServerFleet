@@ -1,0 +1,39 @@
+--- a/proto/serverfleet/agent/v1/agent.proto
++++ b/proto/serverfleet/agent/v1/agent.proto
+@@ -32,6 +32,8 @@
+     StateSyncRequest state_sync_request = 30;
+     StateSyncReply state_sync_reply = 31;
+     ControlError control_error = 32;
++    FileChunkRequest file_chunk_request = 33;
++    FileChunkReply file_chunk_reply = 34;
+   }
+ }
+ 
+@@ -165,3 +167,27 @@
+   string message = 2;
+   string related_message_id = 3;
+ }
++
++// WAVE6 PROPOSED: only after files.chunk.v1 negotiation and a durable,
++// currently authorized TaskOffer reservation. Binding path/direction/size/hash
++// come from the immutable task parameters, never from these chunk requests.
++// Each frame remains one bounded Envelope; data <=32768, frame <=65536.
++message FileChunkRequest {
++  string task_id = 1;
++  string execution_id = 2;
++  string transfer_id = 3;
++  uint64 offset = 4;
++  uint32 read_bytes = 5; // read only, 1..32768
++  bytes data = 6;       // write only; never TaskOutput
++  bool finish = 7;      // write commit, whole-file hash must match plan
++}
++message FileChunkReply {
++  string task_id = 1;
++  string execution_id = 2;
++  string transfer_id = 3;
++  uint64 offset = 4;
++  uint64 next_offset = 5;
++  bytes data = 6; // read only
++  bool complete = 7;
++  string result_code = 8; // bounded enum vocabulary, no paths/secrets/errors
++}

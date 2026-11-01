@@ -279,6 +279,16 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 					fail(errAgentSession)
 					return
 				}
+				if cfg.InitialSample != nil {
+					sampleCtx, stop := context.WithTimeout(bounded, 5*time.Second)
+					batch, sampleErr := cfg.InitialSample(sampleCtx)
+					expired := sampleCtx.Err()
+					stop()
+					if sampleErr != nil || expired != nil || batch == nil || write(&agentv1.Envelope{Message: &agentv1.Envelope_Metrics{Metrics: batch}}, transport.Established) != nil {
+						fail(errAgentSession)
+						return
+					}
+				}
 			}
 		}
 	}()

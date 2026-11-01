@@ -71,6 +71,7 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 	result.NodeName = request.NodeName
 	result.WaitTaskMillis = request.WaitTaskMillis
 	var facts agentIdentityFacts
+	var linkErr error
 	err = store.WithCertificate(ctx,
 		func(ctx context.Context, observed agentIdentityFacts) error {
 			if !executionIDPattern.MatchString(observed.NodeID) || !time.Now().Add(time.Minute).Before(observed.ExpiresAt) {
@@ -80,9 +81,13 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 			return nil
 		},
 		func(ctx context.Context, certificate tls.Certificate) error {
-			return runOneShotLink(ctx, request, endpoint, roots, pin, certificate, facts, &result)
+			linkErr = runOneShotLink(ctx, request, endpoint, roots, pin, certificate, facts, &result)
+			return linkErr
 		})
 	if err != nil {
+		if errors.Is(linkErr, errAgentWorkersUnknown) {
+			return result, errAgentWorkersUnknown
+		}
 		return result, errAgentConnect
 	}
 	if result.NodeID == "" || result.ConnectionID == "" || !result.HeartbeatSent || !result.MetricsSent {
@@ -135,6 +140,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		_ = connection.Close()
 		return errAgentConnect
 	}
+	defer socket.Close()
 	bootID, err := transport.NewConnectionID()
 	if err != nil {
 		_ = socket.Close()
@@ -182,6 +188,24 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 	result.ConnectionID = connectionID
 	result.HeartbeatSent = true
 	result.MetricsSent = true
+	if request.Persistent {
+		select {
+		case err := <-done:
+			return err
+		case <-ctx.Done():
+			sessionCancel()
+			_ = socket.Close()
+			select {
+			case err := <-done:
+				if errors.Is(err, errAgentWorkersUnknown) {
+					return err
+				}
+				return nil
+			case <-time.After(agentLinkWaitCompletionTimeout):
+				return errAgentWorkersUnknown
+			}
+		}
+	}
 	if wait := time.Duration(request.WaitTaskMillis) * time.Millisecond; wait > 0 {
 		timer := time.NewTimer(wait)
 		defer timer.Stop()
