@@ -7,6 +7,7 @@ import type {
   AIApprovalRequest,
   AIExecuteResult,
   AIMessage,
+  AIModelSettings,
   AIResourceRecommendation,
   AISecurityPolicy,
   AISession,
@@ -69,7 +70,27 @@ export const aiApi = {
     apiClient.request<Page<AIMessage>>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, { query, signal }),
   sendMessage: (sessionId: string, body: { content: string; clientMessageId: string; scopeRevision: number }) =>
     apiClient.request<AIMessage>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, { method: "POST", body }),
+  // 显式生成：无请求体/查询参数；响应是服务端缓冲上游 SSE 至终态后的完整脱敏消息，
+  // 不是浏览器逐 token 流。排队/回显用户文本不算生成成功。
+  generate: (sessionId: string, messageId: string) =>
+    apiClient.request<AIMessage>(
+      `/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(messageId)}/generate`,
+      { method: "POST" },
+    ),
   eventsUrl: (sessionId: string) => `/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/events`,
+};
+
+/** 所有者作用域的模型配置：GET 为已保存配置（缺省=禁用+revision 0），PUT 走 owner CAS。 */
+export const modelSettingsApi = {
+  get: (signal?: AbortSignal) => apiClient.request<AIModelSettings>("/api/v1/ai/model-settings", { signal }),
+  set: (body: {
+    expectedRevision: number;
+    enabled: boolean;
+    provider: string;
+    model: string;
+    credentialRef: string;
+    credentialRevision: number;
+  }) => apiClient.request<AIModelSettings>("/api/v1/ai/model-settings", { method: "PUT", body }),
 };
 
 export const pluginsApi = {

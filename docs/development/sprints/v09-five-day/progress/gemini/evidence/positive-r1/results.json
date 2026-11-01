@@ -1,0 +1,139 @@
+{
+  "status": "PARTIAL",
+  "complete": false,
+  "passed": 20,
+  "blocked": 6,
+  "failed": 0,
+  "results": [
+    {
+      "step": "P01 bootstrap initializes the real controller admin",
+      "state": "PASS",
+      "detail": "POST /api/v1/auth/bootstrap (204) + auto-login completed against the real controller"
+    },
+    {
+      "step": "P02 full page reload restores CSRF from the real /auth/me response",
+      "state": "PASS",
+      "detail": "location.reload() completed; /auth/me returned csrfToken for bjYe0tHWqmt5zbTZPUEn1_5VEpbE2oKYV2hNW9hH8fw and writes stayed unlocked"
+    },
+    {
+      "step": "P03 UI issues a one-time enrollment token (shown once only)",
+      "state": "PASS",
+      "detail": "POST /api/v1/node-enrollment-tokens -> 201; token rendered once and absent from list responses"
+    },
+    {
+      "step": "P04 real Linux agent enrolls and lands in pending approval",
+      "state": "PASS",
+      "detail": "agent CLI (linux/amd64) enrolled over real HTTPS: state=pending"
+    },
+    {
+      "step": "P05 administrator approves the pending enrollment through the UI",
+      "state": "PASS",
+      "detail": "POST /api/v1/node-enrollments/{id}/decision approve -> 200; node inventory created server-side"
+    },
+    {
+      "step": "P06 same one-time token fetches the issued identity with a nodeId",
+      "state": "PASS",
+      "detail": "identity issued server-side: nodeId=fc62f53d11454382db58787ca6314b06"
+    },
+    {
+      "step": "P07 admin grants the enrolled node through the UI resource grants",
+      "state": "PASS",
+      "detail": "granted 16 permissions on fc62f53d11454382db58787ca6314b06 through POST /api/v1/resource-grants"
+    },
+    {
+      "step": "P08 real agent opens the controlled WSS+mTLS link and the node reports online",
+      "state": "PASS",
+      "detail": "real agent heartbeat/metrics over WSS+mTLS; node fc62f53d11454382db58787ca6314b06 online and listed in the console"
+    },
+    {
+      "step": "P09 UI submits a standard tasks.command task for the enrolled node",
+      "state": "PASS",
+      "detail": "POST /api/v1/tasks -> 202 tsk_f5997a72b2772b36693330de (standard class, no approval required, real dispatcher)"
+    },
+    {
+      "step": "P10 real agent executes the task; task completes with a succeeded execution",
+      "state": "PASS",
+      "detail": "task tsk_f5997a72b2772b36693330de -> completed; execution state=succeeded; agent one-shot reports tasksExecuted=1 (real TaskOffer/TaskFinished over the link)"
+    },
+    {
+      "step": "P11 node page reflects the real connection lifecycle honestly",
+      "state": "PASS",
+      "detail": "node fc62f53d11454382db58787ca6314b06 rendered from server truth: online during the link (P08), honestly offline after the one-shot agent exit"
+    },
+    {
+      "step": "P12 audit records the real enrollment and task chain",
+      "state": "PASS",
+      "detail": "GET /api/v1/audit/events covers enrollment.token/request/decide + tasks.submit"
+    },
+    {
+      "step": "P15 second real agent enrolls, is approved and reports online",
+      "state": "PASS",
+      "detail": "agent-2 identity issued: nodeId=1dfd6a9ff997c3d92e5afbd7015f7cae"
+    },
+    {
+      "step": "P16 admin grants the second enrolled node through the API",
+      "state": "PASS",
+      "detail": "granted 7 permissions on 1dfd6a9ff997c3d92e5afbd7015f7cae"
+    },
+    {
+      "step": "P17 both real agents hold live WSS+mTLS links simultaneously",
+      "state": "PASS",
+      "detail": "two enrolled agents connected over independent WSS+mTLS links; heartbeats visible in the console"
+    },
+    {
+      "step": "P18 real source/target fixtures with verifiable SHA-256 are prepared in private folders",
+      "state": "PASS",
+      "detail": "fixtures ready: src transfer-sample.txt sha256=a439666981f6d56c…; dst dir prepared"
+    },
+    {
+      "step": "P13 real failed task page: peer-approved host.patch is rejected by the agent",
+      "state": "PASS",
+      "detail": "task tsk_de8ce7264d0c44a6fd718b96 -> failed: peer-approved host.patch rejected by the real agent (CAPABILITY_REJECTED), page renders the failure and per-node note"
+    },
+    {
+      "step": "P13b admin session is restored after the approver flow",
+      "state": "PASS",
+      "detail": "admin session verified/restored for the B-group probes"
+    },
+    {
+      "step": "B01 cross-node byte transfer between real agents",
+      "state": "BLOCKED",
+      "detail": "transfer xfer_aa835b9ab4ed754325d83f5b not completed within 60s：字节链路未在本基线打通（诚实未完成）"
+    },
+    {
+      "step": "B02 AI generation reaches a terminal assistant message",
+      "state": "BLOCKED",
+      "detail": "POST …/generate -> 503 {\"code\":\"GENERATION_OUTCOME_UNKNOWN\",\"status\":503,\"title\":\"Service Unavailable\",\"type\":\"about:blank\"}：模型设置与凭据已保存并通过校验（read-back ok），但组合运行时默认配额拒绝且上游端点固定为 api.openai.com——本地 TLS 供应商注入属 CX Wave6-R1 + 总控组合范围；用户消息已入队但入队不等于生成"
+    },
+    {
+      "step": "P19 model settings panel saves owner CAS through the real UI",
+      "state": "PASS",
+      "detail": "UI CAS save accepted: revision 1 -> 2, model=local-test-model-2; secret never displayed"
+    },
+    {
+      "step": "B03 Xray installation against a real published artifact",
+      "state": "BLOCKED",
+      "detail": "catalog unavailable: 501 {\"code\":\"PLUGIN_CATALOG_SOURCE_UNAVAILABLE\",\"status\":501,\"title\":\"Not Implemented\",\"type\":\"about:blank\"}"
+    },
+    {
+      "step": "B04 service publication reaches real stage execution with compensation",
+      "state": "BLOCKED",
+      "detail": "gateway create -> 409 {\"error\":{\"code\":\"takeover_approval_required\",\"message\":\"existing site takeover requires approval\"}}：网关安装任务未受理"
+    },
+    {
+      "step": "B05 controller update executes with signature verification",
+      "state": "BLOCKED",
+      "detail": "update source unavailable: 503 {\"code\":\"UPDATE_SOURCE_UNAVAILABLE\",\"status\":503,\"title\":\"Service Unavailable\",\"type\":\"about:blank\"}"
+    },
+    {
+      "step": "B06 disaster recovery executes against an isolated second controller",
+      "state": "BLOCKED",
+      "detail": "recovery preview not passed: status=200, checks=[{\"name\":\"backup_integrity\",\"passed\":true},{\"name\":\"target_controller_identity\",\"passed\":false,\"reason\":\"target_identity_not_observed\"},{\"name\":\"old_controller_fenced\",\"passed\":false,\"reason\":\"fencing_evidence_unavailable\"},{\"name\":\"recovery_key_reference\",\"pa——预演成功也不代表恢复；实际恢复需第二隔离 Controller、真实 fence 与撤销不复活证据"
+    },
+    {
+      "step": "P14 grant revocation isolates task access and a 403 keeps the session",
+      "state": "PASS",
+      "detail": "revoked grant -> task detail 403 rendered honestly; 403 did not clear the authenticated session"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { jsonResponse, sseResponse, type FetchRoutes } from "@/test/http";
+import { IDENTITY, jsonResponse, sseResponse, type FetchRoutes } from "@/test/http";
 import { renderAuthenticated } from "@/test/app";
 
 afterEach(() => {
@@ -121,5 +121,113 @@ describe("AI session page", () => {
     fireEvent.click(screen.getByRole("button", { name: "新建 AI 会话" }));
     await waitFor(() => expect(window.location.hash).toBe("#/ai/s-new"));
     expect(calls.some(call => call.method === "POST" && call.url === "/api/v1/ai/sessions")).toBe(true);
+  });
+});
+
+describe("AI model settings (GM-W6-R1)", () => {
+  const ADMIN_IDENTITY = { ...IDENTITY, roles: ["administrator"] };
+  const SETTINGS_EMPTY = { ownerId: "u-admin", revision: 0, enabled: false, provider: "", model: "", credentialRef: "", credentialRevision: 0 };
+  const CREDENTIALS = [
+    { id: "cred-ai-1", name: "本地模型 Key", kind: "ai_api_key", status: "unverified", usageScope: ["ai"], revision: 3 },
+    { id: "cred-cf-1", name: "Cloudflare", kind: "cloudflare_token", status: "valid", usageScope: ["dns"], revision: 1 },
+  ];
+
+  function entryRoutes(settings: unknown, credentials: unknown = CREDENTIALS): FetchRoutes {
+    return {
+      "GET /api/v1/ai/security-policy": () => jsonResponse({ defaultDeny: true, serverSideEnforced: true }),
+      "GET /api/v1/ai/model-settings": () => jsonResponse(settings),
+      "GET /api/v1/credentials": () => jsonResponse(credentials),
+      "POST /api/v1/ai/sessions": () => jsonResponse({ ...SESSION, id: "s-new" }, 201),
+    };
+  }
+
+  it("saves owner-scoped model settings through CAS with the credential revision, never echoing secrets", async () => {
+    const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), ADMIN_IDENTITY);
+    expect(await screen.findByText("AI 模型设置（当前用户）")).toBeVisible();
+    // 凭据只显示引用/状态/修订号；凭据下拉不包含 dns 作用域的其他类型。
+    expect(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }).textContent).toContain("cred-ai-1");
+    expect(screen.getByRole("combobox", { name: "AI 凭据（ai_api_key）" }).textContent).not.toContain("cred-cf-1");
+    expect(screen.queryByLabelText("秘密值")).toBeNull();
+    fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    await waitFor(() => {
+      const call = calls.find(call => call.method === "PUT" && call.url === "/api/v1/ai/model-settings");
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.init?.body))).toEqual({
+        expectedRevision: 0,
+        enabled: true,
+        provider: "openai-responses",
+        model: "gpt-test",
+        credentialRef: "cred-ai-1",
+        credentialRevision: 3,
+      });
+    });
+  });
+
+  it("surfaces a revision conflict honestly and refetches instead of overwriting", async () => {
+    const { calls } = await renderAuthenticated("/ai", {
+      ...entryRoutes(SETTINGS_EMPTY),
+      "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "MODEL_REVISION_CONFLICT", status: 409 }, 409),
+    }, ADMIN_IDENTITY);
+    await screen.findByText("AI 模型设置（当前用户）");
+    fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    expect(await screen.findByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
+    await waitFor(() => expect(calls.filter(call => call.url === "/api/v1/ai/model-settings" && call.method === "GET").length).toBeGreaterThanOrEqual(2));
+  });
+
+  it("keeps the panel read-only for a non-administrator identity", async () => {
+    const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), { ...IDENTITY, roles: ["reader"] });
+    await screen.findByText("当前身份不是管理员：只能查看本页配置，不能修改（服务端强制）。");
+    expect((screen.getByRole("button", { name: "保存模型设置（CAS）" }) as HTMLButtonElement).disabled).toBe(true);
+    await waitFor(() => expect(calls.some(call => call.method === "PUT")).toBe(false));
+  });
+});
+
+describe("AI explicit generation (GM-W6-R1)", () => {
+  const ADMIN_IDENTITY = { ...IDENTITY, roles: ["administrator"] };
+
+  function sessionRoutes(extra: FetchRoutes = {}): FetchRoutes {
+    return {
+      ...aiRoutes(),
+      "GET /api/v1/ai/sessions/s-1/messages": () =>
+        jsonResponse({ items: [
+          { messageId: "m-user-1", sessionId: "s-1", role: "user", createdAt: "2026-11-01T01:00:00Z", redactedContent: "列出节点运行时间" },
+        ], page: { nextCursor: null, limit: 100, hasMore: false } }),
+      ...extra,
+    };
+  }
+
+  it("generates explicitly per message with no request body and renders the completed assistant message", async () => {
+    const { calls } = await renderAuthenticated("/ai/s-1", sessionRoutes({
+      "POST /api/v1/ai/sessions/s-1/messages/m-user-1/generate": () =>
+        jsonResponse({ messageId: "m-assistant-1", sessionId: "s-1", role: "assistant", createdAt: "2026-11-01T01:00:05Z", redactedContent: "节点运行时间为 3 小时" }),
+      "GET /api/v1/ai/sessions/s-1/messages": () =>
+        jsonResponse({ items: [
+          { messageId: "m-user-1", sessionId: "s-1", role: "user", createdAt: "2026-11-01T01:00:00Z", redactedContent: "列出节点运行时间" },
+          { messageId: "m-assistant-1", sessionId: "s-1", role: "assistant", createdAt: "2026-11-01T01:00:05Z", redactedContent: "节点运行时间为 3 小时" },
+        ], page: { nextCursor: null, limit: 100, hasMore: false } }),
+    }), ADMIN_IDENTITY);
+    fireEvent.click(await screen.findByRole("tab", { name: "消息与审批审计" }));
+    fireEvent.click(await screen.findByRole("button", { name: "生成回复" }));
+    expect(await screen.findByText("节点运行时间为 3 小时")).toBeVisible();
+    const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/ai/sessions/s-1/messages/m-user-1/generate");
+    expect(call).toBeDefined();
+    expect(call?.init?.body).toBeUndefined();
+  });
+
+  it("reports generation refusal honestly instead of fabricating an assistant reply", async () => {
+    await renderAuthenticated("/ai/s-1", sessionRoutes({
+      "POST /api/v1/ai/sessions/s-1/messages/m-user-1/generate": () =>
+        jsonResponse({ code: "AI_SOURCE_UNAVAILABLE", status: 503 }, 503),
+    }), ADMIN_IDENTITY);
+    fireEvent.click(await screen.findByRole("tab", { name: "消息与审批审计" }));
+    fireEvent.click(await screen.findByRole("button", { name: "生成回复" }));
+    expect(await screen.findByText(/模型或配额不可用（503 AI_SOURCE_UNAVAILABLE）/)).toBeVisible();
+    expect(screen.queryByText("节点运行时间为 3 小时")).toBeNull();
   });
 });

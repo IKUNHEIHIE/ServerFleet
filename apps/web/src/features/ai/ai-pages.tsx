@@ -9,8 +9,8 @@ import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
-import { nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
-import { aiApi } from "@/lib/api/endpoints-ai";
+import { credentialsApi, nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
+import { aiApi, modelSettingsApi } from "@/lib/api/endpoints-ai";
 import type {
   AIApprovalEvent,
   AIApprovalMode,
@@ -18,8 +18,10 @@ import type {
   AIApprovalRequest,
   AIExecuteResult,
   AIMessage,
+  AIModelSettings,
   AIResourceRecommendation,
   AISession,
+  CredentialMetadata,
   NodeSummary,
   ServiceGroup,
 } from "@/lib/api/dto";
@@ -115,7 +117,165 @@ export function AIPage() {
           )}
         </AsyncPanel>
       </Panel>
+      <ModelSettingsPanel />
     </div>
+  );
+}
+
+/**
+ * 所有者作用域的模型配置（GET/PUT /api/v1/ai/model-settings）。GET 返回已保存配置，
+ * 不代表供应商健康；PUT 是当前真人管理员的 owner CAS（expectedRevision）。
+ * 页面只显示凭据引用与修订号，绝不显示/保存 BYOK 明文；秘密值只在凭据页签提交一次。
+ * 表单状态以服务端快照为初始值（key=revision）：revision 变化即以服务端为准重建表单，
+ * 不用同步 effect 回写，避免迟到 effect 覆盖用户输入。
+ */
+function ModelSettingsPanel() {
+  const session = useSession();
+  const settings = useResource(`ai:model-settings:${session.viewEpoch}`, signal =>
+    modelSettingsApi.get(signal).then(result => result.data),
+  );
+  const credentials = useResource(`ai:model-credentials:${session.viewEpoch}`, signal =>
+    credentialsApi.list(signal).then(result => result.data),
+  );
+  const isAdmin = session.identity?.roles.includes("administrator") ?? false;
+  const credentialsLoaded = credentials.state.status === "ready" ? credentials.state.data : [];
+  const aiKeys = credentialsLoaded.filter(credential => credential.kind === "ai_api_key" && credential.usageScope.includes("ai"));
+
+  return (
+    <Panel
+      title="AI 模型设置（当前用户）"
+      description="GET/PUT /api/v1/ai/model-settings；PUT 是 owner CAS，仅当前真人管理员可写。保存的配置不代表供应商健康。"
+    >
+      <AsyncPanel state={settings.state} onRetry={settings.reload} errorTitle="模型设置加载失败">
+        {data => (
+          <ModelSettingsForm
+            key={data.revision}
+            data={data}
+            aiKeys={aiKeys}
+            isAdmin={isAdmin}
+            writesLocked={session.writesLocked}
+            onSaved={() => settings.reload()}
+            onConflict={() => settings.refreshSilent()}
+          />
+        )}
+      </AsyncPanel>
+    </Panel>
+  );
+}
+
+function ModelSettingsForm({
+  data,
+  aiKeys,
+  isAdmin,
+  writesLocked,
+  onSaved,
+  onConflict,
+}: {
+  readonly data: AIModelSettings;
+  readonly aiKeys: readonly CredentialMetadata[];
+  readonly isAdmin: boolean;
+  readonly writesLocked: boolean;
+  readonly onSaved: () => void;
+  readonly onConflict: () => void;
+}) {
+  const [enabled, setEnabled] = useState(data.enabled);
+  const [model, setModel] = useState(data.model);
+  const [credentialRef, setCredentialRef] = useState(data.credentialRef);
+  const [conflict, setConflict] = useState(false);
+  const selected = aiKeys.find(credential => credential.id === credentialRef) ?? null;
+
+  const save = useAction((body: {
+    expectedRevision: number;
+    enabled: boolean;
+    provider: string;
+    model: string;
+    credentialRef: string;
+    credentialRevision: number;
+  }) => modelSettingsApi.set(body));
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (enabled && (!model.trim() || !credentialRef)) return;
+    const result = await save.run({
+      expectedRevision: data.revision,
+      enabled,
+      provider: "openai-responses",
+      model: model.trim(),
+      credentialRef,
+      credentialRevision: selected?.revision ?? 0,
+    });
+    // 成功后的新 revision 由 key 重建表单；409 用静默刷新保住提示并取回服务端最新
+    // 修订（旧 revision 已被服务端拒绝，本地绝不覆盖他人变更）。
+    if (result.ok) {
+      setConflict(false);
+      onSaved();
+    } else {
+      setConflict(true);
+      onConflict();
+    }
+  }
+
+  const saveError = save.error;
+  const saveErrorCode = (saveError as { code?: string } | null)?.code ?? "";
+
+  return (
+    <form onSubmit={submit} className="space-y-4 px-5 py-4">
+      <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
+        <p>配置状态：{data.enabled ? "已启用" : "未启用"}</p>
+        <p>配置修订：{data.revision}</p>
+        <p>供应商：{data.provider || "未设置"}</p>
+        <p>密钥引用：{data.credentialRef ? <span className="font-mono text-xs">{data.credentialRef}（r{data.credentialRevision}）</span> : "未绑定"}</p>
+      </div>
+      {data.updatedAt ? <p className="text-xs text-muted-foreground">更新时间：{formatDateTime(data.updatedAt) ?? "—"}</p> : null}
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field label="模型标识" hint="仅 openai-responses 供应商；不带 sk- 前缀。">
+          {ids => <TextInput id={ids.inputId} value={model} onChange={event => setModel(event.target.value)} maxLength={128} disabled={!isAdmin || writesLocked} />}
+        </Field>
+        <Field label="AI 凭据（ai_api_key）" hint="只显示引用与修订号；秘密值在「设置 → 凭据」页签提交一次，绝不回显。">
+          {ids => (
+            <Select id={ids.inputId} value={credentialRef} onChange={event => setCredentialRef(event.target.value)} disabled={!isAdmin || writesLocked}>
+              <option value="">未绑定</option>
+              {aiKeys.map(credential => (
+                <option key={credential.id} value={credential.id}>
+                  {credential.name}（{credential.id.slice(0, 12)}… · {credential.status} · r{credential.revision}）
+                </option>
+              ))}
+            </Select>
+          )}
+        </Field>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={event => setEnabled(event.target.checked)}
+          disabled={!isAdmin || writesLocked}
+        />
+        启用本用户的模型生成（显式触发；不产生自动调用）
+      </label>
+      {conflict || saveErrorCode.includes("MODEL_REVISION_CONFLICT") ? (
+        <Notice tone="error" title="配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）">
+          已重新读取服务端最新修订；请核对后再次提交，不要覆盖他人变更。
+        </Notice>
+      ) : null}
+      {saveError && !saveErrorCode.includes("MODEL_REVISION_CONFLICT") ? (
+        <Notice tone="error" title="保存失败">{describeApiError(saveError)}</Notice>
+      ) : null}
+      {saveErrorCode.includes("AI_SOURCE_UNAVAILABLE") ? (
+        <p className="text-xs text-muted-foreground">服务端无法验证该凭据引用（类型/范围/状态/有效期），已保持原配置。</p>
+      ) : null}
+      {!isAdmin ? (
+        <p className="text-xs text-muted-foreground">当前身份不是管理员：只能查看本页配置，不能修改（服务端强制）。</p>
+      ) : null}
+      <Button
+        type="submit"
+        variant="primary"
+        loading={save.pending}
+        disabled={!isAdmin || writesLocked || (enabled && (!model.trim() || !credentialRef))}
+      >
+        保存模型设置（CAS）
+      </Button>
+    </form>
   );
 }
 
@@ -400,6 +560,30 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
     }),
   );
   const send = useAction((body: { content: string; clientMessageId: string; scopeRevision: number }) => aiApi.sendMessage(sessionId, body));
+  const [generatingMessageId, setGeneratingMessageId] = useState<string | null>(null);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  /** 显式生成：成功后服务端返回完整助手消息并持久化，刷新消息列表即可见；
+   * 失败时按服务端错误码诚实显示，不在本地编造回复。 */
+  async function runGenerate(messageId: string) {
+    setGeneratingMessageId(messageId);
+    setGenerateError(null);
+    try {
+      await aiApi.generate(sessionId, messageId);
+      messages.refreshSilent();
+    } catch (error) {
+      const code = (error as { code?: string })?.code ?? "";
+      const known: Record<string, string> = {
+        AI_SOURCE_UNAVAILABLE: "模型或配额不可用（503 AI_SOURCE_UNAVAILABLE）：未配置模型设置或供应商未接线。",
+        NOT_AUTHORIZED: "服务端拒绝本次生成（403 NOT_AUTHORIZED）：当前身份/会话/审批策略不满足。",
+        GENERATION_OUTCOME_UNKNOWN: "生成结果未知（503 GENERATION_OUTCOME_UNKNOWN）：服务端不会自动重试，请核对消息状态。",
+        MODEL_REVISION_CONFLICT: "模型配置在生成期间被修改（409）：请重新检查模型设置。",
+      };
+      setGenerateError(known[code] ?? describeApiError(error));
+    } finally {
+      setGeneratingMessageId(null);
+    }
+  }
 
   const stream = useEventStream({
     url: current ? aiApi.eventsUrl(sessionId) : null,
@@ -649,7 +833,10 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
 
             {tab === "chat" ? (
               <div className="grid gap-5 xl:grid-cols-2">
-                <Panel title="消息" description="GET/POST /api/v1/ai/sessions/{id}/messages；内容为服务端脱敏文本。">
+                <Panel
+                  title="消息"
+                  description="GET/POST /api/v1/ai/sessions/{id}/messages；内容为服务端脱敏文本。生成必须显式触发，返回缓冲至终态的完整消息。"
+                >
                   <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="暂无消息" />} isEmpty={page => page.items.length === 0}>
                     {() => (
                       <ul className="max-h-80 divide-y overflow-y-auto">
@@ -658,11 +845,28 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                             <p className="text-xs text-muted-foreground">{message.role} · {formatDateTime(message.createdAt) ?? "—"}</p>
                             <p className="mt-1 whitespace-pre-wrap">{message.redactedContent ?? "服务端未返回内容"}</p>
                             {message.taskIds?.length ? <p className="mt-1 text-xs">任务：{message.taskIds.join("、")}</p> : null}
+                            {message.role === "user" ? (
+                              <div className="mt-2">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  loading={generatingMessageId === message.messageId}
+                                  disabled={writesLocked || !canUse || generatingMessageId !== null}
+                                  onClick={() => void runGenerate(message.messageId)}
+                                >
+                                  生成回复
+                                </Button>
+                              </div>
+                            ) : null}
                           </li>
                         ))}
                       </ul>
                     )}
                   </AsyncPanel>
+                  {generateError ? <Notice tone="error" title="生成失败（未产生助手回复）">{generateError}</Notice> : null}
+                  <p className="px-5 pt-2 text-xs text-muted-foreground">
+                    生成说明：点击「生成回复」向 POST …/messages/{"{messageId}"}/generate 显式发起；响应为服务端缓冲上游 SSE 至终态并复核撤权/配额后的完整脱敏消息，不是浏览器逐 token 流。重复对 generating/unknown 消息发起会被服务端拒绝。
+                  </p>
                   <form onSubmit={sendMessage} className="space-y-3 border-t px-5 py-4">
                     {send.error ? <Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice> : null}
                     <Field label="消息内容" hint="每次提交带 clientMessageId 与当前 scopeRevision；过期会被拒绝。">
