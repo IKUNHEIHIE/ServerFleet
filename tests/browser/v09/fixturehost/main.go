@@ -3,8 +3,8 @@
 // AIBudget，让真实浏览器在当前 Cookie/CSRF/审批语义下完成 设置 → 消息 →
 // 显式 generate → 真实 assistant 终态。依赖方向只允许本包导入生产包；
 // 生产代码绝不导入本包。它不是产品 mock：组合与校验全部走真实代码路径，
-// 宿主只提供程序级注入（LocalAIProvider）与预算配置动作（预算 HTTP 路由
-// 尚未交付，Configure 的 admin gate 仍执行真实管理员/owner/profile 校验）。
+// 宿主只提供程序级注入（LocalAIProvider）；预算配置通过正式的、带当前
+// Cookie/Origin/CSRF 和管理员/owner/profile 校验的 HTTP 路由完成。
 package main
 
 import (
@@ -25,12 +25,6 @@ import (
 	"serverfleet.local/serverfleet/apps/controller/server"
 	"serverfleet.local/serverfleet/internal/ai"
 )
-
-type configureRequest struct {
-	OwnerID   string `json:"ownerId"`
-	ProfileID string `json:"profileId"`
-	Secret    string `json:"secret"`
-}
 
 type fixtureResponse struct {
 	OK     bool   `json:"ok"`
