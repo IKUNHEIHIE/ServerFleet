@@ -31,6 +31,8 @@ The controller-to-agent file parameters already carried `conflictPolicy` as a st
 
 Evidence: `TestActualWSSOverwriteAndRenameConflictPolicies` exercises overwrite replacement, two successive renames and unchanged skip over actual WSS; Windows/Linux `internal/files`, `internal/transport`, `apps/agent` suites, staticcheck and architecture checks pass, and the R3 development combination remains 2 PASS / 0 SKIP. Remote upload/multi-target distribution, broader partial-result matrices and the 16-item/64 MiB product limits remain open.
 
+Cross-suite adjustment for integrator review: `tests/integration/v09/services/file_transport_blackbox_test.go` previously pinned overwrite/rename as "must keep failing closed until CX implements". It now asserts the three reviewed policies are admitted while every other unsafe/ambiguous request (unknown policy, createParents, bad digests, absolute/traversal/staging paths) still fails closed. The file is CX-relevant but sits in the services suite, so the integration owner should accept this expectation change explicitly.
+
 # CX-04 owned product updates (second candidate)
 
 `controller-product-updates.patch` adds only `Config.UpdateProduct *updates.ProductDeploymentOptions`, `Server.ProductUpdates`, startup registration and lifecycle. It refuses to combine `UpdateProduct` with an already-injected `UpdateExecution/UpdateApply/UpdateResolvePlan/UpdatePlan/UpdateCheck`. No HTTP field supplies paths, keys, argv, provenance or the node identity; the central source is not edited in this worktree.
