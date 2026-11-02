@@ -4,7 +4,7 @@
 
 先读根 AGENTS、README、TASK-BOARD、MODULE-OWNERSHIP、DEPENDENCY-RULES、[共享接收说明](WAVE6-R2-SHARED.md)和[本轮审查报告](../../reviews/V09-WAVE6-R2-REVIEW.md)。旧 WAVE6/CODEX/DEEPSEEK/GEMINI 的整包目标继续有效，下面明确本轮优先级、共享装配和所有权。本包授权连续完成多个可独立增量，每个检查点交 SHA 后继续其他独立项，不等待小项重复派单。
 
-起点为总控最终交接 SHA；三个原目录必须干净且已由总控快进至同一起点，若不符先报告具体差异，禁止覆盖、stash/reset 他人修改。保持原作者会话和分支，不自动启动其他 Agent，不合 main、不推送、不 SSH、不使用真实外部秘密。
+起点为总控最终交接 SHA；工作目录必须干净且已由总控准备，若不符先报告具体差异，禁止覆盖、stash/reset 他人修改。CX/DS保持原会话和分支。**2026-11-02负责人确认GM-04尚未开始，完整转交Codex Arts（codex-arts-01），使用新CA独立目录；原gemini-06不再启动本包，历史工作与证据保留。** 具体见[交接提示词](GM04-CODEX-ARTS-HANDOFF.md)。不自动启动其他 Agent，不合 main、不推送、不 SSH、不使用真实外部秘密。
 
 ## V09-R6-CX-04 / codex-06
 
@@ -30,9 +30,9 @@
 
 停止条件：整包可独立项完成并列明剩余依赖，不以 port/函数存在、202、排队任务或独立 Nginx 测试代替完整统一发布。
 
-## V09-R6-GM-04 / gemini-06
+## V09-R6-GM-04 / codex-arts-01（Codex Arts接手）
 
-分支 `feature/v09-r6-console-gm06`，目录 `.worktrees/feature--v09-r6-console-gm06`；审查 codex-review-02 + UI/安全。沿用全部 Web、tests/browser/v09，允许测试专用 fixturehost；不改生产 Go/公共契约/Proto/根锁/CI。进度 `progress/gemini/wave6-r3`。
+分支 `feature/v09-r6-console-ca01`，目录 `.worktrees/feature--v09-r6-console-ca01`；唯一会话 `codex-arts-01`；审查 codex-review-02 + UI/安全。任务ID和以下五项范围保持不变；继承已合入main的Gemini历史成果，无未开始的GM-04增量需要搬运。沿用全部 Web、tests/browser/v09，允许测试专用 fixturehost；不改生产 Go/公共契约/Proto/根锁/CI。新进度写 `progress/codex-arts/wave6-r3`，不改写Gemini历史交付。完整开工提示见[交接说明](GM04-CODEX-ARTS-HANDOFF.md)。
 
 1. **先把 B01 做成真实页面闭环**。后端 worker/迁移/路径 mapper 已在统一基线，解除旧中央接线等待。扩展 fixturehost 用可信程序端口注入 FileExecution、私有 spool 和按已入网 nodeID 的明确逻辑根表；两个 Agent 都传独立私有 -file-root。动态登记只允许测试程序内部受控来源，不能暴露无认证 HTTP 配置。实际页面创建/统一任务/如需则审批/真实源目标字节与 SHA/父 transfer 和双方终态；再覆盖 cancel/撤权/回执丢失。至少先交现已支持 skip 的可运行检查点，不能把后端已接收仍叫未接收。
 2. **AI 预算正式界面**。接 GET/PUT `/ai/model-settings/{profileId}/budget`，显示 owner 当前窗口/限额/已用/剩余、缺策略拒绝、管理员 CAS 配置/409、普通用户只读、撤权/身份切换和旧响应隔离。不能从消息表或本地 state 造计数。保留本轮真实 B02：密钥私有文件、遥测 loopback/只读、预算配置走正式 Cookie/CSRF API，不恢复 /fixture/configure。
@@ -46,4 +46,4 @@
 
 每个可运行增量（或 2—4 小时）交 SHA、文件、命令/原始输出、真实正常与负向结果、已知依赖，然后继续独立工作。根要求 npm ci、tools:install、check、check:security 与相关模块/负向检查；受环境阻塞时保留精确失败，不删测试/伪造通过。中央共享文件交可应用差异和兼容/回退说明，DDL 交新候选并由总控登记；不要重放已接收补丁。
 
-最终交接列全部提交、干净 HEAD、证据/输出/候选依赖/剩余风险。仅总控合 main 和在指定 awskr 私有目录操作隔离测试；没有自动消息派发或自动启动。主控本次完成接收与派单后停止；三位开始由负责人把对应提示发回各原对话。
+最终交接列全部提交、干净 HEAD、证据/输出/候选依赖/剩余风险。仅总控合 main 和在指定 awskr 私有目录操作隔离测试；没有自动消息派发或自动启动。CX/DS继续原对话；GM-04由负责人将交接提示交给Codex Arts新会话，选择CA独立工作目录。主控完成交接后停止。
