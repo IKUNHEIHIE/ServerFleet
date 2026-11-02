@@ -10,7 +10,7 @@
 | CP-3 回归 | `reports/live-regression.log`、`reports/stub-regression.log` | 真实 Controller 70/70 PASS；契约桩 16/16 PASS |
 | CP-4 负向与宿主 | `reports/positive-b01.log`、`reports/positive-w6r3-b01/positive-b01n-revoke.png`、`positive-b01n-lostack.png`、`positive-b01n-cancel.png` | 27 PASS / 4 BLOCKED / 0 FAIL（31 步）；B01n×3、B06n PASS |
 | CP-4 Web 提示 | `reports/web-tests.log`、`reports/web-junit.xml` | Web 347/347；更新源 503、插件目录 501 有专门说明与回归 |
-| 根检查 | `reports/check-all.json`、`reports/check-go.json`、`reports/check-security.log`、`reports/full-check.log` | policy/contracts/web/git PASS；go PASS（代理补齐依赖测试模块后）；security PASS（0 漏洞） |
+| 根检查 | `reports/check-all.json`、`reports/check-security.json`、`reports/full-check.log` | policy/contracts/go/web/git 全部 PASS；security PASS（0 漏洞）；Web 347/347 |
 | CP-2 构建 | `reports/fixturehost.exe`、`reports/linux-fixturehost`、`reports/linux-agent`、`reports/linux-controller` | Windows 与 linux/amd64 构建均 exit 0；`go vet` exit 0 |
 | 失败保留 | 本轮第一次正向运行（协议 minor 不一致）输出保留在 `reports/positive-b01.log` 的滚动历史与对话记录中；未删除失败 | 失败原因：Controller minor=1 而 Agent 未声明文件能力 |
 
