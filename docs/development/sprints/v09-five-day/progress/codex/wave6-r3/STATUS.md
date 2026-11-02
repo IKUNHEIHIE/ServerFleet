@@ -86,6 +86,13 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 
 因此本包在作者权限内的可独立项已全部实现并验证；上述 1—2 项需总控接收候选后再产出固定 clean SHA 证据，3—5 项需先冻结设计或提供环境。
 
+## 最终固定 SHA 证据与环境复验（`347cefb`）
+
+- 干净 HEAD `347cefb` 运行 `node tests/poc/v09/platform/run-wave6-r3.mjs --final`：`workingTree=CLEAN`，**2 PASS / 0 SKIP**；工件 SHA 见 `reports/wave6-r3/final-clean-result.json`（controller `2598fbd…`、agent `78f9d78…`、v1 `31a8501…`、v2 `61f50f3…`、test `b34fc9b…`，native.log SHA256 `84ad12e2…`）。
+- `npm ci` exit 0（`npm-ci.log`）；`npm run tools:install` 首次外部 proxy 失败（`tools-install.log` 保留），按固定模块缓存以 file GOPROXY 重试 PASS（`tools-install-cache.log`），未改 pins/校验。
+- `npm run check` exit 0（test2json pass 2037 / skip 30 / fail 0；Web 341 PASS）；`npm run check:security` exit 0；`go test ./tests/architecture` PASS。
+- 完整交接清单与逐项依赖见同目录 [HANDOFF.md](HANDOFF.md)。以上证据对应代码 HEAD `347cefb`，其后仅本文件/STATUS/HANDOFF 文档提交。
+
 ## 剩余（继续独立推进）
 
 - 本增量新CLI+product两个中央patch待总控接收；不等待共享patch而停止其他独立项。
