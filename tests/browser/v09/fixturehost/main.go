@@ -18,12 +18,15 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
 	"serverfleet.local/serverfleet/apps/controller/server"
 	"serverfleet.local/serverfleet/internal/ai"
+	"serverfleet.local/serverfleet/internal/files"
 )
 
 type fixtureResponse struct {
@@ -53,6 +56,8 @@ func main() {
 	agentAuthority := flag.String("agent-authority", "", "agent-facing authority host:port when the agent link is enabled")
 	agentServerName := flag.String("agent-server-name", "", "agent TLS server name when the agent link is enabled")
 	secretFile := flag.String("ai-secret-file", "", "private synthetic upstream secret file")
+	fileSpool := flag.String("file-spool", "", "private execution spool directory (enables the unified file worker)")
+	fileRoots := flag.String("file-roots", "", "private 0600 JSON registry mapping enrolled nodeID to its logical absolute root")
 	flag.Parse()
 	controlHost, _, controlErr := net.SplitHostPort(*fixtureListen)
 	if controlErr != nil || net.ParseIP(controlHost) == nil || !net.ParseIP(controlHost).IsLoopback() {
@@ -110,6 +115,29 @@ func main() {
 		composedConfig.AgentAuthority = *agentAuthority
 		composedConfig.AgentServerName = *agentServerName
 		agentRoots = agentMaterial.Roots
+	}
+	// 统一文件执行只在测试程序显式提供私有 spool 和受控 nodeID 注册表时开启。
+	// 注册表是本地私有文件（0600），fixturehost 不暴露任何修改它的 HTTP 入口；
+	// 没有 Agent PKI/受控链路时拒绝开启，避免“配置了一个不会执行的 worker”。
+	if (*fileSpool == "") != (*fileRoots == "") {
+		log.Fatal("fixturehost: -file-spool and -file-roots must be provided together")
+	}
+	if *fileSpool != "" {
+		if agentMaterial == nil || !filepath.IsAbs(*fileSpool) || !filepath.IsAbs(*fileRoots) {
+			log.Fatal("fixturehost: file execution requires -agent-pki-dir and absolute -file-spool/-file-roots paths")
+		}
+		if err := files.CheckExecutionSpool(*fileSpool); err != nil {
+			log.Fatalf("fixturehost: file spool is not private: %v", err)
+		}
+		rootsInfo, err := os.Lstat(*fileRoots)
+		if err != nil || !rootsInfo.Mode().IsRegular() || rootsInfo.Mode()&os.ModeSymlink != 0 || (runtime.GOOS != "windows" && rootsInfo.Mode().Perm()&0o077 != 0) || rootsInfo.Size() > maxFileRootsBytes {
+			log.Fatal("fixturehost: -file-roots must be a private regular file owned by the test program")
+		}
+		composedConfig.FileExecution = &server.FileExecutionConfig{
+			Paths:    registryPathMapper{path: *fileRoots},
+			SpoolDir: *fileSpool,
+		}
+		log.Printf("fixturehost: unified file worker enabled with controlled node registry %s", *fileRoots)
 	}
 	composed, err := server.New(ctx, composedConfig)
 	if err != nil {

@@ -10,7 +10,7 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { credentialsApi, nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
-import { aiApi, modelSettingsApi } from "@/lib/api/endpoints-ai";
+import { aiApi, modelBudgetApi, modelSettingsApi } from "@/lib/api/endpoints-ai";
 import type {
   AIApprovalEvent,
   AIApprovalMode,
@@ -18,6 +18,9 @@ import type {
   AIApprovalRequest,
   AIExecuteResult,
   AIMessage,
+  AIModelBudget,
+  AIModelBudgetInput,
+  AIModelBudgetPolicy,
   AIModelSettings,
   AIResourceRecommendation,
   AISession,
@@ -154,15 +157,28 @@ function ModelSettingsPanel() {
       ) : null}
       <AsyncPanel state={settings.state} onRetry={settings.reload} errorTitle="模型设置加载失败">
         {data => (
-          <ModelSettingsForm
-            key={data.revision}
-            data={data}
-            aiKeys={aiKeys}
-            isAdmin={isAdmin}
-            writesLocked={session.writesLocked}
-            onSaved={() => { setConflict(false); settings.reload(); }}
-            onConflict={() => { setConflict(true); settings.refreshSilent(); }}
-          />
+          <>
+            <ModelSettingsForm
+              key={data.revision}
+              data={data}
+              aiKeys={aiKeys}
+              isAdmin={isAdmin}
+              writesLocked={session.writesLocked}
+              onSaved={() => { setConflict(false); settings.reload(); }}
+              onConflict={() => { setConflict(true); settings.refreshSilent(); }}
+            />
+            {data.id ? (
+              <ModelBudgetPanel
+                key={`${data.id}:${session.viewEpoch}`}
+                profileId={data.id}
+                modelEnabled={data.enabled}
+              />
+            ) : (
+              <p className="border-t px-5 py-4 text-xs text-muted-foreground">
+                服务端未返回模型配置 profileId，无法读取或配置 owner 预算；先保存模型设置后再查看。
+              </p>
+            )}
+          </>
         )}
       </AsyncPanel>
     </Panel>
@@ -272,6 +288,225 @@ function ModelSettingsForm({
         disabled={!isAdmin || writesLocked || (enabled && (!model.trim() || !credentialRef))}
       >
         保存模型设置（CAS）
+      </Button>
+    </form>
+  );
+}
+
+/**
+ * 当前 owner 的窗口预算（GET/PUT /api/v1/ai/model-settings/{profileId}/budget）。
+ * 已用/剩余完全来自服务端视图；页面不按消息条数或本地状态推算，也不因重新配置而
+ * 假定计数被重置（服务端保留同一窗口的已用计数）。缺少策略时服务端拒绝生成。
+ * 普通用户只读：PUT 由后端管理员门强制，页面只按当前身份隐藏/禁用输入。
+ */
+function ModelBudgetPanel({ profileId, modelEnabled }: { readonly profileId: string; readonly modelEnabled: boolean }) {
+  const session = useSession();
+  const isAdmin = session.identity?.roles.includes("administrator") ?? false;
+  const [conflict, setConflict] = useState(false);
+  const budget = useResource(`ai:budget:${profileId}:${session.viewEpoch}`, signal =>
+    modelBudgetApi.get(profileId, signal).then(result => result.data),
+  );
+
+  return (
+    <section className="border-t" aria-labelledby="ai-budget-heading">
+      <div className="px-5 py-4">
+        <h3 id="ai-budget-heading" className="text-sm font-semibold">AI 预算窗口（当前用户）</h3>
+        <p className="mt-1 text-xs text-muted-foreground">
+          GET/PUT /api/v1/ai/model-settings/{profileId}/budget；计数以服务端为准，管理员 CAS 配置，窗口显式且不重置计数。
+        </p>
+      </div>
+      {conflict ? (
+        <div className="px-5 pb-4">
+          <Notice tone="error" title="预算已被其他操作修改（409 BUDGET_REVISION_CONFLICT）">
+            已重新读取服务端最新修订；请核对窗口与限额后再次提交，不要覆盖他人变更。
+          </Notice>
+        </div>
+      ) : null}
+      <AsyncPanel state={budget.state} onRetry={budget.reload} errorTitle="AI 预算加载失败">
+        {data => (
+          <>
+            <BudgetSummary data={data} modelEnabled={modelEnabled} />
+            {!data.configured ? (
+              <div className="px-5 pb-4">
+                <Notice tone="warning" title="未配置窗口预算：服务端拒绝生成">
+                  当前 owner/profile 没有预算策略，生成请求会被服务端拒绝。{isAdmin ? "管理员可在下方创建首个窗口（expectedRevision = 0）。" : "需要当前真人管理员配置窗口后才能生成。"}
+                </Notice>
+              </div>
+            ) : null}
+            <ModelBudgetForm
+              key={data.policy?.revision ?? 0}
+              profileId={profileId}
+              data={data}
+              isAdmin={isAdmin}
+              writesLocked={session.writesLocked}
+              onSaved={() => { setConflict(false); budget.reload(); }}
+              onConflict={() => { setConflict(true); budget.refreshSilent(); }}
+            />
+          </>
+        )}
+      </AsyncPanel>
+    </section>
+  );
+}
+
+function BudgetSummary({ data, modelEnabled }: { readonly data: AIModelBudget; readonly modelEnabled: boolean }) {
+  const policy = data.policy;
+  return (
+    <div className="grid gap-3 px-5 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+      <p>预算配置：{data.configured ? "已配置" : "未配置"}</p>
+      <p>窗口状态：{data.active ? "当前窗口内" : "不在当前窗口"}</p>
+      <p>模型生成：{modelEnabled ? "已启用" : "未启用（预算不参与生成）"}</p>
+      <p>策略修订：{policy ? policy.revision : "—"}</p>
+      <p>窗口 ID：{policy ? policy.windowId : "—"}</p>
+      <p>窗口开始：{policy ? formatDateTime(policy.startsAt) ?? "—" : "—"}</p>
+      <p>窗口结束：{policy ? formatDateTime(policy.endsAt) ?? "—" : "—"}</p>
+      <p>输出预留 token：{data.outputReservationTokens.toLocaleString("zh-CN")}</p>
+      <p>请求限额：{policy ? policy.requestLimit.toLocaleString("zh-CN") : "—"}</p>
+      <p>输入字节限额：{policy ? policy.inputByteLimit.toLocaleString("zh-CN") : "—"}</p>
+      <p>输出 token 限额：{policy ? policy.outputTokenLimit.toLocaleString("zh-CN") : "—"}</p>
+      <p>已用请求：{data.usage.requests.toLocaleString("zh-CN")} / 剩余 {data.remaining.requests.toLocaleString("zh-CN")}</p>
+      <p>已用输入字节：{data.usage.inputBytes.toLocaleString("zh-CN")} / 剩余 {data.remaining.inputBytes.toLocaleString("zh-CN")}</p>
+      <p>已用输出 token：{data.usage.outputTokens.toLocaleString("zh-CN")} / 剩余 {data.remaining.outputTokens.toLocaleString("zh-CN")}</p>
+      <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+        计数、剩余与活跃状态均为服务端快照；重新配置同一窗口不会重置已用计数。
+      </p>
+    </div>
+  );
+}
+
+function toLocalDateTimeInput(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function fromLocalDateTimeInput(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function parsePositiveInteger(value: string): number | null {
+  if (!/^[1-9][0-9]*$/.test(value.trim())) return null;
+  const parsed = Number(value.trim());
+  return Number.isSafeInteger(parsed) ? parsed : null;
+}
+
+const BUDGET_INPUT_LIMITS = {
+  requestLimit: 10000,
+  inputByteLimit: 1099511627776,
+  outputTokenLimit: 1099511627776,
+} as const;
+
+function ModelBudgetForm({
+  profileId,
+  data,
+  isAdmin,
+  writesLocked,
+  onSaved,
+  onConflict,
+}: {
+  readonly profileId: string;
+  readonly data: AIModelBudget;
+  readonly isAdmin: boolean;
+  readonly writesLocked: boolean;
+  readonly onSaved: () => void;
+  readonly onConflict: () => void;
+}) {
+  const policy: AIModelBudgetPolicy | null = data.policy;
+  const [windowId, setWindowId] = useState(policy?.windowId ?? "");
+  const [startsAt, setStartsAt] = useState(() => toLocalDateTimeInput(policy?.startsAt ?? new Date().toISOString()));
+  const [endsAt, setEndsAt] = useState(() => toLocalDateTimeInput(policy?.endsAt ?? new Date(Date.now() + 86_400_000).toISOString()));
+  const [requestLimit, setRequestLimit] = useState(policy ? String(policy.requestLimit) : "100");
+  const [inputByteLimit, setInputByteLimit] = useState(policy ? String(policy.inputByteLimit) : "1048576");
+  const [outputTokenLimit, setOutputTokenLimit] = useState(policy ? String(policy.outputTokenLimit) : "128000");
+
+  const save = useAction((body: AIModelBudgetInput) => modelBudgetApi.set(profileId, body));
+
+  const parsed = {
+    requestLimit: parsePositiveInteger(requestLimit),
+    inputByteLimit: parsePositiveInteger(inputByteLimit),
+    outputTokenLimit: parsePositiveInteger(outputTokenLimit),
+  };
+  const startsIso = fromLocalDateTimeInput(startsAt);
+  const endsIso = fromLocalDateTimeInput(endsAt);
+  const windowValid = windowId.trim().length > 0 && windowId.trim().length <= 128;
+  const limitsValid =
+    parsed.requestLimit !== null && parsed.requestLimit <= BUDGET_INPUT_LIMITS.requestLimit &&
+    parsed.inputByteLimit !== null && parsed.inputByteLimit <= BUDGET_INPUT_LIMITS.inputByteLimit &&
+    parsed.outputTokenLimit !== null && parsed.outputTokenLimit <= BUDGET_INPUT_LIMITS.outputTokenLimit;
+  const windowOrderValid = startsIso !== null && endsIso !== null && new Date(endsIso).getTime() > new Date(startsIso).getTime();
+  const valid = windowValid && limitsValid && windowOrderValid;
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!valid || !startsIso || !endsIso || parsed.requestLimit === null || parsed.inputByteLimit === null || parsed.outputTokenLimit === null) return;
+    const result = await save.run({
+      expectedRevision: policy?.revision ?? 0,
+      windowId: windowId.trim(),
+      startsAt: startsIso,
+      endsAt: endsIso,
+      requestLimit: parsed.requestLimit,
+      inputByteLimit: parsed.inputByteLimit,
+      outputTokenLimit: parsed.outputTokenLimit,
+    });
+    // 服务端的 409 表示其他写者已推进修订：保留提示并静默取回最新修订，
+    // 绝不带旧 expectedRevision 自动重试，也不在本地覆盖服务端策略。
+    if (result.ok) {
+      onSaved();
+    } else if (result.error?.status === 409) {
+      onConflict();
+    }
+  }
+
+  const saveError = save.error;
+
+  return (
+    <form onSubmit={submit} className="space-y-4 border-t px-5 py-4">
+      <p className="text-sm">
+        {isAdmin
+          ? `管理员 CAS 配置：expectedRevision = ${policy?.revision ?? 0}；同一窗口重配保留已用计数。`
+          : "当前身份不是管理员：只能查看预算，配置由服务端 403 拒绝。"}
+      </p>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Field label="窗口 ID" hint="显式窗口标识，1—128 字符；不做自动滚动。">
+          {ids => <TextInput id={ids.inputId} value={windowId} onChange={event => setWindowId(event.target.value)} maxLength={128} disabled={!isAdmin || writesLocked} />}
+        </Field>
+        <Field label="窗口开始">
+          {ids => <TextInput id={ids.inputId} type="datetime-local" value={startsAt} onChange={event => setStartsAt(event.target.value)} disabled={!isAdmin || writesLocked} />}
+        </Field>
+        <Field label="窗口结束" error={startsAt && endsAt && !windowOrderValid ? "结束时间必须晚于开始时间" : null}>
+          {ids => <TextInput id={ids.inputId} type="datetime-local" value={endsAt} onChange={event => setEndsAt(event.target.value)} disabled={!isAdmin || writesLocked} />}
+        </Field>
+        <Field label="请求次数限额" hint="1—10000。">
+          {ids => <TextInput id={ids.inputId} inputMode="numeric" value={requestLimit} onChange={event => setRequestLimit(event.target.value)} disabled={!isAdmin || writesLocked} />}
+        </Field>
+        <Field label="输入字节限额" hint="正整数，最大 1099511627776。">
+          {ids => <TextInput id={ids.inputId} inputMode="numeric" value={inputByteLimit} onChange={event => setInputByteLimit(event.target.value)} disabled={!isAdmin || writesLocked} />}
+        </Field>
+        <Field label="输出 token 限额" hint="服务端按实际供应商上限预留输出 token。">
+          {ids => <TextInput id={ids.inputId} inputMode="numeric" value={outputTokenLimit} onChange={event => setOutputTokenLimit(event.target.value)} disabled={!isAdmin || writesLocked} />}
+        </Field>
+      </div>
+      {saveError && saveError.status !== 409 ? (
+        <Notice tone="error" title="预算配置失败">{describeApiError(saveError)}</Notice>
+      ) : null}
+      {saveError?.status === 409 ? (
+        <Notice tone="error" title="修订冲突（409 BUDGET_REVISION_CONFLICT）">
+          服务端拒绝了过期修订；以上显示的是最新预算快照，请核对后重新提交。
+        </Notice>
+      ) : null}
+      {saveError?.status === 403 ? (
+        <p className="text-xs text-muted-foreground">服务端拒绝：需要当前真人管理员并持有该 owner/profile；未放宽权限。</p>
+      ) : null}
+      <Button
+        type="submit"
+        variant="primary"
+        loading={save.pending}
+        disabled={!isAdmin || writesLocked || !valid}
+      >
+        保存预算窗口（CAS）
       </Button>
     </form>
   );

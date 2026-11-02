@@ -80,6 +80,8 @@ const ADMIN_PASSWORD = "positive-admin-strong-password-01";
 const ENROLLED_NODE_LABEL = "enrollment-token";
 /** B01 夹具样本：写入 WSL 私有目录并计算 SHA-256；内容为合成测试数据。 */
 const UPLOAD_SAMPLE_TEXT = "serverfleet wave6-r1 cross-node transfer sample";
+/** 授权 UI 与负向恢复共用同一显式权限集合；取消需要 tasks.cancel，撤权测试随后原样恢复。 */
+const ADMIN_NODE_PERMISSIONS = ["nodes.read", "nodes.write", "groups.write", "tasks.submit", "tasks.read", "tasks.command", "tasks.cancel", "files.read", "files.write", "files.transfer", "servicegroups.read", "servicegroups.write", "gateway.read", "gateway.write", "gateway.provision", "publishing.read", "publishing.write"];
 
 const results = [];
 /** @param {string} step @param {"PASS"|"BLOCKED"|"FAIL"} state @param {string} detail */
@@ -332,8 +334,11 @@ server.listen(Number(process.env.WEB_PORT), "0.0.0.0", () => console.log("webhos
 const PKI_SCRIPT = `
 set -eu
 work="$1"
-mkdir -p "$work/pki" "$work/db" "$work/logs" "$work/fixtures/src" "$work/fixtures/dst" "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02"
-chmod 700 "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02"
+mkdir -p "$work/pki" "$work/db" "$work/logs" "$work/fixtures/src" "$work/fixtures/dst" "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02" "$work/file-spool"
+chmod 700 "$work/agent-state-01" "$work/agent-state-02" "$work/agent-file-root-01" "$work/agent-file-root-02" "$work/file-spool" "$work/fixtures/src" "$work/fixtures/dst"
+# 受控 nodeID→逻辑根注册表：私有 0600 空映射，B01 在节点 ID 签发后由测试程序写入。
+echo '{}' > "$work/file-roots.json"
+chmod 600 "$work/file-roots.json"
 # localpki load() 兼容的本地 Agent CA：EC P-256、PKCS8 私钥、自签 CA（>12h 有效）。
 openssl genpkey -algorithm EC -pkeyopt ec_paramgen_curve:P-256 -out "$work/pki/local-agent-ca-key.pem" 2>/dev/null
 openssl req -x509 -new -key "$work/pki/local-agent-ca-key.pem" -sha256 \\
@@ -408,6 +413,7 @@ exec "$work/fixturehost" -db "$work/db/controller.db" -agent-pki-dir "$work/pki"
   -ai-upstream-listen "127.0.0.1:$aiUpstreamPort" \\
   -ai-secret-file "$work/fixture-ai-key.txt" \\
   -fixture-listen "127.0.0.1:$fixturePort" \\
+  -file-spool "$work/file-spool" -file-roots "$work/file-roots.json" \\
   > "$work/logs/fixturehost.log" 2>&1
 `;
 
@@ -429,17 +435,87 @@ apiPort="$2"
 waitTaskMs="$3"
 stateDir="$4"
 logTag="$5"
+fileRoot="\${6:-}"
 cd "$work"
+# 记录 Linux 进程号，供 B01 结束一次性连接后再启动常驻文件 Agent。
+echo $$ > "$work/pids/agent-connect-$logTag.pid"
+if [ -n "$fileRoot" ]; then
+  exec "$work/agent" -connect-once -controller-url "https://localhost:$apiPort" \\
+    -root-cert "$work/pki/local-agent-ca.pem" -state-dir "$work/$stateDir" \\
+    -file-root "$fileRoot" \\
+    -wait-task-ms "$waitTaskMs" > "$work/logs/agent-connect-$logTag.json" 2> "$work/logs/agent-connect-$logTag.err"
+fi
 exec "$work/agent" -connect-once -controller-url "https://localhost:$apiPort" \\
   -root-cert "$work/pki/local-agent-ca.pem" -state-dir "$work/$stateDir" \\
   -wait-task-ms "$waitTaskMs" > "$work/logs/agent-connect-$logTag.json" 2> "$work/logs/agent-connect-$logTag.err"
+`;
+
+// B01 专用：两个真实常驻 Agent，各自只有自己的私有 -file-root；连接保持到清理。
+const RUN_AGENT_SERVE_SCRIPT = `#!/bin/sh
+set -eu
+work="$1"
+apiPort="$2"
+stateDir="$3"
+logTag="$4"
+fileRoot="$5"
+cd "$work"
+echo $$ > "$work/pids/agent-serve-$logTag.pid"
+exec "$work/agent" -serve -controller-url "https://localhost:$apiPort" \\
+  -root-cert "$work/pki/local-agent-ca.pem" -state-dir "$work/$stateDir" \\
+  -file-root "$fileRoot" \\
+  > "$work/logs/agent-serve-$logTag.json" 2> "$work/logs/agent-serve-$logTag.err"
+`;
+
+// B06 宿主结构：第二个完全隔离的 Controller 进程（独立 DB/PKI/端口），用于推进
+// 真实灾备宿主；它不共享身份/节点/任务，也不因“存在第二个主控”而被恢复预演接受。
+const RUN_SECOND_CONTROLLER_SCRIPT = `#!/bin/sh
+set -eu
+work="$1"
+port="$2"
+mkdir -p "$work/db2" "$work/pki2" "$work/logs"
+chmod 700 "$work/db2" "$work/pki2"
+cd "$work"
+echo $$ > "$work/pids/second-controller.pid"
+exec "$work/controller" -db "$work/db2/controller2.db" -agent-pki-dir "$work/pki2" \\
+  -listen "127.0.0.1:$port" -origin "https://127.0.0.1:$port" \\
+  -tls-cert "$work/cert.pem" -tls-key "$work/cert-key.pem" \\
+  -agent-authority "localhost:$port" -agent-server-name localhost \\
+  > "$work/logs/second-controller.log" 2>&1
+`;
+
+const PROBE_SECOND_CONTROLLER_SCRIPT = `#!/bin/sh
+set -eu
+port="$1"
+mode="$2"
+base="https://127.0.0.1:$port"
+case "$mode" in
+  health) curl -sk -o /dev/null -w '%{http_code}' "$base/healthz" ;;
+  bootstrap) curl -sk "$base/api/v1/auth/bootstrap-status" ;;
+  nodes) curl -sk -o /dev/null -w '%{http_code}' "$base/api/v1/nodes" ;;
+  login)
+    curl -sk -o /dev/null -w '%{http_code}' -X POST "$base/api/v1/auth/login" \\
+      -H 'Content-Type: application/json' -H "Origin: $base" \\
+      -d "{\\"username\\":\\"$3\\",\\"password\\":\\"$4\\"}" ;;
+esac
+`;
+
+// 受控注册表只由测试程序写入私有 0600 文件；fixturehost 没有修改它的 HTTP 端点。
+const WRITE_FILE_ROOTS_SCRIPT = `#!/bin/sh
+set -eu
+work="$1"
+n1="$2"
+n2="$3"
+tmp="$work/file-roots.json.tmp"
+printf '{"%s":"%s/fixtures/src","%s":"%s/fixtures/dst"}' "$n1" "$work" "$n2" "$work" > "$tmp"
+chmod 600 "$tmp"
+mv "$tmp" "$work/file-roots.json"
 `;
 
 const KILL_PID_SCRIPT = `#!/bin/sh
 set -eu
 work="$1"
 name="$2"
-case "$name" in agent-connect-*|controller|webhost) ;; *) exit 2 ;; esac
+case "$name" in agent-connect-*|agent-serve-*|controller|webhost|second-controller) ;; *) exit 2 ;; esac
 f="$work/pids/$name.pid"
 if [ -f "$f" ]; then
   pid=$(cat "$f")
@@ -539,7 +615,7 @@ async function cleanup() {
     try { child.kill(); } catch { /* already gone */ }
   }
   if (distro && workDir) {
-    for (const name of ["agent-connect-01", "agent-connect-02", "controller", "webhost"]) {
+    for (const name of ["agent-connect-01", "agent-connect-02", "agent-serve-01", "agent-serve-02", "controller", "webhost", "second-controller"]) {
       await killWorkloadPid(name).catch(() => {});
     }
     if (!keepTemp) {
@@ -600,6 +676,10 @@ async function main() {
   await writeFile(join(tempDir, "run-fixturehost.sh"), RUN_FIXTUREHOST_SCRIPT);
   await writeFile(join(tempDir, "run-agent-enroll.sh"), RUN_AGENT_ENROLL_SCRIPT);
   await writeFile(join(tempDir, "run-agent-connect.sh"), RUN_AGENT_CONNECT_SCRIPT);
+  await writeFile(join(tempDir, "run-agent-serve.sh"), RUN_AGENT_SERVE_SCRIPT);
+  await writeFile(join(tempDir, "write-file-roots.sh"), WRITE_FILE_ROOTS_SCRIPT);
+  await writeFile(join(tempDir, "run-second-controller.sh"), RUN_SECOND_CONTROLLER_SCRIPT);
+  await writeFile(join(tempDir, "probe-second-controller.sh"), PROBE_SECOND_CONTROLLER_SCRIPT);
   await writeFile(join(tempDir, "kill-pid.sh"), KILL_PID_SCRIPT);
   await writeFile(join(tempDir, "cleanup.sh"), CLEANUP_SCRIPT);
   await writeFile(join(tempDir, "read-file.sh"), READ_FILE_SCRIPT);
@@ -625,7 +705,7 @@ async function main() {
 
   const wslTemp = toWslPath(tempDir);
   await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
-    `cp ${wslTemp}/${aiHostMode ? "fixturehost" : "controller"} ${wslTemp}/agent ${workDir}/ && chmod 700 ${workDir}/${aiHostMode ? "fixturehost" : "controller"} ${workDir}/agent && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-fixturehost.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && cp ${wslTemp}/fixture-ai-key.txt ${workDir}/fixture-ai-key.txt && chmod 600 ${workDir}/fixture-ai-key.txt && sh ${workDir}/pki.sh ${workDir}`]);
+    `cp ${wslTemp}/${aiHostMode ? "fixturehost" : "controller"} ${wslTemp}/agent ${wslTemp}/controller ${workDir}/ && chmod 700 ${workDir}/${aiHostMode ? "fixturehost" : "controller"} ${workDir}/agent ${workDir}/controller && cp -r ${toWslPath(resolve(repoRoot, "apps/web/dist"))} ${workDir}/dist && cp ${wslTemp}/setup-token.mjs ${wslTemp}/webhost.mjs ${wslTemp}/pki.sh ${wslTemp}/run-webhost.sh ${wslTemp}/run-controller.sh ${wslTemp}/run-fixturehost.sh ${wslTemp}/run-agent-enroll.sh ${wslTemp}/run-agent-connect.sh ${wslTemp}/run-agent-serve.sh ${wslTemp}/write-file-roots.sh ${wslTemp}/run-second-controller.sh ${wslTemp}/probe-second-controller.sh ${wslTemp}/kill-pid.sh ${wslTemp}/read-file.sh ${wslTemp}/backup.mjs ${wslTemp}/identity-dump.mjs ${workDir}/ && cp ${wslTemp}/fixture-ai-key.txt ${workDir}/fixture-ai-key.txt && chmod 600 ${workDir}/fixture-ai-key.txt && sh ${workDir}/pki.sh ${workDir}`]);
   console.log("staged controller/agent/dist and prepared local PKI + localhost server certificate");
 
   const apiPort = await freePort();
@@ -811,7 +891,7 @@ async function main() {
     await clickText(session, "创建授权", { exact: true });
     await fillField(session, "主体 ID", adminUserId);
     await fillField(session, "资源 ID", nodeId);
-    const permissions = ["nodes.read", "nodes.write", "groups.write", "tasks.submit", "tasks.read", "tasks.command", "files.read", "files.write", "files.transfer", "servicegroups.read", "servicegroups.write", "gateway.read", "gateway.write", "gateway.provision", "publishing.read", "publishing.write"];
+    const permissions = ADMIN_NODE_PERMISSIONS;
     for (const permission of permissions) {
       await setCheckbox(session, permission, true);
     }
@@ -836,7 +916,10 @@ async function main() {
   });
 
   await stepPass("P08 real agent opens the controlled WSS+mTLS link and the node reports online", async () => {
-    track(wslSpawn(distro, `${workDir}/run-agent-connect.sh`, [workDir, String(apiPort), "240000", "agent-state-01", "01"]));
+    // 测试宿主启用统一文件 worker 时，Controller 协商协议 minor=1 并要求 Agent 也声明
+    // 文件能力；因此 ai-host 模式下所有 Agent 连接都必须显式给出各自私有 -file-root，
+    // 否则握手次版本不一致会被真实拒绝（这正是失败关闭，不能靠放宽校验绕过）。
+    track(wslSpawn(distro, `${workDir}/run-agent-connect.sh`, [workDir, String(apiPort), "240000", "agent-state-01", "01", aiHostMode ? `${workDir}/fixtures/src` : ""]));
     let online = false;
     for (let attempt = 0; attempt < 30 && !online; attempt += 1) {
       await sleep(1000);
@@ -960,7 +1043,7 @@ async function main() {
     const grant2 = await evaluate(session, `(${PAGE_WRITE})('/api/v1/resource-grants', 'POST', {
       principalId: ${JSON.stringify(adminUserId)}, resourceType: "node",
       resourceId: ${JSON.stringify(nodeId2)},
-      permissions: ["nodes.read", "tasks.submit", "tasks.read", "tasks.command", "files.read", "files.write", "files.transfer"],
+      permissions: ["nodes.read", "tasks.submit", "tasks.read", "tasks.command", "tasks.cancel", "files.read", "files.write", "files.transfer"],
     }, { "Idempotency-Key": "positive-w6r1-grant-node2-0001" })`);
     if (![200, 201].includes(grant2.status)) throw new Error(`grant for agent-2 node ${grant2.status}: ${JSON.stringify(grant2.body).slice(0, 200)}`);
     return `granted 7 permissions on ${nodeId2}`;
@@ -969,8 +1052,8 @@ async function main() {
   let agent2Online = false;
   let agent1Online = false;
   await stepPass("P17 both real agents hold live WSS+mTLS links simultaneously", async () => {
-    track(wslSpawn(distro, `${workDir}/run-agent-connect.sh`, [workDir, String(apiPort), "300000", "agent-state-01", "01"]));
-    track(wslSpawn(distro, `${workDir}/run-agent-connect.sh`, [workDir, String(apiPort), "300000", "agent-state-02", "02"]));
+    track(wslSpawn(distro, `${workDir}/run-agent-connect.sh`, [workDir, String(apiPort), "300000", "agent-state-01", "01", aiHostMode ? `${workDir}/fixtures/src` : ""]));
+    track(wslSpawn(distro, `${workDir}/run-agent-connect.sh`, [workDir, String(apiPort), "300000", "agent-state-02", "02", aiHostMode ? `${workDir}/fixtures/dst` : ""]));
     const deadline = Date.now() + 40_000;
     while (Date.now() < deadline && !(agent1Online && agent2Online)) {
       await sleep(1000);
@@ -1140,21 +1223,54 @@ async function main() {
   });
 
   await attemptPositive("B01 cross-node byte transfer between real agents", async () => {
-    if (!hasFlag("attempt-file-flow")) {
-      throw blocked("HARNESS_INCOMPLETE: 当前CLI未装配统一文件worker、显式路径映射及Agent file-root；双在线Agent和SHA夹具不等于字节链路。配置完整测试宿主后用--attempt-file-flow执行，失败或超时将判FAIL。");
+    if (!hasFlag("attempt-file-flow") || !aiHostMode) {
+      throw blocked("HARNESS_INCOMPLETE: B01 需要 --ai-host --attempt-file-flow；测试宿主需注入统一文件 worker、私有 spool 与受控 nodeID 注册表，两个 Agent 需各自私有 -file-root。");
     }
+    if (!nodeId || !nodeId2 || !sourceSha256) {
+      throw new Error("B01 prerequisites missing: enrolled node ids or the source fixture SHA are absent");
+    }
+    // 受控注册表：只由测试程序写入私有 0600 文件（fixturehost 无 HTTP 配置入口）。
+    // node1 的逻辑根只包含源目录，node2 只包含目标目录；Agent 各自 -file-root 到同一私有目录。
+    await runCommand("wsl.exe", ["-d", distro, "--", "sh", `${workDir}/write-file-roots.sh`, workDir, nodeId, nodeId2]);
+    // P17 的一次性连接可能已消费/拒绝任务；B01 用两个常驻 Agent 重新建立，保证双方
+    // 同时在线且都只暴露自己的私有 file-root。结束旧连接后等待控制器看到新链路。
+    await killWorkloadPid("agent-connect-01");
+    await killWorkloadPid("agent-connect-02");
+    await sleep(1500);
+    track(wslSpawn(distro, `${workDir}/run-agent-serve.sh`, [workDir, String(apiPort), "agent-state-01", "01", `${workDir}/fixtures/src`]));
+    track(wslSpawn(distro, `${workDir}/run-agent-serve.sh`, [workDir, String(apiPort), "agent-state-02", "02", `${workDir}/fixtures/dst`]));
+    let bothOnline = false;
+    const onlineDeadline = Date.now() + 40_000;
+    while (Date.now() < onlineDeadline) {
+      await sleep(1000);
+      const probe = await evaluate(session, `(${PAGE_FETCH})('/api/v1/nodes').then(data => ({
+        first: (data.items ?? []).find(entry => entry.id === ${JSON.stringify(nodeId)})?.online === true,
+        second: (data.items ?? []).find(entry => entry.id === ${JSON.stringify(nodeId2)})?.online === true,
+      }))`).catch(() => null);
+      if (probe?.first && probe?.second) {
+        bothOnline = true;
+        break;
+      }
+    }
+    if (!bothOnline) {
+      const serveErr = await runCommand("wsl.exe", ["-d", distro, "--", "sh",
+        `${workDir}/read-file.sh`, `${workDir}/logs/agent-serve-01.err`]).catch(() => ({ stdout: "" }));
+      throw new Error(`file agents did not both come online (serve err: ${cleanWslOutput(serveErr.stdout).slice(0, 240)})`);
+    }
+
     const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
       sourceNodeId: ${JSON.stringify(nodeId)},
       sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/transfer-sample.txt")}],
       destinationNodeId: ${JSON.stringify(nodeId2)},
       destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
       conflictPolicy: "skip",
-    }, { "Idempotency-Key": "positive-w6-transfer-02" })`);
+    }, { "Idempotency-Key": "positive-w6r3-transfer-01" })`);
     if (![200, 201, 202].includes(created.status)) {
       throw new Error(`transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
     }
     const transferId = created.body?.id ?? created.body?.transferId;
     if (!transferId) throw new Error(`transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 200)}`);
+
     for (let attempt = 0; attempt < 40; attempt += 1) {
       await sleep(1500);
       const job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
@@ -1163,15 +1279,319 @@ async function main() {
         const verify = await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
           `sha256sum ${workDir}/fixtures/dst/transfer-sample.txt 2>/dev/null | cut -d' ' -f1`]).catch(() => ({ stdout: "" }));
         const actual = cleanWslOutput(verify.stdout).split(/\r?\n/).filter(Boolean).pop();
-        if (actual !== sourceSha256) throw new Error(`SHA mismatch: ${actual} != ${sourceSha256}`);
-        return `transfer ${transferId} completed; destination sha256 matches source (${sourceSha256.slice(0, 16)}…)`;
+        if (actual !== sourceSha256) throw new Error(`destination SHA mismatch: ${actual} != ${sourceSha256}`);
+        const items = Array.isArray(job.items) ? job.items : [];
+        if (items.length !== 1) throw new Error(`transfer ${transferId} reported ${items.length} items`);
+        const itemStatus = items[0]?.status;
+        // skip 策略下已存在的目标会被明确跳过；本次目标为全新私有目录，复制完成应为 copied。
+        if (itemStatus !== "copied" && itemStatus !== "skipped") {
+          throw new Error(`transfer item status ${itemStatus}`);
+        }
+        const taskId = job.taskId;
+        if (typeof taskId !== "string" || !taskId.startsWith("tsk_")) throw new Error("transfer taskId missing");
+        const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+        const taskState = task?.state ?? task?.job?.state;
+        if (taskState !== "completed") throw new Error(`parent task state ${JSON.stringify(taskState)} (${taskId})`);
+        const executions = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}/executions')`);
+        const executionItems = Array.isArray(executions?.items) ? executions.items : [];
+        if (executionItems.length < 2) throw new Error(`expected both endpoints executions, got ${executionItems.length}`);
+        // GET /api/v1/tasks/{id}/executions 的逐节点结果字段是 state；
+        // 兼容旧桩返回的 status，但只接受 succeeded。
+        const bad = executionItems.filter(entry => (entry.state ?? entry.status) !== "succeeded");
+        if (bad.length > 0) throw new Error(`non-succeeded executions: ${JSON.stringify(bad).slice(0, 260)}`);
+        await screenshot(session, join(outDir, "positive-b01-transfer-completed.png"));
+        return `transfer ${transferId} completed via unified task ${taskId}; both endpoints succeeded; destination sha256 matches source (${sourceSha256.slice(0, 16)}…)`;
       }
-      if (status === "failed" || status === "canceled" || status === "unknown" || job?.error) {
+      if (status === "failed" || status === "cancelled" || status === "canceled" || status === "unknown" || job?.error) {
         throw new Error(`transfer ${transferId} failed: ${status} ${JSON.stringify(job?.error ?? null).slice(0, 180)}`);
       }
     }
     throw new Error(`transfer ${transferId} did not complete within 60s`);
   });
+
+  // 文件闭环负向：取消必须产生非成功终态，且不得把“取消”说成回滚或复制成功。
+  // 只有完整文件宿主与双常驻 Agent 就位时才注册该步骤，避免无条件记 PASS。
+  if (hasFlag("attempt-file-flow") && aiHostMode) {
+    await stepPass("B01n revoking node permission mid-transfer fails closed", async () => {
+      // 32 MiB 真实字节；撤权发生在 worker 已运行且源读取进行中，确保当前授权被重新检查。
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+        `head -c 33554432 /dev/urandom > ${workDir}/fixtures/src/revoke-sample.bin && rm -f ${workDir}/fixtures/dst/revoke-sample.bin`]);
+      const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/revoke-sample.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-revoke-create-01" })`);
+      if (![200, 201, 202].includes(created.status)) {
+        throw new Error(`revoke fixture transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
+      }
+      const transferId = created.body?.id ?? created.body?.transferId;
+      const taskId = created.body?.taskId;
+      if (!transferId || typeof taskId !== "string") throw new Error("revoke fixture ids missing");
+      let taskRunning = false;
+      for (let attempt = 0; attempt < 30 && !taskRunning; attempt += 1) {
+        await sleep(300);
+        const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+        const state = task?.state ?? task?.job?.state;
+        if (state === "running") taskRunning = true;
+        else if (state === "completed" || state === "failed" || state === "canceled") {
+          throw new Error(`transfer ${transferId} finished before revocation: ${state}`);
+        }
+      }
+      if (!taskRunning) throw new Error(`task ${taskId} did not reach running before revocation`);
+      await sleep(300);
+      const grants = await evaluate(session, `(${PAGE_FETCH})('/api/v1/resource-grants').then(data => data.items)`);
+      const mine = grants.find(entry => entry.principalId === adminUserId && entry.resourceId === nodeId);
+      if (!mine) throw new Error("admin grant on the source node not found for revocation");
+      const revoked = await evaluate(session, `(${PAGE_WRITE})('/api/v1/resource-grants/${mine.grantId}', 'DELETE')`);
+      if (![200, 202, 204].includes(revoked.status)) {
+        throw new Error(`grant revoke ${revoked.status}: ${JSON.stringify(revoked.body).slice(0, 200)}`);
+      }
+      // 撤权后当前身份立即失去读取该传输的权限；读取必须 403，而不是继续显示旧进度。
+      // 用 PAGE_WRITE 读取状态码（PAGE_FETCH 只返回 body），且先恢复授权再判定，
+      // 避免负向失败把后续步骤的显式权限一起带走。
+      const deniedRead = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers/${transferId}', 'GET')`);
+      const deniedStatus = deniedRead?.status;
+      await sleep(1500);
+      // 恢复同一显式权限集合（真实授权，不是绕过）；随后读取最终状态。
+      const restored = await evaluate(session, `(${PAGE_WRITE})('/api/v1/resource-grants', 'POST', {
+        principalId: ${JSON.stringify(adminUserId)}, resourceType: "node",
+        resourceId: ${JSON.stringify(nodeId)},
+        permissions: ${JSON.stringify(ADMIN_NODE_PERMISSIONS)},
+      }, { "Idempotency-Key": "positive-w6r3-revoke-restore-01" })`);
+      if (![200, 201].includes(restored.status)) {
+        throw new Error(`grant restore ${restored.status}: ${JSON.stringify(restored.body ?? null).slice(0, 200)}`);
+      }
+      if (deniedStatus !== 403) {
+        throw new Error(`expected 403 while revoked, got ${deniedStatus} ${JSON.stringify(deniedRead?.body ?? null).slice(0, 160)}`);
+      }
+      let job = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(500);
+        job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+        const status = job?.status;
+        if (["completed", "partial_failure", "failed", "cancelled", "canceled"].includes(status)) break;
+      }
+      const status = job?.status;
+      if (!["failed", "partial_failure", "unknown", "cancelled", "canceled"].includes(status)) {
+        throw new Error(`revoked transfer reported terminal status ${JSON.stringify(status)} (${transferId})`);
+      }
+      const items = Array.isArray(job.items) ? job.items : [];
+      if (items.some(item => item.status === "copied")) {
+        throw new Error(`revoked transfer reported a copied item: ${JSON.stringify(items).slice(0, 220)}`);
+      }
+      const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+      const taskState = task?.state ?? task?.job?.state;
+      if (taskState === "completed") throw new Error(`revoked transfer left the parent task completed (${taskId})`);
+      await screenshot(session, join(outDir, "positive-b01n-revoke.png"));
+      return `revocation ${transferId} -> ${status}; live read was 403 while revoked; no copied item; task ${taskState} is not completed; grants restored`;
+    });
+
+    await stepPass("B01n losing the destination agent mid-transfer never claims success", async () => {
+      // 8 MiB 真实字节 + 目标端临时文件出现后立即终止目标 Agent：
+      // 模拟“已开始写入后回执丢失/中断”，控制器必须未知或失败，且不自动重放。
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+        `head -c 8388608 /dev/urandom > ${workDir}/fixtures/src/lostack-sample.bin && rm -f ${workDir}/fixtures/dst/lostack-sample.bin && rm -f ${workDir}/lostack-marker && touch ${workDir}/lostack-marker`]);
+      const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/lostack-sample.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-lostack-create-01" })`);
+      if (![200, 201, 202].includes(created.status)) {
+        throw new Error(`lost-ack transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
+      }
+      const transferId = created.body?.id ?? created.body?.transferId;
+      const taskId = created.body?.taskId;
+      if (!transferId || typeof taskId !== "string") throw new Error("lost-ack fixture ids missing");
+      let targetTouched = false;
+      for (let attempt = 0; attempt < 300 && !targetTouched; attempt += 1) {
+        await sleep(200);
+        const probe = await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+          `find ${workDir}/fixtures/dst -mindepth 1 -maxdepth 1 -newer ${workDir}/lostack-marker | head -n 1`]);
+        targetTouched = cleanWslOutput(probe.stdout).trim().length > 0;
+      }
+      if (!targetTouched) throw new Error("destination agent never started writing before the interruption");
+      await killWorkloadPid("agent-serve-02");
+      let job = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(500);
+        job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+        const status = job?.status;
+        if (["completed", "partial_failure", "failed", "cancelled", "canceled"].includes(status)) break;
+      }
+      const status = job?.status;
+      if (!["failed", "partial_failure", "unknown", "cancelled", "canceled"].includes(status)) {
+        throw new Error(`interrupted transfer reported terminal status ${JSON.stringify(status)} (${transferId})`);
+      }
+      const items = Array.isArray(job.items) ? job.items : [];
+      if (items.some(item => item.status === "copied")) {
+        throw new Error(`interrupted transfer reported a copied item: ${JSON.stringify(items).slice(0, 220)}`);
+      }
+      const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+      const taskState = task?.state ?? task?.job?.state;
+      if (taskState === "completed") throw new Error(`interrupted transfer left the parent task completed (${taskId})`);
+      // 重启目标 Agent 供后续负向继续使用同一节点身份；已中断的传输不得被重启“补完”或重放。
+      track(wslSpawn(distro, `${workDir}/run-agent-serve.sh`, [workDir, String(apiPort), "agent-state-02", "02", `${workDir}/fixtures/dst`]));
+      let backOnline = false;
+      for (let attempt = 0; attempt < 40 && !backOnline; attempt += 1) {
+        await sleep(1000);
+        backOnline = await evaluate(session, `(${PAGE_FETCH})('/api/v1/nodes').then(data => (data.items ?? []).some(entry => entry.id === ${JSON.stringify(nodeId2)} && entry.online === true))`).catch(() => false);
+      }
+      if (!backOnline) throw new Error("destination agent did not reconnect after the interruption");
+      await sleep(1000);
+      const afterRestart = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+      if (afterRestart?.status === "completed") {
+        throw new Error(`interrupted transfer was replayed to completed after restart (${transferId})`);
+      }
+      await screenshot(session, join(outDir, "positive-b01n-lostack.png"));
+      return `destination agent interrupted after write start; transfer ${transferId} -> ${status}; no copied item; task ${taskState} is not completed; agent restarted but the transfer stayed ${afterRestart?.status} (no replay)`;
+    });
+  await stepPass("B01n page cancel ends the transfer without any copied-item claim", async () => {
+      // 32 MiB 真实字节：任务进入 running 后取消才持有运行上下文，读取阶段足够长，
+      // 使取消落在复制中段而不是完成后。
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+        `head -c 33554432 /dev/urandom > ${workDir}/fixtures/src/cancel-sample.bin && rm -f ${workDir}/fixtures/dst/cancel-sample.bin`]);
+      const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/cancel-sample.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-cancel-create-01" })`);
+      if (![200, 201, 202].includes(created.status)) {
+        throw new Error(`cancel fixture transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
+      }
+      const transferId = created.body?.id ?? created.body?.transferId;
+      if (!transferId) throw new Error("cancel fixture transfer id missing");
+      const taskId = created.body?.taskId;
+      if (typeof taskId !== "string" || !taskId.startsWith("tsk_")) throw new Error("cancel fixture taskId missing");
+      // 取消必须在 worker 已经开始（任务 running、取消器持有运行上下文）之后发出；
+      // 否则 queued 派的取消只会停在 cancelling，不能证明取消语义。
+      let taskRunning = false;
+      for (let attempt = 0; attempt < 30 && !taskRunning; attempt += 1) {
+        await sleep(300);
+        const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+        const state = task?.state ?? task?.job?.state;
+        if (state === "running") { taskRunning = true; break; }
+        if (state === "completed" || state === "failed" || state === "canceled") {
+          throw new Error(`transfer ${transferId} finished before cancel could be exercised: ${state}`);
+        }
+      }
+      if (!taskRunning) throw new Error(`task ${taskId} did not reach running before cancel`);
+      // worker 已登记运行上下文并开始源读取；再等一个短窗口，让取消落在复制中段。
+      await sleep(500);
+      const cancelled = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers/${transferId}/cancel', 'POST', {}, { "Idempotency-Key": "positive-w6r3-cancel-02" })`);
+      if (![200, 202].includes(cancelled.status)) {
+        throw new Error(`transfer cancel ${cancelled.status}: ${JSON.stringify(cancelled.body).slice(0, 220)}`);
+      }
+      let job = null;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await sleep(500);
+        job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+        const status = job?.status;
+        if (["completed", "partial_failure", "failed", "cancelled", "canceled"].includes(status)) break;
+      }
+      const status = job?.status;
+      if (!["failed", "cancelled", "canceled"].includes(status)) {
+        throw new Error(`cancelled transfer reported terminal status ${JSON.stringify(status)} (${transferId})`);
+      }
+      const items = Array.isArray(job.items) ? job.items : [];
+      if (items.some(item => item.status === "copied")) {
+        throw new Error(`cancel reported a copied item: ${JSON.stringify(items).slice(0, 220)}`);
+      }
+      if (job.taskId) {
+        const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${job.taskId}')`);
+        const taskState = task?.state ?? task?.job?.state;
+        if (taskState === "completed") throw new Error(`cancel left the parent task completed (${job.taskId})`);
+      }
+      await screenshot(session, join(outDir, "positive-b01n-cancel.png"));
+      return `cancel ${transferId} -> ${status}; no copied item; parent task is not completed (cancel is not a rollback claim)`;
+    });
+
+    await stepPass("B01n multi-file transfer reports a missing source as failure, never success", async () => {
+      // 两个源文件，其中一个不存在：计划/统一任务仍走真实链路，终态必须失败并逐项如实，
+      // 不能因为另一个文件已复制就显示 completed。
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+        `head -c 1048576 /dev/urandom > ${workDir}/fixtures/src/multi-ok.bin && rm -f ${workDir}/fixtures/dst/multi-ok.bin ${workDir}/fixtures/src/multi-missing.bin`]);
+      const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}, ${JSON.stringify(workDir + "/fixtures/src/multi-missing.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-multi-create-01" })`);
+      if (![200, 201, 202].includes(created.status)) {
+        throw new Error(`multi transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
+      }
+      const transferId = created.body?.id ?? created.body?.transferId;
+      const taskId = created.body?.taskId;
+      if (!transferId || typeof taskId !== "string") throw new Error("multi transfer ids missing");
+      let job = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(500);
+        job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+        const status = job?.status;
+        if (["completed", "partial_failure", "failed", "cancelled", "canceled"].includes(status)) break;
+      }
+      const status = job?.status;
+      if (!["failed", "partial_failure", "unknown"].includes(status)) {
+        throw new Error(`missing source produced terminal status ${JSON.stringify(status)} (${transferId})`);
+      }
+      const items = Array.isArray(job.items) ? job.items : [];
+      if (items.length !== 2) throw new Error(`expected 2 item results, got ${items.length}`);
+      const missing = items.find(item => item.sourcePath?.endsWith("multi-missing.bin"));
+      if (!missing || missing.status === "copied") {
+        throw new Error(`missing source was reported as copied: ${JSON.stringify(missing ?? null).slice(0, 200)}`);
+      }
+      if (items.every(item => item.status === "copied")) {
+        throw new Error("all items reported copied despite a missing source");
+      }
+      const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+      const taskState = task?.state ?? task?.job?.state;
+      if (taskState === "completed") throw new Error(`missing source left the parent task completed (${taskId})`);
+      await screenshot(session, join(outDir, "positive-b01n-multi-failure.png"));
+      return `multi-file transfer ${transferId} -> ${status}; missing source item is ${missing.status}; task ${taskState} is not completed`;
+    });
+
+    await stepPass("B01n traversal paths and non-skip policies are rejected before execution", async () => {
+      // 路径遍历必须在建任务前拒绝；overwrite/rename 当前未被 worker 支持，也必须显式拒绝，
+      // 不能静默退化成 skip。
+      const traversal = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/../../outside.txt")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-traversal-source-01" })`);
+      if (![400, 403, 409, 422].includes(traversal.status)) {
+        throw new Error(`source traversal was not rejected: ${traversal.status} ${JSON.stringify(traversal.body).slice(0, 200)}`);
+      }
+      const destinationTraversal = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst/../../outside")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-traversal-dest-01" })`);
+      if (![400, 403, 409, 422].includes(destinationTraversal.status)) {
+        throw new Error(`destination traversal was not rejected: ${destinationTraversal.status} ${JSON.stringify(destinationTraversal.body).slice(0, 200)}`);
+      }
+      const overwrite = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "overwrite",
+      }, { "Idempotency-Key": "positive-w6r3-policy-overwrite-01" })`);
+      if (![400, 403, 409, 422].includes(overwrite.status)) {
+        throw new Error(`unsupported overwrite policy was not rejected: ${overwrite.status} ${JSON.stringify(overwrite.body).slice(0, 200)}`);
+      }
+      return `traversal source=${traversal.status}, destination=${destinationTraversal.status}; overwrite=${overwrite.status}; no task accepted`;
+    });
+  }
 
   await attemptPositive("B02 AI generation reaches a terminal assistant message", async () => {
     // 完整结构：合成 ai_api_key 凭据（不入日志/不回显）→ owner CAS 保存模型设置 →
@@ -1273,6 +1693,45 @@ async function main() {
     return `UI CAS save accepted: revision ${before} -> ${after.revision}, model=${after.model}; secret never displayed`;
   });
 
+  await stepPass("P20 owner AI budget window renders server usage and admin CAS preserves counters", async () => {
+    // B02 已通过正式 Cookie/CSRF PUT 配置窗口；本步用真实页面读取 owner 窗口/限额/
+    // 已用/剩余，并以管理员 CAS 修改限额。计数必须仍来自服务端且不被重配重置。
+    const profile = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/model-settings')`);
+    const profileId = profile?.id;
+    if (typeof profileId !== "string" || profileId.length === 0) throw new Error("model settings profile id missing");
+    const before = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/model-settings/${profileId}/budget')`);
+    if (before?.configured !== true || !before?.policy) {
+      throw new Error(`expected the B02 budget window, got ${JSON.stringify(before).slice(0, 200)}`);
+    }
+    await goto(session, `${base}/#/ai`);
+    await expectText(session, "AI 预算窗口（当前用户）", 20_000);
+    await expectText(session, `窗口 ID：${before.policy.windowId}`, 20_000);
+    await expectText(session, "预算配置：已配置", 15_000);
+    await expectText(session, "已用请求：", 15_000);
+    await expectText(session, "已用输出 token：", 15_000);
+    // 管理员 CAS：只改请求限额，窗口与时间保持不变；服务端保留同一窗口的已用计数。
+    const nextLimit = Number(before.policy.requestLimit) + 2;
+    await fillField(session, "请求次数限额", String(nextLimit));
+    await clickText(session, "保存预算窗口（CAS）", { exact: true });
+    let after = null;
+    for (let attempt = 0; attempt < 30; attempt += 1) {
+      await sleep(500);
+      after = await evaluate(session, `(${PAGE_FETCH})('/api/v1/ai/model-settings/${profileId}/budget')`);
+      if (after?.policy?.revision === before.policy.revision + 1) break;
+    }
+    if (after?.policy?.revision !== before.policy.revision + 1) {
+      throw new Error(`budget revision did not advance: ${JSON.stringify(after?.policy ?? null).slice(0, 200)}`);
+    }
+    if (after.policy.requestLimit !== nextLimit) {
+      throw new Error(`budget limit not saved: ${after.policy.requestLimit} != ${nextLimit}`);
+    }
+    if (after.usage.requests !== before.usage.requests || after.usage.outputTokens !== before.usage.outputTokens) {
+      throw new Error(`server counters changed across reconfiguration: ${JSON.stringify({ before: before.usage, after: after.usage })}`);
+    }
+    await screenshot(session, join(outDir, "positive-20-ai-budget-window.png"));
+    return `owner budget window ${after.policy.windowId} r${after.policy.revision}: requests used ${after.usage.requests}/${after.policy.requestLimit}, outputTokens ${after.usage.outputTokens}; counters preserved by server`;
+  });
+
   await attemptPositive("B03 Xray installation against a real published artifact", async () => {
     const response=await evaluate(session, `(${PAGE_WRITE})('/api/v1/plugins/catalog/refresh','POST')`);
     if(expectedUnavailable(response,[[501,"PLUGIN_CATALOG_SOURCE_UNAVAILABLE"]])) throw blocked(`catalog unavailable: ${response.status} ${JSON.stringify(response.body)}`);
@@ -1371,6 +1830,45 @@ async function main() {
       throw blocked(`recovery job -> ${job.status} ${JSON.stringify(job.body).slice(0, 200)}：恢复执行器未接线`);
     }
     throw new Error(`recovery job accepted ${job.status}: ${JSON.stringify(job.body).slice(0, 200)}`);
+  });
+
+  await stepPass("B06n second controller is isolated and does not satisfy recovery evidence", async () => {
+    // 宿主结构：独立 DB/PKI/端口的第二个 Controller；只证明“隔离”，不把存在第二主控
+    // 当作真实新权威/旧主控 fence 证据（B06 仍保持 BLOCKED）。
+    const port = await freePort();
+    track(wslSpawn(distro, `${workDir}/run-second-controller.sh`, [workDir, String(port)]));
+    let healthy = false;
+    for (let attempt = 0; attempt < 40 && !healthy; attempt += 1) {
+      await sleep(500);
+      const probe = await runCommand("wsl.exe", ["-d", distro, "--", "sh",
+        `${workDir}/probe-second-controller.sh`, String(port), "health"]).catch(() => ({ stdout: "" }));
+      healthy = cleanWslOutput(probe.stdout).trim() === "200";
+    }
+    if (!healthy) throw new Error("second controller did not become healthy");
+    const bootstrap = await runCommand("wsl.exe", ["-d", distro, "--", "sh",
+      `${workDir}/probe-second-controller.sh`, String(port), "bootstrap"]);
+    let bootstrapBody = null;
+    try { bootstrapBody = JSON.parse(cleanWslOutput(bootstrap.stdout)); } catch { bootstrapBody = null; }
+    if (!bootstrapBody || bootstrapBody.initialized !== false) {
+      throw new Error(`second controller unexpectedly initialized: ${JSON.stringify(bootstrapBody).slice(0, 160)}`);
+    }
+    const nodesProbe = await runCommand("wsl.exe", ["-d", distro, "--", "sh",
+      `${workDir}/probe-second-controller.sh`, String(port), "nodes"]);
+    if (cleanWslOutput(nodesProbe.stdout).trim() !== "401") {
+      throw new Error(`second controller did not require authentication for nodes: ${cleanWslOutput(nodesProbe.stdout).trim()}`);
+    }
+    const loginProbe = await runCommand("wsl.exe", ["-d", distro, "--", "sh",
+      `${workDir}/probe-second-controller.sh`, String(port), "login", ADMIN_USER, ADMIN_PASSWORD]);
+    if (cleanWslOutput(loginProbe.stdout).trim() !== "401") {
+      throw new Error(`first controller identity was accepted by the second controller: ${cleanWslOutput(loginProbe.stdout).trim()}`);
+    }
+    // 第一个主控保持自己的身份/会话，不受第二个进程影响。
+    const me = await evaluate(session, `(${PAGE_FETCH})('/api/v1/auth/me')`);
+    if (me?.userId !== adminUserId) throw new Error("first controller lost the authenticated identity");
+    const firstBoot = await evaluate(session, `(${PAGE_FETCH})('/api/v1/auth/bootstrap-status')`);
+    if (firstBoot?.initialized !== true) throw new Error("first controller is no longer initialized");
+    await killWorkloadPid("second-controller");
+    return `second controller :${port} healthy; separate DB/PKI (initialized=false, nodes/login 401); first controller keeps its identity; no recovery evidence implied`;
   });
 
   await stepPass("P14 grant revocation isolates task access and a 403 keeps the session", async () => {

@@ -120,6 +120,19 @@ describe("update center", () => {
     expect(screen.queryByRole("button", { name: /分批升级|升级 Agent/ })).not.toBeInTheDocument();
   });
 
+  it("explains an unavailable update source instead of treating the check as success", async () => {
+    await renderAuthenticated("/updates", {
+      "POST /api/v1/system/updates/check": () =>
+        jsonResponse({ code: "UPDATE_SOURCE_UNAVAILABLE", message: "no trusted source configured" }, 503),
+      "GET /api/v1/system/updates/jobs": () => jsonResponse({ items: [] }),
+    });
+    expect(await screen.findByRole("heading", { level: 1, name: "更新中心" })).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "检查更新" }));
+    expect(await screen.findByText("发行源未配置（B05 硬依赖）")).toBeVisible();
+    expect(screen.queryByText("有可用更新")).not.toBeInTheDocument();
+    expect(screen.queryByText("已是最新")).not.toBeInTheDocument();
+  });
+
   it("shares one update source with the system settings tab", async () => {
     const { calls } = await renderAuthenticated("/settings", updateRoutes([]));
     fireEvent.click(await screen.findByRole("tab", { name: "系统更新" }));

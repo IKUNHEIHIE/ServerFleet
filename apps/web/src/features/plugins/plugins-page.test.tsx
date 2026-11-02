@@ -63,6 +63,18 @@ const INSTALLED_ENABLED = {
 };
 
 describe("plugin center", () => {
+  it("explains an unavailable catalog source and offers no install path", async () => {
+    await renderAuthenticated("/plugins", {
+      "GET /api/v1/plugins/repository": () => jsonResponse(REPOSITORY),
+      "GET /api/v1/plugins/catalog": () =>
+        jsonResponse({ code: "PLUGIN_CATALOG_SOURCE_UNAVAILABLE", message: "no catalog source" }, 501),
+      "GET /api/v1/plugins": () => jsonResponse({ items: [] }),
+    });
+    expect(await screen.findByText("目录源不可用（B03 硬依赖）")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "安装" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认安装" })).not.toBeInTheDocument();
+  });
+
   it("refuses entries without an immutable artifact hash and requires explicit permission acceptance", async () => {
     const { calls } = await renderAuthenticated("/plugins", pluginRoutes([]));
     expect(await screen.findByRole("heading", { level: 1, name: "插件中心" })).toBeVisible();

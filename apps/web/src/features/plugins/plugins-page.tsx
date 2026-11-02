@@ -226,6 +226,13 @@ export function PluginsPage() {
       </Panel>
 
       <Panel title="插件目录" description="GET /api/v1/plugins/catalog；只读取元数据，主动安装才获取插件包。">
+        {catalog.state.status === "error" && catalog.state.error.code === "PLUGIN_CATALOG_SOURCE_UNAVAILABLE" ? (
+          <div className="px-5 pb-4">
+            <Notice tone="warning" title="目录源不可用（B03 硬依赖）">
+              服务端没有可用目录源或工件准入；本页不会安装/运行未审查产物，也不会回退到演示插件。
+            </Notice>
+          </div>
+        ) : null}
         <AsyncPanel state={catalog.state} onRetry={catalog.reload} errorTitle="目录加载失败" empty={<EmptyState title="目录为空" description="官方仓库可能尚未绑定或没有可安装条目。" />} isEmpty={data => data.items.length === 0}>
           {() => (
             <DataTable
