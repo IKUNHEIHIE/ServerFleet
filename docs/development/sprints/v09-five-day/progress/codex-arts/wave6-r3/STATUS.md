@@ -18,12 +18,13 @@
 |---|---|---|---|
 | CP-1 | `92eb5ecdddc81566ed365e9c1806fbcfe11c389d` | AI 预算正式界面：owner 窗口/限额/已用/剩余，管理员 CAS、409、只读、缺策略拒绝 | `tsc --noEmit` PASS；`check:web` PASS（Web 345/345）；新增 `ai-budget.test.tsx` 4/4 |
 | CP-2 | `ba60e55469662fece4858a6756c6b6d8338b9d94` | B01 真实文件页面闭环：fixturehost 注入文件 worker/私有 spool/受控根注册表；双常驻 Agent 私有 file-root；B01 终态断言；预算 P20 浏览器步骤 | 严格正向 `--ai-host --attempt-file-flow --require-complete`：23 PASS / 4 BLOCKED / 0 FAIL；B01、P20 PASS；Go 构建/vet PASS |
-| CP-3 | 本提交（见 `git log -1`） | B01 取消负向：页面创建 32MiB 传输 → 任务 running → 页面取消；终态 cancelled、无 copied 项、父任务非 completed；授权显式增加 `tasks.cancel` | 严格正向：**24 PASS / 4 BLOCKED / 0 FAIL（28 步）**，B01/B01n/P20 PASS；真实 Controller 回归 **70/70**；契约桩 **16/16** |
+| CP-3 | `2c3a1b0c237ea8b0c5299b4d1526d166138ebb15` | B01 取消负向：页面创建 32MiB 传输 → 任务 running → 页面取消；终态 cancelled、无 copied 项、父任务非 completed；授权显式增加 `tasks.cancel` | 严格正向：24 PASS / 4 BLOCKED / 0 FAIL（28 步），B01/B01n/P20 PASS；真实 Controller 回归 70/70；契约桩 16/16 |
+| CP-4 | 本提交（见 `git log -1`） | B01 撤权与丢回执负向；B06n 第二隔离 Controller 宿主；更新中心/插件目录的阻塞错误说明 | **27 PASS / 4 BLOCKED / 0 FAIL（31 步）**；B01n×3、B06n、P20 PASS；桩 16/16、真实 70/70；Web 347/347 |
 
 ## 未完成/阻塞（滚动更新）
 
-- B01 撤权/已写后丢回执：后端联合测试已有真实证据；页面宿主本增量未做确定性复现（需故障注入或更细的执行状态观测口），保留为后续项。
-- B03 Xray：缺可准入工件/Runtime（501 目录源）。
-- B04 发布：网关创建 `takeover_approval_required`，缺完整 typed worker/终态补偿。
-- B05 更新：`UPDATE_SOURCE_UNAVAILABLE`，缺正式更新源/安装装配。
-- B06 灾备：预览缺目标身份/旧主控 fence，缺第二隔离主控真实执行。
+- B01 撤权/丢回执：已用真实页面 + 真实进程覆盖（见 B01n）；遍历/symlink、续传、多文件部分结果仍属后端/后续项。
+- B03 Xray：缺可准入工件/Runtime（501 目录源）；页面已显式说明且无可执行安装路径。
+- B04 发布：网关创建 `takeover_approval_required`，缺 typed worker/工件/终态补偿端口；宿主骨架可继续搭，但真实执行等 DS/CX。
+- B05 更新：`UPDATE_SOURCE_UNAVAILABLE` / 计划器端口缺失；页面已显式说明 503 不是成功。
+- B06 灾备：第二隔离 Controller 宿主已实测（独立 DB/PKI、身份隔离）；真实新权威/旧主控 fence 仍需 CX 与正式 PKI-OPS 原文。

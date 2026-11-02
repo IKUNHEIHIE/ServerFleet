@@ -6,7 +6,8 @@
 |---|---|---|
 | CP-1 | `92eb5ecdddc81566ed365e9c1806fbcfe11c389d` | AI 预算正式界面（owner 窗口/限额/已用/剩余、管理员 CAS、409、只读、缺策略拒绝）+ 4 个组件测试 |
 | CP-2 | `ba60e55469662fece4858a6756c6b6d8338b9d94` | B01 真实文件页面闭环：fixturehost 注入 `server.Config.FileExecution`、私有 spool、受控 nodeID→逻辑根注册表；两个真实常驻 Agent 各自私有 `-file-root`；页面创建 transfer → 统一任务 → 双方执行 → 目标 SHA/任务/执行终态；新增预算浏览器步骤 P20 |
-| CP-3 | 本文件所在提交 | B01 取消负向：32MiB 传输在任务 running 后由页面取消；终态 cancelled、无 copied 项、父任务非 completed；显式授权 `tasks.cancel` |
+| CP-3 | `2c3a1b0c237ea8b0c5299b4d1526d166138ebb15` | B01 取消负向：32MiB 传输在任务 running 后由页面取消；终态 cancelled、无 copied 项、父任务非 completed；显式授权 `tasks.cancel` |
+| CP-4 | 本文件所在提交 | B01 撤权/丢回执负向；B06n 第二隔离 Controller 宿主（独立 DB/PKI/端口）；更新中心与插件目录的阻塞错误说明 |
 
 ## CP-2 运行方式（严格正向，含 B01）
 
@@ -20,12 +21,15 @@ node tests/browser/v09/run-positive-success-acceptance.mjs `
 
 结果（2026-11-02，WSL Ubuntu，linux/amd64 交叉构建）：
 
-- **24 PASS / 4 BLOCKED / 0 FAIL（28 步）**，`--require-complete` 下退出码 1（4 个已知 BLOCKED 仍存在，未伪造通过）。
-- B01：`transfer xfer_31e0b0bfb133d6d213b5be10 completed via unified task tsk_3a193f8777c85631ca7b1bac; both endpoints succeeded; destination sha256 matches source`。
-- B01n：`cancel xfer_c3cd19d34bcea25d80062993 -> cancelled; no copied item; parent task is not completed (cancel is not a rollback claim)`。
+- **27 PASS / 4 BLOCKED / 0 FAIL（31 步）**，`--require-complete` 下退出码 1（4 个已知 BLOCKED 仍存在，未伪造通过）。
+- B01：`transfer ... completed via unified task ...; both endpoints succeeded; destination sha256 matches source`。
+- B01n 取消：`cancel ... -> cancelled; no copied item; parent task is not completed`。
+- B01n 撤权：`revocation ... -> failed; live read was 403 while revoked; no copied item; task failed is not completed; grants restored`。
+- B01n 丢回执：`destination agent interrupted after write start; transfer ... -> failed; no copied item; task failed is not completed; agent restarted but the transfer stayed failed (no replay)`。
+- B06n：`second controller :<port> healthy; separate DB/PKI (initialized=false, nodes/login 401); first controller keeps its identity; no recovery evidence implied`。
 - P20：`owner budget window browser-fixture-window r2: requests used 1/12, outputTokens 8192; counters preserved by server`。
-- 回归：真实 Controller 浏览器 **70/70 PASS**；契约桩 **16/16 PASS**（各自独立报告，未相加宣传）。
-- 证据：`reports/positive-b01.log`、`reports/live-regression.log`、`reports/stub-regression.log` 与对应截图目录（Windows 本地忽略目录）。
+- 回归：真实 Controller 浏览器 **70/70 PASS**；契约桩 **16/16 PASS**；Web **347/347**（各自独立报告）。
+- 证据：`reports/positive-b01.log`、`reports/live-regression.log`、`reports/stub-regression.log`、`reports/web-tests.log` 与对应截图目录（Windows 本地忽略目录）。
 
 ## 根检查（2026-11-02）
 
@@ -51,6 +55,6 @@ node tests/browser/v09/run-positive-success-acceptance.mjs `
 
 ## 下一步
 
-- B01 剩余负向：撤权与“已写后丢回执/UNKNOWN”。后端联合测试已有真实进程证据；页面宿主尚未提供确定性故障注入/执行状态观测口，需精确端口后再补，不能用单线程或结果不明当成功。
-- B04/B05/B06 宿主结构：当前页面已按服务端真实语义显示拒绝/不可用；扩完整流程需 CX/DS 提供发布 typed worker 与终态补偿、正式更新源与安装装配、第二隔离主控与真实 fence/新权威端口。缺口已在 `STATUS.md` 与 `<codex-review-02>` 可见的 BLOCKED 明细中列出。
-- 其他可独立 Web 项（错误/空/权限/部分结果）按能力逐个补；本增量未改生产后端或公共契约。
+- 剩余硬依赖（非本会话可单独关闭）：B03 可准入工件/Runtime；B04 typed 发布 worker/工件生命周期/终态补偿；B05 正式更新源/解析器/安装装配；B06 真实新权威/旧主控 fence 与正式 PKI-OPS 原文。第二隔离 Controller 的宿主隔离已在本轮实测。
+- 可继续的独立项：B04/B05 的测试宿主注入骨架（需要 CX/DS 先给出注入接口签名，避免猜测生产契约）；遍历/symlink、续传与多文件部分结果的宿主级负向。
+- 本增量未改生产 Go 或公共契约；新增 Web 提示只消费既有错误码。
