@@ -60,7 +60,7 @@ func TestInstallWorkerRealTaskApprovalAtomicJournalAndUnknownFence(t *testing.T)
 			if err != nil {
 				t.Fatal(err)
 			}
-			p := FrozenInstallPlan{ID: "reviewed-update", SubjectID: "admin", NodeID: "isolated-node", BackupSHA256: strings.Repeat("a", 64), PolicySHA256: ReleasePolicyDigest(f.policy), Previous: f.intent.Previous, Attempted: f.staged.Manifest(), AllowRollback: true}
+			p := FrozenInstallPlan{ID: "reviewed-update", SubjectID: "admin", NodeID: "isolated-node", BackupSHA256: strings.Repeat("a", 64), PolicySHA256: ReleasePolicyDigest(f.policy), SchemaFingerprint: strings.Repeat("d", 64), Previous: f.intent.Previous, Attempted: f.staged.Manifest(), AllowRollback: true}
 			request, err := p.TaskRequest("request-update")
 			if err != nil {
 				t.Fatal(err)

@@ -18,8 +18,12 @@ const ActionInstall = "system.updates.apply"
 // is persisted in the sole task service and included in its approval digest.
 type FrozenInstallPlan struct {
 	ID, SubjectID, NodeID, BackupSHA256, PolicySHA256 string
-	Previous, Attempted                               ReleaseManifest
-	AllowRollback                                     bool
+	// SchemaFingerprint is the reviewed DDL definition hash the approving human
+	// saw. It is part of the canonical plan bytes and therefore the approval
+	// digest; replay under a different pinned schema is rejected.
+	SchemaFingerprint   string
+	Previous, Attempted ReleaseManifest
+	AllowRollback       bool
 }
 
 func ReleasePolicyDigest(p ReleasePolicy) string {
@@ -28,7 +32,7 @@ func ReleasePolicyDigest(p ReleasePolicy) string {
 	return hex.EncodeToString(sum[:])
 }
 func (p FrozenInstallPlan) valid() bool {
-	return installID(p.ID) && installID(p.SubjectID) && installID(p.NodeID) && validPlanDigest(p.BackupSHA256) && validPlanDigest(p.PolicySHA256) && installedManifest(p.Previous) && installedManifest(p.Attempted) && p.Previous.Component == p.Attempted.Component && p.Previous.Architecture == p.Attempted.Architecture && p.Attempted.Sequence > p.Previous.Sequence
+	return installID(p.ID) && installID(p.SubjectID) && installID(p.NodeID) && validPlanDigest(p.BackupSHA256) && validPlanDigest(p.PolicySHA256) && validPlanDigest(p.SchemaFingerprint) && installedManifest(p.Previous) && installedManifest(p.Attempted) && p.Previous.Component == p.Attempted.Component && p.Previous.Architecture == p.Attempted.Architecture && p.Attempted.Sequence > p.Previous.Sequence
 }
 func validPlanDigest(s string) bool {
 	b, e := hex.DecodeString(s)
