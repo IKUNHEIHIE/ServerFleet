@@ -139,6 +139,7 @@ func TestR3ActualProductAgentHTTPApprovedSignedInstallAndCompatibleRollback(t *t
 	initial := writeRelease("1.0.0", 1, oldBinary)
 	next := writeRelease("1.0.1", 2, nextBinary)
 	writeRelease("1.0.2", 3, nextBinary)
+	writeRelease("1.0.3", 4, nextBinary)
 	oldBytes, _ := os.ReadFile(oldBinary)
 	os.WriteFile(filepath.Join(slot, "active"), oldBytes, 0700)
 	schemaFingerprint, e := updates.SQLiteSchemaFingerprint(ctx, composed.DB)
@@ -233,5 +234,53 @@ func TestR3ActualProductAgentHTTPApprovedSignedInstallAndCompatibleRollback(t *t
 			t.Fatal("journal provenance/floor", string(installedRaw), floor)
 		}
 		t.Logf("actual Agent product %s -> parent %s; current build %v PID %v; journal floor %d", version, want, v["version"], v["pid"], floor)
+	}
+	// Schema drift after human approval must end UNKNOWN before any product
+	// change: approval is not a bypass of the current schema gate, and no
+	// provenance/floor is committed.
+	raw = c.must("POST", "/api/v1/system/updates/plan", map[string]any{"targetVersion": "1.0.3", "dryRun": true}, 200)
+	var schemaPlan updates.Plan
+	json.Unmarshal(raw, &schemaPlan)
+	if !schemaPlan.Eligible {
+		t.Fatal(string(raw))
+	}
+	raw = c.must("POST", "/api/v1/system/updates/apply", map[string]string{"planId": schemaPlan.PlanID, "confirmation": "1.0.3", "backupMode": "required"}, 202)
+	var schemaJob updates.ApplyResult
+	json.Unmarshal(raw, &schemaJob)
+	if schemaJob.Status != "awaiting_approval" {
+		t.Fatal(string(raw))
+	}
+	if _, err = composed.DB.Exec(ctx, `PRAGMA user_version=1`); err != nil {
+		t.Fatal(err)
+	}
+	raw = c.must("GET", "/api/v1/tasks/"+schemaJob.TaskID, nil, 200)
+	var schemaTask struct {
+		Digest string `json:"planDigest"`
+	}
+	json.Unmarshal(raw, &schemaTask)
+	approver.must("POST", "/api/v1/tasks/"+schemaJob.TaskID+"/approve", map[string]string{"planDigest": schemaTask.Digest, "decision": "approve", "reason": "schema drift must stay unknown"}, 200)
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		raw = c.must("GET", "/api/v1/system/updates/jobs/"+schemaJob.ID, nil, 200)
+		var state updates.ApplyResult
+		json.Unmarshal(raw, &state)
+		if state.Status == "unknown" {
+			break
+		}
+		if state.Status == "completed" || state.Status == "installed" || state.Status == "rolled_back" || time.Now().After(deadline) {
+			t.Fatal("schema drift was not reported UNKNOWN", string(raw))
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	if v := health(next.Version); v["pid"] != oldPID {
+		t.Fatal("product was replaced despite schema drift")
+	}
+	var afterFloor uint64
+	composed.DB.QueryRow(ctx, `SELECT sequence_floor FROM cx_update_installed WHERE component='agent'`).Scan(&afterFloor)
+	if afterFloor != 3 {
+		t.Fatal("provenance advanced under schema drift", afterFloor)
+	}
+	if _, err = composed.DB.Exec(ctx, `PRAGMA user_version=0`); err != nil {
+		t.Fatal(err)
 	}
 }

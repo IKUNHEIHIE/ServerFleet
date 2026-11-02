@@ -53,6 +53,13 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 
 仍未完成：远端上传/多目标分发、断连续传之外的冲突/部分结果矩阵、每文件64MiB以上及>16项的产品限制策略，真实ENOSPC/inode专项。协议不再只收 skip，但也没有放宽到任意字符串。
 
+## 第四增量：更新前置拒绝与 schema 漂移 UNKNOWN
+
+- 产品真实 HTTP 链新增负向：先正常 plan 1.0.3，再在审批前把实际 SQLite `PRAGMA user_version` 改为 1，随后另一管理员审批；`/api/v1/system/updates/jobs/{id}` 终态为 `unknown`，实际产品 PID 不变、journal floor 仍为 3、无 provenance 提交，最后恢复 user_version=0。证明审批不能绕过当前 schema 门，且 UNKNOWN 不自动重试。
+- 新增 Linux 单测 `TestProductDeploymentRefusesLeftoverUpdateEffects`：残留 `update-lock.json` 或 `supervisor-reservation.json` 时 `NewProductDeployment` 返回 `ErrUpdateBusy`；干净私有目录可创建并关闭，防止重启自动接管中断更新。
+- 首次把期望写成 `failed`、实测 `unknown` 的失败日志保留为 `reports/wave6-r3/product-schema-expectation-fail.log`，随后按真实终态改为 UNKNOWN，未放宽断言。
+- 证据：R3 开发组合 **2 PASS / 0 SKIP**（HEAD `8af6f57` 加本增量，DIRTY DEVELOPMENT）；`internal/updates` 原生 Linux 全 PASS。仍未覆盖真实进程崩溃后的全新进程恢复与不可逆迁移的实际回滚，只有当前 schema 漂移拒绝与残留标记拒启动。
+
 ## 剩余（继续独立推进）
 
 - 本增量新CLI+product两个中央patch待总控接收；不等待共享patch而停止其他独立项。
