@@ -49,6 +49,8 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 
 验证：新增实际双进程 WSS 测试 `TestActualWSSOverwriteAndRenameConflictPolicies`（overwrite 替换、rename 依次得到 `target (1).bin`/`target (2).bin`、原文件保留、skip 不改写）；`internal/files`、`internal/transport`、`apps/agent` 的 Windows 与原生Linux测试 PASS；staticcheck（Windows+Linux）与架构检查PASS；R3 开发组合再次 2 PASS/0 SKIP。证据 reports/wave6-r3/files-conflict-*、agent.test、files.test。
 
+根检查：修改后第一次 `npm run check` 在 `tests/integration/v09/services/file_transport_blackbox_test.go` 失败的原始日志保留为 `reports/wave6-r3/root-check-after-files.log`（该黑盒原先固定要求 overwrite/rename 继续被拒绝）。按该测试注释“until CX implements”更新为接受三种受审策略、其余不安全请求仍拒绝，并把该跨套件期望变更登记在 SHARED-CHANGES 交总控复核；随后 `npm run check` exit=0（Go、契约、policy、Web 341 PASS、git），`npm run check:security` exit=0（npm 0 漏洞、govulncheck 无已知漏洞）。证据 `reports/wave6-r3/root-check-final.log`、`root-security-final.log`。
+
 仍未完成：远端上传/多目标分发、断连续传之外的冲突/部分结果矩阵、每文件64MiB以上及>16项的产品限制策略，真实ENOSPC/inode专项。协议不再只收 skip，但也没有放宽到任意字符串。
 
 ## 剩余（继续独立推进）
