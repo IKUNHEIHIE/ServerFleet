@@ -409,7 +409,7 @@ func TestCancelTransferUsesUnifiedTask(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cancelled.Status != files.TransferCancelling {
+	if cancelled.Status != files.TransferCanceled || cancelled.CompletedAt.IsZero() {
 		t.Fatalf("status = %s", cancelled.Status)
 	}
 	if f.cancellerPtr.taskID != "task-1" {

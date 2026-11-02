@@ -19,7 +19,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 	var old []storage.Migration
 	for _, set := range server.Migrations() {
 		for _, migration := range set {
-			if migration.Version != "cx/0007_ai_budgets_and_model_audit" && migration.Version != "ds/0081_publishing_targets" && migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" {
+			if migration.Version != "cx/0007_ai_budgets_and_model_audit" && migration.Version != "ds/0081_publishing_targets" && migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" {
 				old = append(old, migration)
 			}
 		}
@@ -45,7 +45,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 		t.Fatal("migration replay changed history", err)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 24 {
+	if err != nil || len(versions) != 25 {
 		t.Fatal(versions, err)
 	}
 	var name, gateways string

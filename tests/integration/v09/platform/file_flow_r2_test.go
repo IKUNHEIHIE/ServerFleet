@@ -337,7 +337,7 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 		}
 	}
 	invalid := body(sourcePaths)
-	invalid["conflictPolicy"] = "overwrite"
+	invalid["conflictPolicy"] = "unsafe-policy"
 	must("POST", "/api/v1/transfers", invalid, 400)
 	// Pause only after a real source read frame has persisted. Use normal HTTP
 	// cancel/revoke; the extra fixture gate never authorizes a denied request.

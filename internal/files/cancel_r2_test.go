@@ -9,6 +9,23 @@ import (
 
 type cancelR2Func func(context.Context, string, string, string) error
 
+func TestQueuedCancelTerminatesAndPreventsWorkerClaim(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	tr, err := f.service.CreateTransfer(ctx, validInput())
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := f.service.CancelTransfer(ctx, "user-1", "review-queued-cancel", tr.ID)
+	if err != nil || got.Status != files.TransferCanceled || got.CompletedAt.IsZero() {
+		t.Fatalf("queued cancel did not terminate: %+v error=%v", got, err)
+	}
+	_, claimed, err := f.repo.ClaimTransfer(ctx, tr.TaskID, got.CompletedAt)
+	if err != nil || claimed {
+		t.Fatalf("canceled transfer became runnable: claimed=%v error=%v", claimed, err)
+	}
+}
+
 func (f cancelR2Func) CancelTask(ctx context.Context, task, subject, request string) error {
 	return f(ctx, task, subject, request)
 }
@@ -48,6 +65,9 @@ func TestRestartFencesCancellingTransferWithoutReplay(t *testing.T) {
 	tr, err := f.service.CreateTransfer(ctx, validInput())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if _, claimed, err := f.repo.ClaimTransfer(ctx, tr.TaskID, tr.CreatedAt); err != nil || !claimed {
+		t.Fatal("running fixture not claimed", claimed, err)
 	}
 	if _, err = f.service.CancelTransfer(ctx, "user-1", "r2-cancel", tr.ID); err != nil {
 		t.Fatal(err)

@@ -1556,9 +1556,8 @@ async function main() {
       return `multi-file transfer ${transferId} -> ${status}; missing source item is ${missing.status}; task ${taskState} is not completed`;
     });
 
-    await stepPass("B01n traversal paths and non-skip policies are rejected before execution", async () => {
-      // 路径遍历必须在建任务前拒绝；overwrite/rename 当前未被 worker 支持，也必须显式拒绝，
-      // 不能静默退化成 skip。
+    await stepPass("B01n traversal paths and unknown policies are rejected before execution", async () => {
+      // 三种已接收策略另验真实字节与终态；遍历和未知策略必须在建任务前拒绝。
       const traversal = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
         sourceNodeId: ${JSON.stringify(nodeId)},
         sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/../../outside.txt")}],
@@ -1584,13 +1583,46 @@ async function main() {
         sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}],
         destinationNodeId: ${JSON.stringify(nodeId2)},
         destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
-        conflictPolicy: "overwrite",
-      }, { "Idempotency-Key": "positive-w6r3-policy-overwrite-01" })`);
+        conflictPolicy: "unsafe-policy",
+      }, { "Idempotency-Key": "positive-w6r3-policy-unknown-01" })`);
       if (![400, 403, 409, 422].includes(overwrite.status)) {
-        throw new Error(`unsupported overwrite policy was not rejected: ${overwrite.status} ${JSON.stringify(overwrite.body).slice(0, 200)}`);
+        throw new Error(`unknown policy was not rejected: ${overwrite.status} ${JSON.stringify(overwrite.body).slice(0, 200)}`);
       }
-      return `traversal source=${traversal.status}, destination=${destinationTraversal.status}; overwrite=${overwrite.status}; no task accepted`;
+      return `traversal source=${traversal.status}, destination=${destinationTraversal.status}; unknown policy=${overwrite.status}; no task accepted`;
     });
+    for (const policy of ["overwrite", "rename"]) {
+      await stepPass(`B01 ${policy} preserves real destination bytes and successful task evidence`, async () => {
+        const expected = `${UPLOAD_SAMPLE_TEXT}|review-${policy}`;
+        await runCommand("wsl.exe", ["-d", distro, "--", "node", "-e",
+          "require('node:fs').writeFileSync(process.argv[1],process.argv[2])",
+          `${workDir}/fixtures/src/transfer-sample.txt`, expected]);
+        const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+          sourceNodeId: ${JSON.stringify(nodeId)}, sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/transfer-sample.txt")}],
+          destinationNodeId: ${JSON.stringify(nodeId2)}, destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+          conflictPolicy: ${JSON.stringify(policy)},
+        }, { "Idempotency-Key": ${JSON.stringify("review-r3-policy-" + policy)} })`);
+        if (created.status !== 202 || !created.body?.id) throw new Error(`${policy} create ${created.status}: ${JSON.stringify(created.body).slice(0,200)}`);
+        let transfer;
+        for (let attempt=0; attempt<60; attempt+=1) {
+          transfer=await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${created.body.id}')`);
+          if (["completed","failed","partial_failure","cancelled"].includes(transfer.status)) break;
+          await sleep(1000);
+        }
+        const item=transfer?.items?.[0], original=`${workDir}/fixtures/dst/transfer-sample.txt`;
+        if (transfer?.status!=="completed" || transfer.items.length!==1 || item?.status!=="copied") throw new Error(`${policy} did not copy: ${JSON.stringify(transfer).slice(0,300)}`);
+        if (policy==="overwrite" && item.destinationPath!==original || policy==="rename" && item.destinationPath!==`${workDir}/fixtures/dst/transfer-sample (1).txt`) throw new Error(`${policy} wrong published path ${item.destinationPath}`);
+        await runCommand("wsl.exe", ["-d", distro, "--", "node", "-e",
+          "const fs=require('node:fs');if(fs.readFileSync(process.argv[1],'utf8')!==process.argv[2])throw Error('destination bytes differ')",
+          item.destinationPath, expected]);
+        if (policy==="rename") await runCommand("wsl.exe", ["-d", distro, "--", "node", "-e",
+          "const fs=require('node:fs');if(fs.readFileSync(process.argv[1],'utf8')!==process.argv[2])throw Error('rename replaced existing bytes')",
+          original, `${UPLOAD_SAMPLE_TEXT}|review-overwrite`]);
+        const task=await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${transfer.taskId}')`);
+        const executions=await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${transfer.taskId}/executions')`);
+        if ((task.state??task.job?.state)!=="completed" || executions?.items?.length<2 || executions.items.some(entry=>(entry.state??entry.status)!=="succeeded")) throw new Error(`${policy} lacks successful parent/endpoints`);
+        return `${policy} copied exact bytes to ${item.destinationPath}; parent completed and both endpoints succeeded`;
+      });
+    }
   }
 
   await attemptPositive("B02 AI generation reaches a terminal assistant message", async () => {

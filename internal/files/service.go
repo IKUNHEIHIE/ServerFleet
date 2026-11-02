@@ -433,8 +433,15 @@ func (s *Service) CancelTransfer(ctx context.Context, subjectID, requestID, id s
 		}
 		// The worker may finalize between CancelTask and this transaction. Never
 		// overwrite its terminal result, item evidence or progress with a stale row.
-		if _, err := tx.Exec(txCtx, `UPDATE file_transfers SET status=?, error_message=?, completed_at=?, updated_at=? WHERE id=? AND status IN (?,?,?)`,
-			string(status), "canceled by operator", encodeTime(completed), encodeTime(s.now()), transfer.ID,
+		// ClaimTransfer is the only queued->running transition. Win against it
+		// atomically: a queued transfer has no byte execution to wait for; once
+		// canceled it cannot be claimed. A running one still needs worker evidence.
+		if _, err := tx.Exec(txCtx, `UPDATE file_transfers SET
+			status=CASE WHEN status=? THEN ? ELSE ? END, error_message=?,
+			completed_at=CASE WHEN status=? THEN ? ELSE ? END, updated_at=?
+			WHERE id=? AND status IN (?,?,?)`,
+			string(TransferQueued), string(TransferCanceled), string(status), "canceled by operator",
+			string(TransferQueued), encodeTime(s.now()), encodeTime(completed), encodeTime(s.now()), transfer.ID,
 			string(TransferQueued), string(TransferRunning), string(TransferCancelling)); err != nil {
 			return err
 		}

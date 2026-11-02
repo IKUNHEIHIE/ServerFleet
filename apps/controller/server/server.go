@@ -78,6 +78,7 @@ type Config struct {
 	// BackupDir defaults to a private directory beside the SQLite database.
 	BackupDir         string
 	RecoveryLatch     *recovery.QuarantineLatch
+	UpdateProduct     *updates.ProductDeploymentOptions
 	UpdateExecution   *updates.TaskInstallWorkerOptions
 	UpdateResolvePlan func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
 	UpdateJobs        func(context.Context, updates.Principal) (updates.JobPage, error)
@@ -92,6 +93,7 @@ type Config struct {
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
+	ProductUpdates     updates.ProductDeployment
 	runtimeGate        func(context.Context) error
 	DB                 *storage.DB
 	Audit              *audit.SQLRecorder
@@ -213,6 +215,7 @@ func Migrations() [][]storage.Migration {
 		dns.Migrations(),
 		certificates.Migrations(),
 		certificates.CleanupMigrations(),
+		certificates.CleanupClaimMigrations(),
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
@@ -433,6 +436,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if s != nil && s.PluginVault != nil {
 			_ = s.PluginVault.Close()
 			s.PluginVault = nil
+		}
+		if s != nil && s.ProductUpdates != nil {
+			_ = s.ProductUpdates.Close()
 		}
 		_ = db.Close()
 		return nil, cause
@@ -661,6 +667,19 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if s.FileWorker != nil {
 		workers[files.ActionTransfer] = s.FileWorker
 		agentBridge.fileWorker = s.FileWorker
+	}
+	if cfg.UpdateProduct != nil {
+		if cfg.UpdateExecution != nil || cfg.UpdateApply != nil || cfg.UpdateResolvePlan != nil || cfg.UpdatePlan != nil || cfg.UpdateCheck != nil {
+			return cleanup(updates.ErrArtifactRejected)
+		}
+		s.ProductUpdates, err = s.NewOwnedProductUpdates(*cfg.UpdateProduct)
+		if err != nil {
+			return cleanup(err)
+		}
+		cfg.UpdateExecution = s.ProductUpdates.WorkerOptions()
+		cfg.UpdateResolvePlan = s.ProductUpdates.ResolvePlan
+		cfg.UpdatePlan = s.ProductUpdates.Plan
+		cfg.UpdateCheck = s.ProductUpdates.Check
 	}
 	if cfg.UpdateExecution != nil {
 		if cfg.UpdateResolvePlan == nil || cfg.UpdateApply != nil {
@@ -898,6 +917,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
 	}
+	if s.ProductUpdates != nil {
+		if err := s.ProductUpdates.Start(ctx); err != nil {
+			return cleanup(err)
+		}
+	}
 	s.startTaskScheduler()
 	return s, nil
 }
@@ -940,6 +964,12 @@ func (s *Server) Close() error {
 	if s.PluginVault != nil {
 		_ = s.PluginVault.Close()
 		s.PluginVault = nil
+	}
+	if s.ProductUpdates != nil {
+		if err := s.ProductUpdates.Close(); err != nil {
+			return err
+		}
+		s.ProductUpdates = nil
 	}
 	if s.DB == nil {
 		return nil

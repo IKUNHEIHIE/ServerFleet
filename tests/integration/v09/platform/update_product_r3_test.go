@@ -1,5 +1,3 @@
-//go:build cx_r3_product
-
 package platform_test
 
 import (
