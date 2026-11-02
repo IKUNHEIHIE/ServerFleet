@@ -15,9 +15,13 @@
 
 | # | 提交 | 范围 | 验证 |
 |---|---|---|---|
-| 1 | 见下方 HANDOFF 的 `HEAD` | AI 预算正式界面：owner 窗口/限额/已用/剩余，管理员 CAS、409、只读、缺策略拒绝 | `tsc --noEmit` PASS；`check:web` PASS（Web 345/345）；新增 `ai-budget.test.tsx` 4/4 |
+| CP-1 | `92eb5ecdddc81566ed365e9c1806fbcfe11c389d` | AI 预算正式界面：owner 窗口/限额/已用/剩余，管理员 CAS、409、只读、缺策略拒绝 | `tsc --noEmit` PASS；`check:web` PASS（Web 345/345）；新增 `ai-budget.test.tsx` 4/4 |
+| CP-2 | 本提交（见 `git log -1`） | B01 真实文件页面闭环：fixturehost 注入文件 worker/私有 spool/受控根注册表；双常驻 Agent 私有 file-root；B01 终态断言；预算 P20 浏览器步骤 | 严格正向 `--ai-host --attempt-file-flow --require-complete`：23 PASS / 4 BLOCKED / 0 FAIL；B01、P20 PASS；Go 构建/vet PASS |
 
 ## 未完成/阻塞（滚动更新）
 
-- B01：待实现 fixturehost `FileExecution` 注入 + 私有 spool + 受控 nodeID→逻辑根注册表，以及双常驻 Agent `-file-root` 的真实页面闭环。
-- B03/B04/B05/B06：按交接说明保持阻塞或待扩完整流程。
+- B01 负向（cancel/撤权/丢回执）与后端已支持范围逐项验证中。
+- B03 Xray：缺可准入工件/Runtime（501 目录源）。
+- B04 发布：网关创建 `takeover_approval_required`，缺完整 typed worker/终态补偿。
+- B05 更新：`UPDATE_SOURCE_UNAVAILABLE`，缺正式更新源/安装装配。
+- B06 灾备：预览缺目标身份/旧主控 fence，缺第二隔离主控真实执行。
