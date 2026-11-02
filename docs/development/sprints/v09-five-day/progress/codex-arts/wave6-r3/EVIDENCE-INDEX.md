@@ -6,6 +6,8 @@
 |---|---|---|
 | CP-1 AI 预算界面 | `reports/web-tests.log`、`reports/web-junit.xml`、`reports/web-typecheck.log`、`reports/web-build.log` | `check:web` PASS；Web 345/345（含新增 4 个预算用例）；`tsc --noEmit` PASS |
 | CP-2 B01 | `reports/positive-b01.log`、`reports/positive-w6r3-b01/positive-b01-transfer-completed.png` | 23 PASS / 4 BLOCKED / 0 FAIL；B01 与 P20 PASS |
+| CP-3 B01 取消 | `reports/positive-b01.log`（最后一次运行）、`reports/positive-w6r3-b01/positive-b01n-cancel.png` | 24 PASS / 4 BLOCKED / 0 FAIL（28 步）；B01/B01n/P20 PASS |
+| CP-3 回归 | `reports/live-regression.log`、`reports/stub-regression.log` | 真实 Controller 70/70 PASS；契约桩 16/16 PASS |
 | CP-2 构建 | `reports/fixturehost.exe`、`reports/linux-fixturehost`、`reports/linux-agent`、`reports/linux-controller` | Windows 与 linux/amd64 构建均 exit 0；`go vet` exit 0 |
 | 失败保留 | 本轮第一次正向运行（协议 minor 不一致）输出保留在 `reports/positive-b01.log` 的滚动历史与对话记录中；未删除失败 | 失败原因：Controller minor=1 而 Agent 未声明文件能力 |
 

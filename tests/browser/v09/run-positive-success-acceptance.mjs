@@ -854,7 +854,7 @@ async function main() {
     await clickText(session, "创建授权", { exact: true });
     await fillField(session, "主体 ID", adminUserId);
     await fillField(session, "资源 ID", nodeId);
-    const permissions = ["nodes.read", "nodes.write", "groups.write", "tasks.submit", "tasks.read", "tasks.command", "files.read", "files.write", "files.transfer", "servicegroups.read", "servicegroups.write", "gateway.read", "gateway.write", "gateway.provision", "publishing.read", "publishing.write"];
+    const permissions = ["nodes.read", "nodes.write", "groups.write", "tasks.submit", "tasks.read", "tasks.command", "tasks.cancel", "files.read", "files.write", "files.transfer", "servicegroups.read", "servicegroups.write", "gateway.read", "gateway.write", "gateway.provision", "publishing.read", "publishing.write"];
     for (const permission of permissions) {
       await setCheckbox(session, permission, true);
     }
@@ -1006,7 +1006,7 @@ async function main() {
     const grant2 = await evaluate(session, `(${PAGE_WRITE})('/api/v1/resource-grants', 'POST', {
       principalId: ${JSON.stringify(adminUserId)}, resourceType: "node",
       resourceId: ${JSON.stringify(nodeId2)},
-      permissions: ["nodes.read", "tasks.submit", "tasks.read", "tasks.command", "files.read", "files.write", "files.transfer"],
+      permissions: ["nodes.read", "tasks.submit", "tasks.read", "tasks.command", "tasks.cancel", "files.read", "files.write", "files.transfer"],
     }, { "Idempotency-Key": "positive-w6r1-grant-node2-0001" })`);
     if (![200, 201].includes(grant2.status)) throw new Error(`grant for agent-2 node ${grant2.status}: ${JSON.stringify(grant2.body).slice(0, 200)}`);
     return `granted 7 permissions on ${nodeId2}`;
@@ -1271,6 +1271,72 @@ async function main() {
     }
     throw new Error(`transfer ${transferId} did not complete within 60s`);
   });
+
+  // 文件闭环负向：取消必须产生非成功终态，且不得把“取消”说成回滚或复制成功。
+  // 只有完整文件宿主与双常驻 Agent 就位时才注册该步骤，避免无条件记 PASS。
+  if (hasFlag("attempt-file-flow") && aiHostMode) {
+    await stepPass("B01n page cancel ends the transfer without any copied-item claim", async () => {
+      // 32 MiB 真实字节：任务进入 running 后取消才持有运行上下文，读取阶段足够长，
+      // 使取消落在复制中段而不是完成后。
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+        `head -c 33554432 /dev/urandom > ${workDir}/fixtures/src/cancel-sample.bin && rm -f ${workDir}/fixtures/dst/cancel-sample.bin`]);
+      const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/cancel-sample.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-cancel-create-01" })`);
+      if (![200, 201, 202].includes(created.status)) {
+        throw new Error(`cancel fixture transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
+      }
+      const transferId = created.body?.id ?? created.body?.transferId;
+      if (!transferId) throw new Error("cancel fixture transfer id missing");
+      const taskId = created.body?.taskId;
+      if (typeof taskId !== "string" || !taskId.startsWith("tsk_")) throw new Error("cancel fixture taskId missing");
+      // 取消必须在 worker 已经开始（任务 running、取消器持有运行上下文）之后发出；
+      // 否则 queued 派的取消只会停在 cancelling，不能证明取消语义。
+      let taskRunning = false;
+      for (let attempt = 0; attempt < 30 && !taskRunning; attempt += 1) {
+        await sleep(300);
+        const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+        const state = task?.state ?? task?.job?.state;
+        if (state === "running") { taskRunning = true; break; }
+        if (state === "completed" || state === "failed" || state === "canceled") {
+          throw new Error(`transfer ${transferId} finished before cancel could be exercised: ${state}`);
+        }
+      }
+      if (!taskRunning) throw new Error(`task ${taskId} did not reach running before cancel`);
+      // worker 已登记运行上下文并开始源读取；再等一个短窗口，让取消落在复制中段。
+      await sleep(500);
+      const cancelled = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers/${transferId}/cancel', 'POST', {}, { "Idempotency-Key": "positive-w6r3-cancel-02" })`);
+      if (![200, 202].includes(cancelled.status)) {
+        throw new Error(`transfer cancel ${cancelled.status}: ${JSON.stringify(cancelled.body).slice(0, 220)}`);
+      }
+      let job = null;
+      for (let attempt = 0; attempt < 40; attempt += 1) {
+        await sleep(500);
+        job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+        const status = job?.status;
+        if (["completed", "partial_failure", "failed", "cancelled", "canceled"].includes(status)) break;
+      }
+      const status = job?.status;
+      if (!["failed", "cancelled", "canceled"].includes(status)) {
+        throw new Error(`cancelled transfer reported terminal status ${JSON.stringify(status)} (${transferId})`);
+      }
+      const items = Array.isArray(job.items) ? job.items : [];
+      if (items.some(item => item.status === "copied")) {
+        throw new Error(`cancel reported a copied item: ${JSON.stringify(items).slice(0, 220)}`);
+      }
+      if (job.taskId) {
+        const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${job.taskId}')`);
+        const taskState = task?.state ?? task?.job?.state;
+        if (taskState === "completed") throw new Error(`cancel left the parent task completed (${job.taskId})`);
+      }
+      await screenshot(session, join(outDir, "positive-b01n-cancel.png"));
+      return `cancel ${transferId} -> ${status}; no copied item; parent task is not completed (cancel is not a rollback claim)`;
+    });
+  }
 
   await attemptPositive("B02 AI generation reaches a terminal assistant message", async () => {
     // 完整结构：合成 ai_api_key 凭据（不入日志/不回显）→ owner CAS 保存模型设置 →
