@@ -64,3 +64,52 @@ node tests/browser/v09/run-product-update-acceptance.mjs --skip-build
 
 运行态目录 `~/sf-wb01-product-update`（0700，保留用于复验；脚本每次运行前清空运行态，
 不保留旧 DB/身份）。
+
+---
+
+## CP-3：B06 灾难恢复前置条件探测
+
+| 命令 | 结果 |
+|---|---|
+| `node tests/browser/v09/run-recovery-prerequisite-probe.mjs` | 退出 0；**11 PASS / 3 BLOCKED / 0 FAIL** |
+
+### 设计取舍（为什么不像 B05 那样注入执行器）
+
+B05 能被真实验证，是因为 `server.Config.UpdateProduct` 是**产品已合入的程序注入点**，
+注入的配置只描述「可信工件来自哪里」，执行仍由产品自己的 `internal/updates` 完成。
+
+B06 不同：`server.Config.RecoveryExecute` 是**执行器本身**。若我在宿主里写一个恢复适配器，
+被测对象就变成我写的代码，而不是 AgentMore 的产品实现——这是自证。所以本专项
+**按生产同构启动（不注入 `RecoveryExecute`）**，只记录产品的真实返回，对「实际恢复」不下结论。
+
+### 步骤（R00—R13）
+
+R00 身份/工具/目录权限（非 root，0700）→ R01 构建宿主 → R02 私有 PKI 与 0600 合成 secret →
+R03 生产同构启动（无 `RecoveryExecute`，含 Agent PKI 链路）→ R04 Web 同源宿主 →
+R05 浏览器完成首次 bootstrap → R06 `VACUUM INTO` 生成真实备份并核对 `schema_migrations` 账本 →
+R07 备份校验真实通过 → R08 预览 `eligible=false`（2/4 项产品侧关闭）→
+R09 创建作业 `501` → R10 作业读回 `404` → R11 未知备份 `404` 且不泄露路径 →
+R12 未认证 `403` 且不返回检查项 → R13 页面实况与能力一致（不出现无依据的「恢复成功」）。
+
+### 结论（不得外推）
+
+- 可验证的部分是通的：备份校验 `200 verified=true`，两条负向鉴权/存在性判定正确。
+- 不可验证的部分是产品侧关闭：预览恒不合格、执行器未装配、作业状态不可读回。
+  因此「浏览器端到端恢复」在本基线**不可能跑通**，不因页面存在而算完成。
+- 第二 Controller 健康、独立 DB/PKI 只算隔离基础，不当灾备成功。
+
+### 环境事实（本轮新增）
+
+- `node -e` 内联脚本的 ESM/参数行为不稳，探测脚本改为落地 `.mjs` 临时文件执行
+  （`node file.mjs args`），避免 `argv` 与模块类型歧义。
+- 宿主的 `-origin` 必须是实际 Web 端口；origin 里出现 `undefined` 会被 auth 的
+  Origin 校验直接拒绝，表现为 `compose server: auth: invalid check`（非配置缺失）。
+- 无头浏览器进程不经过 `track()`，必须在 `cleanup()` 中显式终止，否则事件循环不退出，
+  脚本会被外层 `timeout` 杀掉（退出 124）。
+
+```sh
+node tests/browser/v09/run-recovery-prerequisite-probe.mjs            # 完整（含构建）
+node tests/browser/v09/run-recovery-prerequisite-probe.mjs --skip-build --keep
+```
+
+运行态目录 `~/sf-wb01-recovery-probe`（0700）。

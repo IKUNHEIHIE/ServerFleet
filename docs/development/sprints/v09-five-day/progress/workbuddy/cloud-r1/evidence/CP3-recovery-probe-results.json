@@ -1,0 +1,107 @@
+{
+  "task": "V09-CLOUD-WB-01",
+  "scope": "B06 灾难恢复前置条件探测（不是恢复成功验收）",
+  "generatedAt": "2026-11-02T21:23:52.374Z",
+  "ports": {
+    "apiPort": 46437,
+    "webPort": 43365,
+    "aiPort": 45597,
+    "controlPort": 39877
+  },
+  "backup": {
+    "id": "wb01-dr-backup",
+    "sha256": "3447fa3491a60f73c8f727a238222154b8a834985dc8b4279e57e85d72f14c55"
+  },
+  "counts": {
+    "pass": 11,
+    "blocked": 3,
+    "fail": 0
+  },
+  "results": [
+    {
+      "id": "R00",
+      "title": "环境与身份",
+      "status": "PASS",
+      "detail": "uid=1000 node=v24.22.1 go=go version go1.27.3 linux/amd64 work=/home/ubuntu/sf-wb01-recovery-probe mode=700"
+    },
+    {
+      "id": "R01",
+      "title": "构建 fixturehost（生产同构宿主）",
+      "status": "PASS",
+      "detail": "built /home/ubuntu/sf-wb01-recovery-probe/fixturehost"
+    },
+    {
+      "id": "R02",
+      "title": "私有 PKI 与目录",
+      "status": "PASS",
+      "detail": "TLS 证书 + AI upstream 证书 + 0600 合成 secret"
+    },
+    {
+      "id": "R03",
+      "title": "启动宿主：生产同构（不注入 RecoveryExecute）",
+      "status": "PASS",
+      "detail": "api=46437 web=43365 ai=45597 control=39877"
+    },
+    {
+      "id": "R04",
+      "title": "Web 同源宿主就绪",
+      "status": "PASS",
+      "detail": "https://127.0.0.1:43365 → :46437"
+    },
+    {
+      "id": "R05",
+      "title": "首次 bootstrap 会话（浏览器内完成）",
+      "status": "PASS",
+      "detail": "admin"
+    },
+    {
+      "id": "R06",
+      "title": "生成真实一致性备份（SQLite VACUUM INTO）并核对迁移账本",
+      "status": "PASS",
+      "detail": "backupId=wb01-dr-backup ledger=1 integrity=ok sha256=3447fa3491a60f73c8f727a238222154b8a834985dc8b4279e57e85d72f14c55"
+    },
+    {
+      "id": "R07",
+      "title": "POST /backups/{id}/verify 真实通过（200 且 valid=true）",
+      "status": "PASS",
+      "detail": "200 verified=true backup_integrity=passed againstSha=3447fa3491a60f73…"
+    },
+    {
+      "id": "R08",
+      "title": "POST /disaster-recovery/preview 返回 200 但 eligible 恒为 false",
+      "status": "BLOCKED",
+      "detail": "200 eligible=false，未通过项 2/4: target_controller_identity/target_identity_not_observed; old_controller_fenced/fencing_evidence_unavailable"
+    },
+    {
+      "id": "R09",
+      "title": "POST /disaster-recovery/jobs 返回 501（生产未装配 RecoveryExecute）",
+      "status": "BLOCKED",
+      "detail": "501 RECOVERY_EXECUTOR_UNAVAILABLE；作业未创建，未触碰任何主控或数据"
+    },
+    {
+      "id": "R10",
+      "title": "GET /disaster-recovery/jobs/{id} 恒为 404（作业状态不可读回）",
+      "status": "BLOCKED",
+      "detail": "404 code=RECOVERY_JOB_NOT_FOUND；即使作业创建成功也无法从服务端读回状态与阶段"
+    },
+    {
+      "id": "R11",
+      "title": "负向：未知备份 ID 必须 404 且不泄露内容",
+      "status": "PASS",
+      "detail": "404 BACKUP_NOT_FOUND，响应无路径/SQLite 细节"
+    },
+    {
+      "id": "R12",
+      "title": "负向：未认证会话必须 403 且不暴露检查项",
+      "status": "PASS",
+      "detail": "403 NOT_AUTHORIZED，未返回任何检查项或备份信息"
+    },
+    {
+      "id": "R13",
+      "title": "页面实况：备份与恢复页对当前能力一致呈现",
+      "status": "PASS",
+      "detail": "页面标注契约缺口，未出现「恢复成功」类陈述"
+    }
+  ],
+  "disclaimer": "R08–R10 的 BLOCKED 是产品侧当前行为（预览恒不合格、执行器未装配、作业状态不可读回），不计为本任务通过项；本脚本未注入自制恢复执行器，因此不对实际恢复、新权威、旧主控 fence、旧信任代次拒绝下结论。"
+}

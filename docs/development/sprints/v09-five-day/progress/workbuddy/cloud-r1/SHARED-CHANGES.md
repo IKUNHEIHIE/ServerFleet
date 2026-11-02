@@ -12,6 +12,7 @@
 | `apps/web/src/features/updates/updates-page.tsx` | 修改 | 移除「无 backupId 即禁止 apply」的前置阻断；改为如实提示服务端备份 |
 | `apps/web/src/features/updates/updates-page.test.tsx` | 修改 | 单测同步为新行为，仍断言未确认时禁用且不发请求 |
 | `docs/.../progress/workbuddy/cloud-r1/**` | 新增 | 本任务独占进度与证据 |
+| `tests/browser/v09/run-recovery-prerequisite-probe.mjs` | 新增（CP-3） | B06 前置条件探测（R00—R13）；生产同构启动，不注入恢复执行器 |
 
 ## 2. 未触碰的共享面
 
@@ -45,3 +46,16 @@
 
 `fixturehost` 只单向导入生产包（`server`、`updates`、`ai`、`files`），生产代码不导入该包；
 未新增任何无认证 HTTP 配置入口，未新增直连 Agent/DB 旁路，未引入 fixture 配置旁路。
+
+## 6. B06 需要上游补齐的三项（精确到端点、状态码与代码接缝）
+
+CP-3 实测后，B06 的前端与宿主侧已无缺件；剩余阻塞全部在 `internal/**`（本任务禁止修改）：
+
+| # | 缺口 | 实测证据 | 代码接缝 | 归属 |
+|---|---|---|---|---|
+| 1 | 恢复预览恒不合格 | `POST /api/v1/disaster-recovery/preview` → `200`，`eligible=false`，未通过项 `target_controller_identity/target_identity_not_observed`、`old_controller_fenced/fencing_evidence_unavailable` | `internal/recovery/http.go` 的 `preview` 中两项 `Passed: false` 为常量；需要可信 Controller 身份观测与真实 fence 证据才能置真 | AgentMore |
+| 2 | 创建作业恒 501 | `POST /api/v1/disaster-recovery/jobs` → `501 RECOVERY_EXECUTOR_UNAVAILABLE` | `server.go:89` 声明 `RecoveryExecute`，`updates_recovery.go:56` 接到 `recovery.Options.Execute`，但全仓**无生产赋值点** | AgentMore（执行器语义）+ 主控（装配决策） |
+| 3 | 作业状态不可读回 | `GET /api/v1/disaster-recovery/jobs/{jobId}` → `404 RECOVERY_JOB_NOT_FOUND`，无条件 | `internal/recovery/http.go` 的 `job` handler 只有一行写 404 | 需契约决策：实现读回，或在 OpenAPI 标注该端点未开放 |
+
+在 1 与 2 补齐前，任何「浏览器恢复成功」的声明都不可能成立；本任务不会以页面出现或 `202`
+受理来替代证据。3 若不解决，恢复过程对管理员不可观测，验收只能停在「已受理」。
