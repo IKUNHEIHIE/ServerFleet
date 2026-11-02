@@ -7,7 +7,24 @@
   "authority": "User required completion within five days and explicitly selected 完整 v0.9",
   "source": "docs/reference/ServerFleet-ALL-v0.9-G2/01-当前开发基线/docs/PRODUCT-ACCEPTANCE-MATRIX-v0.9.md",
   "statusMeaning": "NOT_ACCEPTED refers to complete real v0.9 acceptance; existing scaffold/offline rules and isolated UI remain accepted as their limited historical scope",
-  "owners": {"CX":"codex-02","DS":"deepseek-02","GM":"gemini-02","integration":"codex-review-01"},
+  "owners": {"CX":"codex-06","DS":"deepseek-06","GM":"codex-arts-01","integration":"codex-review-02"},
+  "latestReview": {
+    "date": "2026-11-02",
+    "technicalHead": "8df015456b2d57c8e960f934c9a7d3f3817c1894",
+    "report": "docs/development/reviews/V09-WAVE6-R3-REVIEW.md",
+    "results": "docs/development/reviews/V09-WAVE6-R3-RESULTS.json",
+    "authorEvidence": "docs/development/sprints/v09-five-day/progress/codex-arts/wave6-r3/AC-MATRIX.md",
+    "positiveSuite": {"passed":31,"blocked":4,"failed":0,"strictExitCode":1},
+    "fullProductSignoff": false,
+    "meaning": "Existing NOT_ACCEPTED items refer to full product/release signoff; verified partial implementation and tests are recorded here and in the linked review, not zero development progress.",
+    "verifiedPartialEvidence": [
+      {"items":["AC-03"],"scope":"Actual Controller CLI/two Agents and browser transfer, skip/overwrite/rename, cancel/revoke/no-replay; upload task pipeline, multi-target and full resume remain open"},
+      {"items":["AC-10","AC-11","AC-19"],"scope":"Real TLS generation plus owner budget UI/CAS/usage preservation and denied read; not full AI security PoC signoff"},
+      {"items":["AC-06","AC-15"],"scope":"Actual WSS/Nginx/HTTP module and publication task/compensation tests; combined product artifact/Agent registration remains open"},
+      {"items":["AC-13"],"scope":"Actual signed local Agent product install, health rollback and schema drift protection; full browser/deployment and Controller update remain open"},
+      {"items":["AC-18"],"scope":"Second Controller isolation and recovery runtime guard; actual new authority/old-controller fencing and recovery execution remain open"}
+    ]
+  },
   "items": [
     {"id":"AC-01","name":"节点接入、身份与生命周期","backend":["CX-02","CX-03","DS-02"],"ui":["GM-02","GM-04"],"evidenceRequired":"Real Agent enrollment, expired/repeated credential, bad CA, revoked identity, heartbeat/reconnect and audit","status":"NOT_ACCEPTED","evidence":[]},
     {"id":"AC-02","name":"普通分组与自动分类","backend":["DS-02"],"ui":["GM-04"],"evidenceRequired":"Persistent API plus browser; unauthorized member, cancel/no-save, classification read-only and concurrent member update","status":"NOT_ACCEPTED","evidence":[]},

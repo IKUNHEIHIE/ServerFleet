@@ -14,4 +14,4 @@ G1 的 PLUGIN v0.3 替代旧编译期内置业务插件条款；DEPLOY v0.3 扩�
 
 资料包未独立收录 PRIV、WC、PKI-OPS、UPDATE 的所有原始 ADR。涉及其详细实现前需从原项目归档核验；P1 不实施这些业务，也不捏造条款。历史包不展开到源码中。
 
-1 vCPU / 1GB RAM 仍待硬限制/实机验收；WASM/Eino 未锁定。已有SQLite、授权、WSS+mTLS、随机持久密钥、AI预算HTTP/typed审计及真实浏览器TLS生成；正式文件worker/双Agent多文件、自己拥有的更新子进程与恢复运行门有隔离证据。文件页面/完整策略、实际发布、cleanup并发和真实新权威灾备等仍有缺口。最新状态以`../development/TASK-BOARD.md`与`../development/reviews/V09-WAVE6-R2-REVIEW.md`为准；默认缺可信配置仍拒绝，编译和静态检查不能代替运行时安全验证。
+1 vCPU / 1GB RAM 仍待硬限制/实机验收；WASM/Eino 未锁定。已有真实文件CLI/双Agent传输与三种冲突策略、文件页面、AI预算HTTP/UI与TLS生成；实际Agent签名本地更新/健康回滚、恢复运行门和cleanup原子claim有隔离证据。用户上传任务化/多目标/续传、完整产品发布、Controller更新/部署与真实灾备新权威等仍有缺口。最新状态以`../development/TASK-BOARD.md`与`../development/reviews/V09-WAVE6-R3-REVIEW.md`为准；默认缺可信配置仍拒绝，编译和静态检查不能代替运行时安全验证。
