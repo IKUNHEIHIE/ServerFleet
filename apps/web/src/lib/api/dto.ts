@@ -825,6 +825,45 @@ export interface AIModelSettings {
   readonly credentialRevision: number;
 }
 
+/** 服务端权威计数：request/输入字节/输出 token 已用与剩余，绝不由页面本地累加。 */
+export interface AIBudgetUsage {
+  readonly requests: number;
+  readonly inputBytes: number;
+  readonly outputTokens: number;
+}
+
+export interface AIModelBudgetPolicy {
+  readonly revision: number;
+  readonly windowId: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly requestLimit: number;
+  readonly inputByteLimit: number;
+  readonly outputTokenLimit: number;
+}
+
+/** GET/PUT /api/v1/ai/model-settings/{profileId}/budget 的 owner 视图。 */
+export interface AIModelBudget {
+  readonly ownerId: string;
+  readonly profileId: string;
+  readonly configured: boolean;
+  readonly active: boolean;
+  readonly outputReservationTokens: number;
+  readonly policy: AIModelBudgetPolicy | null;
+  readonly usage: AIBudgetUsage;
+  readonly remaining: AIBudgetUsage;
+}
+
+export interface AIModelBudgetInput {
+  readonly expectedRevision: number;
+  readonly windowId: string;
+  readonly startsAt: string;
+  readonly endsAt: string;
+  readonly requestLimit: number;
+  readonly inputByteLimit: number;
+  readonly outputTokenLimit: number;
+}
+
 export interface PluginRepository {
   readonly mode: "official" | "custom";
   readonly url?: string;

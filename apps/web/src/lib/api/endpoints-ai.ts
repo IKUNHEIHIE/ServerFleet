@@ -7,6 +7,8 @@ import type {
   AIApprovalRequest,
   AIExecuteResult,
   AIMessage,
+  AIModelBudget,
+  AIModelBudgetInput,
   AIModelSettings,
   AIResourceRecommendation,
   AISecurityPolicy,
@@ -91,6 +93,18 @@ export const modelSettingsApi = {
     credentialRef: string;
     credentialRevision: number;
   }) => apiClient.request<AIModelSettings>("/api/v1/ai/model-settings", { method: "PUT", body }),
+};
+
+/**
+ * 当前 owner 的窗口预算：GET 只读当前已保存策略/已用/剩余；PUT 是当前真人管理员
+ * 的 CAS（expectedRevision），窗口显式、计数保留，不做重置或自动滚动。
+ * 计数以服务端为准，页面不根据消息表或本地状态推算。
+ */
+export const modelBudgetApi = {
+  get: (profileId: string, signal?: AbortSignal) =>
+    apiClient.request<AIModelBudget>(`/api/v1/ai/model-settings/${encodeURIComponent(profileId)}/budget`, { signal }),
+  set: (profileId: string, body: AIModelBudgetInput) =>
+    apiClient.request<AIModelBudget>(`/api/v1/ai/model-settings/${encodeURIComponent(profileId)}/budget`, { method: "PUT", body }),
 };
 
 export const pluginsApi = {
