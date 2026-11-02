@@ -26,6 +26,9 @@
 | CP-1 | 测试宿主的可信程序注入：`server.Config.UpdateProduct`（`-product-update-config` 私有 JSON），`SchemaFingerprint` 由宿主从真实库读取；宿主退出时闭合 `Server.Close()` | 构建/vet 通过；专项 P09 通过 |
 | CP-2 | Agent 组件本地签名更新浏览器专项（原生 Linux）：check → 冻结 plan → 异人审批 → apply → 真实版本/健康 → 终态 → 失败拒绝 → 重启持久 | **20 PASS / 0 FAIL**（退出 0） |
 
+CP-2 提交：`8b298dec70baf74c2a842e37416e5c0712e8fb90`（本 PR 首个提交；文档回填提交随后）。
+PR：`#1`（Draft，base `main`），head 以远端 `feature/cloud-console-wb01` 最新提交为准。
+
 ## 本检查点已证明（限定范围）
 
 1. 真实发布构建：两个 `apps/agent` 构建（`-ldflags -X main.agentBuildVersion`）字节不同，SHA 分别记录在证据 JSON。
