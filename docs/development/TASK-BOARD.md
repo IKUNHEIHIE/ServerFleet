@@ -4,6 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
+| V09-WAVE6-R3-REVIEW | IN PROGRESS：审查三线-04提交、必要修复和共享组合，根/安全/原生Linux/浏览器复验，完成接收与续派后停止 | codex-review-02 | integration/v09-wave6-r3-review-cx02 / `.worktrees/integration--v09-wave6-r3-review-cx02` | 本轮提交必要修复、中央注册/契约/迁移、测试/证据与后续任务；不改作者目录或既有远端服务 | 项目负责人；起始fafbe93；CX f643c49、DS 0b6cf7b、CA a70694b |
 | V09-GM04-TRANSFER | 转交登记/独立CA目录/完整提示词完成，policy/git检查PASS；快进新CA目录后交接停止，未启动实现或代发消息 | codex-review-02 | main / 主目录（集成负责人） | 本次交接文档、TASK-BOARD、WAVE6-R3的GM执行人/目录/进度记录；不改作者代码/历史证据或同步CX/DS目录 | 项目负责人；起始db3cf87；见GM04-CODEX-ARTS-HANDOFF.md |
 | V09-WAVE6-R2-REVIEW | 三线-03审查/必要返修/正式组合及根安全、Linux、浏览器复验完成；完成接收/干净目录快进和续派后停止 | codex-review-02 | integration/v09-wave6-r2-review-cx02 / `.worktrees/integration--v09-wave6-r2-review-cx02` | 本轮增量必要修复、中央注册/契约/迁移、证据/后续任务；未改既有awskr服务 | 项目负责人；起始c9013f4；技术23e56d5；见reviews/V09-WAVE6-R2-REVIEW.md |
 | V09-R6-CX-04 | READY：可信文件CLI/路径装配和剩余文件能力、更新来源/产品进程装配、真实恢复权威/fence与平台独立项 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6-R3.md的CX完整包；继续独占files，中央共享差异交patch，不写DS/GM目录 | codex-review-02+安全/通信；本轮最终main交接SHA |
