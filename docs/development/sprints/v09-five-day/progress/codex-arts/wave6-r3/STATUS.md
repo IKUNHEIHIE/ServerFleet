@@ -10,7 +10,7 @@
 - 新工作目录未预置 `.tools`、`.cache`、`node_modules`、`reports`（交接说明称总控已准备，与实际不符）。
 - 处置：仅创建被 `.gitignore` 忽略的本地开发链接 `.tools -> D:/admin/desktop/codex/myproject/ks/.tools`（只读使用共享固定 Go/Node，不写入链接目标），并执行 `npm ci`（PASS，127 packages）。未修改任何跟踪文件或依赖版本。
 - Node：`v24.22.1`（仓库 `.tools` 固定发行版）；Go：`go1.27.3 windows/amd64`（共享只读）。
-- 根检查（最终提交后重跑）：`npm run check` policy/contracts/go/web/git **全部 PASS**；`npm run check:security` **PASS**（npm 0 漏洞、govulncheck 无已知漏洞）；Web 347/347。首次 Go tidy 失败仅为本机 `GOPROXY=off` 缺依赖测试模块，非代码/依赖改动。见 `reports/check-all.json`、`reports/check-security.json`、`reports/full-check.log`。
+- 根检查（最终提交后重跑）：`npm ci` PASS、`npm run tools:install` PASS（固定版本 protoc-gen-go/staticcheck/govulncheck/actionlint）、`npm run check` policy/contracts/go/web/git **全部 PASS**、`npm run check:security` **PASS**（0 漏洞）；Web 348/348。首次 Go tidy 失败仅为本机 `GOPROXY=off` 缺依赖测试模块，非代码/依赖改动。见 `reports/check-all.json`、`reports/check-security.json`、`reports/full-check.log`、`reports/tools-install.log`。
 
 ## 可运行增量
 

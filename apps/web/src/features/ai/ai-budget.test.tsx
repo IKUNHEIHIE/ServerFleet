@@ -111,6 +111,23 @@ describe("AI budget panel", () => {
     });
   });
 
+  it("renders no budget numbers when the current identity is denied", async () => {
+    await renderAuthenticated(
+      "/ai",
+      {
+        ...baseRoutes(),
+        "GET /api/v1/ai/model-settings/prof-1/budget": () =>
+          jsonResponse({ code: "NOT_AUTHORIZED", message: "denied" }, 403),
+      },
+      ADMIN_IDENTITY,
+    );
+
+    expect(await screen.findByText(/HTTP 403/)).toBeVisible();
+    expect(screen.queryByText(/窗口 ID：/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/已用请求：/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存预算窗口（CAS）" })).not.toBeInTheDocument();
+  });
+
   it("keeps the current view and reloads the server revision after a 409 conflict", async () => {
     let budgetReads = 0;
     const { calls } = await renderAuthenticated(

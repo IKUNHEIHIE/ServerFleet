@@ -42,9 +42,10 @@ node tests/browser/v09/run-positive-success-acceptance.mjs `
 ## 根检查（2026-11-02）
 
 - `npm ci` PASS（127 packages，固定 Node v24.22.1）。
-- 最终提交后重跑 `npm run check`：policy / contracts / go / web / git **全部 PASS**（Web 347/347）。首次运行时 `go mod tidy -diff` 仅因本机 `GOPROXY=off` 无法解析依赖自身的测试模块而失败，属于环境原因，无代码/依赖改动；使用可访问代理后同一检查通过。
+- `npm run tools:install` PASS：protoc-gen-go v1.36.12、staticcheck v0.8.2、govulncheck v1.9.0、actionlint v1.7.12。
+- 最终提交后重跑 `npm run check`：policy / contracts / go / web / git **全部 PASS**（Web 348/348）。首次运行时 `go mod tidy -diff` 仅因本机 `GOPROXY=off` 无法解析依赖自身的测试模块而失败，属于环境原因，无代码/依赖改动；使用可访问代理后同一检查通过。
 - `npm run check:security` **PASS**：npm audit 0 漏洞；govulncheck 无已知漏洞。
-- 原始输出：`reports/check-all.json`、`reports/check-security.json`、`reports/full-check.log`。
+- 原始输出：`reports/check-all.json`、`reports/check-security.json`、`reports/full-check.log`、`reports/tools-install.log`。
 
 ## UI 边界态审计（2026-11-02）
 
