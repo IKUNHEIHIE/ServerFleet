@@ -23,10 +23,14 @@ import (
 )
 
 type fakeGatewayRunner struct {
-	mu           sync.Mutex
-	calls        [][]string
-	failValidate bool
-	failReload   bool
+	mu                sync.Mutex
+	calls             [][]string
+	failValidate      bool
+	failReload        bool
+	failValidateFirst bool
+	failReloadFirst   bool
+	validates         int
+	reloads           int
 }
 
 func (r *fakeGatewayRunner) Run(_ context.Context, name string, args ...string) ([]byte, error) {
@@ -34,10 +38,16 @@ func (r *fakeGatewayRunner) Run(_ context.Context, name string, args ...string) 
 	defer r.mu.Unlock()
 	r.calls = append(r.calls, append([]string{name}, args...))
 	switch {
-	case len(args) > 0 && args[0] == "-t" && r.failValidate:
-		return []byte("syntax error"), os.ErrInvalid
-	case len(args) > 0 && args[0] == "-s" && r.failReload:
-		return []byte("reload failed"), os.ErrInvalid
+	case len(args) > 0 && args[0] == "-t":
+		r.validates++
+		if r.failValidate || (r.failValidateFirst && r.validates == 1) {
+			return []byte("syntax error"), os.ErrInvalid
+		}
+	case len(args) > 0 && args[0] == "-s":
+		r.reloads++
+		if r.failReload || (r.failReloadFirst && r.reloads == 1) {
+			return []byte("reload failed"), os.ErrInvalid
+		}
 	}
 	return []byte("ok"), nil
 }
@@ -77,8 +87,13 @@ func newGatewayTestEnvAt(t *testing.T, prefix string) *gatewayTestEnv {
 		t.Fatal(err)
 	}
 	runner := &fakeGatewayRunner{}
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
 	capability, err := newGatewayCapability(gatewayCapabilityConfig{
 		Prefix: prefix, SiteDir: siteDir, ArtifactDir: artifactDir, MainConfig: mainConfig,
+		NginxBinary: binary,
 	}, runner)
 	if err != nil {
 		t.Fatal(err)
@@ -174,7 +189,7 @@ func TestGatewayCapabilityValidateFailureRestoresOldFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	artifact, digest := env.artifact(t, "new.conf", []byte("invalid site"))
-	env.runner.failValidate = true
+	env.runner.failValidateFirst = true
 	action := env.capability.Actions()[gatewayApplyAction]
 	if result := action.Run(context.Background(), env.params(t, "apply", "site.conf", artifact, digest, true, "approval-1")); result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_FAILED {
 		t.Fatalf("validate failure result = %+v", result)
@@ -185,6 +200,20 @@ func TestGatewayCapabilityValidateFailureRestoresOldFile(t *testing.T) {
 	}
 }
 
+func TestGatewayCapabilityRestoreFailureIsUnknown(t *testing.T) {
+	env := newGatewayTestEnv(t)
+	old := []byte("old site")
+	if err := os.WriteFile(env.site("site.conf"), old, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	artifact, digest := env.artifact(t, "new.conf", []byte("invalid site"))
+	env.runner.failValidate = true
+	action := env.capability.Actions()[gatewayApplyAction]
+	if result := action.Run(context.Background(), env.params(t, "apply", "site.conf", artifact, digest, true, "approval-1")); result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN {
+		t.Fatalf("restore failure result = %+v", result)
+	}
+}
+
 func TestGatewayCapabilityReloadFailureRestoresOldFile(t *testing.T) {
 	env := newGatewayTestEnv(t)
 	old := []byte("old site")
@@ -192,7 +221,7 @@ func TestGatewayCapabilityReloadFailureRestoresOldFile(t *testing.T) {
 		t.Fatal(err)
 	}
 	artifact, digest := env.artifact(t, "new.conf", []byte("new site"))
-	env.runner.failReload = true
+	env.runner.failReloadFirst = true
 	action := env.capability.Actions()[gatewayApplyAction]
 	if result := action.Run(context.Background(), env.params(t, "apply", "site.conf", artifact, digest, true, "approval-1")); result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_FAILED {
 		t.Fatalf("reload failure result = %+v", result)

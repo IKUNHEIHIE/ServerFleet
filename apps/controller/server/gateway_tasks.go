@@ -20,6 +20,7 @@ import (
 	"serverfleet.local/serverfleet/internal/notifications"
 	"serverfleet.local/serverfleet/internal/publishing"
 	"serverfleet.local/serverfleet/internal/servicegroups"
+	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 )
 
@@ -28,95 +29,6 @@ import (
 // keeps the gateway stage closed.
 type GatewayArtifactUploader interface {
 	Upload(ctx context.Context, nodeID, absolutePath string, content []byte, sha256Hex string) error
-}
-
-type gatewayTaskHost struct {
-	tasks     *tasks.Service
-	artifacts GatewayArtifactUploader
-}
-
-func newGatewayTaskHost(tasksService *tasks.Service, artifacts GatewayArtifactUploader) (*gatewayTaskHost, error) {
-	if tasksService == nil || artifacts == nil {
-		return nil, gateway.ErrTaskSubmitterUnavailable
-	}
-	return &gatewayTaskHost{tasks: tasksService, artifacts: artifacts}, nil
-}
-
-func (h *gatewayTaskHost) apply(ctx context.Context, site gateway.NginxSite, input gateway.NginxTaskInput) (string, error) {
-	if h == nil || h.tasks == nil || h.artifacts == nil {
-		return "", gateway.ErrTaskSubmitterUnavailable
-	}
-	request, err := gateway.BuildNginxApplyTask(site, input)
-	if err != nil {
-		return "", err
-	}
-	id, err := h.submit(ctx, request, "nginx site apply "+input.GatewayID)
-	if err != nil {
-		return "", err
-	}
-	task, err := h.tasks.Get(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	if task.Status == tasks.StatusCompleted {
-		return id, nil
-	}
-	// No artifact I/O before the sole task is approved and actually running.
-	// A queued task is not a completed publication stage.
-	if _, err := h.tasks.CheckExecution(ctx, id, task.PlanHash); err != nil {
-		return "", err
-	}
-	if err := h.artifacts.Upload(ctx, input.NodeID, site.ArtifactPath, site.Config, site.Digest); err != nil {
-		return "", err
-	}
-	return h.confirmCompleted(ctx, id)
-}
-
-func (h *gatewayTaskHost) remove(ctx context.Context, site gateway.NginxSite, input gateway.NginxTaskInput) (string, error) {
-	if h == nil || h.tasks == nil {
-		return "", gateway.ErrTaskSubmitterUnavailable
-	}
-	request, err := gateway.BuildNginxRemoveTask(site, input)
-	if err != nil {
-		return "", err
-	}
-	id, err := h.submit(ctx, request, "nginx site remove "+input.GatewayID)
-	if err != nil {
-		return "", err
-	}
-	return h.confirmCompleted(ctx, id)
-}
-
-func (h *gatewayTaskHost) confirmCompleted(ctx context.Context, id string) (string, error) {
-	task, err := h.tasks.Get(ctx, id)
-	if err != nil {
-		return "", err
-	}
-	if task.Status != tasks.StatusCompleted {
-		return "", publishing.ErrProductionUnavailable
-	}
-	for _, target := range task.Targets {
-		if target.State != tasks.TargetSucceeded {
-			return "", publishing.ErrProductionUnavailable
-		}
-	}
-	return id, nil
-}
-
-func (h *gatewayTaskHost) submit(ctx context.Context, request gateway.TaskRequest, name string) (string, error) {
-	task, err := h.tasks.Submit(ctx, tasks.SubmitRequest{
-		SubjectID: request.SubjectID, RequestID: request.RequestID, Name: name,
-		ActionID: request.ActionID, OperationClass: tasks.OperationClassModifying,
-		TargetType: "node_ids", TargetNodeIDs: request.NodeIDs,
-		Params: request.Params, IdempotencyKey: request.IdempotencyKey,
-	})
-	if err != nil {
-		return "", err
-	}
-	if task.ID == "" {
-		return "", gateway.ErrTaskSubmitterUnavailable
-	}
-	return task.ID, nil
 }
 
 // CertificateInstallPaths are operator-owned file paths for one certificate.
@@ -136,25 +48,51 @@ type ProductionPublishingConfig struct {
 	Nodes           *nodes.Repo
 	ServiceGroups   *servicegroups.Repo
 	Tasks           *tasks.Service
+	TasksRepo       *tasks.Repo
+	DB              *storage.DB
 	Artifacts       GatewayArtifactUploader
+	NextDispatcher  tasks.Dispatcher
+	Authorizer      auth.Authorizer
 	CertificatePath map[string]CertificateInstallPaths
+	Now             func() time.Time
+	ApprovalTTL     time.Duration
+	ApprovalWait    time.Duration
+	ExecutionWait   time.Duration
+	Poll            time.Duration
+	OnTaskSubmitted func(string)
 }
 
 // NewProductionPublishingBridge is the controller composition seam. The
-// returned LocalBridge holds real DNS/certificate/gateway stages; a controller
-// must still ensure the plan's current authorization before calling Run.
-func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishing.LocalBridge, error) {
+// returned LocalBridge holds real DNS/certificate/gateway stages, and the
+// dispatcher must wrap the Agent link dispatcher so gateway artifacts are
+// uploaded only after the current approval and target revision are rechecked.
+func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishing.LocalBridge, tasks.Dispatcher, error) {
 	if config.Plans == nil || config.DNS == nil || config.Certificates == nil ||
 		config.Gateways == nil || config.Nodes == nil || config.ServiceGroups == nil ||
-		config.Tasks == nil || config.Artifacts == nil {
-		return publishing.LocalBridge{}, publishing.ErrProductionUnavailable
+		config.Tasks == nil || config.TasksRepo == nil || config.DB == nil ||
+		config.Artifacts == nil || config.NextDispatcher == nil || config.Authorizer == nil {
+		return publishing.LocalBridge{}, nil, publishing.ErrProductionUnavailable
 	}
-	host, err := newGatewayTaskHost(config.Tasks, config.Artifacts)
+	registry := newGatewayArtifactRegistry()
+	authority := publicationPlanAuthority{repo: config.Plans}
+	dispatcher, err := newGatewayTaskDispatcher(gatewayExecutionConfig{
+		Repo: config.TasksRepo, DB: config.DB, Plans: config.Plans,
+		Artifacts: config.Artifacts, Next: config.NextDispatcher, Authorizer: config.Authorizer,
+		Nodes: config.Nodes, Registry: registry, Now: config.Now, ApprovalTTL: config.ApprovalTTL,
+	})
 	if err != nil {
-		return publishing.LocalBridge{}, err
+		return publishing.LocalBridge{}, nil, err
 	}
-	applier := &publicationGatewayApplier{gateways: config.Gateways, tasks: host}
-	return publishing.NewProductionBridge(publishing.ProductionBridgeConfig{
+	host, err := newGatewayTaskHost(config.Tasks, gatewayHostConfig{
+		Registry: registry, Authority: authority, Poll: config.Poll,
+		ApprovalWait: config.ApprovalWait, ExecuteWait: config.ExecutionWait,
+		OnSubmitted: config.OnTaskSubmitted, Now: config.Now,
+	})
+	if err != nil {
+		return publishing.LocalBridge{}, nil, err
+	}
+	applier := &publicationGatewayApplier{gateways: config.Gateways, tasks: host, plans: config.Plans}
+	bridge, err := publishing.NewProductionBridge(publishing.ProductionBridgeConfig{
 		Plans:     publicationPlanLookup{repo: config.Plans},
 		DNS:       publicationDNSWriter{service: config.DNS},
 		Addresses: publicationGatewayAddresses{gateways: config.Gateways, nodes: config.Nodes},
@@ -164,6 +102,10 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 		Upstreams: publicationServiceUpstreams{groups: config.ServiceGroups, nodes: config.Nodes},
 		Gateway:   applier,
 	})
+	if err != nil {
+		return publishing.LocalBridge{}, nil, err
+	}
+	return bridge, dispatcher, nil
 }
 
 type publicationPlanLookup struct{ repo *publishing.Repo }
@@ -291,27 +233,36 @@ func (u publicationServiceUpstreams) Upstreams(ctx context.Context, _ string, se
 }
 
 type gatewayPublicationSummary struct {
-	RouteID      string `json:"routeId"`
-	GatewayID    string `json:"gatewayId"`
-	NodeID       string `json:"nodeId"`
-	SitePath     string `json:"sitePath"`
-	ConfigSHA256 string `json:"configSha256"`
-	TaskID       string `json:"taskId"`
-	RouteCreated bool   `json:"routeCreated"`
+	RouteID            string `json:"routeId"`
+	GatewayID          string `json:"gatewayId"`
+	NodeID             string `json:"nodeId"`
+	SitePath           string `json:"sitePath"`
+	ConfigSHA256       string `json:"configSha256"`
+	TaskID             string `json:"taskId"`
+	RouteRevision      uint64 `json:"routeRevision"`
+	RouteCreated       bool   `json:"routeCreated"`
+	PlanID             string `json:"planId"`
+	PlanTargetRevision uint64 `json:"planTargetRevision"`
 }
 
 type publicationGatewayApplier struct {
 	gateways *gateway.Service
 	tasks    *gatewayTaskHost
+	plans    *publishing.Repo
 }
 
 func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.Plan, request publishing.GatewayRequest, upstreams []string, certificatePath, keyPath string) (string, error) {
-	if a == nil || a.gateways == nil || a.tasks == nil {
+	if a == nil || a.gateways == nil || a.tasks == nil || a.plans == nil {
 		return "", publishing.ErrProductionUnavailable
 	}
 	if len(request.GatewayIDs) != 1 {
 		return "", publishing.ErrProductionTarget
 	}
+	current, err := a.currentPlan(ctx, plan)
+	if err != nil {
+		return "", err
+	}
+	plan = current
 	gatewayID := request.GatewayIDs[0]
 	record, err := a.gateways.GetGateway(ctx, request.SubjectID, gatewayID)
 	if err != nil {
@@ -347,7 +298,7 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 	if err != nil {
 		return "", err
 	}
-	taskID, err := a.tasks.apply(ctx, site, gateway.NginxTaskInput{
+	taskID, err := a.tasks.apply(ctx, plan, site, gateway.NginxTaskInput{
 		SubjectID: request.SubjectID, RequestID: request.RequestID, GatewayID: gatewayID,
 		NodeID: record.NodeID, IdempotencyKey: plan.ID,
 	})
@@ -356,7 +307,9 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 	}
 	summary, err := json.Marshal(gatewayPublicationSummary{
 		RouteID: routeID, GatewayID: gatewayID, NodeID: record.NodeID,
-		SitePath: site.Path, ConfigSHA256: site.Digest, TaskID: taskID, RouteCreated: created,
+		SitePath: site.Path, ConfigSHA256: site.Digest, TaskID: taskID,
+		RouteRevision: route.Revision, RouteCreated: created,
+		PlanID: plan.ID, PlanTargetRevision: plan.TargetRevision,
 	})
 	if err != nil {
 		return "", publishing.ErrProductionTarget
@@ -364,22 +317,55 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 	return string(summary), nil
 }
 
+func (a *publicationGatewayApplier) currentPlan(ctx context.Context, plan publishing.Plan) (publishing.Plan, error) {
+	current, _, err := a.plans.Get(ctx, plan.ID)
+	if err != nil || !current.TargetsPersisted || current.TargetRevision != plan.TargetRevision ||
+		current.ZoneID != plan.ZoneID || current.CertificateID != plan.CertificateID ||
+		current.HTTPS != plan.HTTPS || current.ServiceGroupID != plan.ServiceGroupID ||
+		!strings.EqualFold(current.Domain, plan.Domain) || !sameGatewayIDs(current.GatewayIDs, plan.GatewayIDs) {
+		return publishing.Plan{}, publishing.ErrProductionTarget
+	}
+	return current, nil
+}
+
+func sameGatewayIDs(left, right []string) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	seen := make(map[string]int, len(left))
+	for _, id := range left {
+		seen[id]++
+	}
+	for _, id := range right {
+		seen[id]--
+		if seen[id] < 0 {
+			return false
+		}
+	}
+	return true
+}
+
 func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishing.Plan, summary string) error {
-	if a == nil || a.gateways == nil || a.tasks == nil {
+	if a == nil || a.gateways == nil || a.tasks == nil || a.plans == nil {
 		return publishing.ErrProductionUnavailable
 	}
 	var state gatewayPublicationSummary
 	if len(summary) == 0 || len(summary) > 2048 || json.Unmarshal([]byte(summary), &state) != nil {
 		return publishing.ErrProductionTarget
 	}
-	if state.SitePath != "" || state.ConfigSHA256 != "" {
-		site := gateway.NginxSite{GatewayID: state.GatewayID, Domain: plan.Domain, Path: state.SitePath, Digest: state.ConfigSHA256}
-		if _, err := a.tasks.remove(ctx, site, gateway.NginxTaskInput{
-			SubjectID: plan.CreatedBy, RequestID: plan.ID, GatewayID: state.GatewayID,
-			NodeID: state.NodeID, IdempotencyKey: plan.ID,
-		}); err != nil {
-			return err
-		}
+	if state.PlanID != plan.ID || state.PlanTargetRevision != plan.TargetRevision ||
+		state.GatewayID == "" || state.NodeID == "" || state.SitePath == "" || state.ConfigSHA256 == "" {
+		return publishing.ErrProductionTarget
+	}
+	if _, err := a.currentPlan(ctx, plan); err != nil {
+		return err
+	}
+	site := gateway.NginxSite{GatewayID: state.GatewayID, Domain: plan.Domain, Path: state.SitePath, Digest: state.ConfigSHA256}
+	if _, err := a.tasks.remove(ctx, plan, site, gateway.NginxTaskInput{
+		SubjectID: plan.CreatedBy, RequestID: plan.ID, GatewayID: state.GatewayID,
+		NodeID: state.NodeID, IdempotencyKey: plan.ID,
+	}); err != nil {
+		return err
 	}
 	if !state.RouteCreated {
 		return nil
@@ -390,6 +376,9 @@ func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishin
 	}
 	if err != nil {
 		return err
+	}
+	if route.Revision != state.RouteRevision {
+		return publishing.ErrProductionTarget
 	}
 	return a.gateways.DeleteRoute(ctx, plan.CreatedBy, plan.ID, state.GatewayID, state.RouteID, route.Revision)
 }

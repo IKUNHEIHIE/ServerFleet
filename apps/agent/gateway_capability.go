@@ -29,6 +29,7 @@ var (
 	errGatewayCapability = errors.New("agent: gateway capability rejected")
 	errGatewaySiteExists = errors.New("agent: existing site requires approved takeover")
 	errGatewayDigest     = errors.New("agent: artifact or site digest mismatch")
+	errGatewayUnknown    = errors.New("agent: rollback outcome is unknown")
 )
 
 // gatewayCommandRunner is injectable for tests. Production uses the fixed argv
@@ -71,6 +72,8 @@ type gatewayParams struct {
 
 // newGatewayCapability validates the operator-owned roots. A missing/invalid
 // prefix keeps the capability closed; no default /etc/nginx path is assumed.
+// The executable is resolved once to an absolute regular file and never taken
+// from task parameters.
 func newGatewayCapability(config gatewayCapabilityConfig, runner gatewayCommandRunner) (*gatewayCapability, error) {
 	if runner == nil {
 		return nil, errGatewayCapability
@@ -86,10 +89,20 @@ func newGatewayCapability(config gatewayCapabilityConfig, runner gatewayCommandR
 	if err := rejectSymlinkPath(config.Prefix); err != nil {
 		return nil, errGatewayCapability
 	}
-	if info, err := os.Lstat(config.SiteDir); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	for _, directory := range []string{config.Prefix, config.SiteDir, config.ArtifactDir} {
+		info, err := os.Lstat(directory)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+			return nil, errGatewayCapability
+		}
+		if err := checkPrivateRoot(directory, info); err != nil {
+			return nil, errGatewayCapability
+		}
+	}
+	mainInfo, err := os.Lstat(config.MainConfig)
+	if err != nil || !mainInfo.Mode().IsRegular() || mainInfo.Mode()&os.ModeSymlink != 0 {
 		return nil, errGatewayCapability
 	}
-	if info, err := os.Lstat(config.ArtifactDir); err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if err := checkPrivateFile(config.MainConfig, mainInfo); err != nil {
 		return nil, errGatewayCapability
 	}
 	binary := config.NginxBinary
@@ -97,6 +110,17 @@ func newGatewayCapability(config gatewayCapabilityConfig, runner gatewayCommandR
 		binary = "nginx"
 	}
 	if strings.ContainsAny(binary, " \t\r\n;|&") {
+		return nil, errGatewayCapability
+	}
+	if !filepath.IsAbs(binary) {
+		resolved, err := exec.LookPath(binary)
+		if err != nil {
+			return nil, errGatewayCapability
+		}
+		binary = resolved
+	}
+	binaryInfo, err := os.Stat(binary)
+	if err != nil || !binaryInfo.Mode().IsRegular() {
 		return nil, errGatewayCapability
 	}
 	return &gatewayCapability{
@@ -192,7 +216,7 @@ func (c *gatewayCapability) runApply(ctx context.Context, raw []byte) executionR
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
 	}
 	if err := c.apply(ctx, p); err != nil {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || errors.Is(err, errGatewayUnknown) {
 			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
 		}
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
@@ -206,7 +230,7 @@ func (c *gatewayCapability) runRemove(ctx context.Context, raw []byte) execution
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
 	}
 	if err := c.remove(ctx, p); err != nil {
-		if ctx.Err() != nil {
+		if ctx.Err() != nil || errors.Is(err, errGatewayUnknown) {
 			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
 		}
 		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
@@ -215,6 +239,9 @@ func (c *gatewayCapability) runRemove(ctx context.Context, raw []byte) execution
 }
 
 func (c *gatewayCapability) apply(ctx context.Context, p gatewayParams) error {
+	if err := rejectSymlinkPath(filepath.Dir(p.ArtifactPath)); err != nil {
+		return errGatewayCapability
+	}
 	artifact, err := readBounded(p.ArtifactPath, gatewayMaxArtifactBytes)
 	if err != nil {
 		return errGatewayCapability
@@ -247,7 +274,7 @@ func (c *gatewayCapability) apply(ctx context.Context, p gatewayParams) error {
 	if err := c.validateAndReload(ctx); err != nil {
 		restoreErr := c.restore(ctx, p.SitePath, existing)
 		if restoreErr != nil {
-			return errGatewayCapability
+			return errGatewayUnknown
 		}
 		return err
 	}
@@ -274,7 +301,7 @@ func (c *gatewayCapability) remove(ctx context.Context, p gatewayParams) error {
 	}
 	if err := c.validateAndReload(ctx); err != nil {
 		if restoreErr := c.restore(ctx, p.SitePath, existing); restoreErr != nil {
-			return errGatewayCapability
+			return errGatewayUnknown
 		}
 		return err
 	}
@@ -349,9 +376,11 @@ func writeAtomic(path string, data []byte) error {
 }
 
 func readBounded(path string, max int) ([]byte, error) {
-	if link, err := os.Lstat(path); err != nil {
+	link, err := os.Lstat(path)
+	if err != nil {
 		return nil, err
-	} else if link.Mode()&os.ModeSymlink != 0 {
+	}
+	if link.Mode()&os.ModeSymlink != 0 {
 		return nil, errGatewayCapability
 	}
 	file, err := os.Open(path)
@@ -360,7 +389,7 @@ func readBounded(path string, max int) ([]byte, error) {
 	}
 	defer file.Close()
 	info, err := file.Stat()
-	if err != nil || !info.Mode().IsRegular() || info.Size() > int64(max) {
+	if err != nil || !info.Mode().IsRegular() || !os.SameFile(link, info) || info.Size() > int64(max) {
 		return nil, errGatewayCapability
 	}
 	data, err := io.ReadAll(io.LimitReader(file, int64(max)+1))
