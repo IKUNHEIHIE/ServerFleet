@@ -10,6 +10,7 @@
 - 新工作目录未预置 `.tools`、`.cache`、`node_modules`、`reports`（交接说明称总控已准备，与实际不符）。
 - 处置：仅创建被 `.gitignore` 忽略的本地开发链接 `.tools -> D:/admin/desktop/codex/myproject/ks/.tools`（只读使用共享固定 Go/Node，不写入链接目标），并执行 `npm ci`（PASS，127 packages）。未修改任何跟踪文件或依赖版本。
 - Node：`v24.22.1`（仓库 `.tools` 固定发行版）；Go：`go1.27.3 windows/amd64`（共享只读）。
+- 根检查：`npm run check` 的 policy/contracts/web/git PASS；Go 首次仅因本机 `GOPROXY=off` 缺依赖测试模块而 tidy 失败（环境原因），用可访问代理后 `check:go` PASS；`check:security` PASS（npm 0 漏洞、govulncheck 无已知漏洞）。见 `reports/check-all.json`、`check-go.json`、`check-security.log`。
 
 ## 可运行增量
 

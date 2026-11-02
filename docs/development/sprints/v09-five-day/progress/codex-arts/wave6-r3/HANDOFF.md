@@ -27,6 +27,13 @@ node tests/browser/v09/run-positive-success-acceptance.mjs `
 - 回归：真实 Controller 浏览器 **70/70 PASS**；契约桩 **16/16 PASS**（各自独立报告，未相加宣传）。
 - 证据：`reports/positive-b01.log`、`reports/live-regression.log`、`reports/stub-regression.log` 与对应截图目录（Windows 本地忽略目录）。
 
+## 根检查（2026-11-02）
+
+- `npm ci` PASS（127 packages，固定 Node v24.22.1）。
+- `npm run check`：policy / contracts / web / git **PASS**；Go 首次因本机 `GOPROXY=off` 无法解析依赖自身的测试模块，`go mod tidy -diff` 失败（环境原因，无代码/依赖改动）。用可访问的 `goproxy.cn` 补齐固定版本模块后 `npm run check:go` **PASS**（含测试、vet、staticcheck）。
+- `npm run check:security` **PASS**：npm audit 0 漏洞；govulncheck 无已知漏洞。
+- 原始输出：`reports/check-all.json`、`reports/check-go.json`、`reports/check-security.log`、`reports/full-check.log`。
+
 ## B01 实现要点（安全边界）
 
 - fixturehost 只在显式提供 `-file-spool` 与 `-file-roots` 时开启文件执行；两者必须同时给出且要求 `-agent-pki-dir`，否则启动失败。
