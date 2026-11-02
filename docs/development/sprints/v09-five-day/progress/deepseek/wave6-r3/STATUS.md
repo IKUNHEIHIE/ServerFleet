@@ -14,6 +14,9 @@
 | `1a98086` | cleanup 原子 claim/lease、cancel 优先级、重启未知结果不重放、I/O 前后复权、竞争测试与 ds/0063 候选 DDL |
 | `eed7538` | 网关任务审批后上传、终态等待、同计划幂等；Agent 私有根/owner/二进制解析/路径竞态/回滚 UNKNOWN |
 | `2c1aee6` | 发布失败补偿身份持久化、DNS 部分清理保留、真实三阶段+任务闭环、供应商 secret callback 绑定、services-candidate 对齐 |
+| `dda43a1` | 工件上传绑定执行任务 ID（上传前 `CheckExecution`）+ wave6-r3 证据 |
+| `73dbebb` | 每网关显式私有 nginx 根，缺失在写路由前 fail closed |
+| `f8aa07b` | staticcheck 清理（未使用测试字段） |
 
 ## 已完成（对应 WAVE6-R3 DS 条目）
 
@@ -89,10 +92,12 @@ NGINX_BIN=C:/temp/nginx-portable/nginx.exe .tools/go/bin/go.exe test ./apps/agen
 .tools/go/bin/go.exe test ./internal/certificates -run 'Concurrent|CancelWins|RetryDueDoesNotDuplicate|StaleClaim|RecoverStale' -count=10
 → ok
 
-npm run check        → 通过（Go format/vet/staticcheck/build/test、web 341 tests、contracts、git diff）
+npm run check        → 通过（exit 0；Go format/vet/staticcheck/build/test、web 341 tests、contracts、git diff）
 npm run check:security → 0 vulnerabilities（npm audit + govulncheck）
 npx --no-install redocly lint api/openapi/revisions/v09-r7/services-candidate.yaml → valid
 ```
+
+最终 HEAD 复核：`npm run check` exit 0（`reports/final-check.log`）；`npm run check:security` exit 0（`reports/final-security.log`）。
 
 ## 剩余阻塞 / 未测
 
