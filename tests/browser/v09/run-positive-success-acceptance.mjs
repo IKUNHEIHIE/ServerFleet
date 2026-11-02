@@ -1593,7 +1593,7 @@ async function main() {
     for (const policy of ["overwrite", "rename"]) {
       await stepPass(`B01 ${policy} preserves real destination bytes and successful task evidence`, async () => {
         const expected = `${UPLOAD_SAMPLE_TEXT}|review-${policy}`;
-        await runCommand("wsl.exe", ["-d", distro, "--", "node", "-e",
+        await runCommand("wsl.exe", ["-d", distro, "--exec", "node", "-e",
           "require('node:fs').writeFileSync(process.argv[1],process.argv[2])",
           `${workDir}/fixtures/src/transfer-sample.txt`, expected]);
         const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
@@ -1611,10 +1611,10 @@ async function main() {
         const item=transfer?.items?.[0], original=`${workDir}/fixtures/dst/transfer-sample.txt`;
         if (transfer?.status!=="completed" || transfer.items.length!==1 || item?.status!=="copied") throw new Error(`${policy} did not copy: ${JSON.stringify(transfer).slice(0,300)}`);
         if (policy==="overwrite" && item.destinationPath!==original || policy==="rename" && item.destinationPath!==`${workDir}/fixtures/dst/transfer-sample (1).txt`) throw new Error(`${policy} wrong published path ${item.destinationPath}`);
-        await runCommand("wsl.exe", ["-d", distro, "--", "node", "-e",
+        await runCommand("wsl.exe", ["-d", distro, "--exec", "node", "-e",
           "const fs=require('node:fs');if(fs.readFileSync(process.argv[1],'utf8')!==process.argv[2])throw Error('destination bytes differ')",
           item.destinationPath, expected]);
-        if (policy==="rename") await runCommand("wsl.exe", ["-d", distro, "--", "node", "-e",
+        if (policy==="rename") await runCommand("wsl.exe", ["-d", distro, "--exec", "node", "-e",
           "const fs=require('node:fs');if(fs.readFileSync(process.argv[1],'utf8')!==process.argv[2])throw Error('rename replaced existing bytes')",
           original, `${UPLOAD_SAMPLE_TEXT}|review-overwrite`]);
         const task=await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${transfer.taskId}')`);
