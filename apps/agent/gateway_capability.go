@@ -123,6 +123,9 @@ func newGatewayCapability(config gatewayCapabilityConfig, runner gatewayCommandR
 	if err != nil || !binaryInfo.Mode().IsRegular() {
 		return nil, errGatewayCapability
 	}
+	if err := checkExecutableFile(binary, binaryInfo); err != nil {
+		return nil, errGatewayCapability
+	}
 	return &gatewayCapability{
 		prefix: config.Prefix, siteDir: config.SiteDir, artifactDir: config.ArtifactDir,
 		nginxBinary: binary, mainConfig: config.MainConfig, runner: runner,

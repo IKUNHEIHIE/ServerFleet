@@ -31,3 +31,10 @@ func checkPrivateFile(_ string, info os.FileInfo) error {
 	}
 	return nil
 }
+
+func checkExecutableFile(_ string, info os.FileInfo) error {
+	if info.Mode().Perm()&0o111 == 0 {
+		return errGatewayCapability
+	}
+	return nil
+}

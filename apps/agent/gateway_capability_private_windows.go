@@ -9,3 +9,5 @@ import "os"
 func checkPrivateRoot(string, os.FileInfo) error { return nil }
 
 func checkPrivateFile(string, os.FileInfo) error { return nil }
+
+func checkExecutableFile(string, os.FileInfo) error { return nil }
