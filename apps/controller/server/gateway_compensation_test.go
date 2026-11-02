@@ -140,6 +140,41 @@ func reviewGatewaySummary(t *testing.T, plan publishing.Plan, route gateway.Gate
 	return string(raw)
 }
 
+func TestGatewayApplyUsesConfiguredPrivatePaths(t *testing.T) {
+	plan := reviewGatewayPlan()
+	routes := &reviewRouteService{}
+	runner := &reviewTaskRunner{}
+	applier := &publicationGatewayApplier{
+		gateways: routes, tasks: runner, plans: reviewPlanLookup{plan: plan},
+		sitePaths: map[string]GatewayInstallPaths{
+			"gw-one": {SiteDir: "/srv/fleet/nginx/conf", ArtifactDir: "/srv/fleet/nginx/artifacts"},
+		},
+	}
+	if _, err := applier.Apply(context.Background(), plan, reviewGatewayRequest(), []string{"127.0.0.1:8080"}, "", ""); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(runner.lastSite.Path, "/srv/fleet/nginx/conf/") ||
+		!strings.HasPrefix(runner.lastSite.ArtifactPath, "/srv/fleet/nginx/artifacts/") {
+		t.Fatalf("rendered paths = %q / %q", runner.lastSite.Path, runner.lastSite.ArtifactPath)
+	}
+}
+
+func TestGatewayApplyRejectsMissingPrivatePathsBeforeRouteWrite(t *testing.T) {
+	plan := reviewGatewayPlan()
+	routes := &reviewRouteService{}
+	runner := &reviewTaskRunner{}
+	applier := &publicationGatewayApplier{
+		gateways: routes, tasks: runner, plans: reviewPlanLookup{plan: plan},
+		sitePaths: map[string]GatewayInstallPaths{"other-gateway": {SiteDir: "/srv/a", ArtifactDir: "/srv/b"}},
+	}
+	if _, err := applier.Apply(context.Background(), plan, reviewGatewayRequest(), []string{"127.0.0.1:8080"}, "", ""); !errors.Is(err, publishing.ErrProductionUnavailable) {
+		t.Fatalf("err = %v", err)
+	}
+	if routes.createCalls != 0 || runner.applyCalls != 0 {
+		t.Fatalf("missing paths wrote route/apply: %d/%d", routes.createCalls, runner.applyCalls)
+	}
+}
+
 func TestGatewayApplyRecordsExactTargetAndRouteRevision(t *testing.T) {
 	plan := reviewGatewayPlan()
 	routes := &reviewRouteService{}

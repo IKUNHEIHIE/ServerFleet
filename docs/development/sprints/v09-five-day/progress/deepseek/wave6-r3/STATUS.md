@@ -27,6 +27,7 @@
 - `apps/controller/server/gateway_tasks.go`
   - `GatewaySiteApplier.Apply/Rollback` 在路由写入、任务上传/执行、补偿前读取当前计划并比较 `TargetRevision`、网关、zone、证书、域名、服务组。
   - 发布失败仍返回带 `RouteCreated/RouteRevision/SitePath/Digest/PlanID/PlanTargetRevision` 的部分摘要；补偿只删除 `RouteCreated=true` 且 revision 未变化的路由；站点移除失败不删路由。
+  - `GatewayInstallPaths` 每网关显式 `SiteDir`/`ArtifactDir`，写入 Agent 私有 prefix；缺失时在写路由前 fail closed，不使用 `/etc/nginx` 默认值。
   - 删除 `TargetResourceID` 使用；`TargetType=node_ids`。
 - 测试：`gateway_review_test.go` 10 项（审批前零上传、awaiting 非成功、撤权、上传失败、UNKNOWN、上传前后 target revision 变化、上传中取消、同计划幂等、成功闭环）；`gateway_compensation_test.go` 9 项（外来摘要、新 revision 路由、站点移除失败、失败摘要可补偿等）。
 

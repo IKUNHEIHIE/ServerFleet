@@ -128,7 +128,6 @@ CLI/宿主需从**可信程序配置**填充上述五项并保证：
 ```
 
 文件：`apps/controller/server/server.go`（在 `tasks.NewService` 之前）
-
 ```go
 type lateTaskDispatcher struct {
 	mu    sync.RWMutex
@@ -186,6 +185,7 @@ if cfg.ProductionPublishing != nil {
 		Tasks: tasksService, TasksRepo: tasksRepo, DB: db,
 		Artifacts: cfg.GatewayArtifacts, NextDispatcher: agentBridge,
 		Authorizer: authorizer, CertificatePath: cfg.GatewayCertificatePaths,
+		GatewayPaths: cfg.GatewayInstallPaths,
 		ApprovalWait: cfg.GatewayApprovalWait, ExecutionWait: cfg.GatewayExecutionWait,
 		Poll: cfg.GatewayPoll, OnTaskSubmitted: cfg.GatewayTaskSubmitted,
 	})
@@ -208,8 +208,10 @@ if cfg.ProductionPublishing != nil {
   }
   ```
   实现必须：先 `tasks.CheckExecution(taskID, planHash)` 取得当前任务/审批/授权；用现有 Agent file channel 写入 `absolutePath` 对应的显式逻辑根（大小/SHA 精确）；不得写入任意 HTTP 路径，不得开 SSH/第二个执行队列，不得在失败后自动重试 UNKNOWN。
+- `ApprovalTTL` 应与 `tasks.Options.ApprovalTTL` 使用同一值（默认 30m），否则 dispatcher 的二次校验可能比任务服务更严或更松。
 - `NextDispatcher` 必须是原始 `agentBridge`，不能是 `lateDispatcher`（否则递归）。`lateDispatcher` 只供 `tasks.Service` 使用。
 - `cfg.ProductionPublishing == nil` 时保持现有 `cfg.PublishingBridge` 注入（测试/本地），不得把测试 bridge 当生产成功证据。
+- `GatewayInstallPaths` 必须是每网关显式私有目录（`SiteDir`/`ArtifactDir`），与 Agent 侧 `GatewaySiteDir`/`GatewayArtifactDir` 完全一致；缺失时 `NewProductionPublishingBridge` 返回 `ErrProductionUnavailable`，`Apply` 在写路由前失败。不得回退 `/etc/nginx` 默认值。
 - 未装配生产 bridge 时，网关任务仍会走 agentBridge 直接 dispatch：没有工件上传门；必须把它视为未启用发布执行器，不能对外宣称成功。
 
 文件：`apps/controller/server/server.go` `ExtraPermissions()`：

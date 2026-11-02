@@ -39,6 +39,13 @@ type CertificateInstallPaths struct {
 	PrivateKeyPath  string
 }
 
+// GatewayInstallPaths are the private Agent-side nginx roots for one gateway.
+// They must match the Agent capability's Prefix/SiteDir/ArtifactDir config.
+type GatewayInstallPaths struct {
+	SiteDir     string
+	ArtifactDir string
+}
+
 // ProductionPublishingConfig binds concrete DS owners to the production
 // publishing bridge. Missing dependencies keep that stage closed.
 type ProductionPublishingConfig struct {
@@ -55,6 +62,7 @@ type ProductionPublishingConfig struct {
 	NextDispatcher  tasks.Dispatcher
 	Authorizer      auth.Authorizer
 	CertificatePath map[string]CertificateInstallPaths
+	GatewayPaths    map[string]GatewayInstallPaths
 	Now             func() time.Time
 	ApprovalTTL     time.Duration
 	ApprovalWait    time.Duration
@@ -71,7 +79,8 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 	if config.Plans == nil || config.DNS == nil || config.Certificates == nil ||
 		config.Gateways == nil || config.Nodes == nil || config.ServiceGroups == nil ||
 		config.Tasks == nil || config.TasksRepo == nil || config.DB == nil ||
-		config.Artifacts == nil || config.NextDispatcher == nil || config.Authorizer == nil {
+		config.Artifacts == nil || config.NextDispatcher == nil || config.Authorizer == nil ||
+		len(config.GatewayPaths) == 0 {
 		return publishing.LocalBridge{}, nil, publishing.ErrProductionUnavailable
 	}
 	registry := newGatewayArtifactRegistry()
@@ -92,7 +101,10 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 	if err != nil {
 		return publishing.LocalBridge{}, nil, err
 	}
-	applier := &publicationGatewayApplier{gateways: config.Gateways, tasks: host, plans: publicationPlanLookup{repo: config.Plans}}
+	applier := &publicationGatewayApplier{
+		gateways: config.Gateways, tasks: host, plans: publicationPlanLookup{repo: config.Plans},
+		sitePaths: config.GatewayPaths,
+	}
 	bridge, err := publishing.NewProductionBridge(publishing.ProductionBridgeConfig{
 		Plans:     publicationPlanLookup{repo: config.Plans},
 		DNS:       publicationDNSWriter{service: config.DNS},
@@ -260,9 +272,10 @@ type gatewayTaskRunner interface {
 }
 
 type publicationGatewayApplier struct {
-	gateways gatewayRouteService
-	tasks    gatewayTaskRunner
-	plans    publishing.PlanLookup
+	gateways  gatewayRouteService
+	tasks     gatewayTaskRunner
+	plans     publishing.PlanLookup
+	sitePaths map[string]GatewayInstallPaths
 }
 
 func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.Plan, request publishing.GatewayRequest, upstreams []string, certificatePath, keyPath string) (string, error) {
@@ -279,6 +292,10 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 	plan = current
 	gatewayID := request.GatewayIDs[0]
 	record, err := a.gateways.GetGateway(ctx, request.SubjectID, gatewayID)
+	if err != nil {
+		return "", err
+	}
+	sitePaths, err := a.pathsFor(gatewayID)
 	if err != nil {
 		return "", err
 	}
@@ -308,6 +325,7 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		GatewayID: gatewayID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
 		ServiceGroupRevision: request.ExpectedGroupRevision, UpstreamHosts: upstreams,
 		HTTPS: request.HTTPS, CertificatePath: certificatePath, PrivateKeyPath: keyPath,
+		SiteDir: sitePaths.SiteDir, ArtifactDir: sitePaths.ArtifactDir,
 	})
 	if err != nil {
 		return gatewayPublicationState(gatewayPublicationSummary{
@@ -342,6 +360,18 @@ func gatewayPublicationState(summary gatewayPublicationSummary) string {
 		return ""
 	}
 	return string(raw)
+}
+
+func (a *publicationGatewayApplier) pathsFor(gatewayID string) (GatewayInstallPaths, error) {
+	if len(a.sitePaths) == 0 {
+		// Direct unit tests and non-production seam use the renderer defaults.
+		return GatewayInstallPaths{}, nil
+	}
+	paths, ok := a.sitePaths[gatewayID]
+	if !ok || paths.SiteDir == "" || paths.ArtifactDir == "" {
+		return GatewayInstallPaths{}, publishing.ErrProductionUnavailable
+	}
+	return paths, nil
 }
 
 func (a *publicationGatewayApplier) currentPlan(ctx context.Context, plan publishing.Plan) (publishing.Plan, error) {
