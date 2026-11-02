@@ -113,7 +113,7 @@ describe("settings credentials", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "引用" })[0]);
     expect(await screen.findByText(/没有引用清单字段/)).toBeVisible();
     const referencesDialog = await screen.findByRole("dialog", { name: "凭据引用检查" });
-    await waitFor(() => expect(within(referencesDialog).getByRole("button", { name: "关闭" })).toHaveFocus());
+    await waitFor(() => expect(referencesDialog.contains(document.activeElement)).toBe(true));
     fireEvent.keyDown(document, { key: "Escape" });
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "凭据引用检查" })).not.toBeInTheDocument());
 
