@@ -112,10 +112,13 @@ describe("settings credentials", () => {
     await screen.findByRole("button", { name: "引用" });
     fireEvent.click(screen.getAllByRole("button", { name: "引用" })[0]);
     expect(await screen.findByText(/没有引用清单字段/)).toBeVisible();
+    const referencesDialog = await screen.findByRole("dialog", { name: "凭据引用检查" });
+    await waitFor(() => expect(within(referencesDialog).getByRole("button", { name: "关闭" })).toHaveFocus());
     fireEvent.keyDown(document, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "凭据引用检查" })).not.toBeInTheDocument());
 
     fireEvent.click(screen.getAllByRole("button", { name: "轮换" })[0]);
-    const rotateDialog = await screen.findByRole("dialog");
+    const rotateDialog = await screen.findByRole("dialog", { name: "轮换凭据" });
     fireEvent.change(within(rotateDialog).getByLabelText("秘密值"), { target: { value: "new-secret" } });
     fireEvent.click(within(rotateDialog).getByRole("button", { name: "提交轮换" }));
     await vi.waitFor(() => {

@@ -75,6 +75,10 @@ func newGatewayTestEnv(t *testing.T) *gatewayTestEnv {
 
 func newGatewayTestEnvAt(t *testing.T, prefix string) *gatewayTestEnv {
 	t.Helper()
+	// The capability requires a private operator-owned root on Linux too.
+	if err := os.Chmod(prefix, 0o700); err != nil {
+		t.Fatal(err)
+	}
 	siteDir := filepath.Join(prefix, "conf")
 	artifactDir := filepath.Join(prefix, "artifacts")
 	mainConfig := filepath.Join(prefix, "nginx.conf")
