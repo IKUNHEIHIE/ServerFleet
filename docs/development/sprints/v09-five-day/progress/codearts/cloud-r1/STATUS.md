@@ -97,6 +97,22 @@ gofmt -l <新增文件>                                                # 空
 - `apps/agent/runtime` 的 `-gateway-prefix` / `-nginx-bin` 参数与 `connect.go` 注册调用属 Agent 入口，需 AgentMore/中央接线；本任务已提供可调用的 `newGatewayRegistration`。
 - `files.AgentFileChannel` 的生产实现（WSS 文件帧适配）仍缺失；当前 Uploader 通过注入的 `files.UploadTransport` 工作，本地组合用 `LocalStagingTransport` 验证真实字节，生产需可信程序注入真实通道。
 
+### CI 复验（head `75c5fce`）
+
+PR #2 触发 run 41526891590：
+
+- `dependencies` job：success。
+- `apps/agent` 包：PASS（20.457s）。
+- `TestGatewayCapabilityRealNginxIsolated`：PASS（0.35s）。
+- `TestActualWSSGatewayApplyReloadAndHTTPBytes`：PASS（0.27s）。
+
+第一次 PR run（41524264749，head `f00ab16`）在路径修复后暴露第二个真实失败：`EXECUTION_RESULT_UNKNOWN`。根因是夹具启动 nginx master 后立即 apply，慢速 runner 上 `nginx -s reload` 与 master 启动竞态，capability 正确返回 unknown 补偿结果。`75c5fce` 在两个真实 nginx 夹具中等待 pid 文件后再 apply；产品侧 unknown 语义与私有根检查未放宽，本地连续 3 轮 PASS。
+
+`foundation` job 仍为 failure，剩余原因均不在本任务写权限：
+
+1. `tests/integration/v09/platform`：`TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown`、`TestR3ActualProductAgentHTTPApprovedSignedInstallAndCompatibleRollback`（CX/AgentMore）。
+2. 契约检查：`no-unresolved-refs`、`operation-operationId-unique`、`path-parameters-defined`（OpenAPI/Redocly，契约负责人）。
+
 ## 尚未完成（保持 OPEN）
 
 - 整体 Foundation CI 仍为 FAIL：`tests/integration/v09/platform` 的三项（AgentMore/CX 范围）不在本任务写权限内，本任务不宣称 CI 全绿。
