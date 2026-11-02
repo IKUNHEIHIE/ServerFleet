@@ -1,0 +1,150 @@
+{
+  "task": "V09-CLOUD-WB-01",
+  "session": "workbuddy-01",
+  "scope": "Agent 组件本地签名更新 · 浏览器专项（不含 Controller 组件升级）",
+  "environment": {
+    "node": "v24.22.1",
+    "platform": "linux/x64",
+    "uid": 1000,
+    "work": "/home/ubuntu/sf-wb01-product-update",
+    "outDir": "/home/ubuntu/ServerFleet-WB01-parent/ServerFleet-WB01/reports/wb01-product-update",
+    "binaries": {
+      "fixturehost": "5dffb2f274eeca81b13ba7e30ad5f57ba07032c3d169eed6390a2c30581ac804",
+      "agent100": "9cc9c76a17fee40e13f13a28dc50cac9e185fd7150c0aafdcb881556cc38ffe2",
+      "agent101": "3a613a8fc6b472dea07b0a5e6ae3d40fdd2ebdba0f8a4c0259e27838a9019bdf"
+    },
+    "ports": {
+      "apiPort": 33957,
+      "webPort": 40717,
+      "aiPort": 40527,
+      "controlPort": 33701
+    },
+    "nodeId": "e933e20dcf41b94a4412e39da6e6fbbb",
+    "pidBefore": 631167,
+    "taskId": "tsk_744fbe4bcb9d3e6e02d35ed0",
+    "pidAfter": 631373
+  },
+  "results": [
+    {
+      "id": "P00",
+      "title": "构建真实 fixturehost 与两个真实 Agent 发布版本",
+      "status": "PASS",
+      "detail": "1.0.0=9cc9c76a17fee40e… 1.0.1=3a613a8fc6b472de…"
+    },
+    {
+      "id": "P01",
+      "title": "本地 CA 与服务端证书（localpki 兼容格式）",
+      "status": "PASS",
+      "detail": "ca/cert/ai-cert 已生成并经 openssl verify"
+    },
+    {
+      "id": "P02",
+      "title": "阶段 A 宿主就绪（正式 server.New + enrollment 链路）",
+      "status": "PASS",
+      "detail": "listening"
+    },
+    {
+      "id": "P03",
+      "title": "本机安装器写入 setup token 摘要（不落日志）",
+      "status": "PASS",
+      "detail": "digest seeded"
+    },
+    {
+      "id": "P04",
+      "title": "浏览器完成首次 bootstrap，再建立异人管理员账号",
+      "status": "PASS",
+      "detail": "admin=? approver=AB0NQokepK8Ir95MwKLYkfbFIHvuVyL-L6UJByOnHQs"
+    },
+    {
+      "id": "P05",
+      "title": "真实 Agent 接入令牌与 pending enrollment",
+      "status": "PASS",
+      "detail": "node=e933e20dcf41b94a4412e39da6e6fbbb cli={\"state\":\"pending\",\"expiresAt\":\"2026-11-02T21:00:29.539701162Z\"}"
+    },
+    {
+      "id": "P06",
+      "title": "管理员审批 enrollment 并签发身份（真实 mTLS）",
+      "status": "PASS",
+      "detail": "issued"
+    },
+    {
+      "id": "P07",
+      "title": "为两名管理员授予节点与更新权限",
+      "status": "PASS",
+      "detail": "grants=2"
+    },
+    {
+      "id": "P08",
+      "title": "真实发布构建入槽 + 合成 ed25519 签名 inbox",
+      "status": "PASS",
+      "detail": "initial=9cc9c76a17fee40e… target=13873107b"
+    },
+    {
+      "id": "P09",
+      "title": "阶段 B 宿主按真实库指纹装配 UpdateProduct 并启动受监督真实 Agent",
+      "status": "PASS",
+      "detail": "health 1.0.0 pid=631167 fingerprint=85e399e882eb"
+    },
+    {
+      "id": "P10",
+      "title": "浏览器：管理员进入更新中心",
+      "status": "PASS",
+      "detail": "updates page loaded"
+    },
+    {
+      "id": "P11",
+      "title": "浏览器：检查更新（真实 /check，签名与平台由服务端校验）",
+      "status": "PASS",
+      "detail": "check -> 1.0.1 available"
+    },
+    {
+      "id": "P12",
+      "title": "浏览器：生成冻结计划（dryRun）",
+      "status": "PASS",
+      "detail": "plan eligible"
+    },
+    {
+      "id": "P13",
+      "title": "浏览器：确认文本 + 风险勾选 → 一键更新（202 只代表受理）",
+      "status": "PASS",
+      "detail": "apply accepted (202)"
+    },
+    {
+      "id": "P14",
+      "title": "浏览器（异人管理员会话）：打开任务页并审批同一任务",
+      "status": "PASS",
+      "detail": "task=tsk_744fbe4bcb9d3e6e02d35ed0 approved by distinct administrator"
+    },
+    {
+      "id": "P15",
+      "title": "真实 Agent 版本与健康：completed 且进程被替换",
+      "status": "PASS",
+      "detail": "1.0.0(pid 631167) -> 1.0.1(pid 631373)"
+    },
+    {
+      "id": "P16",
+      "title": "槽位字节与 1.0.1 发布构建 SHA 一致（真实安装而非状态伪造）",
+      "status": "PASS",
+      "detail": "active=3a613a8fc6b472de…"
+    },
+    {
+      "id": "P17",
+      "title": "作业/任务终态与审计持久（服务端为准）",
+      "status": "PASS",
+      "detail": "job=tsk_744fbe4bcb9d3e6e02d35ed0 status=completed task=tsk_744fbe4bcb9d3e6e02d35ed0"
+    },
+    {
+      "id": "P18",
+      "title": "负向：工件与清单 SHA 不一致的 1.0.2 必须失败且不替换当前产品",
+      "status": "PASS",
+      "detail": "plan rejected (UPDATE_PLANNER_UNAVAILABLE); no job, product still 1.0.1 pid 631373"
+    },
+    {
+      "id": "P19",
+      "title": "重启宿主：已安装版本与作业终态持久，未知结果不重放",
+      "status": "PASS",
+      "detail": "restored 1.0.1 pid 631572; completed job durable"
+    }
+  ],
+  "failed": false
+}

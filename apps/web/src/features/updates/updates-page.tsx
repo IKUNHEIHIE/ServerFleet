@@ -62,9 +62,12 @@ export function ControllerUpdatePanel() {
   const detailAction = useAction((jobId: string) => updatesApi.job(jobId));
 
   const planBlocked = plan ? !plan.eligible || (plan.preflightChecks ?? []).some(item => !item.passed) : true;
-  const backupBlocked = Boolean(plan?.backupRequired) && !jobItems.some(job => job.backupId);
+  // 备份由服务端在 backing_up 阶段依据 backupMode:"required" 生成并回写 backupId；
+  // 页面不能因为“历史作业里还没有 backupId”就把一键更新永久禁用——那会让第一次
+  // 真实升级永远无法发起。这里只如实提示，不代替服务端做前置判定。
+  const backupPending = Boolean(plan?.backupRequired);
   const confirmationMatches = Boolean(plan) && confirmation.trim() === plan?.targetVersion;
-  const applyDisabled = !canManage || writesLocked || planBlocked || backupBlocked || !confirmationMatches || !riskAccepted || applyAction.pending;
+  const applyDisabled = !canManage || writesLocked || planBlocked || !confirmationMatches || !riskAccepted || applyAction.pending;
 
   async function runCheck(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -225,9 +228,10 @@ export function ControllerUpdatePanel() {
             <form onSubmit={runApply} className="space-y-3 rounded-lg border px-4 py-3">
               {applyAction.error ? <Notice tone="error" title="创建升级作业失败">{describeApiError(applyAction.error)}</Notice> : null}
               {planBlocked ? <Notice tone="warning" title="计划不可执行">计划不合格或存在未通过的预检项；服务端应拒绝安装。</Notice> : null}
-              {backupBlocked ? (
-                <Notice tone="warning" title="缺少可验证备份">
-                  计划要求备份（backupMode 固定 `required`），但更新作业历史中没有服务端返回的 backupId。备份记录列表/创建端点缺失（见 SHARED-CHANGES §4），本页不伪造备份成功。
+              {backupPending ? (
+                <Notice tone="warning" title="本次升级需要备份">
+                  计划要求备份（backupMode 固定 `required`）；备份由服务端在 backing_up 阶段创建并回写 backupId，
+                  页面不预造备份记录，也不把“尚无 backupId”当成已经备份成功。
                 </Notice>
               ) : null}
               <Field label="确认文本" hint={`必须逐字输入目标版本 ${plan.targetVersion}；不得由模型或脚本自批准。`}>
