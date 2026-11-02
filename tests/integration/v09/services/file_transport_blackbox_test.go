@@ -31,16 +31,16 @@ func baseFileParameters(direction string) map[string]string {
 }
 
 // TestCXFileTransportExplicitUnsupportedPolicies is a black-box handoff for the
-// CX file path: currently only new-file/skip is implemented. These assertions
-// must keep failing closed until CX implements or explicitly rejects the wider
-// policy set; DS does not modify internal/files this round.
+// CX file path. Skip/overwrite/rename are now admitted and implemented by the
+// Agent; every other ambiguous or unsafe request must still fail closed. This
+// file is CX-relevant but lives in the services suite, so the integration owner
+// should review the adjusted expectations.
 func TestCXFileTransportExplicitUnsupportedPolicies(t *testing.T) {
 	cases := []struct {
 		name   string
 		mutate func(map[string]string)
 	}{
-		{"overwrite policy", func(v map[string]string) { v["conflictPolicy"] = "overwrite" }},
-		{"rename policy", func(v map[string]string) { v["conflictPolicy"] = "rename" }},
+		{"unknown policy", func(v map[string]string) { v["conflictPolicy"] = "replace" }},
 		{"create parents", func(v map[string]string) { v["createParents"] = "true" }},
 		{"read with size but no digest", func(v map[string]string) { v["direction"] = "read"; v["size"] = "1"; v["sha256"] = "" }},
 		{"write without digest", func(v map[string]string) { v["direction"] = "write"; v["size"] = "42"; v["sha256"] = "" }},
@@ -60,15 +60,19 @@ func TestCXFileTransportExplicitUnsupportedPolicies(t *testing.T) {
 	}
 }
 
-func TestCXFileTransportAcceptsOnlyCurrentReadAndSkipWrite(t *testing.T) {
+func TestCXFileTransportAcceptsReadAndReviewedWritePolicies(t *testing.T) {
 	read := baseFileParameters("read")
 	if _, err := transport.ParseFileParameters(fileParameterJSON(read)); err != nil {
 		t.Fatalf("supported read rejected: %v", err)
 	}
-	write := baseFileParameters("write")
-	if _, err := transport.ParseFileParameters(fileParameterJSON(write)); err != nil {
-		t.Fatalf("supported write rejected: %v", err)
+	for _, policy := range []string{"skip", "overwrite", "rename"} {
+		write := baseFileParameters("write")
+		write["conflictPolicy"] = policy
+		if got, err := transport.ParseFileParameters(fileParameterJSON(write)); err != nil || got.ConflictPolicy != policy {
+			t.Fatalf("reviewed write policy rejected: %s %v", policy, err)
+		}
 	}
+	write := baseFileParameters("write")
 	write["transferId"] = "transfer:with-colon"
 	if _, err := transport.ParseFileParameters(fileParameterJSON(write)); err == nil {
 		t.Fatal("colon transfer id accepted")
