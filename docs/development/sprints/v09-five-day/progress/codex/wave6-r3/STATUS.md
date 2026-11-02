@@ -60,6 +60,16 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 - 首次把期望写成 `failed`、实测 `unknown` 的失败日志保留为 `reports/wave6-r3/product-schema-expectation-fail.log`，随后按真实终态改为 UNKNOWN，未放宽断言。
 - 证据：R3 开发组合 **2 PASS / 0 SKIP**（HEAD `8af6f57` 加本增量，DIRTY DEVELOPMENT）；`internal/updates` 原生 Linux 全 PASS。仍未覆盖真实进程崩溃后的全新进程恢复与不可逆迁移的实际回滚，只有当前 schema 漂移拒绝与残留标记拒启动。
 
+## 第五增量：真实统一任务链的 overwrite/rename
+
+此前 Agent 已实现三种策略，但 Controller 的 `FileExecutionWorker` 仍硬编码只接受 `skip`（plan/params/decode/live/Gate/open 五处），因此真实产品 API 无法使用 overwrite/rename。本增量：
+
+- `apps/controller/server/file_worker.go`：`fileTaskPlan` 携带并冻结 `ConflictPolicy`；plan/decode/live/Gate/open 全部按受审策略校验；Agent 回传的 rename 路径必须与计划路径同目录（经显式 PathMapper 转绝对路径比较），否则拒绝；`copyItem` 把实际发布路径写回 transfer item 的 `DestinationPath`。
+- `tests/integration/v09/platform/file_cli_r3_test.go`：在真实 Controller CLI + 两个实际 Agent CLI 的既有 skip 流程后，再通过 `/api/v1/transfers` 统一任务链执行 overwrite（原地替换、字节校验）与 rename（得到 `/target/out/source (1).bin`、原文件保留、API item 路径更新）。
+- R3 开发组合仍 **2 PASS / 0 SKIP**（HEAD `5ceadcc` 加本增量，DIRTY DEVELOPMENT）；`apps/controller/server` 与架构检查 Windows PASS。
+
+仍缺：>16 项/多目标分发、断连续传跨主控重启、真实 ENOSPC/inode 专项；rename 冲突耗尽（32 次）只返回 UNKNOWN，没有专门产品级测试。
+
 ## 剩余（继续独立推进）
 
 - 本增量新CLI+product两个中央patch待总控接收；不等待共享patch而停止其他独立项。

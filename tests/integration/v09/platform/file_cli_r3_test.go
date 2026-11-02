@@ -284,6 +284,71 @@ func TestR3TrustedFileDeploymentActualControllerAndTwoAgentCLI(t *testing.T) {
 			t.Fatal("target bytes/SHA differ", err)
 		}
 	}
+	runTransfer := func(body map[string]any) files.Transfer {
+		t.Helper()
+		raw := client.must("POST", "/api/v1/transfers", body, 202)
+		var created struct{ ID, TaskID string }
+		json.Unmarshal(raw, &created)
+		deadline := time.Now().Add(20 * time.Second)
+		for {
+			raw = client.must("GET", "/api/v1/tasks/"+created.TaskID, nil, 200)
+			var task struct {
+				State tasks.TaskStatus `json:"state"`
+			}
+			json.Unmarshal(raw, &task)
+			if task.State.Terminal() {
+				if task.State != tasks.StatusCompleted {
+					t.Fatal("policy transfer did not complete", string(raw), readLogTail(p.log))
+				}
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatal("policy transfer timed out", string(raw))
+			}
+			time.Sleep(30 * time.Millisecond)
+		}
+		raw = client.must("GET", "/api/v1/transfers/"+created.ID, nil, 200)
+		var tr files.Transfer
+		json.Unmarshal(raw, &tr)
+		if tr.Status != files.TransferCompleted {
+			t.Fatal(string(raw))
+		}
+		return tr
+	}
+	// Overwrite replaces the existing target through the unified task/approval
+	// path; rename publishes to a reported sibling and leaves the original.
+	overwrite := bytes.Repeat([]byte("o"), 65000)
+	if err = os.WriteFile(filepath.Join(roots[0], "source.bin"), overwrite, 0600); err != nil {
+		t.Fatal(err)
+	}
+	policyBase := map[string]any{"sourceNodeId": nodes[0], "destinationNodeId": nodes[1], "sourcePaths": []string{"/source/source.bin"}, "destinationDir": "/target/out"}
+	overwriteBody := map[string]any{}
+	for key, value := range policyBase {
+		overwriteBody[key] = value
+	}
+	overwriteBody["conflictPolicy"] = "overwrite"
+	tr := runTransfer(overwriteBody)
+	if len(tr.Items) != 1 || tr.Items[0].Status != files.ItemCopied || tr.Items[0].DestinationPath != "/target/out/source.bin" {
+		t.Fatal("overwrite item", string(raw))
+	}
+	if got, e := os.ReadFile(filepath.Join(roots[1], "out", "source.bin")); e != nil || !bytes.Equal(got, overwrite) {
+		t.Fatal("overwrite target bytes", e)
+	}
+	renameBody := map[string]any{}
+	for key, value := range policyBase {
+		renameBody[key] = value
+	}
+	renameBody["conflictPolicy"] = "rename"
+	tr = runTransfer(renameBody)
+	if len(tr.Items) != 1 || tr.Items[0].Status != files.ItemCopied || tr.Items[0].DestinationPath != "/target/out/source (1).bin" {
+		t.Fatal("rename item", string(raw))
+	}
+	if got, e := os.ReadFile(filepath.Join(roots[1], "out", "source (1).bin")); e != nil || !bytes.Equal(got, overwrite) {
+		t.Fatal("renamed target bytes", e)
+	}
+	if got, e := os.ReadFile(filepath.Join(roots[1], "out", "source.bin")); e != nil || !bytes.Equal(got, overwrite) {
+		t.Fatal("rename replaced the original", e)
+	}
 	bad := map[string]any{}
 	for key, value := range transferBody {
 		bad[key] = value
