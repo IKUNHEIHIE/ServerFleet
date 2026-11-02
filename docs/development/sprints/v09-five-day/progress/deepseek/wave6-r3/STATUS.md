@@ -17,6 +17,7 @@
 | `dda43a1` | 工件上传绑定执行任务 ID（上传前 `CheckExecution`）+ wave6-r3 证据 |
 | `73dbebb` | 每网关显式私有 nginx 根，缺失在写路由前 fail closed |
 | `f8aa07b` | staticcheck 清理（未使用测试字段） |
+| `94ffe16` | Unix 下 nginx 可执行来源要求 executable bit |
 
 ## 已完成（对应 WAVE6-R3 DS 条目）
 
