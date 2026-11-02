@@ -5,7 +5,7 @@
 | AC | 本轮证据 | 状态与边界 |
 |---|---|---|
 | AC-01 节点接入/身份/生命周期 | P01–P08、P15–P17：真实 Controller + 真实 Linux Agent 的 bootstrap、一次性令牌、pending→approve→issued、WSS+mTLS 在线/离线、审计；Node 页显示服务端真值 | 真实页面正常链路 PASS；过期/重复凭据、坏 CA、身份撤销由既有 70 步与后端用例覆盖，本增量未新增外部实机项 |
-| AC-03 文件互传 | **B01**：页面创建 transfer → 统一任务 → 两个真实常驻 Agent（各自私有 `-file-root`）→ 目标字节 SHA-256 与源一致 → transfer/task 双方执行终态；**B01n**：取消（cancelled）、撤权（failed，撤权期间读取 403）、目标 Agent 写入中断/丢回执（failed，重启后仍不 completed、不重放）；失败不冒充成功 | 正常、取消、撤权、丢回执均 PASS（真实页面 + 真实进程）；遍历/symlink、续传、多文件部分结果仍属后端/后续项 |
+| AC-03 文件互传 | **B01**：页面创建 transfer → 统一任务 → 两个真实常驻 Agent（各自私有 `-file-root`）→ 目标字节 SHA-256 与源一致 → transfer/task 双方执行终态；**B01n**：取消（cancelled）、撤权（failed，撤权期间读取 403）、目标 Agent 写入中断/丢回执（failed，重启后仍不 completed、不重放）、多文件缺源（failed，逐项如实）、路径遍历 source/destination 400、overwrite 策略 400；失败不冒充成功 | 正常与上述负向均 PASS（真实页面 + 真实进程）；断连续传、symlink 竞态、多文件成功+失败混合的 `partial_failure` 仍属后端/后续项 |
 | AC-05 批量任务 | P09/P10（标准任务真实执行）、P13（peer-approved host.patch 被 Agent 拒绝、页面显示失败）、B01n（取消不冒充回滚）、P14（撤权后 403 不清会话） | 真实页面正常/负向 PASS；批次/金丝雀/审批失效由既有 70 步覆盖，本增量未改 |
 | AC-10/11 AI 授权与审批 | B02 真实 TLS 上游生成 + 真实 AIBudget；**P20** owner 预算窗口/限额/已用/剩余与管理员 CAS，服务端计数跨重配保留；缺策略拒绝在组件测试中断言 | 页面与 API PASS；AI 任意 root shell 的真人管理员审批仍按原有证据，本增量未放宽 |
 | AC-13 更新中心 | B05 调用真实 `/system/updates/check` 得到 503 `UPDATE_SOURCE_UNAVAILABLE`；页面新增专门说明（检查/安装都不算成功）并有回归测试 | **BLOCKED**：缺正式更新源/签名安装装配；无外部实机证据 |

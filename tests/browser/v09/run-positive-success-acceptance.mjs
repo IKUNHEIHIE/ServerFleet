@@ -1510,6 +1510,87 @@ async function main() {
       await screenshot(session, join(outDir, "positive-b01n-cancel.png"));
       return `cancel ${transferId} -> ${status}; no copied item; parent task is not completed (cancel is not a rollback claim)`;
     });
+
+    await stepPass("B01n multi-file transfer reports a missing source as failure, never success", async () => {
+      // 两个源文件，其中一个不存在：计划/统一任务仍走真实链路，终态必须失败并逐项如实，
+      // 不能因为另一个文件已复制就显示 completed。
+      await runCommand("wsl.exe", ["-d", distro, "--", "sh", "-c",
+        `head -c 1048576 /dev/urandom > ${workDir}/fixtures/src/multi-ok.bin && rm -f ${workDir}/fixtures/dst/multi-ok.bin ${workDir}/fixtures/src/multi-missing.bin`]);
+      const created = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}, ${JSON.stringify(workDir + "/fixtures/src/multi-missing.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-multi-create-01" })`);
+      if (![200, 201, 202].includes(created.status)) {
+        throw new Error(`multi transfer create ${created.status}: ${JSON.stringify(created.body).slice(0, 220)}`);
+      }
+      const transferId = created.body?.id ?? created.body?.transferId;
+      const taskId = created.body?.taskId;
+      if (!transferId || typeof taskId !== "string") throw new Error("multi transfer ids missing");
+      let job = null;
+      for (let attempt = 0; attempt < 120; attempt += 1) {
+        await sleep(500);
+        job = await evaluate(session, `(${PAGE_FETCH})('/api/v1/transfers/${transferId}')`);
+        const status = job?.status;
+        if (["completed", "partial_failure", "failed", "cancelled", "canceled"].includes(status)) break;
+      }
+      const status = job?.status;
+      if (!["failed", "partial_failure", "unknown"].includes(status)) {
+        throw new Error(`missing source produced terminal status ${JSON.stringify(status)} (${transferId})`);
+      }
+      const items = Array.isArray(job.items) ? job.items : [];
+      if (items.length !== 2) throw new Error(`expected 2 item results, got ${items.length}`);
+      const missing = items.find(item => item.sourcePath?.endsWith("multi-missing.bin"));
+      if (!missing || missing.status === "copied") {
+        throw new Error(`missing source was reported as copied: ${JSON.stringify(missing ?? null).slice(0, 200)}`);
+      }
+      if (items.every(item => item.status === "copied")) {
+        throw new Error("all items reported copied despite a missing source");
+      }
+      const task = await evaluate(session, `(${PAGE_FETCH})('/api/v1/tasks/${taskId}')`);
+      const taskState = task?.state ?? task?.job?.state;
+      if (taskState === "completed") throw new Error(`missing source left the parent task completed (${taskId})`);
+      await screenshot(session, join(outDir, "positive-b01n-multi-failure.png"));
+      return `multi-file transfer ${transferId} -> ${status}; missing source item is ${missing.status}; task ${taskState} is not completed`;
+    });
+
+    await stepPass("B01n traversal paths and non-skip policies are rejected before execution", async () => {
+      // 路径遍历必须在建任务前拒绝；overwrite/rename 当前未被 worker 支持，也必须显式拒绝，
+      // 不能静默退化成 skip。
+      const traversal = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/../../outside.txt")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-traversal-source-01" })`);
+      if (![400, 403, 409, 422].includes(traversal.status)) {
+        throw new Error(`source traversal was not rejected: ${traversal.status} ${JSON.stringify(traversal.body).slice(0, 200)}`);
+      }
+      const destinationTraversal = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst/../../outside")},
+        conflictPolicy: "skip",
+      }, { "Idempotency-Key": "positive-w6r3-traversal-dest-01" })`);
+      if (![400, 403, 409, 422].includes(destinationTraversal.status)) {
+        throw new Error(`destination traversal was not rejected: ${destinationTraversal.status} ${JSON.stringify(destinationTraversal.body).slice(0, 200)}`);
+      }
+      const overwrite = await evaluate(session, `(${PAGE_WRITE})('/api/v1/transfers', 'POST', {
+        sourceNodeId: ${JSON.stringify(nodeId)},
+        sourcePaths: [${JSON.stringify(workDir + "/fixtures/src/multi-ok.bin")}],
+        destinationNodeId: ${JSON.stringify(nodeId2)},
+        destinationDir: ${JSON.stringify(workDir + "/fixtures/dst")},
+        conflictPolicy: "overwrite",
+      }, { "Idempotency-Key": "positive-w6r3-policy-overwrite-01" })`);
+      if (![400, 403, 409, 422].includes(overwrite.status)) {
+        throw new Error(`unsupported overwrite policy was not rejected: ${overwrite.status} ${JSON.stringify(overwrite.body).slice(0, 200)}`);
+      }
+      return `traversal source=${traversal.status}, destination=${destinationTraversal.status}; overwrite=${overwrite.status}; no task accepted`;
+    });
   }
 
   await attemptPositive("B02 AI generation reaches a terminal assistant message", async () => {

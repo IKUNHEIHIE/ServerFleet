@@ -19,7 +19,11 @@
 | CP-1 | `92eb5ecdddc81566ed365e9c1806fbcfe11c389d` | AI 预算正式界面：owner 窗口/限额/已用/剩余，管理员 CAS、409、只读、缺策略拒绝 | `tsc --noEmit` PASS；`check:web` PASS（Web 345/345）；新增 `ai-budget.test.tsx` 4/4 |
 | CP-2 | `ba60e55469662fece4858a6756c6b6d8338b9d94` | B01 真实文件页面闭环：fixturehost 注入文件 worker/私有 spool/受控根注册表；双常驻 Agent 私有 file-root；B01 终态断言；预算 P20 浏览器步骤 | 严格正向 `--ai-host --attempt-file-flow --require-complete`：23 PASS / 4 BLOCKED / 0 FAIL；B01、P20 PASS；Go 构建/vet PASS |
 | CP-3 | `2c3a1b0c237ea8b0c5299b4d1526d166138ebb15` | B01 取消负向：页面创建 32MiB 传输 → 任务 running → 页面取消；终态 cancelled、无 copied 项、父任务非 completed；授权显式增加 `tasks.cancel` | 严格正向：24 PASS / 4 BLOCKED / 0 FAIL（28 步），B01/B01n/P20 PASS；真实 Controller 回归 70/70；契约桩 16/16 |
-| CP-4 | 本提交（见 `git log -1`） | B01 撤权与丢回执负向；B06n 第二隔离 Controller 宿主；更新中心/插件目录的阻塞错误说明 | **27 PASS / 4 BLOCKED / 0 FAIL（31 步）**；B01n×3、B06n、P20 PASS；桩 16/16、真实 70/70；Web 347/347 |
+| CP-4 | `35e0c7f`（负向/宿主）/ `d2d2f14`（Web） | B01 撤权/丢回执/多文件失败/路径遍历/非 skip 策略负向；B06n 第二隔离 Controller 宿主；更新中心/插件目录的阻塞错误说明 | **29 PASS / 4 BLOCKED / 0 FAIL（33 步）**；桩 16/16、真实 70/70、Web 347/347 |
+
+## 已发现、待后端修复
+
+- queued 阶段取消可能停在 `cancelling`（20s 未收敛）；测试改为 task running 后再取消。最小复现与归属见 `HANDOFF.md`。
 
 ## 未完成/阻塞（滚动更新）
 
