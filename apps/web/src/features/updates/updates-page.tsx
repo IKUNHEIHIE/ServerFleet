@@ -131,6 +131,11 @@ export function ControllerUpdatePanel() {
       <Panel title="检查更新" description="POST /api/v1/system/updates/check；检查只读取版本清单，不安装、不自动重启、不静默升级。">
         <form onSubmit={runCheck} className="space-y-3 px-5 py-4">
           {checkAction.error ? <Notice tone="error" title="检查失败">{describeApiError(checkAction.error)}</Notice> : null}
+          {checkAction.error?.code === "UPDATE_SOURCE_UNAVAILABLE" ? (
+            <Notice tone="warning" title="发行源未配置（B05 硬依赖）">
+              服务端没有可信发行源：检查与安装都不能视为成功。需要正式签名发行源、冻结计划与安装装配端口后再验收。
+            </Notice>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="发布通道">
               {ids => (
@@ -170,6 +175,11 @@ export function ControllerUpdatePanel() {
       <Panel title="升级计划与一键更新" description="POST /api/v1/system/updates/plan → /apply；计划不合格、预检失败或需要备份而没有备份时不能创建作业。">
         <form onSubmit={runPlan} className="space-y-3 border-b px-5 py-4">
           {planAction.error ? <Notice tone="error" title="生成计划失败">{describeApiError(planAction.error)}</Notice> : null}
+          {planAction.error?.code === "UPDATE_PLANNER_UNAVAILABLE" ? (
+            <Notice tone="warning" title="升级计划器未装配">
+              服务端缺少冻结计划/兼容解析端口；本页不会用客户端推断替代服务端计划。
+            </Notice>
+          ) : null}
           <div className="grid gap-3 sm:grid-cols-3">
             <Field label="目标版本" hint="来自检查结果或服务端版本清单；不接受通配或“latest”。">
               {ids => <TextInput id={ids.inputId} value={targetVersion} onChange={event => setTargetVersion(event.target.value)} disabled={!canManage || writesLocked} required />}
