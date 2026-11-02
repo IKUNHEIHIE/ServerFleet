@@ -30,13 +30,12 @@ func (l reviewCredentialLookup) LookupProviderCredential(context.Context, string
 }
 
 type reviewCredentialUse struct {
-	mu       sync.Mutex
-	ops      []auth.CredentialOperation
-	calls    int
-	secret   string
-	err      error
-	zeroed   bool
-	consumeE error
+	mu     sync.Mutex
+	ops    []auth.CredentialOperation
+	calls  int
+	secret string
+	err    error
+	zeroed bool
 }
 
 func (c *reviewCredentialUse) UseForService(ctx context.Context, op auth.CredentialOperation, consume func(context.Context, []byte) error) error {
