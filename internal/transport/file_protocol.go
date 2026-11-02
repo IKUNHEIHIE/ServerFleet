@@ -48,6 +48,20 @@ func FileDigest(s string) bool {
 func FilePath(s string) bool {
 	return fs.ValidPath(s) && s != "." && len(s) <= 1024 && !strings.ContainsAny(s, "\\:\x00") && !strings.HasPrefix(s, ".sf-")
 }
+
+// ValidFileConflictPolicy admits the three reviewed policies. The transfer plan
+// freezes one policy; a rename reply may carry the actual sibling path.
+func ValidFileConflictPolicy(policy string) bool {
+	return policy == "skip" || policy == "overwrite" || policy == "rename"
+}
+
+// fileDirectory returns the explicit parent of a validated relative file path.
+func fileDirectory(value string) string {
+	if i := strings.LastIndex(value, "/"); i >= 0 {
+		return value[:i]
+	}
+	return ""
+}
 func ParseFileParameters(raw []byte) (FileParameters, error) {
 	var p FileParameters
 	if len(raw) == 0 || len(raw) > 4096 {
@@ -92,7 +106,7 @@ func ParseFileParameters(raw []byte) (FileParameters, error) {
 			return p, ErrLinkRejected
 		}
 	}
-	if len(keys) != 7 || !FileID(p.TransferID) || !FilePath(p.RelativePath) || p.Size > FileMaxBytes || (p.Direction != "read" && p.Direction != "write") || p.Direction == "write" && !FileDigest(p.SHA256) || p.Direction == "read" && p.SHA256 != "" && !FileDigest(p.SHA256) || (p.SHA256 == "" && p.Size != 0) || p.ConflictPolicy != "skip" || p.CreateParents {
+	if len(keys) != 7 || !FileID(p.TransferID) || !FilePath(p.RelativePath) || p.Size > FileMaxBytes || (p.Direction != "read" && p.Direction != "write") || p.Direction == "write" && !FileDigest(p.SHA256) || p.Direction == "read" && p.SHA256 != "" && !FileDigest(p.SHA256) || (p.SHA256 == "" && p.Size != 0) || !ValidFileConflictPolicy(p.ConflictPolicy) || p.CreateParents {
 		return p, ErrLinkRejected
 	}
 	return p, nil
@@ -145,7 +159,7 @@ func (v semanticValidator) filePayload(payload proto.Message) error {
 	}
 	switch m := payload.(type) {
 	case *agentv1.FileOpenRequest:
-		if !ids(m.TaskId, m.ExecutionId, m.TransferId) || !FilePath(m.RelativePath) || !FileDigest(m.PlanDigestSha256) || m.Size > FileMaxBytes || m.ResumeOffset > m.Size || (m.Direction != "read" && m.Direction != "write") || m.ConflictPolicy != "skip" || m.CreateParents || m.Direction == "write" && !FileDigest(m.Sha256) || m.Direction == "read" && m.Sha256 != "" && !FileDigest(m.Sha256) {
+		if !ids(m.TaskId, m.ExecutionId, m.TransferId) || !FilePath(m.RelativePath) || !FileDigest(m.PlanDigestSha256) || m.Size > FileMaxBytes || m.ResumeOffset > m.Size || (m.Direction != "read" && m.Direction != "write") || !ValidFileConflictPolicy(m.ConflictPolicy) || m.CreateParents || m.Direction == "write" && !FileDigest(m.Sha256) || m.Direction == "read" && m.Sha256 != "" && !FileDigest(m.Sha256) {
 			return bad()
 		}
 	case *agentv1.FileOpenReply:

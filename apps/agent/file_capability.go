@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -24,6 +25,7 @@ const agentFileChunkBytes = 32 << 10
 // gates. A browser cannot register a gate or choose the local root directory.
 type agentFileBinding struct {
 	TaskID, ExecutionID, TransferID, NodeID, RelativePath, SHA256, Direction string
+	ConflictPolicy                                                           string
 	Size                                                                     int64
 }
 type agentFileGate func(context.Context, agentFileBinding, string) error
@@ -58,8 +60,21 @@ func (f *agentFileCapability) Close() error {
 }
 func validAgentFileBinding(b agentFileBinding, direction string) bool {
 	h, err := hex.DecodeString(b.SHA256)
-	return executionIDPattern.MatchString(b.TaskID) && executionIDPattern.MatchString(b.ExecutionID) && executionIDPattern.MatchString(b.TransferID) && executionIDPattern.MatchString(b.NodeID) && b.Direction == direction && fs.ValidPath(b.RelativePath) && b.RelativePath != "." && !strings.Contains(b.RelativePath, "\\") && !strings.Contains(b.RelativePath, ":") && !strings.HasPrefix(b.RelativePath, ".sf-") && len(b.RelativePath) <= 1024 && b.Size >= 0 && b.Size <= 64<<20 && err == nil && len(h) == 32 && hex.EncodeToString(h) == b.SHA256
+	return executionIDPattern.MatchString(b.TaskID) && executionIDPattern.MatchString(b.ExecutionID) && executionIDPattern.MatchString(b.TransferID) && executionIDPattern.MatchString(b.NodeID) && b.Direction == direction && validAgentConflictPolicy(b.ConflictPolicy) && fs.ValidPath(b.RelativePath) && b.RelativePath != "." && !strings.Contains(b.RelativePath, "\\") && !strings.Contains(b.RelativePath, ":") && !strings.HasPrefix(b.RelativePath, ".sf-") && len(b.RelativePath) <= 1024 && b.Size >= 0 && b.Size <= 64<<20 && err == nil && len(h) == 32 && hex.EncodeToString(h) == b.SHA256
 }
+
+func validAgentConflictPolicy(policy string) bool {
+	return policy == "skip" || policy == "overwrite" || policy == "rename"
+}
+
+type agentFileKind int
+
+const (
+	agentDestinationMissing agentFileKind = iota
+	agentDestinationRegular
+	agentDestinationOther
+)
+
 func (f *agentFileCapability) check(ctx context.Context, b agentFileBinding, phase string) (err error) {
 	defer func() {
 		if recover() != nil {
@@ -96,6 +111,81 @@ func hashAgentFile(file *os.File, size int64, digest string) error {
 	}
 	return nil
 }
+
+// resolveWriteDestination applies the plan's conflict policy before any bytes
+// move. Skip/overwrite/rename may only touch a non-symlink regular file; a
+// rename target is chosen once and reused from the private partial binding on
+// resume.
+func (f *agentFileCapability) resolveWriteDestination(ctx context.Context, b agentFileBinding) (agentFileBinding, bool, error) {
+	if b.ConflictPolicy == "rename" {
+		if prior, ok := f.priorWritePath(b); ok {
+			b.RelativePath = prior
+		}
+	}
+	if f.check(ctx, b, "stat") != nil || f.safePath(b.RelativePath, true) != nil {
+		return b, false, errFileCapability
+	}
+	kind, err := agentFileDestination(f.root, b.RelativePath)
+	if err != nil {
+		return b, false, errFileCapability
+	}
+	switch {
+	case kind == agentDestinationMissing:
+		return b, false, nil
+	case kind != agentDestinationRegular:
+		return b, false, errFileCapability
+	case b.ConflictPolicy == "skip":
+		return b, true, nil
+	case b.ConflictPolicy == "overwrite":
+		return b, false, nil
+	}
+	dir, name := "", b.RelativePath
+	if i := strings.LastIndex(name, "/"); i >= 0 {
+		dir, name = name[:i+1], name[i+1:]
+	}
+	stem, ext := name, ""
+	if i := strings.LastIndex(name, "."); i > 0 {
+		stem, ext = name[:i], name[i:]
+	}
+	for index := 1; index <= 32; index++ {
+		candidate := fmt.Sprintf("%s%s (%d)%s", dir, stem, index, ext)
+		if len(candidate) > 1024 {
+			return b, false, errFileCapability
+		}
+		kind, err := agentFileDestination(f.root, candidate)
+		if err != nil {
+			return b, false, errFileCapability
+		}
+		if kind == agentDestinationMissing {
+			b.RelativePath = candidate
+			return b, false, nil
+		}
+		if kind != agentDestinationRegular {
+			return b, false, errFileCapability
+		}
+	}
+	return b, false, errFileCapability
+}
+
+func (f *agentFileCapability) priorWritePath(b agentFileBinding) (string, bool) {
+	raw, err := f.root.ReadFile(".sf-" + b.TransferID + "/binding.json")
+	if err != nil || len(raw) > 4096 {
+		return "", false
+	}
+	var prior agentFileBinding
+	if json.Unmarshal(raw, &prior) != nil || prior.TaskID != b.TaskID || prior.ExecutionID != b.ExecutionID || prior.TransferID != b.TransferID || prior.NodeID != b.NodeID || prior.SHA256 != b.SHA256 || prior.Direction != b.Direction || prior.Size != b.Size || prior.ConflictPolicy != "rename" {
+		return "", false
+	}
+	dir := ""
+	if i := strings.LastIndex(b.RelativePath, "/"); i >= 0 {
+		dir = b.RelativePath[:i+1]
+	}
+	if !fs.ValidPath(prior.RelativePath) || !strings.HasPrefix(prior.RelativePath, dir) || strings.HasPrefix(prior.RelativePath, ".sf-") {
+		return "", false
+	}
+	return prior.RelativePath, true
+}
+
 func (f *agentFileCapability) Read(ctx context.Context, b agentFileBinding, offset int64, length int) ([]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -127,10 +217,13 @@ func (f *agentFileCapability) Read(ctx context.Context, b agentFileBinding, offs
 	return chunk, nil
 }
 
-// Write never overwrites an existing destination. Partial data survives a
-// disconnect in a private transfer directory. Resumption requires the SAME
-// binding and current gate; a different offset or plan is rejected. There are
-// no bytes in task logs, execution ledger, audit metadata or errors.
+// Write keeps the verified partial file until commit. The admitted conflict
+// policy decides publication: skip never replaces, overwrite atomically swaps a
+// verified regular file, and rename publishes to a free sibling chosen at open.
+// Partial data survives a disconnect in a private transfer directory. Resumption
+// requires the SAME binding and current gate; a different offset or plan is
+// rejected. There are no bytes in task logs, execution ledger, audit metadata or
+// errors.
 func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, offset int64, chunk []byte, finish bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -193,7 +286,11 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 		return errFileCapability
 	}
 	// No automatic retry after this point: a lost acknowledgement is UNKNOWN.
-	if agentFilePublish(f.root, dir+"/partial", b.RelativePath) != nil {
+	publish := agentFilePublishNoReplace
+	if b.ConflictPolicy == "overwrite" {
+		publish = agentFilePublishReplace
+	}
+	if publish(f.root, dir+"/partial", b.RelativePath) != nil {
 		return errFileCapability
 	}
 	published, err := agentFileOpen(f.root, b.RelativePath, os.O_RDONLY, 0)

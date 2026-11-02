@@ -35,6 +35,22 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 
 这是同源实际产品的本地合成签名/编译版本证据，不是外部正式Release、浏览器或实机准入；product patch 待总控接收。
 
+## 第三增量：文件冲突策略（skip/overwrite/rename）
+
+此前仅 skip：Agent 打开写会话时无条件跳过已存在的目标，overwrite/rename 虽在 Controller 模型中合法，却会被静默降级为 skip，且线协议在 `ParseFileParameters`/`FileOpenRequest` 校验中硬编码只收 `skip`。
+
+本增量：
+
+- `internal/transport/file_protocol.go`：协议参数与 FileOpenRequest 接受受审的 `skip|overwrite|rename`（字段本来就是 string，无 Proto/gen 变更）；新增 `ValidFileConflictPolicy`。
+- `apps/agent/file_capability.go`、`file_session.go`：写会话按计划策略处理；`skip` 保留原目标并回 skipped；`overwrite` 只对非 symlink 常规文件生效，发布前原子替换；`rename` 在打开时选择同目录空闲 `name (N).ext`（最多32次），在 `RelativePath` 回给 Controller；链接/目录一律拒绝。断连续传从私有 partial binding 复用已选路径，丢失回执仍 UNKNOWN、不自动重试。
+- `apps/agent/file_nofollow_linux.go`：`Linkat` 保持不覆盖；新增 `Renameat` 原子替换与 `Fstatat(AT_SYMLINK_NOFOLLOW)` 目的地分类；非Linux保持显式拒绝。
+- `internal/transport/file_client.go`：只允许 rename 回复同目录内的合法相对路径，其他策略仍须与请求一致。
+- Controller 协调器已用 `UploadResult.DestinationPath` 记录实际 rename 路径，无需新扣；非策略型 transport 仍对非 overwrite 显式拒绝。
+
+验证：新增实际双进程 WSS 测试 `TestActualWSSOverwriteAndRenameConflictPolicies`（overwrite 替换、rename 依次得到 `target (1).bin`/`target (2).bin`、原文件保留、skip 不改写）；`internal/files`、`internal/transport`、`apps/agent` 的 Windows 与原生Linux测试 PASS；staticcheck（Windows+Linux）与架构检查PASS；R3 开发组合再次 2 PASS/0 SKIP。证据 reports/wave6-r3/files-conflict-*、agent.test、files.test。
+
+仍未完成：远端上传/多目标分发、断连续传之外的冲突/部分结果矩阵、每文件64MiB以上及>16项的产品限制策略，真实ENOSPC/inode专项。协议不再只收 skip，但也没有放宽到任意字符串。
+
 ## 剩余（继续独立推进）
 
 - 本增量新CLI+product两个中央patch待总控接收；不等待共享patch而停止其他独立项。

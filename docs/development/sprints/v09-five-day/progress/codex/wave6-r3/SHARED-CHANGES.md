@@ -19,6 +19,18 @@ IDs must be actual enrolled inventory identities, provisioned by a trusted local
 
 CLI candidate: existing management TLS arguments plus `-file-deployment /private/controller/files.json`. Error `files: invalid or insecure deployment configuration` aborts startup before local PKI/database setup, rather than starting a partially disabled runtime. Without this flag default behavior stays unchanged. Rollback disables this explicit flag after stopping the process, retaining the DB/migration/Agent ledger; never delete UNKNOWN reservations.
 
+# CX-04 file conflict policies (third increment)
+
+The controller-to-agent file parameters already carried `conflictPolicy` as a string; no Proto/gen change. `internal/transport` now admits the three reviewed values instead of only `skip`, and the agent implements them:
+
+- `skip`: an existing non-symlink regular destination is reported `skipped` and is byte-for-byte unchanged.
+- `overwrite`: only a non-symlink regular destination may be replaced; the verified partial is swapped in atomically (`renameat`) and re-opened with `NOFOLLOW` for identity/hash verification. Links and directories are rejected. A race with a same-UID writer ends UNKNOWN, never a follow.
+- `rename`: at open the agent picks the first free sibling `name (N).ext` in the same explicit directory (bounded 32 attempts, never replaces an existing entry) and returns it as `FileOpenReply.relativePath`; the controller maps it to the transfer item destination. A resumed transfer reuses the path recorded in the private partial binding, so a reconnect cannot silently pick another name.
+- A rename reply outside the requested directory, or any non-rename reply path that differs from the request, is rejected by the file client.
+- The local (non-channel) transport still only asserts overwrite semantics; the coordinator keeps rejecting other policies before any bytes move. `FileOpenReply` loss/commit uncertainty remains UNKNOWN with no automatic replay.
+
+Evidence: `TestActualWSSOverwriteAndRenameConflictPolicies` exercises overwrite replacement, two successive renames and unchanged skip over actual WSS; Windows/Linux `internal/files`, `internal/transport`, `apps/agent` suites, staticcheck and architecture checks pass, and the R3 development combination remains 2 PASS / 0 SKIP. Remote upload/multi-target distribution, broader partial-result matrices and the 16-item/64 MiB product limits remain open.
+
 # CX-04 owned product updates (second candidate)
 
 `controller-product-updates.patch` adds only `Config.UpdateProduct *updates.ProductDeploymentOptions`, `Server.ProductUpdates`, startup registration and lifecycle. It refuses to combine `UpdateProduct` with an already-injected `UpdateExecution/UpdateApply/UpdateResolvePlan/UpdatePlan/UpdateCheck`. No HTTP field supplies paths, keys, argv, provenance or the node identity; the central source is not edited in this worktree.

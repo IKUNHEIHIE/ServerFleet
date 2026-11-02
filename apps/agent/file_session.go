@@ -136,7 +136,7 @@ func (f *agentFileSessions) Handle(ctx context.Context, e *agentv1.Envelope) (*a
 		if t.opened || r.TaskId != t.offer.TaskId || r.ExecutionId != t.offer.ExecutionId || r.PlanDigestSha256 != t.offer.PlanDigestSha256 || r.TransferId != p.TransferID || r.RelativePath != p.RelativePath || r.Direction != p.Direction || r.Size != p.Size || r.Sha256 != p.SHA256 || r.ConflictPolicy != p.ConflictPolicy || r.CreateParents != p.CreateParents || r.ResumeOffset != 0 {
 			return nil, nil, errFileCapability
 		}
-		b := agentFileBinding{TaskID: task, ExecutionID: execution, TransferID: transfer, NodeID: f.node, RelativePath: p.RelativePath, SHA256: p.SHA256, Direction: p.Direction, Size: int64(p.Size)}
+		b := agentFileBinding{TaskID: task, ExecutionID: execution, TransferID: transfer, NodeID: f.node, RelativePath: p.RelativePath, SHA256: p.SHA256, Direction: p.Direction, ConflictPolicy: p.ConflictPolicy, Size: int64(p.Size)}
 		skipped := false
 		if p.Direction == "read" {
 			var err error
@@ -145,14 +145,13 @@ func (f *agentFileSessions) Handle(ctx context.Context, e *agentv1.Envelope) (*a
 				return nil, nil, err
 			}
 		} else {
-			// skip is the ONLY admitted conflict policy. An existing regular
-			// destination is skipped without changing it; links are rejected.
-			info, err := f.io.root.Lstat(b.RelativePath)
-			if err == nil {
-				if !info.Mode().IsRegular() || f.io.safePath(b.RelativePath, false) != nil {
-					return nil, nil, errFileCapability
-				}
-				skipped = true
+			// The trusted plan decides skip/overwrite/rename. Only a non-symlink
+			// regular destination is ever replaced; rename reports the actual
+			// chosen sibling path back to the Controller.
+			var err error
+			b, skipped, err = f.io.resolveWriteDestination(ioctx, b)
+			if err != nil {
+				return nil, nil, err
 			}
 		}
 		t.opened = true

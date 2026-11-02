@@ -19,7 +19,13 @@ func TestFileTaskParametersMatchStringMapTaskPortAndRejectAmbiguity(t *testing.T
 	if got, err := ParseFileParameters(raw); err != nil || got != p {
 		t.Fatal(err)
 	}
-	for _, input := range []string{strings.Replace(string(raw), `"size":"42"`, `"size":"042"`, 1), strings.Replace(string(raw), `"direction":"write"`, `"direction":"write","direction":"read"`, 1), strings.Replace(string(raw), `"relativePath":"data.bin"`, `"relativePath":"../escape"`, 1), strings.Replace(string(raw), `"conflictPolicy":"skip"`, `"conflictPolicy":"overwrite"`, 1), strings.Replace(string(raw), `"createParents":"false"`, `"createParents":"true"`, 1)} {
+	for _, policy := range []string{"overwrite", "rename"} {
+		accepted := strings.Replace(string(raw), `"conflictPolicy":"skip"`, `"conflictPolicy":"`+policy+`"`, 1)
+		if got, err := ParseFileParameters([]byte(accepted)); err != nil || got.ConflictPolicy != policy {
+			t.Fatal("reviewed conflict policy rejected", policy, err)
+		}
+	}
+	for _, input := range []string{strings.Replace(string(raw), `"size":"42"`, `"size":"042"`, 1), strings.Replace(string(raw), `"direction":"write"`, `"direction":"write","direction":"read"`, 1), strings.Replace(string(raw), `"relativePath":"data.bin"`, `"relativePath":"../escape"`, 1), strings.Replace(string(raw), `"conflictPolicy":"skip"`, `"conflictPolicy":"replace"`, 1), strings.Replace(string(raw), `"createParents":"false"`, `"createParents":"true"`, 1)} {
 		if _, err := ParseFileParameters([]byte(input)); err == nil {
 			t.Fatal("ambiguous or unsupported task plan admitted")
 		}

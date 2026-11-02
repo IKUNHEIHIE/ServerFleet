@@ -13,7 +13,7 @@ import (
 
 func fileBinding(data []byte, direction string) agentFileBinding {
 	h := sha256.Sum256(data)
-	return agentFileBinding{TaskID: "file-task", ExecutionID: "file-execution", TransferID: "file-transfer", NodeID: "file-node", RelativePath: "received.bin", SHA256: hex.EncodeToString(h[:]), Direction: direction, Size: int64(len(data))}
+	return agentFileBinding{TaskID: "file-task", ExecutionID: "file-execution", TransferID: "file-transfer", NodeID: "file-node", RelativePath: "received.bin", SHA256: hex.EncodeToString(h[:]), Direction: direction, ConflictPolicy: "skip", Size: int64(len(data))}
 }
 func TestAgentFileBytesResumeHashAndIndependentReadGate(t *testing.T) {
 	if runtime.GOOS != "linux" {
@@ -121,5 +121,15 @@ func TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel(t *testing.T) {
 	got, _ := os.ReadFile(filepath.Join(dir, b.RelativePath))
 	if string(got) != "original" {
 		t.Fatal("existing file changed")
+	}
+	replacement := []byte("explicit replacement")
+	overwrite := fileBinding(replacement, "write")
+	overwrite.TransferID = "overwrite-transfer"
+	overwrite.ConflictPolicy = "overwrite"
+	if err = f.Write(ctx, overwrite, 0, replacement, true); err != nil {
+		t.Fatal("explicit overwrite rejected", err)
+	}
+	if got, _ = os.ReadFile(filepath.Join(dir, overwrite.RelativePath)); string(got) != string(replacement) {
+		t.Fatal("explicit overwrite did not replace the regular file")
 	}
 }

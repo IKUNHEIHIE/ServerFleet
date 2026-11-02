@@ -162,7 +162,16 @@ func (s *FileSession) Open(ctx context.Context) (*agentv1.FileOpenReply, error) 
 		return nil, err
 	}
 	reply := e.GetFileOpenReply()
-	if reply == nil || reply.ResultCode != "ok" || reply.RelativePath != p.RelativePath || reply.PlanDigestSha256 != s.offer.PlanDigestSha256 || reply.ResumeOffset != 0 || reply.Size > FileMaxBytes || !FileDigest(reply.Sha256) || p.SHA256 != "" && (reply.Size != p.Size || reply.Sha256 != p.SHA256) {
+	if reply == nil {
+		return nil, ErrLinkRejected
+	}
+	// Usually the agent echoes the requested path. A rename policy may return a
+	// free sibling chosen under the same explicit directory; never another tree.
+	pathOK := reply.RelativePath == p.RelativePath
+	if p.ConflictPolicy == "rename" {
+		pathOK = FilePath(reply.RelativePath) && fileDirectory(reply.RelativePath) == fileDirectory(p.RelativePath)
+	}
+	if reply.ResultCode != "ok" || !pathOK || reply.PlanDigestSha256 != s.offer.PlanDigestSha256 || reply.ResumeOffset != 0 || reply.Size > FileMaxBytes || !FileDigest(reply.Sha256) || p.SHA256 != "" && (reply.Size != p.Size || reply.Sha256 != p.SHA256) {
 		return nil, ErrLinkRejected
 	}
 	s.opened = true
