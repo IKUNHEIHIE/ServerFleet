@@ -99,8 +99,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorR7'
-        '422':
-          description: A stage failed; later stages stay pending
+        '502':
+          description: A stage or provider operation failed; persisted operation and stage errors are returned
           content:
             application/json:
               schema:
@@ -165,7 +165,7 @@ paths:
         '404':
           $ref: '#/components/responses/NotFoundR7'
         '409':
-          description: Record is resolved/canceled or retry budget is exhausted
+          description: Record is resolved/canceled/unknown, another attempt is running, or the retry budget is exhausted
           content:
             application/json:
               schema:
@@ -306,12 +306,6 @@ components:
             - succeeded
             - partially_completed
             - failed
-        currentStage:
-          type: string
-          enum:
-            - dns
-            - certificate
-            - gateway
         targetsPersisted:
           type: boolean
           description: False means ds/0081 target columns are not present; no execution success may be inferred.
@@ -375,6 +369,7 @@ components:
             - resolved
             - canceled
             - failed
+            - unknown
         attempts:
           type: integer
           minimum: 0

@@ -14,6 +14,7 @@ import (
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/certificates"
+	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/storage/testkit"
 )
 
@@ -36,15 +37,29 @@ type cleanupCall struct {
 }
 
 type fakeCleaner struct {
-	mu    sync.Mutex
-	calls []cleanupCall
-	err   error
+	mu      sync.Mutex
+	calls   []cleanupCall
+	err     error
+	started chan struct{}
+	release chan struct{}
 }
 
 func (f *fakeCleaner) DeleteChallengeRecord(_ context.Context, subjectID, requestID, fqdn, recordID, expectedValue string) error {
 	f.mu.Lock()
-	defer f.mu.Unlock()
 	f.calls = append(f.calls, cleanupCall{subjectID, requestID, fqdn, recordID, expectedValue})
+	started, release := f.started, f.release
+	f.mu.Unlock()
+	if started != nil {
+		select {
+		case started <- struct{}{}:
+		default:
+		}
+	}
+	if release != nil {
+		<-release
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	return f.err
 }
 
@@ -59,11 +74,12 @@ type cleanupFixture struct {
 	cleaner    *fakeCleaner
 	authorizer *cleanupAuthorizer
 	recorder   *audit.SQLRecorder
+	db         *storage.DB
 }
 
 func newCleanupFixture(t *testing.T, maxAttempts int) cleanupFixture {
 	t.Helper()
-	db := testkit.NewDB(t, certificates.CleanupMigrations(), audit.Migrations())
+	db := testkit.NewDB(t, certificates.CleanupMigrations(), certificates.CleanupClaimMigrations(), audit.Migrations())
 	limits := audit.DefaultLimits()
 	limits.RequireSource = true
 	validator, err := audit.NewValidator(certificates.ServiceActions(), limits)
@@ -83,7 +99,7 @@ func newCleanupFixture(t *testing.T, maxAttempts int) cleanupFixture {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return cleanupFixture{journal: journal, cleaner: cleaner, authorizer: authorizer, recorder: recorder}
+	return cleanupFixture{journal: journal, cleaner: cleaner, authorizer: authorizer, recorder: recorder, db: db}
 }
 
 func testCleanupRecords() []certificates.ACMEDNS01Record {
@@ -105,6 +121,9 @@ func TestCleanupJournalRecordsFailuresIdempotently(t *testing.T) {
 	list, err := f.journal.List(context.Background(), "admin-1")
 	if err != nil || len(list) != 1 || list[0].RecordValue != "txt-1" || list[0].RecordID != "record-1" {
 		t.Fatalf("list = %+v, %v", list, err)
+	}
+	if list[0].PlanID != "plan-1" || list[0].Domain != "app.example.com" || list[0].FQDN != "_acme-challenge.app.example.com" {
+		t.Fatalf("record identity = %+v", list[0])
 	}
 	page, err := f.recorder.Query(context.Background(), audit.Query{Action: certificates.ActionCleanupRecord})
 	if err != nil || page.Total != 1 {
@@ -204,6 +223,215 @@ func TestCleanupJournalRetryDueUsesServiceAuthorization(t *testing.T) {
 	list, _ := f.journal.List(context.Background(), "admin-1")
 	if list[0].State != certificates.CleanupResolved {
 		t.Fatalf("due state = %+v", list[0])
+	}
+}
+
+func TestCleanupJournalConcurrentRetryDeletesOnce(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	records, err := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := records[0].ID
+	f.cleaner.started = make(chan struct{}, 1)
+	release := make(chan struct{})
+	f.cleaner.release = release
+	first := make(chan error, 1)
+	go func() {
+		_, err := f.journal.Retry(context.Background(), "admin-1", "req-first", id)
+		first <- err
+	}()
+	<-f.cleaner.started
+	if _, err := f.journal.Retry(context.Background(), "admin-1", "req-second", id); !errors.Is(err, certificates.ErrCleanupBusy) {
+		t.Fatalf("concurrent retry err = %v", err)
+	}
+	close(release)
+	if err := <-first; err != nil {
+		t.Fatal(err)
+	}
+	if calls := f.cleaner.snapshot(); len(calls) != 1 {
+		t.Fatalf("provider calls = %d, want 1", len(calls))
+	}
+	list, _ := f.journal.List(context.Background(), "admin-1")
+	if list[0].State != certificates.CleanupResolved || list[0].Attempts != 1 {
+		t.Fatalf("final state = %+v", list[0])
+	}
+	page, err := f.recorder.Query(context.Background(), audit.Query{Action: certificates.ActionCleanupRetry, Result: "denied"})
+	if err != nil || page.Total < 1 {
+		t.Fatalf("busy denial audit = %+v, %v", page, err)
+	}
+}
+
+func TestCleanupJournalCancelWinsOverInFlightSuccess(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	records, err := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := records[0].ID
+	f.cleaner.started = make(chan struct{}, 1)
+	release := make(chan struct{})
+	f.cleaner.release = release
+	first := make(chan error, 1)
+	go func() {
+		_, err := f.journal.Retry(context.Background(), "admin-1", "req-first", id)
+		first <- err
+	}()
+	<-f.cleaner.started
+	canceled, err := f.journal.Cancel(context.Background(), "admin-1", "req-cancel", id)
+	if err != nil || canceled.State != certificates.CleanupCanceled {
+		t.Fatalf("cancel = %+v, err = %v", canceled, err)
+	}
+	close(release)
+	if err := <-first; !errors.Is(err, certificates.ErrCleanupState) {
+		t.Fatalf("late retry err = %v", err)
+	}
+	list, _ := f.journal.List(context.Background(), "admin-1")
+	if list[0].State != certificates.CleanupCanceled {
+		t.Fatalf("canceled state was overwritten: %+v", list[0])
+	}
+	if calls := f.cleaner.snapshot(); len(calls) != 1 {
+		t.Fatalf("provider calls = %d, want 1", len(calls))
+	}
+	if page, err := f.recorder.Query(context.Background(), audit.Query{RequestID: "req-first", Result: "denied"}); err != nil || page.Total < 1 {
+		t.Fatalf("superseded audit = %+v, %v", page, err)
+	}
+}
+
+func TestCleanupJournalRetryDueDoesNotDuplicate(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	if _, err := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1]); err != nil {
+		t.Fatal(err)
+	}
+	f.cleaner.started = make(chan struct{}, 1)
+	release := make(chan struct{})
+	f.cleaner.release = release
+	first := make(chan struct {
+		count int
+		err   error
+	}, 1)
+	go func() {
+		count, err := f.journal.RetryDue(context.Background(), 10)
+		first <- struct {
+			count int
+			err   error
+		}{count, err}
+	}()
+	<-f.cleaner.started
+	if count, err := f.journal.RetryDue(context.Background(), 10); err != nil || count != 0 {
+		t.Fatalf("second due run = %d, %v", count, err)
+	}
+	close(release)
+	result := <-first
+	if result.err != nil || result.count != 1 {
+		t.Fatalf("first due run = %d, %v", result.count, result.err)
+	}
+	if calls := f.cleaner.snapshot(); len(calls) != 1 {
+		t.Fatalf("provider calls = %d, want 1", len(calls))
+	}
+}
+
+func TestCleanupJournalStaleClaimIsUnknownNotReplayed(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	records, err := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := records[0].ID
+	stale := time.Now().UTC().Add(-time.Minute)
+	if _, err := f.db.Exec(context.Background(), `UPDATE certificate_dns_cleanup
+		SET state = 'retrying', attempts = 1, claim_token = 'stale-token', lease_until = ? WHERE id = ?`,
+		stale.Format(time.RFC3339Nano), id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.journal.Retry(context.Background(), "admin-1", "req-retry", id); !errors.Is(err, certificates.ErrCleanupUnknown) {
+		t.Fatalf("stale retry err = %v", err)
+	}
+	list, _ := f.journal.List(context.Background(), "admin-1")
+	if list[0].State != certificates.CleanupUnknown || list[0].LastErrorCode != "provider_outcome_unknown" {
+		t.Fatalf("stale state = %+v", list[0])
+	}
+	if calls := f.cleaner.snapshot(); len(calls) != 0 {
+		t.Fatalf("stale claim was replayed: %+v", calls)
+	}
+	if _, err := f.journal.Retry(context.Background(), "admin-1", "req-retry-2", id); !errors.Is(err, certificates.ErrCleanupUnknown) {
+		t.Fatalf("unknown retry err = %v", err)
+	}
+	if _, err := f.journal.Cancel(context.Background(), "admin-1", "req-cancel", id); err != nil {
+		t.Fatal(err)
+	}
+	list, _ = f.journal.List(context.Background(), "admin-1")
+	if list[0].State != certificates.CleanupCanceled {
+		t.Fatalf("unknown cancel state = %+v", list[0])
+	}
+}
+
+func TestCleanupJournalRecoverStaleClaimsMarksUnknown(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	records, err := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	stale := time.Now().UTC().Add(-time.Minute)
+	if _, err := f.db.Exec(context.Background(), `UPDATE certificate_dns_cleanup
+		SET state = 'retrying', attempts = 2, claim_token = 'dead-claim', lease_until = ? WHERE id = ?`,
+		stale.Format(time.RFC3339Nano), records[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	recovered, err := f.journal.RecoverStaleClaims(context.Background(), 10)
+	if err != nil || recovered != 1 {
+		t.Fatalf("recovered = %d, err = %v", recovered, err)
+	}
+	list, _ := f.journal.List(context.Background(), "admin-1")
+	if list[0].State != certificates.CleanupUnknown || list[0].Attempts != 2 || list[0].LastErrorCode != "provider_outcome_unknown" {
+		t.Fatalf("recovered = %+v", list[0])
+	}
+	if calls := f.cleaner.snapshot(); len(calls) != 0 {
+		t.Fatalf("recovery called provider: %+v", calls)
+	}
+	if recovered, err := f.journal.RecoverStaleClaims(context.Background(), 10); err != nil || recovered != 0 {
+		t.Fatalf("second recovery = %d, %v", recovered, err)
+	}
+}
+
+func TestCleanupClaimMigrationPreservesExistingRecords(t *testing.T) {
+	db := testkit.NewDB(t, certificates.CleanupMigrations(), audit.Migrations())
+	now := time.Now().UTC().Format(time.RFC3339Nano)
+	if _, err := db.Exec(context.Background(), `INSERT INTO certificate_dns_cleanup
+		(subject_id, request_id, plan_id, domain, fqdn, record_id, record_value, state,
+		 attempts, last_error_code, next_attempt_at, created_at, updated_at)
+		VALUES ('admin-1', 'req-1', 'plan-1', 'app.example.com', '_acme-challenge.app.example.com',
+			'record-1', 'txt-1', 'retrying', 2, 'provider_delete_failed', NULL, ?, ?)`, now, now); err != nil {
+		t.Fatal(err)
+	}
+	migrator, err := storage.NewMigrator(certificates.CleanupMigrations(), certificates.CleanupClaimMigrations(), audit.Migrations())
+	if err != nil {
+		t.Fatal(err)
+	}
+	report, err := migrator.Apply(context.Background(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Applied) != 1 || report.Applied[0] != "ds/0063_cleanup_claim" {
+		t.Fatalf("applied = %+v", report.Applied)
+	}
+	var (
+		state    string
+		attempts int
+		claim    string
+		lease    *string
+	)
+	if err := db.QueryRow(context.Background(), `SELECT state, attempts, claim_token, lease_until
+		FROM certificate_dns_cleanup WHERE fqdn = ?`, "_acme-challenge.app.example.com").
+		Scan(&state, &attempts, &claim, &lease); err != nil {
+		t.Fatal(err)
+	}
+	if state != "retrying" || attempts != 2 || claim != "" || lease != nil {
+		t.Fatalf("migrated row = %s/%d/%q/%v", state, attempts, claim, lease)
+	}
+	if _, err := db.Exec(context.Background(), `UPDATE certificate_dns_cleanup SET state = 'unknown' WHERE fqdn = ?`,
+		"_acme-challenge.app.example.com"); err != nil {
+		t.Fatalf("unknown state rejected: %v", err)
 	}
 }
 

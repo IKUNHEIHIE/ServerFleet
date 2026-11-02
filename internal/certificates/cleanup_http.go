@@ -144,7 +144,8 @@ func cleanupStatus(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, auth.ErrDenied):
 		return http.StatusForbidden
-	case errors.Is(err, ErrCleanupState), errors.Is(err, ErrCleanupExhausted), errors.Is(err, ErrInvalidInput):
+	case errors.Is(err, ErrCleanupState), errors.Is(err, ErrCleanupExhausted),
+		errors.Is(err, ErrCleanupBusy), errors.Is(err, ErrCleanupUnknown), errors.Is(err, ErrInvalidInput):
 		return http.StatusConflict
 	case errors.Is(err, ErrCleanupUnavailable):
 		return http.StatusServiceUnavailable

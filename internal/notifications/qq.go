@@ -127,7 +127,7 @@ func (s *QQBotSender) Send(ctx context.Context, settings QQSettings, secretRef s
 	if err != nil {
 		return ProviderResult{Outcome: ProviderRejected, Code: "message_too_large"}, err
 	}
-	use := SecretUse{Ref: secretRef, Operation: "qqbot.send"}
+	use := SecretUse{Ref: secretRef, Operation: "qqbot.send", Module: "qqbot", Purpose: "qqbot-secret"}
 	scope := secretScopeFrom(ctx)
 	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
 	ran := false

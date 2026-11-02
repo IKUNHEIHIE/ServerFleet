@@ -7,6 +7,7 @@ import (
 	"net"
 	"sort"
 	"strings"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/dns"
 )
@@ -108,24 +109,44 @@ func (p *productionDNS) Publish(ctx context.Context, request DNSPublishRequest) 
 	for _, address := range addresses {
 		recordType, content, err := publicationRecord(address)
 		if err != nil {
-			p.cleanup(ctx, request, created)
-			return StageResult{}, err
+			return p.failedStage(ctx, request, created, err)
 		}
 		recordID, isNew, err := p.config.DNS.EnsureRecord(ctx, request.SubjectID, request.RequestID, request.ZoneID,
 			request.Domain, recordType, content, 60)
 		if err != nil {
-			p.cleanup(ctx, request, created)
-			return StageResult{}, err
+			return p.failedStage(ctx, request, created, err)
 		}
 		if recordID == "" {
-			p.cleanup(ctx, request, created)
-			return StageResult{}, ErrProductionTarget
+			return p.failedStage(ctx, request, created, ErrProductionTarget)
 		}
 		created = append(created, publicationRecordState{id: recordID, created: isNew})
 	}
+	summary := dnsStageSummary(request.ZoneID, created)
+	if len(summary) > 512 {
+		return p.failedStage(ctx, request, created, ErrProductionTarget)
+	}
+	return StageResult{Summary: summary}, nil
+}
+
+// failedStage attempts to remove only the records this publish created and keeps
+// the identities whose deletion failed in the returned summary. A partial DNS
+// cleanup failure is persisted by the stage row and retried by explicit rollback.
+func (p *productionDNS) failedStage(ctx context.Context, request DNSPublishRequest, created []publicationRecordState, cause error) (StageResult, error) {
+	remaining, cleanupFailures := p.cleanup(ctx, request, created)
+	summary := ""
+	if len(remaining) > 0 {
+		summary = dnsStageSummary(request.ZoneID, remaining)
+	}
+	errs := make([]error, 0, 1+len(cleanupFailures))
+	errs = append(errs, cause)
+	errs = append(errs, cleanupFailures...)
+	return StageResult{Summary: summary}, errors.Join(errs...)
+}
+
+func dnsStageSummary(zoneID string, records []publicationRecordState) string {
 	var summary strings.Builder
-	summary.WriteString("dns;zone=" + request.ZoneID + ";records=")
-	for index, record := range created {
+	summary.WriteString("dns;zone=" + zoneID + ";records=")
+	for index, record := range records {
 		if index > 0 {
 			summary.WriteByte(',')
 		}
@@ -135,11 +156,7 @@ func (p *productionDNS) Publish(ctx context.Context, request DNSPublishRequest) 
 		}
 		summary.WriteString(record.id + ":" + flag)
 	}
-	if summary.Len() > 512 {
-		p.cleanup(ctx, request, created)
-		return StageResult{}, ErrProductionTarget
-	}
-	return StageResult{Summary: summary.String()}, nil
+	return summary.String()
 }
 
 func (p *productionDNS) Rollback(ctx context.Context, planID string, result StageResult) error {
@@ -171,12 +188,21 @@ type publicationRecordState struct {
 	created bool
 }
 
-func (p *productionDNS) cleanup(ctx context.Context, request DNSPublishRequest, records []publicationRecordState) {
+func (p *productionDNS) cleanup(ctx context.Context, request DNSPublishRequest, records []publicationRecordState) ([]publicationRecordState, []error) {
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+	defer cancel()
+	remaining := make([]publicationRecordState, 0)
+	var failures []error
 	for _, record := range records {
-		if record.created {
-			_ = p.config.DNS.DeleteRecord(context.WithoutCancel(ctx), request.SubjectID, request.RequestID, request.ZoneID, record.id)
+		if !record.created {
+			continue
+		}
+		if err := p.config.DNS.DeleteRecord(cleanupCtx, request.SubjectID, request.RequestID, request.ZoneID, record.id); err != nil {
+			failures = append(failures, err)
+			remaining = append(remaining, record)
 		}
 	}
+	return remaining, failures
 }
 
 type productionCertificate struct{ config ProductionBridgeConfig }
@@ -241,7 +267,13 @@ func (p *productionGateway) Publish(ctx context.Context, request GatewayRequest)
 		return StageResult{}, ErrProductionTarget
 	}
 	summary, err := p.config.Gateway.Apply(ctx, plan, request, upstreams, certificatePath, keyPath)
-	if err != nil || strings.TrimSpace(summary) == "" {
+	if err != nil {
+		if strings.TrimSpace(summary) != "" {
+			return StageResult{Summary: summary}, err
+		}
+		return StageResult{}, err
+	}
+	if strings.TrimSpace(summary) == "" {
 		return StageResult{}, ErrProductionTarget
 	}
 	return StageResult{Summary: summary}, nil

@@ -18,6 +18,8 @@ type SecretUse struct {
 	SubjectID  string
 	RequestID  string
 	PlanDigest string
+	Module     string
+	Purpose    string
 }
 
 // SecretBorrower lends a credential only inside a callback so provider I/O and
