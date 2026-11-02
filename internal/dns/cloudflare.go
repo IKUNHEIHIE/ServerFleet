@@ -38,6 +38,8 @@ type SecretUse struct {
 	SubjectID  string
 	RequestID  string
 	PlanDigest string
+	Module     string
+	Purpose    string
 }
 
 // SecretBorrower lends a credential only inside a callback so provider I/O and
@@ -333,7 +335,7 @@ func (p *CloudflareProvider) borrow(ctx context.Context, credential CredentialRe
 	if err := credential.Validate(); err != nil {
 		return fmt.Errorf("%w: credential ref", ErrCloudflareSecret)
 	}
-	use := SecretUse{Ref: string(credential), Operation: operation}
+	use := SecretUse{Ref: string(credential), Operation: operation, Module: "dns", Purpose: "dns-provider"}
 	scope := secretScopeFrom(ctx)
 	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
 	ran := false

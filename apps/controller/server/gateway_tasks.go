@@ -91,7 +91,7 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 	if err != nil {
 		return publishing.LocalBridge{}, nil, err
 	}
-	applier := &publicationGatewayApplier{gateways: config.Gateways, tasks: host, plans: config.Plans}
+	applier := &publicationGatewayApplier{gateways: config.Gateways, tasks: host, plans: publicationPlanLookup{repo: config.Plans}}
 	bridge, err := publishing.NewProductionBridge(publishing.ProductionBridgeConfig{
 		Plans:     publicationPlanLookup{repo: config.Plans},
 		DNS:       publicationDNSWriter{service: config.DNS},
@@ -245,10 +245,23 @@ type gatewayPublicationSummary struct {
 	PlanTargetRevision uint64 `json:"planTargetRevision"`
 }
 
+type gatewayRouteService interface {
+	GetGateway(ctx context.Context, subjectID, gatewayID string) (gateway.GatewayNode, error)
+	GetRoute(ctx context.Context, subjectID, routeID string) (gateway.GatewayRoute, error)
+	CreateRoute(ctx context.Context, subjectID, requestID, gatewayID string, input gateway.CreateRouteInput) (gateway.GatewayRoute, error)
+	UpdateRoute(ctx context.Context, subjectID, requestID, gatewayID, routeID string, expectedRevision uint64, input gateway.UpdateRouteInput) (gateway.GatewayRoute, error)
+	DeleteRoute(ctx context.Context, subjectID, requestID, gatewayID, routeID string, expectedRevision uint64) error
+}
+
+type gatewayTaskRunner interface {
+	apply(ctx context.Context, plan publishing.Plan, site gateway.NginxSite, input gateway.NginxTaskInput) (string, error)
+	remove(ctx context.Context, plan publishing.Plan, site gateway.NginxSite, input gateway.NginxTaskInput) (string, error)
+}
+
 type publicationGatewayApplier struct {
-	gateways *gateway.Service
-	tasks    *gatewayTaskHost
-	plans    *publishing.Repo
+	gateways gatewayRouteService
+	tasks    gatewayTaskRunner
+	plans    publishing.PlanLookup
 }
 
 func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.Plan, request publishing.GatewayRequest, upstreams []string, certificatePath, keyPath string) (string, error) {
@@ -296,29 +309,42 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		HTTPS: request.HTTPS, CertificatePath: certificatePath, PrivateKeyPath: keyPath,
 	})
 	if err != nil {
-		return "", err
+		return gatewayPublicationState(gatewayPublicationSummary{
+			RouteID: routeID, GatewayID: gatewayID, NodeID: record.NodeID,
+			RouteRevision: route.Revision, RouteCreated: created,
+			PlanID: plan.ID, PlanTargetRevision: plan.TargetRevision,
+		}), err
+	}
+	partial := gatewayPublicationSummary{
+		RouteID: routeID, GatewayID: gatewayID, NodeID: record.NodeID,
+		SitePath: site.Path, ConfigSHA256: site.Digest,
+		RouteRevision: route.Revision, RouteCreated: created,
+		PlanID: plan.ID, PlanTargetRevision: plan.TargetRevision,
 	}
 	taskID, err := a.tasks.apply(ctx, plan, site, gateway.NginxTaskInput{
 		SubjectID: request.SubjectID, RequestID: request.RequestID, GatewayID: gatewayID,
 		NodeID: record.NodeID, IdempotencyKey: plan.ID,
 	})
 	if err != nil {
-		return "", err
+		// The route and staged artifact may exist even when the task outcome is
+		// failed/unknown. Preserve their identities so rollback can remove only
+		// what this plan created.
+		return gatewayPublicationState(partial), err
 	}
-	summary, err := json.Marshal(gatewayPublicationSummary{
-		RouteID: routeID, GatewayID: gatewayID, NodeID: record.NodeID,
-		SitePath: site.Path, ConfigSHA256: site.Digest, TaskID: taskID,
-		RouteRevision: route.Revision, RouteCreated: created,
-		PlanID: plan.ID, PlanTargetRevision: plan.TargetRevision,
-	})
+	partial.TaskID = taskID
+	return gatewayPublicationState(partial), nil
+}
+
+func gatewayPublicationState(summary gatewayPublicationSummary) string {
+	raw, err := json.Marshal(summary)
 	if err != nil {
-		return "", publishing.ErrProductionTarget
+		return ""
 	}
-	return string(summary), nil
+	return string(raw)
 }
 
 func (a *publicationGatewayApplier) currentPlan(ctx context.Context, plan publishing.Plan) (publishing.Plan, error) {
-	current, _, err := a.plans.Get(ctx, plan.ID)
+	current, err := a.plans.GetPlan(ctx, plan.ID)
 	if err != nil || !current.TargetsPersisted || current.TargetRevision != plan.TargetRevision ||
 		current.ZoneID != plan.ZoneID || current.CertificateID != plan.CertificateID ||
 		current.HTTPS != plan.HTTPS || current.ServiceGroupID != plan.ServiceGroupID ||
@@ -354,18 +380,23 @@ func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishin
 		return publishing.ErrProductionTarget
 	}
 	if state.PlanID != plan.ID || state.PlanTargetRevision != plan.TargetRevision ||
-		state.GatewayID == "" || state.NodeID == "" || state.SitePath == "" || state.ConfigSHA256 == "" {
+		state.GatewayID == "" || state.NodeID == "" ||
+		(state.SitePath == "") != (state.ConfigSHA256 == "") ||
+		state.SitePath != "" && !validGatewayDigest(state.ConfigSHA256) ||
+		state.RouteCreated && (state.RouteID == "" || state.RouteRevision == 0) {
 		return publishing.ErrProductionTarget
 	}
 	if _, err := a.currentPlan(ctx, plan); err != nil {
 		return err
 	}
-	site := gateway.NginxSite{GatewayID: state.GatewayID, Domain: plan.Domain, Path: state.SitePath, Digest: state.ConfigSHA256}
-	if _, err := a.tasks.remove(ctx, plan, site, gateway.NginxTaskInput{
-		SubjectID: plan.CreatedBy, RequestID: plan.ID, GatewayID: state.GatewayID,
-		NodeID: state.NodeID, IdempotencyKey: plan.ID,
-	}); err != nil {
-		return err
+	if state.SitePath != "" {
+		site := gateway.NginxSite{GatewayID: state.GatewayID, Domain: plan.Domain, Path: state.SitePath, Digest: state.ConfigSHA256}
+		if _, err := a.tasks.remove(ctx, plan, site, gateway.NginxTaskInput{
+			SubjectID: plan.CreatedBy, RequestID: plan.ID, GatewayID: state.GatewayID,
+			NodeID: state.NodeID, IdempotencyKey: plan.ID,
+		}); err != nil {
+			return err
+		}
 	}
 	if !state.RouteCreated {
 		return nil
@@ -417,24 +448,32 @@ type ProviderCredentialLookup interface {
 	LookupProviderCredential(ctx context.Context, ref string) (ProviderCredential, bool, error)
 }
 
+// CredentialUseService is the current owner/revision-bound secret use port. The
+// auth owner reauthorizes before and after provider I/O and rejects replay.
+type CredentialUseService interface {
+	UseForService(ctx context.Context, operation auth.CredentialOperation, consume func(context.Context, []byte) error) error
+}
+
 type providerSecretBorrower struct {
-	credentials *auth.CredentialService
+	credentials CredentialUseService
 	lookup      ProviderCredentialLookup
 }
 
-func newProviderSecretBorrower(credentials *auth.CredentialService, lookup ProviderCredentialLookup) (*providerSecretBorrower, error) {
+func newProviderSecretBorrower(credentials CredentialUseService, lookup ProviderCredentialLookup) (*providerSecretBorrower, error) {
 	if credentials == nil || lookup == nil {
 		return nil, publishing.ErrProductionUnavailable
 	}
 	return &providerSecretBorrower{credentials: credentials, lookup: lookup}, nil
 }
 
-func (b *providerSecretBorrower) withSecret(ctx context.Context, ref, operation string, planDigest, subjectID, requestID string, fn func(context.Context, string) error) error {
-	if b == nil || b.credentials == nil || b.lookup == nil || ref == "" || operation == "" || fn == nil {
+func (b *providerSecretBorrower) withSecret(ctx context.Context, ref, operation, module, purpose, planDigest, subjectID, requestID string, fn func(context.Context, string) error) error {
+	if b == nil || b.credentials == nil || b.lookup == nil || ref == "" || operation == "" ||
+		module == "" || purpose == "" || planDigest == "" || fn == nil {
 		return publishing.ErrProductionUnavailable
 	}
 	meta, ok, err := b.lookup.LookupProviderCredential(ctx, ref)
-	if err != nil || !ok || meta.CredentialID == "" || meta.Owner == "" || meta.Revision == 0 {
+	if err != nil || !ok || meta.CredentialID == "" || meta.Owner == "" || meta.Revision == 0 ||
+		meta.Module != module || meta.Purpose != purpose {
 		return publishing.ErrProductionUnavailable
 	}
 	operationID, err := newProviderOperationID(operation)
@@ -455,7 +494,7 @@ func (b *providerSecretBorrower) withSecret(ctx context.Context, ref, operation 
 // NewDNSPublisherSecretBorrower exposes the callback-scoped DNS provider port
 // to the controller composition. The lookup maps account credential_ref values
 // to current owner/revision/module metadata; it never returns a token.
-func NewDNSPublisherSecretBorrower(credentials *auth.CredentialService, lookup ProviderCredentialLookup) (dns.SecretBorrower, error) {
+func NewDNSPublisherSecretBorrower(credentials CredentialUseService, lookup ProviderCredentialLookup) (dns.SecretBorrower, error) {
 	borrower, err := newProviderSecretBorrower(credentials, lookup)
 	if err != nil {
 		return nil, err
@@ -465,7 +504,7 @@ func NewDNSPublisherSecretBorrower(credentials *auth.CredentialService, lookup P
 
 // NewNotificationSecretBorrower exposes the callback-scoped notification
 // provider port. SMTP and QQ channel secretRefs must resolve through lookup.
-func NewNotificationSecretBorrower(credentials *auth.CredentialService, lookup ProviderCredentialLookup) (notifications.SecretBorrower, error) {
+func NewNotificationSecretBorrower(credentials CredentialUseService, lookup ProviderCredentialLookup) (notifications.SecretBorrower, error) {
 	borrower, err := newProviderSecretBorrower(credentials, lookup)
 	if err != nil {
 		return nil, err
@@ -479,7 +518,7 @@ func (b dnsSecretBorrower) WithSecret(ctx context.Context, use dns.SecretUse, fn
 	if b.borrower == nil {
 		return publishing.ErrProductionUnavailable
 	}
-	return b.borrower.withSecret(ctx, use.Ref, use.Operation, use.PlanDigest, use.SubjectID, use.RequestID, fn)
+	return b.borrower.withSecret(ctx, use.Ref, use.Operation, use.Module, use.Purpose, use.PlanDigest, use.SubjectID, use.RequestID, fn)
 }
 
 type notificationsSecretBorrower struct{ borrower *providerSecretBorrower }
@@ -488,7 +527,7 @@ func (b notificationsSecretBorrower) WithSecret(ctx context.Context, use notific
 	if b.borrower == nil {
 		return publishing.ErrProductionUnavailable
 	}
-	return b.borrower.withSecret(ctx, use.Ref, use.Operation, use.PlanDigest, use.SubjectID, use.RequestID, fn)
+	return b.borrower.withSecret(ctx, use.Ref, use.Operation, use.Module, use.Purpose, use.PlanDigest, use.SubjectID, use.RequestID, fn)
 }
 
 func newProviderOperationID(operation string) (string, error) {

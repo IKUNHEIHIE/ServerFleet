@@ -176,7 +176,7 @@ type gatewayHarness struct {
 
 func newGatewayHarness(t *testing.T, options gatewayHarnessOptions) *gatewayHarness {
 	t.Helper()
-	db := testkit.NewDB(t, tasks.Migrations(), audit.Migrations())
+	db := testkit.NewDB(t, tasks.Migrations(), audit.Migrations(), publishing.Migrations(), publishing.TargetMigrations())
 	repo, err := tasks.NewRepo(db)
 	if err != nil {
 		t.Fatal(err)

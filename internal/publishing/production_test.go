@@ -253,6 +253,64 @@ func TestProductionRejectsUnpersistedTargets(t *testing.T) {
 	}
 }
 
+func TestProductionDNSFailurePreservesFailedCleanupIdentity(t *testing.T) {
+	dnsWriter := newFakeDNSWriter()
+	dnsWriter.failAt = 2
+	dnsWriter.deleteErr = errors.New("delete failed")
+	bridge := productionFixture(t, dnsWriter, fakeCertificateInspection{}, fakeUpstreams{}, &fakeGatewayApplier{})
+	result, err := bridge.DNS.Publish(context.Background(), publishing.DNSPublishRequest{
+		PlanID: "plan-1", SubjectID: "admin-1", RequestID: "req-1", Domain: "app.example.com",
+		GatewayIDs: []string{"gw-1"}, ZoneID: "zone-1", TargetRevision: 1,
+	})
+	if err == nil {
+		t.Fatal("partial provider failure reported success")
+	}
+	if !strings.Contains(result.Summary, "zone=zone-1") || !strings.Contains(result.Summary, "record-1:1") {
+		t.Fatalf("failed cleanup identity was swallowed: %q", result.Summary)
+	}
+	dnsWriter.mu.Lock()
+	dnsWriter.deleteErr = nil
+	dnsWriter.mu.Unlock()
+	if err := bridge.DNS.Rollback(context.Background(), "plan-1", result); err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(dnsWriter.deleted(), ","); !strings.Contains(got, "record-1") {
+		t.Fatalf("rollback did not retry the preserved record: %s", got)
+	}
+}
+
+func TestProductionGatewayFailureKeepsPartialCompensationSummary(t *testing.T) {
+	applier := &fakeGatewayApplier{
+		summary:  "gateway=partial;route=plan-1;site=/etc/nginx/conf.d/site.conf",
+		applyErr: errors.New("agent outcome unknown"),
+	}
+	bridge := productionFixture(t, newFakeDNSWriter(), fakeCertificateInspection{certPath: "/cert.pem", keyPath: "/key.pem"}, fakeUpstreams{values: []string{"10.0.0.2:8080"}}, applier)
+	result, err := bridge.Gateway.Publish(context.Background(), publishing.GatewayRequest{
+		PlanID: "plan-1", SubjectID: "admin-1", Domain: "app.example.com", ServiceGroupID: "sg1",
+		GatewayIDs: []string{"gw-1"}, ZoneID: "zone-1", CertificateID: "cert-1", HTTPS: true, TargetRevision: 1,
+	})
+	if err == nil || result.Summary == "" {
+		t.Fatalf("result = %+v, err = %v", result, err)
+	}
+	if err := bridge.Gateway.Rollback(context.Background(), "plan-1", result); err != nil || applier.rolledBack != 1 {
+		t.Fatalf("partial summary was not usable for rollback: %v/%d", err, applier.rolledBack)
+	}
+}
+
+func TestRunFailurePersistsPartialStageSummary(t *testing.T) {
+	f := newPublicationFixture(t)
+	f.createPlan(t, "plan-1", "shop.example.com", "")
+	f.ports.cert.set(publishing.StageResult{Summary: "certificate=cert-1;state=unknown"}, errors.New("provider exploded"))
+	if _, err := f.service.Run(context.Background(), "admin", "req-run", "plan-1"); !errors.Is(err, publishing.ErrStageFailed) {
+		t.Fatalf("Run err = %v", err)
+	}
+	_, stages := f.plan(t, "plan-1")
+	cert := stageByKind(t, stages, publishing.StageCertificate)
+	if cert.Status != publishing.StageFailed || cert.ResultSummary != "certificate=cert-1;state=unknown" {
+		t.Fatalf("failed stage lost compensation identity: %+v", cert)
+	}
+}
+
 func TestProductionBridgeRequiresAllPorts(t *testing.T) {
 	if _, err := publishing.NewProductionBridge(publishing.ProductionBridgeConfig{}); !errors.Is(err, publishing.ErrProductionUnavailable) {
 		t.Fatalf("empty bridge err = %v", err)

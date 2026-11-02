@@ -387,7 +387,7 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 			} else if !isPureDenial(authErr) {
 				code = ErrorCodeGroupLookupFailed
 			}
-			return s.fail(ctx, subjectID, requestID, plan, stages, index, code, authErr, group.NodeIDs)
+			return s.fail(ctx, subjectID, requestID, plan, stages, index, code, "", authErr, group.NodeIDs)
 		}
 		group = stageGroup
 		stage := &stages[index]
@@ -410,11 +410,13 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 			if ctx.Err() != nil {
 				return plan, ctx.Err()
 			}
-			return s.fail(ctx, subjectID, requestID, plan, stages, index, ErrorCodePublishError, nil, group.NodeIDs)
+			return s.fail(ctx, subjectID, requestID, plan, stages, index, ErrorCodePublishError,
+				sanitizeMessage(result.Summary), nil, group.NodeIDs)
 		}
 		summary, resultErr := normalizeStageResult(result)
 		if resultErr != nil {
-			return s.fail(ctx, subjectID, requestID, plan, stages, index, ErrorCodeInvalidResult, ErrInvalidStageResult, group.NodeIDs)
+			return s.fail(ctx, subjectID, requestID, plan, stages, index, ErrorCodeInvalidResult,
+				"", ErrInvalidStageResult, group.NodeIDs)
 		}
 		now = s.now().UTC()
 		stage.Status = StageSucceeded
@@ -581,12 +583,15 @@ func (s *Service) complete(ctx context.Context, subjectID, requestID string, pla
 	return plan, nil
 }
 
-func (s *Service) fail(ctx context.Context, subjectID, requestID string, plan Plan, stages []Stage, index int, errorCode string, cause error, nodeIDs []string) (Plan, error) {
+// fail records a failed stage. A non-empty partialSummary preserves the exact
+// provider identities a failed publish created, so explicit compensation can
+// still remove only those resources instead of guessing.
+func (s *Service) fail(ctx context.Context, subjectID, requestID string, plan Plan, stages []Stage, index int, errorCode, partialSummary string, cause error, nodeIDs []string) (Plan, error) {
 	stage := &stages[index]
 	now := s.now().UTC()
 	stage.Status = StageFailed
 	stage.ErrorCode = errorCode
-	stage.ResultSummary = ""
+	stage.ResultSummary = sanitizeMessage(partialSummary)
 	stage.FinishedAt = now
 	plan.Status = PlanPartialFailure
 	plan.CurrentStage = stage.Kind

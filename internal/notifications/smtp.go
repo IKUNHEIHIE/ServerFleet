@@ -97,7 +97,7 @@ func (s *SMTPMailer) Send(ctx context.Context, settings SMTPSettings, secretRef 
 	if err != nil {
 		return ProviderResult{Outcome: ProviderRejected, Code: "message_too_large"}, err
 	}
-	use := SecretUse{Ref: secretRef, Operation: "smtp.send"}
+	use := SecretUse{Ref: secretRef, Operation: "smtp.send", Module: "smtp", Purpose: "smtp-password"}
 	scope := secretScopeFrom(ctx)
 	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
 	ran := false
