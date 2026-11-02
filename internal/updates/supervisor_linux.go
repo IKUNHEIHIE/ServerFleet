@@ -18,11 +18,6 @@ import (
 	"time"
 )
 
-type OwnedProcessObservation struct {
-	PID       int
-	Nonce     string
-	StartedAt time.Time
-}
 type OwnedSupervisorConfig struct {
 	Directory, ExecutionID string
 	Arguments, Environment []string

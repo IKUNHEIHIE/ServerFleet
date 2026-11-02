@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"strconv"
 	"time"
 
@@ -38,6 +39,7 @@ type FileExecutionWorker struct {
 type filePlanItem struct{ Source, Destination, ReadPath, WritePath, ExpectedSHA256 string }
 type fileTaskPlan struct {
 	TransferID, SourceNode, DestinationNode string
+	ConflictPolicy                          files.ConflictPolicy
 	Items                                   []filePlanItem
 }
 
@@ -55,11 +57,11 @@ func NewFileExecutionWorker(s *Server, repo *files.Repo, authorizer auth.Authori
 	return &FileExecutionWorker{s, repo, authorizer, cfg}, nil
 }
 func (w *FileExecutionWorker) plan(ctx context.Context, c files.TransferCommand) (fileTaskPlan, map[string]string, error) {
-	p := fileTaskPlan{TransferID: c.TransferID, SourceNode: c.SourceNodeID, DestinationNode: c.DestinationNodeID}
-	if c.ConflictPolicy != files.ConflictSkip || len(c.SourcePaths) == 0 || len(c.SourcePaths) > 16 || !transport.FileID(c.TransferID) {
+	p := fileTaskPlan{TransferID: c.TransferID, SourceNode: c.SourceNodeID, DestinationNode: c.DestinationNodeID, ConflictPolicy: c.ConflictPolicy}
+	if !c.ConflictPolicy.Valid() || len(c.SourcePaths) == 0 || len(c.SourcePaths) > 16 || !transport.FileID(c.TransferID) {
 		return p, nil, files.ErrInvalidTransfer
 	}
-	params := map[string]string{"transfer_id": c.TransferID, "source_node": c.SourceNodeID, "dest_node": c.DestinationNodeID, "conflict_policy": "skip"}
+	params := map[string]string{"transfer_id": c.TransferID, "source_node": c.SourceNodeID, "dest_node": c.DestinationNodeID, "conflict_policy": string(c.ConflictPolicy)}
 	seen := map[string]bool{}
 	for i, source := range c.SourcePaths {
 		name := source
@@ -107,7 +109,11 @@ func (w *FileExecutionWorker) SubmitTransfer(ctx context.Context, c files.Transf
 func decodeFileTask(t tasks.Task) (fileTaskPlan, error) {
 	var params map[string]string
 	var p fileTaskPlan
-	if json.Unmarshal([]byte(t.Params), &params) != nil || params["conflict_policy"] != "skip" || t.ActionID != files.ActionTransfer || t.OperationClass != tasks.OperationClassStandard || len(t.Targets) != 2 {
+	if json.Unmarshal([]byte(t.Params), &params) != nil || t.ActionID != files.ActionTransfer || t.OperationClass != tasks.OperationClassStandard || len(t.Targets) != 2 {
+		return p, files.ErrTransferIdentity
+	}
+	p.ConflictPolicy = files.ConflictPolicy(params["conflict_policy"])
+	if !p.ConflictPolicy.Valid() {
 		return p, files.ErrTransferIdentity
 	}
 	p.TransferID, p.SourceNode, p.DestinationNode = params["transfer_id"], params["source_node"], params["dest_node"]
@@ -158,7 +164,7 @@ func (w *FileExecutionWorker) live(ctx context.Context, t tasks.Task, p fileTask
 		}
 	}
 	transfer, err := w.repo.GetTransfer(ctx, p.TransferID)
-	if err != nil || transfer.TaskID != t.ID || transfer.SubmitterID != t.SubmitterID || transfer.Status.Terminal() || transfer.Status == files.TransferCancelling || transfer.SourceNodeID != p.SourceNode || transfer.DestinationNodeID != p.DestinationNode || len(transfer.Items) != len(p.Items) || transfer.ConflictPolicy != files.ConflictSkip {
+	if err != nil || transfer.TaskID != t.ID || transfer.SubmitterID != t.SubmitterID || transfer.Status.Terminal() || transfer.Status == files.TransferCancelling || transfer.SourceNodeID != p.SourceNode || transfer.DestinationNodeID != p.DestinationNode || len(transfer.Items) != len(p.Items) || transfer.ConflictPolicy != p.ConflictPolicy {
 		return files.ErrTransferIdentity
 	}
 	for i, item := range p.Items {
@@ -231,7 +237,7 @@ func (w *FileExecutionWorker) Gate(ctx context.Context, o transport.LinkObservat
 			if b.State != "accepted" {
 				return files.ErrTransferExecution
 			}
-			if r.RelativePath != parameters.RelativePath || r.Direction != parameters.Direction || r.PlanDigestSha256 != offer.PlanDigestSha256 || r.Size != parameters.Size || r.Sha256 != parameters.SHA256 || r.ResumeOffset != 0 || r.CreateParents || r.ConflictPolicy != "skip" {
+			if r.RelativePath != parameters.RelativePath || r.Direction != parameters.Direction || r.PlanDigestSha256 != offer.PlanDigestSha256 || r.Size != parameters.Size || r.Sha256 != parameters.SHA256 || r.ResumeOffset != 0 || r.CreateParents || r.ConflictPolicy != string(p.ConflictPolicy) {
 				return files.ErrTransferIdentity
 			}
 			return nil
@@ -239,6 +245,18 @@ func (w *FileExecutionWorker) Gate(ctx context.Context, o transport.LinkObservat
 		if r := e.GetFileOpenReply(); r != nil {
 			if b.State != "accepted" && b.State != "opened" && b.State != "done" {
 				return files.ErrTransferExecution
+			}
+			if r.RelativePath != parameters.RelativePath {
+				// Only a rename write may publish to a sibling, and only inside
+				// the same explicitly mapped directory.
+				if b.Direction != "write" || p.ConflictPolicy != files.ConflictRename || !transport.FilePath(r.RelativePath) {
+					return files.ErrTransferIdentity
+				}
+				planned, plannedErr := w.config.Paths.AbsolutePath(ctx, p.DestinationNode, parameters.RelativePath)
+				renamed, renamedErr := w.config.Paths.AbsolutePath(ctx, p.DestinationNode, r.RelativePath)
+				if plannedErr != nil || renamedErr != nil || path.Dir(planned) != path.Dir(renamed) {
+					return files.ErrTransferIdentity
+				}
 			}
 			if b.State != "accepted" && (b.Size != r.Size || b.SHA256 != r.Sha256) {
 				return files.ErrTransferIdentity
@@ -369,7 +387,7 @@ func (w *FileExecutionWorker) open(ctx context.Context, t tasks.Task, p fileTask
 		node, relative, direction = p.DestinationNode, item.WritePath, "write"
 	}
 	execution := childExecutionID(t, node, i)
-	parameters := transport.FileParameters{TransferID: execution, RelativePath: relative, Direction: direction, Size: size, SHA256: digest, ConflictPolicy: "skip"}
+	parameters := transport.FileParameters{TransferID: execution, RelativePath: relative, Direction: direction, Size: size, SHA256: digest, ConflictPolicy: string(p.ConflictPolicy)}
 	raw, _ := json.Marshal(parameters)
 	offer := &agentv1.TaskOffer{TaskId: t.ID, ExecutionId: execution, PlanDigestSha256: t.PlanHash, ActionId: transport.FileCapability, CanonicalParametersJson: raw, Privilege: agentv1.Privilege_PRIVILEGE_NORMAL, ExpiresAtUnixMs: time.Now().Add(5 * time.Minute).UnixMilli(), TimeoutSeconds: 300, ScopeRevision: t.ScopeRevision, ActionSchemaVersion: "1"}
 	observation, err := w.server.Links.FileConnection(ctx, node)
@@ -397,7 +415,7 @@ func (w *FileExecutionWorker) cancelChild(task, node, execution string) {
 	defer cancel()
 	_ = w.server.Links.Send(ctx, node, &agentv1.Envelope{Message: &agentv1.Envelope_TaskCancel{TaskCancel: &agentv1.TaskCancel{TaskId: task, ExecutionId: execution, ReasonCode: "file_worker_stopped", RequestedAtUnixMs: time.Now().UnixMilli()}}})
 }
-func (w *FileExecutionWorker) copyItem(ctx context.Context, t tasks.Task, p fileTaskPlan, i int) (copied int64, skipped bool, err error) {
+func (w *FileExecutionWorker) copyItem(ctx context.Context, t tasks.Task, p fileTaskPlan, i int, destinationPath *string) (copied int64, skipped bool, err error) {
 	spool, err := files.NewExecutionSpool(w.config.SpoolDir)
 	if err != nil {
 		return 0, false, err
@@ -446,6 +464,16 @@ func (w *FileExecutionWorker) copyItem(ctx context.Context, t tasks.Task, p file
 		return 0, false, err
 	}
 	defer destination.Close()
+	if opened.RelativePath != p.Items[i].WritePath {
+		if p.ConflictPolicy != files.ConflictRename {
+			return 0, false, files.ErrTransferIdentity
+		}
+		renamed, mapErr := w.config.Paths.AbsolutePath(ctx, p.DestinationNode, opened.RelativePath)
+		if mapErr != nil {
+			return 0, false, files.ErrPathMappingUnavailable
+		}
+		*destinationPath = renamed
+	}
 	defer func() {
 		if err != nil {
 			w.cancelChild(t.ID, p.DestinationNode, childExecutionID(t, p.DestinationNode, i))
@@ -517,7 +545,8 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 	code := tasks.NodeResultSucceeded
 	status := files.TransferCompleted
 	for i, item := range p.Items {
-		n, skip, e := w.copyItem(ctx, t, p, i)
+		destination := item.Destination
+		n, skip, e := w.copyItem(ctx, t, p, i, &destination)
 		state := files.ItemCopied
 		if skip {
 			state = files.ItemSkipped
@@ -545,7 +574,7 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 			}
 			done()
 		}
-		updates = append(updates, files.ItemUpdate{SourcePath: item.Source, DestinationPath: item.Destination, Status: state, BytesCopied: n, ErrorCode: errorCode, ErrorMessage: message})
+		updates = append(updates, files.ItemUpdate{SourcePath: item.Source, DestinationPath: destination, Status: state, BytesCopied: n, ErrorCode: errorCode, ErrorMessage: message})
 		total += n
 		if e != nil {
 			for _, rest := range p.Items[i+1:] {

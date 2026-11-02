@@ -60,7 +60,7 @@ func TestR2UpdateHTTPAwaitsHumanAndProjectsCurrentOwnerTask(t *testing.T) {
 	next := previous
 	next.Version = "2.0.0"
 	next.Sequence = 2
-	plan = updates.FrozenInstallPlan{ID: "saved-update-plan", SubjectID: login.Identity.SubjectID, NodeID: "owned-update-target", BackupSHA256: strings.Repeat("b", 64), PolicySHA256: strings.Repeat("c", 64), Previous: previous, Attempted: next, AllowRollback: true}
+	plan = updates.FrozenInstallPlan{ID: "saved-update-plan", SubjectID: login.Identity.SubjectID, NodeID: "owned-update-target", BackupSHA256: strings.Repeat("b", 64), PolicySHA256: strings.Repeat("c", 64), SchemaFingerprint: strings.Repeat("d", 64), Previous: previous, Attempted: next, AllowRollback: true}
 	request := func(method, path string, body any, secret, csrf string) (int, []byte) {
 		t.Helper()
 		var raw []byte

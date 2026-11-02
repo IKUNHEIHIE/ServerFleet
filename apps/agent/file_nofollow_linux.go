@@ -37,7 +37,7 @@ func agentFileOpen(root *os.Root, path string, flags int, mode os.FileMode) (*os
 	}
 	return os.NewFile(uintptr(fd), "agent-private-file"), nil
 }
-func agentFilePublish(root *os.Root, source, destination string) error {
+func agentFilePublishNoReplace(root *os.Root, source, destination string) error {
 	src, sname, err := agentFileParent(root, source)
 	if err != nil {
 		return err
@@ -52,6 +52,47 @@ func agentFilePublish(root *os.Root, source, destination string) error {
 		return err
 	}
 	return dst.Sync()
+}
+
+// agentFilePublishReplace atomically swaps the verified partial file over an
+// existing destination. Renameat never follows a symlink at either endpoint, so
+// a symlink planted at the destination would be replaced as an entry, never
+// followed. The caller re-opens the result with O_NOFOLLOW and verifies identity.
+func agentFilePublishReplace(root *os.Root, source, destination string) error {
+	src, sname, err := agentFileParent(root, source)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+	dst, dname, err := agentFileParent(root, destination)
+	if err != nil {
+		return err
+	}
+	defer dst.Close()
+	if err = unix.Renameat(int(src.Fd()), sname, int(dst.Fd()), dname); err != nil {
+		return err
+	}
+	return dst.Sync()
+}
+
+// agentFileDestination classifies one existing entry without following links.
+func agentFileDestination(root *os.Root, path string) (agentFileKind, error) {
+	parent, name, err := agentFileParent(root, path)
+	if err != nil {
+		return agentDestinationOther, err
+	}
+	defer parent.Close()
+	var st unix.Stat_t
+	if err := unix.Fstatat(int(parent.Fd()), name, &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		if err == unix.ENOENT {
+			return agentDestinationMissing, nil
+		}
+		return agentDestinationOther, err
+	}
+	if st.Mode&unix.S_IFMT == unix.S_IFREG {
+		return agentDestinationRegular, nil
+	}
+	return agentDestinationOther, nil
 }
 
 func agentFileSpace(root *os.Root, bytes int64) error {

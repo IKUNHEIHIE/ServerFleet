@@ -214,6 +214,11 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 	result.ConnectionID = connectionID
 	result.HeartbeatSent = true
 	result.MetricsSent = true
+	stopHealth, healthErr := startAgentReleaseHealth(sessionCtx, facts, connectionID)
+	if healthErr != nil {
+		return healthErr
+	}
+	defer stopHealth()
 	if request.Persistent {
 		select {
 		case err := <-done:

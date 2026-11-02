@@ -15,6 +15,7 @@ import (
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/storage/testkit"
 	"serverfleet.local/serverfleet/internal/tasks"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -129,7 +130,7 @@ func runInstallTaskActualOwnedProcess(t *testing.T, incompatible bool) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	plan := FrozenInstallPlan{ID: "actual-owned-update", SubjectID: "admin", NodeID: "isolated-node", BackupSHA256: hex.EncodeToString(backupHash[:]), PolicySHA256: ReleasePolicyDigest(policy), Previous: previous, Attempted: next, AllowRollback: true}
+	plan := FrozenInstallPlan{ID: "actual-owned-update", SubjectID: "admin", NodeID: "isolated-node", BackupSHA256: hex.EncodeToString(backupHash[:]), PolicySHA256: ReleasePolicyDigest(policy), SchemaFingerprint: strings.Repeat("d", 64), Previous: previous, Attempted: next, AllowRollback: true}
 	request, err := plan.TaskRequest("actual-update-request")
 	if err != nil {
 		t.Fatal(err)

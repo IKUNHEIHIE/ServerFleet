@@ -322,3 +322,137 @@ func TestActualWSSFileTwoAgentsBytesCancelRevokeAndUnknown(t *testing.T) {
 		t.Fatal("no actual file frames observed")
 	}
 }
+
+func writeWholeFile(t *testing.T, ctx context.Context, fixture *fileWSSFixture, o *agentv1.TaskOffer, transfer string, data []byte) *agentv1.FileOpenReply {
+	t.Helper()
+	session, err := fixture.client.NewSession(ctx, fixture.node, o)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	open, err := session.Open(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = session.Chunk(ctx, &agentv1.FileChunkRequest{TaskId: o.TaskId, ExecutionId: o.ExecutionId, TransferId: transfer, Data: data, Finish: true}); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case result := <-fixture.finished:
+		if result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED {
+			t.Fatal("write did not finish successfully", result)
+		}
+	case <-ctx.Done():
+		t.Fatal("missing terminal write result")
+	}
+	return open
+}
+
+func TestActualWSSOverwriteAndRenameConflictPolicies(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux non-root actual WSS")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := privateAgentDirectory(t)
+	original := []byte("existing destination bytes must survive rename and skip")
+	if err := os.WriteFile(filepath.Join(root, "target.bin"), original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	fixture := newFileWSSFixture(t, "node-conflict", root, privateAgentDirectory(t))
+	defer fixture.stop()
+
+	overwrite := []byte("replacement bytes from an explicit overwrite")
+	hash := sha256.Sum256(overwrite)
+	overwriteOffer := fileTestOffer(transport.FileParameters{TransferID: "overwrite", RelativePath: "target.bin", Direction: "write", Size: uint64(len(overwrite)), SHA256: hex.EncodeToString(hash[:]), ConflictPolicy: "overwrite"}, "exec-overwrite")
+	open := writeWholeFile(t, ctx, fixture, overwriteOffer, "overwrite", overwrite)
+	if open.Skipped || open.RelativePath != "target.bin" {
+		t.Fatal("overwrite open", open)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target.bin")); err != nil || string(got) != string(overwrite) {
+		t.Fatal("overwrite was not applied", err)
+	}
+
+	renamed := []byte("renamed sibling bytes")
+	hash = sha256.Sum256(renamed)
+	renameOffer := fileTestOffer(transport.FileParameters{TransferID: "rename-one", RelativePath: "target.bin", Direction: "write", Size: uint64(len(renamed)), SHA256: hex.EncodeToString(hash[:]), ConflictPolicy: "rename"}, "exec-rename-one")
+	open = writeWholeFile(t, ctx, fixture, renameOffer, "rename-one", renamed)
+	if open.Skipped || open.RelativePath != "target (1).bin" {
+		t.Fatal("rename target", open.RelativePath)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target (1).bin")); err != nil || string(got) != string(renamed) {
+		t.Fatal("renamed sibling bytes", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target.bin")); err != nil || string(got) != string(overwrite) {
+		t.Fatal("rename replaced the original", err)
+	}
+
+	// A second rename must pick another free sibling, never the files it just made.
+	secondRename := fileTestOffer(transport.FileParameters{TransferID: "rename-two", RelativePath: "target.bin", Direction: "write", Size: uint64(len(renamed)), SHA256: hex.EncodeToString(hash[:]), ConflictPolicy: "rename"}, "exec-rename-two")
+	open = writeWholeFile(t, ctx, fixture, secondRename, "rename-two", renamed)
+	if open.RelativePath != "target (2).bin" {
+		t.Fatal("second rename target", open.RelativePath)
+	}
+
+	skipBytes := []byte("must never be written by skip")
+	hash = sha256.Sum256(skipBytes)
+	skipOffer := fileTestOffer(transport.FileParameters{TransferID: "skip", RelativePath: "target.bin", Direction: "write", Size: uint64(len(skipBytes)), SHA256: hex.EncodeToString(hash[:]), ConflictPolicy: "skip"}, "exec-skip")
+	session, err := fixture.client.NewSession(ctx, fixture.node, skipOffer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	open, err = session.Open(ctx)
+	if err != nil || !open.Skipped {
+		t.Fatal("skip did not report an existing destination", err, open)
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target.bin")); err != nil || string(got) != string(overwrite) {
+		t.Fatal("skip changed the destination", err)
+	}
+}
+
+func TestActualWSSRenameExhaustionFailsClosed(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux non-root actual WSS")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := privateAgentDirectory(t)
+	original := []byte("rename exhaustion must not touch the original")
+	if err := os.WriteFile(filepath.Join(root, "target.bin"), original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 32; i++ {
+		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("target (%d).bin", i)), []byte("occupied"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fixture := newFileWSSFixture(t, "node-rename-exhaust", root, privateAgentDirectory(t))
+	defer fixture.stop()
+	digest := sha256.Sum256(original)
+	offer := fileTestOffer(transport.FileParameters{TransferID: "rename-exhaust", RelativePath: "target.bin", Direction: "write", Size: uint64(len(original)), SHA256: hex.EncodeToString(digest[:]), ConflictPolicy: "rename"}, "exec-rename-exhaust")
+	session, err := fixture.client.NewSession(ctx, fixture.node, offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if _, err = session.Open(ctx); err == nil {
+		t.Fatal("rename exhaustion was reported as an open success")
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target.bin")); err != nil || string(got) != string(original) {
+		t.Fatal("exhausted rename changed the original", err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := 0
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".sf-") {
+			visible++
+		}
+	}
+	if visible != 33 {
+		t.Fatal("rename exhaustion published or removed a sibling", visible)
+	}
+}

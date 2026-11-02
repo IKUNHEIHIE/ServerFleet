@@ -1,0 +1,62 @@
+diff --git a/apps/controller/bootstrap/bootstrap.go b/apps/controller/bootstrap/bootstrap.go
+index a8c52fe..c1496da 100644
+--- a/apps/controller/bootstrap/bootstrap.go
++++ b/apps/controller/bootstrap/bootstrap.go
+@@ -28,6 +28,7 @@ type Options struct {
+ 	AgentPKIDir      string
+ 	AgentAuthority   string
+ 	AgentServerName  string
++	FileDeployment   string
+ 	CredentialKeyDir string
+ }
+ 
+@@ -45,6 +46,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
+ 	flags.StringVar(&options.AgentAuthority, "agent-authority", "", "Agent-facing authority host:port (default: derived from -listen)")
+ 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
+ 	flags.StringVar(&options.CredentialKeyDir, "credential-key-dir", "", "private credential key directory (default: credential-keys beside -db)")
++	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
+ 	if err := flags.Parse(args); err != nil {
+ 		return Options{}, err
+ 	}
+@@ -59,6 +61,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
+ 
+ // Validate enforces the management-mode prerequisites without opening storage.
+ func (o Options) Validate() error {
++	if o.FileDeployment != "" && o.Scaffold() {
++		return errors.New("controller: -file-deployment requires -db and direct HTTPS")
++	}
+ 	if o.Scaffold() {
+ 		return nil
+ 	}
+@@ -107,12 +112,23 @@ func DefaultAgentAuthority(listen string) (string, error) {
+ // Compose opens the management server with the default local Agent PKI. A
+ // scaffold request returns (nil, nil, nil).
+ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Material, error) {
++	if err := options.Validate(); err != nil {
++		return nil, nil, err
++	}
+ 	if options.Scaffold() {
+ 		return nil, nil, nil
+ 	}
+ 	if err := options.Validate(); err != nil {
+ 		return nil, nil, err
+ 	}
++	var fileConfig *server.FileExecutionConfig
++	if options.FileDeployment != "" {
++		var err error
++		fileConfig, err = server.LoadFileExecutionConfig(options.FileDeployment)
++		if err != nil {
++			return nil, nil, err
++		}
++	}
+ 	directory, err := options.LocalPKIDirectory()
+ 	if err != nil {
+ 		return nil, nil, err
+@@ -137,6 +153,7 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
+ 		serverName = host
+ 	}
+ 	composed, err := server.New(ctx, server.Config{
++		FileExecution:    fileConfig,
+ 		DBPath:           options.DBPath,
+ 		CredentialKeyDir: options.CredentialKeyDir,
+ 		Origin:           options.Origin,
