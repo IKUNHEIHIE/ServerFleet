@@ -1,5 +1,7 @@
 # Wave6-R4 · 三线连续交付包
 
+**当前状态：2026-11-02负责人确认，下一轮CX-05/DS-05/GM-05均尚未开始（NOT STARTED），本文件仅为已准备的任务包。当前停留在Wave6-R3接收完成，详见[进度快照](CURRENT-PROGRESS.md)。**
+
 2026-11-02；总控/审查codex-review-02；11月3日完整v0.9目标不变，当前不能保证按时全量完成。原需求/安全约束保持，不以测试通过数替代产品验收。
 
 先读根AGENTS、README、架构说明、TASK-BOARD、MODULE-OWNERSHIP、DEPENDENCY-RULES、[共享接收](WAVE6-R3-SHARED.md)与[本轮报告](../../reviews/V09-WAVE6-R3-REVIEW.md)。下面是对既有整包的继续授权，已接收补丁不能重复作为阻塞。精确起点为总控最终交接SHA；只有目录干净、原HEAD未变时由总控快进，各自核对后在原目录/分支工作。

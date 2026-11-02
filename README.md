@@ -1,5 +1,7 @@
 # Server Fleet · M0-P1 工程基础
 
+[当前进度快照](docs/development/sprints/v09-five-day/CURRENT-PROGRESS.md)：Wave6-R3已接收；负责人于2026-11-02确认下一轮三个任务均尚未开始。
+
 Go模块化单体Controller、独立Go Agent、React/TypeScript/Vite工程。已有SQLite、REST/SSE、WSS+mTLS、持久随机密钥、常驻Agent、统一文件worker及AI持久预算/同事务审计。真实双Agent多文件/三策略、文件页面、预算界面和AI生成已验证；文件上传任务化/分发/续传、Xray、完整发布/更新/灾备与外部验收仍有缺口，不能称完整v0.9可发布。
 
 **状态：2026-11-02由codex-review-02总控，CX/DS/Codex Arts的Wave6-R3增量已审查/返修/正式组合（25项迁移）；根/安全PASS、Web 348 PASS、13组原生Linux 382顶层PASS/5 SKIP，真实CLI文件/Agent产品更新2组PASS；浏览器回归70/70、桩16/16，严格正向31 PASS / 4 BLOCKED / 0 FAIL（退出1）。文件页面、三种冲突策略和预算界面已验证；完整v0.9仍未验收，见[最新审查](docs/development/reviews/V09-WAVE6-R3-REVIEW.md)。实际发布、完整更新/灾备、Xray及其他文件/外部验证仍有缺口；本轮未复查/修改awskr原服务，ENV-W6-01保持未关闭。G0/G1有效，G2/发布准入未冻结。共享见[最新接收](docs/development/sprints/v09-five-day/WAVE6-R3-SHARED.md)，后续见[三线连续包](docs/development/sprints/v09-five-day/WAVE6-R4.md)。**
