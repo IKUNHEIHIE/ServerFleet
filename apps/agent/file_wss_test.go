@@ -410,3 +410,49 @@ func TestActualWSSOverwriteAndRenameConflictPolicies(t *testing.T) {
 		t.Fatal("skip changed the destination", err)
 	}
 }
+
+func TestActualWSSRenameExhaustionFailsClosed(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("Linux non-root actual WSS")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
+	defer cancel()
+	root := privateAgentDirectory(t)
+	original := []byte("rename exhaustion must not touch the original")
+	if err := os.WriteFile(filepath.Join(root, "target.bin"), original, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for i := 1; i <= 32; i++ {
+		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("target (%d).bin", i)), []byte("occupied"), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fixture := newFileWSSFixture(t, "node-rename-exhaust", root, privateAgentDirectory(t))
+	defer fixture.stop()
+	digest := sha256.Sum256(original)
+	offer := fileTestOffer(transport.FileParameters{TransferID: "rename-exhaust", RelativePath: "target.bin", Direction: "write", Size: uint64(len(original)), SHA256: hex.EncodeToString(digest[:]), ConflictPolicy: "rename"}, "exec-rename-exhaust")
+	session, err := fixture.client.NewSession(ctx, fixture.node, offer)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer session.Close()
+	if _, err = session.Open(ctx); err == nil {
+		t.Fatal("rename exhaustion was reported as an open success")
+	}
+	if got, err := os.ReadFile(filepath.Join(root, "target.bin")); err != nil || string(got) != string(original) {
+		t.Fatal("exhausted rename changed the original", err)
+	}
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	visible := 0
+	for _, entry := range entries {
+		if !strings.HasPrefix(entry.Name(), ".sf-") {
+			visible++
+		}
+	}
+	if visible != 33 {
+		t.Fatal("rename exhaustion published or removed a sibling", visible)
+	}
+}

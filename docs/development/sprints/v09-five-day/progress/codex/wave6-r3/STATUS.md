@@ -70,6 +70,22 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 
 仍缺：>16 项只能显式拒绝，多目标分发未实现；断连续传跨主控重启、真实 ENOSPC/inode 专项；rename 冲突耗尽（32 次）只返回 UNKNOWN，没有专门产品级测试。
 
+## 第六增量：rename 耗尽负向
+
+真实 WSS 测试 `TestActualWSSRenameExhaustionFailsClosed`：目标目录已有 `target.bin` 及 32 个 `target (N).bin` 时，rename 打开失败（不返回成功），原文件不变、未新增/删除可见文件。Agent 全量原生 Linux 测试 PASS。
+
+## 收尾说明：剩余项的具体依赖（不再有可独立完成的无依赖工作）
+
+以下项属于本任务范围，但本轮无法在不改公共契约/不新增中央注册/不依赖外部环境的情况下完成，按停止条件逐项列出：
+
+1. **上传走统一任务/审批**：`files.CompleteUpload` 目前在校验摘要后直接走 transport。要实现审批后执行，需要新增 `files.ActionUpload` worker、`UploadSubmitter`、上传任务状态查询（现有路由只有 create/PUT/complete，无 GET 状态），因此需要 OpenAPI 候选 + 中央 `server.go` worker 注册 patch。作者只能交精确候选，不能直接改中央源码。
+2. **多目标分发**：`files.Transfer`/`CreateTransferInput` 目前只有单个 `DestinationNodeID`；需要公共 DTO/OpenAPI/Proto 以及新的迁移（目标集合/幂等键）由总控登记后才能实现，不能在作者目录私改公共结构。
+3. **断连续传跨主控重启**：需持久化每个 item 的已确认 offset 与 Agent 会话绑定，并在重启后按 UNKNOWN 不重放规则重新打开；该设计依赖 Agent 端 resume 语义与任务恢复策略，尚未冻结。
+4. **真实 ENOSPC/inode**：当前只有 RLIMIT_FSIZE（EFBIG）专项；本机 WSL 普通用户不能挂载小文件系统制造 ENOSPC/耗尽 inode，需总控在隔离主机提供受限挂载（不把 EFBIG 冒充 ENOSPC）。
+5. **物理双机/ARM/1C1G/外部账号/发布准入**：外部资源与授权，非作者可独立完成。
+
+因此本包在作者权限内的可独立项已全部实现并验证；上述 1—2 项需总控接收候选后再产出固定 clean SHA 证据，3—5 项需先冻结设计或提供环境。
+
 ## 剩余（继续独立推进）
 
 - 本增量新CLI+product两个中央patch待总控接收；不等待共享patch而停止其他独立项。
