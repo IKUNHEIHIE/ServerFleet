@@ -4,7 +4,7 @@
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
 |---|---|---|---|---|---|
-| V09-GITHUB-UPLOAD | IN PROGRESS：2026-11-02负责人明确授权将已接收代码上传指定GitHub仓库；核对远端历史/待推送内容，正常推送及核验后停止；下一轮仍未开始 | codex-review-02 | main集成；复验integration/github-upload-cx02 / `.worktrees/integration--github-upload-cx02` | 指定仓库IKUNHEIHIE/ServerFleet的主线上传、origin配置、进度/上传记录；不强推、不启动作者、不改业务代码或生产服务 | 项目负责人；起始cf88dfc；https://github.com/IKUNHEIHIE/ServerFleet |
+| V09-GITHUB-UPLOAD | DONE：2026-11-02正常推送d7d57f9，ls-remote及连接器已核验；远端历史保留，干净目录综合/安全PASS；GitHub Actions尚未确认；下一轮仍未开始 | codex-review-02 | main集成；复验integration/github-upload-cx02 / `.worktrees/integration--github-upload-cx02` | 指定仓库IKUNHEIHIE/ServerFleet的主线上传、origin配置、进度/上传记录；普通推送和核验后停止 | 项目负责人；起始cf88dfc；结果见reviews/V09-GITHUB-UPLOAD.md |
 | V09-WAVE6-R3-REVIEW | 三线-04审查/必要返修/正式共享组合及根安全、Linux、浏览器复验完成；接收/干净目录同步和续派后停止 | codex-review-02 | integration/v09-wave6-r3-review-cx02 / `.worktrees/integration--v09-wave6-r3-review-cx02` | 本轮必要修复/中央注册/迁移/契约、证据与后续任务；不改既有远端服务 | 项目负责人；起始fafbe93；技术8df0154；见reviews/V09-WAVE6-R3-REVIEW.md |
 | V09-W6R3-CHECKPOINT | 负责人要求保存当前进度，明确下一轮尚未开始；仅文档记录/核验后停止 | codex-review-02 | main / 主目录（集成负责人） | CURRENT-PROGRESS.md、TASK-BOARD、WAVE6-R4开工状态及README入口；不实现/不启动作者/不改作者目录 | 项目负责人；已验收基线65c759c |
 | V09-R6-CX-05 | NOT STARTED：2026-11-02负责人确认尚未开工，任务包已准备；用户上传统一任务/审批、多目标/续传与平台 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6-R4.md的CX包；独占files，允许新增R8文件候选/新迁移候选，中央注册/公共生成交patch | codex-review-02+安全/通信；起点65c759c |

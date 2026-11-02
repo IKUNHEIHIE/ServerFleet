@@ -1,6 +1,6 @@
 # V09-GITHUB-UPLOAD · 上传记录
 
-日期：2026-11-02（Asia/Shanghai）；会话/集成负责人：codex-review-02；审查人：项目负责人。状态：本地合并复验通过，等待普通推送与远端核验。
+日期：2026-11-02（Asia/Shanghai）；会话/集成负责人：codex-review-02；审查人：项目负责人。状态：代码已普通推送并通过远端精确 SHA 核验，任务完成。
 
 负责人明确要求将已接收代码上传到 <https://github.com/IKUNHEIHIE/ServerFleet>，本次再次要求“开始推送”。授权范围为该仓库 main、origin 配置和上传记录；普通推送及核验完成后停止。下一轮开发任务均保持 NOT STARTED，不启动作者，不部署或访问 awskr/云资源。
 
@@ -16,7 +16,7 @@
 
 接续前已完成：本地可达 387 个提交、1879 个文件、2821 个 blob；无 100 MiB 以上对象；工具、缓存、工作目录和运行数据均未跟踪。定向文本扫描未发现 GitHub/AWS token；私钥标记命中均已人工核实为解析常量或无效拒绝测试，没有真实私钥。该扫描不等于覆盖一切秘密类型，未递归扫描压缩资料。
 
-本次提交范围为任务登记、上传记录及 README；没有新产品功能、契约或候选依赖。完整 v0.9 未完成、G2 未冻结，四项正向阻塞仍在；上传不改变此前 PASS/SKIP/BLOCKED 的验收结论。远端核验在实际推送后补录；GitHub Actions 状态以真实运行记录为准。
+本次提交范围为任务登记、上传记录、README 及进度快照；没有新产品功能、契约或候选依赖。完整 v0.9 未完成、G2 未冻结，四项正向阻塞仍在；上传不改变此前 PASS/SKIP/BLOCKED 的验收结论。GitHub Actions 状态以真实运行记录为准。
 
 ## 本次执行记录
 
@@ -37,3 +37,11 @@
 | 合并差异核对 | 对 cf88dfc 只允许 README、TASK-BOARD 和本上传报告；业务代码/锁/生成/原文无差异 |
 
 新目录本地 `reports/github-upload-{npm-ci,tools-install,check,security}.log`、`check-all.json`、`check-security.json` 和冲突逐路径审计保留。Web 构建的大块体积提示仍在；未新增/重跑浏览器或原生 Linux 专项，沿用先前审查证据，不把 Windows 本次通过替代平台/产品验收。
+
+## 实际推送与核验
+
+- 主目录 main 快进到合并提交 `d7d57f96b7e1d19c189b62293dffef9405016160`，两个父提交为本地 `01e3942` 和原远端 `df11355`。两份历史均保留；该时点可达 391 个提交。
+- 配置 origin 为 `https://github.com/IKUNHEIHIE/ServerFleet.git`，通过已有本机代理和系统认证执行 `git push --porcelain --set-upstream origin main:main`（仅当前命令指定代理/凭据助手）。退出 0，远端 `df11355..d7d57f9`，已建立 main 对 origin/main 的跟踪。
+- `git ls-remote origin refs/heads/main`、本地 `git rev-parse HEAD origin/main` 均为完整 `d7d57f96b7e1d19c189b62293dffef9405016160`；GitHub 连接器读取该提交再次确认 SHA/标题。核验时主目录干净。
+- GitHub combined status 接口返回空 statuses，不能证明 Actions 已成功；本记录将远端 CI 标记为尚未确认，不据本地检查推断远端结果。
+- 本次回执仅补上传记录、任务完成状态和进度入口，随后普通推送；代码树不变。下一轮 CX-05/DS-05/GM-05 均 NOT STARTED，作者目录保持原状态。完成回执的远端核验后停止。
