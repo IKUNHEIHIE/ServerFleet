@@ -312,14 +312,19 @@ func TestGatewayCapabilityFixedArgvHasNoCallerCommands(t *testing.T) {
 
 func asciiTestRoot(t *testing.T) string {
 	t.Helper()
-	candidates := []string{"C:/temp", "D:/temp"}
-	for _, candidate := range candidates {
-		if err := os.MkdirAll(candidate, 0o700); err == nil {
-			if probe, err := os.CreateTemp(candidate, "probe-*"); err == nil {
-				name := probe.Name()
-				_ = probe.Close()
-				_ = os.Remove(name)
-				return candidate
+	// Drive-letter prefixes are only absolute on Windows. On Unix they would
+	// resolve to a relative "C:/temp" under the package directory, and every
+	// capability root check would reject the fixture as non-absolute.
+	if runtime.GOOS == "windows" {
+		candidates := []string{"C:/temp", "D:/temp"}
+		for _, candidate := range candidates {
+			if err := os.MkdirAll(candidate, 0o700); err == nil {
+				if probe, err := os.CreateTemp(candidate, "probe-*"); err == nil {
+					name := probe.Name()
+					_ = probe.Close()
+					_ = os.Remove(name)
+					return candidate
+				}
 			}
 		}
 	}
