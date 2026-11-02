@@ -24,11 +24,12 @@ import (
 	"serverfleet.local/serverfleet/internal/tasks"
 )
 
-// GatewayArtifactUploader is implemented by the CX file-task composition. It
-// must upload bytes only under the accepted task authorization; a nil uploader
-// keeps the gateway stage closed.
+// GatewayArtifactUploader is implemented by the CX file-task composition. The
+// task id is mandatory so the uploader can recheck the current unified task,
+// approval and plan digest before writing bytes; it must use the same Agent file
+// channel and never open SSH or a second execution queue.
 type GatewayArtifactUploader interface {
-	Upload(ctx context.Context, nodeID, absolutePath string, content []byte, sha256Hex string) error
+	Upload(ctx context.Context, taskID, nodeID, absolutePath string, content []byte, sha256Hex string) error
 }
 
 // CertificateInstallPaths are operator-owned file paths for one certificate.

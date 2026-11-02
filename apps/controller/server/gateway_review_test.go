@@ -30,8 +30,8 @@ func (a reviewGatewayAuth) Authorize(context.Context, auth.Check) error {
 }
 
 type reviewUpload struct {
-	node, path, digest string
-	content            []byte
+	taskID, node, path, digest string
+	content                    []byte
 }
 
 type reviewGatewayUploads struct {
@@ -41,9 +41,9 @@ type reviewGatewayUploads struct {
 	onUpload func()
 }
 
-func (u *reviewGatewayUploads) Upload(_ context.Context, nodeID, absolutePath string, content []byte, sha256Hex string) error {
+func (u *reviewGatewayUploads) Upload(_ context.Context, taskID, nodeID, absolutePath string, content []byte, sha256Hex string) error {
 	u.mu.Lock()
-	u.uploads = append(u.uploads, reviewUpload{nodeID, absolutePath, sha256Hex, append([]byte(nil), content...)})
+	u.uploads = append(u.uploads, reviewUpload{taskID, nodeID, absolutePath, sha256Hex, append([]byte(nil), content...)})
 	err, hook := u.err, u.onUpload
 	u.mu.Unlock()
 	if hook != nil {
@@ -301,7 +301,7 @@ func TestGatewayTaskPublishesOnlyAfterApprovalAndTerminal(t *testing.T) {
 		t.Fatal("missing task id")
 	}
 	uploads := h.uploader.snapshot()
-	if len(uploads) != 1 || uploads[0].node != "node-one" || uploads[0].path != site.ArtifactPath ||
+	if len(uploads) != 1 || uploads[0].taskID != taskID || uploads[0].node != "node-one" || uploads[0].path != site.ArtifactPath ||
 		uploads[0].digest != site.Digest || string(uploads[0].content) != string(site.Config) {
 		t.Fatalf("uploads = %+v", uploads)
 	}

@@ -252,7 +252,7 @@ func (d *gatewayTaskDispatcher) Dispatch(ctx context.Context, command tasks.Comm
 		return tasks.DispatchResult{Accepted: false, Reason: "authorization_revoked"}, nil
 	}
 	if command.ActionID == gateway.NginxActionApply {
-		if err := d.artifacts.Upload(ctx, command.NodeID, planned.ArtifactPath, planned.Content, planned.Digest); err != nil {
+		if err := d.artifacts.Upload(ctx, command.TaskID, command.NodeID, planned.ArtifactPath, planned.Content, planned.Digest); err != nil {
 			return tasks.DispatchResult{Accepted: false, Reason: "artifact_upload_failed"}, nil
 		}
 		latest, err := d.repo.Get(ctx, command.TaskID)
