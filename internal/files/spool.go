@@ -29,7 +29,7 @@ func secureSpoolDirectory(dir string) error {
 		return ErrSpoolUnavailable
 	}
 	info, err := os.Lstat(dir)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || !spoolOwned(info) {
 		return ErrSpoolInsecure
 	}
 	if runtime.GOOS != "windows" && info.Mode().Perm()&0o077 != 0 {
