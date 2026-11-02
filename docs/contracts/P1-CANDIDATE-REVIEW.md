@@ -65,3 +65,5 @@ Wave6后续共享检查点：Proto FileChunk33/34、FileOpen35/36已按固定工
 正式允许真实节点/高权限任务前，需要 G2 C01～C07 审查和 BOOT/PRIV/TASK 必需安全验证。当前已有本地实现与隔离实机证据，完整功能和发布准入须分别验收。
 
 Wave6-R1补记：接收File*显式minor1/capability/当前trusted gate及Controller注入接缝，默认CLI无完整文件worker/路径映射，不能以模块WSS通过批准默认运行。AI预算为同DB持久事务+typed/通用审计，只有程序注册管理端口，无新预算HTTP；模型设置沿用独立R6候选。新增cx/0007与ds/0081迁移，发布目标/targetRevision/targetsPersisted为实现候选，与原OpenAPI差异交下一轮独立v09-r7候选，旧三候选/69原文/Proto基线及r03不变。真实更新/灾备权威、Xray工件/Runtime及G2发布准入未关闭，详见development/sprints/v09-five-day/WAVE6-R1-SHARED.md。
+
+Wave6-R2补记（2026-11-02）：正式组合统一文件worker、owner预算GET/管理员CAS PUT及更新/恢复运行门；新登记cx/0008、cx/0009、ds/0062后共24项迁移，旧checksum保留。独立v09-r7的ai-budget/services/updates候选已登记lint；更新实现id/taskId/status/targetVersion与旧jobId/state/toVersion存在显式DTO差异，不以新增候选宣称原接口全兼容。cleanup管理员HTTP默认无真实cleaner，执行claim/取消竞争未关闭；生产发布bridge/网关typed worker待完整装配，不能用排队任务当终态。默认CLI可信路径/来源配置及恢复新权威/fence仍待交付。原三OpenAPI/69原文、Proto/gen/旧兼容基线/r03未改；D01—D07/P1-C10/G2仍OPEN。详见development/reviews/V09-WAVE6-R2-REVIEW.md与WAVE6-R2-SHARED。
