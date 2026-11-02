@@ -65,10 +65,10 @@ internal/files/deployment*、spool owner检查、新增server/file_deployment.go
 此前 Agent 已实现三种策略，但 Controller 的 `FileExecutionWorker` 仍硬编码只接受 `skip`（plan/params/decode/live/Gate/open 五处），因此真实产品 API 无法使用 overwrite/rename。本增量：
 
 - `apps/controller/server/file_worker.go`：`fileTaskPlan` 携带并冻结 `ConflictPolicy`；plan/decode/live/Gate/open 全部按受审策略校验；Agent 回传的 rename 路径必须与计划路径同目录（经显式 PathMapper 转绝对路径比较），否则拒绝；`copyItem` 把实际发布路径写回 transfer item 的 `DestinationPath`。
-- `tests/integration/v09/platform/file_cli_r3_test.go`：在真实 Controller CLI + 两个实际 Agent CLI 的既有 skip 流程后，再通过 `/api/v1/transfers` 统一任务链执行 overwrite（原地替换、字节校验）与 rename（得到 `/target/out/source (1).bin`、原文件保留、API item 路径更新）。
+- `tests/integration/v09/platform/file_cli_r3_test.go`：在真实 Controller CLI + 两个实际 Agent CLI 的既有 skip 流程后，再通过 `/api/v1/transfers` 统一任务链执行 overwrite（原地替换、字节校验）与 rename（得到 `/target/out/source (1).bin`、原文件保留、API item 路径更新）；另验证 17 项请求在创建前返回 400，未产生任务/Agent 副作用。
 - R3 开发组合仍 **2 PASS / 0 SKIP**（HEAD `5ceadcc` 加本增量，DIRTY DEVELOPMENT）；`apps/controller/server` 与架构检查 Windows PASS。
 
-仍缺：>16 项/多目标分发、断连续传跨主控重启、真实 ENOSPC/inode 专项；rename 冲突耗尽（32 次）只返回 UNKNOWN，没有专门产品级测试。
+仍缺：>16 项只能显式拒绝，多目标分发未实现；断连续传跨主控重启、真实 ENOSPC/inode 专项；rename 冲突耗尽（32 次）只返回 UNKNOWN，没有专门产品级测试。
 
 ## 剩余（继续独立推进）
 

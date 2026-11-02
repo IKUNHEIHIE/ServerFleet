@@ -349,6 +349,17 @@ func TestR3TrustedFileDeploymentActualControllerAndTwoAgentCLI(t *testing.T) {
 	if got, e := os.ReadFile(filepath.Join(roots[1], "out", "source.bin")); e != nil || !bytes.Equal(got, overwrite) {
 		t.Fatal("rename replaced the original", e)
 	}
+	// The product promise is at most 16 items per unified transfer; the
+	// boundary is rejected before any task or agent effect.
+	many := make([]string, 17)
+	for i := range many {
+		name := fmt.Sprintf("many-%02d.bin", i)
+		if err = os.WriteFile(filepath.Join(roots[0], name), []byte("x"), 0600); err != nil {
+			t.Fatal(err)
+		}
+		many[i] = "/source/" + name
+	}
+	client.must("POST", "/api/v1/transfers", map[string]any{"sourceNodeId": nodes[0], "destinationNodeId": nodes[1], "sourcePaths": many, "destinationDir": "/target/out", "conflictPolicy": "skip"}, 400)
 	bad := map[string]any{}
 	for key, value := range transferBody {
 		bad[key] = value
