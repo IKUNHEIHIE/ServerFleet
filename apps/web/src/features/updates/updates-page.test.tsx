@@ -69,15 +69,22 @@ async function planUpdate(calls: { method: string; url: string; init?: RequestIn
 }
 
 describe("update center", () => {
-  it("checks and plans without installing, and refuses to apply without a verifiable backup", async () => {
+  it("warns that the server creates the backup instead of blocking the first upgrade", async () => {
     const { calls } = await renderAuthenticated("/updates", updateRoutes([]));
     expect(await screen.findByRole("heading", { level: 1, name: "更新中心" })).toBeVisible();
     await planUpdate(calls);
 
-    expect(screen.getByText("缺少可验证备份")).toBeVisible();
+    // 备份由服务端在 backing_up 阶段创建；页面只提示，不得因“历史作业里还没有
+    // backupId”把一键更新永久禁用（那会让第一次真实升级永远无法发起）。
+    expect(screen.getByText("本次升级需要备份")).toBeVisible();
+    expect(screen.queryByText("缺少可验证备份")).toBeNull();
+
+    const apply = screen.getByRole("button", { name: "一键更新" });
+    expect(apply).toBeDisabled();
     fireEvent.change(await screen.findByLabelText("确认文本"), { target: { value: "0.9.0" } });
+    expect(apply).toBeDisabled();
     fireEvent.click(screen.getByLabelText(/我确认升级会重启主控/));
-    expect(screen.getByRole("button", { name: "一键更新" })).toBeDisabled();
+    expect(apply).toBeEnabled();
     expect(calls.some(call => call.url === "/api/v1/system/updates/apply")).toBe(false);
   });
 

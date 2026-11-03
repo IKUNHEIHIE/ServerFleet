@@ -86,6 +86,7 @@ func TestActualWSSGatewayApplyReloadAndHTTPBytes(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() { _ = start.Wait() }()
+	waitForGatewayProcess(t, filepath.Join(prefix, "nginx.pid"))
 	t.Cleanup(func() {
 		_ = exec.Command(nginxPath, "-s", "stop", "-p", filepath.ToSlash(prefix)+"/", "-c", filepath.ToSlash(mainConfig)).Run()
 		_ = start.Process.Kill()
