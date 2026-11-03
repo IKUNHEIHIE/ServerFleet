@@ -35,7 +35,8 @@ const (
 
 func ServiceActions() []string {
 	return []string{ActionDownload, ActionRead, ActionTransfer, ActionTransferCancel, ActionTransferCreate,
-		ActionTransferExecute, ActionTransferRecover, ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite}
+		ActionTransferExecute, ActionTransferRecover, ActionTransferSubmitFailed, ActionUploadAbort, ActionUploadComplete, ActionUploadCreate, ActionWrite,
+		ActionDistributionCreate, ActionDistributionComplete, ActionDistributionCancel}
 }
 
 var (

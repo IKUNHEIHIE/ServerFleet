@@ -495,3 +495,254 @@ func (r *Repo) RecoverRunningTransfers(ctx context.Context, now time.Time) (int,
 func (r *Repo) SaveProgress(ctx context.Context, id string, progress float64, total, copied *int64, message string, items []TransferItem, started time.Time) error {
 	return r.ApplyTaskUpdate(ctx, r.db, id, TransferRunning, progress, total, copied, message, items, started, time.Time{})
 }
+
+const distributionSelect = `SELECT id, subject_id, node_id, destination_path, status, bytes_received,
+        expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at
+        FROM file_distributions`
+const distributionTargetSelect = `SELECT distribution_id, sequence, node_id, write_path, status, bytes, sha256,
+        error_code, error_message, updated_at FROM file_distribution_targets`
+
+// CreateDistribution inserts the staging header row with its frozen target list.
+func (r *Repo) CreateDistribution(ctx context.Context, q storage.Queryer, distribution Distribution) error {
+	_, err := q.Exec(ctx, `INSERT INTO file_distributions
+			(id, subject_id, node_id, destination_path, status, bytes_received, expected_size,
+			 sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at)
+			VALUES (?, ?, ?, ?, ?, 0, ?, ?, '', '', ?, '', ?, ?)`,
+		distribution.ID, distribution.SubjectID, distribution.NodeID, distribution.DestinationPath, distribution.Status,
+		nullableInt(distribution.ExpectedSize), distribution.SHA256Expected, distribution.StagingName,
+		encodeTime(distribution.CreatedAt), encodeTime(distribution.UpdatedAt))
+	if err != nil {
+		return err
+	}
+	for _, target := range distribution.Targets {
+		if _, err := q.Exec(ctx, `INSERT INTO file_distribution_targets
+                        (distribution_id, sequence, node_id, write_path, status, bytes, sha256, error_code, error_message, updated_at)
+                        VALUES (?, ?, ?, ?, ?, 0, '', '', '', ?)`,
+			distribution.ID, target.Sequence, target.NodeID, target.WritePath, target.Status,
+			encodeTime(target.UpdatedAt)); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (r *Repo) GetDistribution(ctx context.Context, id string) (Distribution, error) {
+	var (
+		distribution     Distribution
+		expected         *int64
+		created, updated string
+	)
+	err := r.db.QueryRow(ctx, distributionSelect+` WHERE id = ?`, id).Scan(
+		&distribution.ID, &distribution.SubjectID, &distribution.NodeID, &distribution.DestinationPath,
+		&distribution.Status, &distribution.BytesReceived, &expected, &distribution.SHA256Expected,
+		&distribution.SHA256Actual, &distribution.ErrorCode, &distribution.StagingName, &distribution.TaskID,
+		&created, &updated)
+	if storage.IsNotFound(err) {
+		return Distribution{}, ErrDistributionNotFound
+	}
+	if err != nil {
+		return Distribution{}, err
+	}
+	distribution.ExpectedSize = expected
+	if distribution.CreatedAt, err = storage.DecodeTime(created); err != nil {
+		return Distribution{}, err
+	}
+	if distribution.UpdatedAt, err = storage.DecodeTime(updated); err != nil {
+		return Distribution{}, err
+	}
+	distribution.Targets, err = r.ListDistributionTargets(ctx, id)
+	return distribution, err
+}
+
+func (r *Repo) GetDistributionByTask(ctx context.Context, taskID string) (Distribution, error) {
+	var (
+		distribution     Distribution
+		expected         *int64
+		created, updated string
+	)
+	err := r.db.QueryRow(ctx, distributionSelect+` WHERE task_id = ?`, taskID).Scan(
+		&distribution.ID, &distribution.SubjectID, &distribution.NodeID, &distribution.DestinationPath,
+		&distribution.Status, &distribution.BytesReceived, &expected, &distribution.SHA256Expected,
+		&distribution.SHA256Actual, &distribution.ErrorCode, &distribution.StagingName, &distribution.TaskID,
+		&created, &updated)
+	if storage.IsNotFound(err) {
+		return Distribution{}, ErrDistributionNotFound
+	}
+	if err != nil {
+		return Distribution{}, err
+	}
+	distribution.ExpectedSize = expected
+	if distribution.CreatedAt, err = storage.DecodeTime(created); err != nil {
+		return Distribution{}, err
+	}
+	if distribution.UpdatedAt, err = storage.DecodeTime(updated); err != nil {
+		return Distribution{}, err
+	}
+	distribution.Targets, err = r.ListDistributionTargets(ctx, distribution.ID)
+	return distribution, err
+}
+
+func (r *Repo) ListDistributionTargets(ctx context.Context, distributionID string) ([]DistributionTarget, error) {
+	rows, err := r.db.Query(ctx, distributionTargetSelect+` WHERE distribution_id = ? ORDER BY sequence`, distributionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var targets []DistributionTarget
+	for rows.Next() {
+		var (
+			target  DistributionTarget
+			updated string
+		)
+		var distributionID string
+		if err := rows.Scan(&distributionID, &target.Sequence, &target.NodeID, &target.WritePath,
+			&target.Status, &target.Bytes, &target.SHA256, &target.ErrorCode, &target.ErrorMessage, &updated); err != nil {
+			return nil, err
+		}
+		if target.UpdatedAt, err = storage.DecodeTime(updated); err != nil {
+			return nil, err
+		}
+		targets = append(targets, target)
+	}
+	return targets, rows.Err()
+}
+
+func (r *Repo) UpdateDistributionProgress(ctx context.Context, q storage.Queryer, id string, received int64) error {
+	_, err := q.Exec(ctx, `UPDATE file_distributions SET bytes_received = ?, updated_at = ? WHERE id = ? AND status = ?`,
+		received, encodeTime(time.Now().UTC()), id, DistributionOpen)
+	return err
+}
+
+// BindDistributionTask durably moves a verified staging distribution into
+// dispatching under exactly one task id. Idempotent for the same task.
+func (r *Repo) BindDistributionTask(ctx context.Context, q storage.Queryer, id, taskID, verifiedSHA string) (bool, error) {
+	res, err := q.Exec(ctx, `UPDATE file_distributions SET status = ?, task_id = ?, sha256_actual = ?, updated_at = ?
+                WHERE id = ? AND ((status = ? AND task_id = '') OR (status = ? AND task_id = ?))`,
+		DistributionDispatching, taskID, verifiedSHA, encodeTime(time.Now().UTC()),
+		id, DistributionOpen, DistributionDispatching, taskID)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved > 0, err
+}
+
+// FinishDistributionTarget persists one per-target terminal outcome exactly
+// once. Non-terminal pending/dispatching rows converge; terminal rows are
+// idempotent no-ops so replays cannot overwrite another honest result.
+func (r *Repo) FinishDistributionTarget(ctx context.Context, q storage.Queryer, id, nodeID, status string, bytes int64, sha, errorCode, errorMessage string) (bool, error) {
+	switch status {
+	case TargetStateCompleted, TargetStateFailed, TargetStateCancelled, TargetStateUnknown:
+	default:
+		return false, ErrInvalidTargets
+	}
+	res, err := q.Exec(ctx, `UPDATE file_distribution_targets SET status = ?, bytes = ?, sha256 = ?, error_code = ?,
+                error_message = ?, updated_at = ? WHERE distribution_id = ? AND node_id = ? AND status IN (?, ?)`,
+		status, bytes, sha, errorCode, errorMessage, encodeTime(time.Now().UTC()),
+		id, nodeID, TargetStatePending, TargetStateDispatching)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved > 0, err
+}
+
+// SetDistributionTargetState atomically claims a pending target. A dispatching
+// or terminal row cannot be claimed again, including after reconciliation.
+func (r *Repo) SetDistributionTargetState(ctx context.Context, id, nodeID, status string) (bool, error) {
+	if status != TargetStateDispatching {
+		return false, ErrInvalidTargets
+	}
+	res, err := r.db.Exec(ctx, `UPDATE file_distribution_targets SET status = ?, updated_at = ?
+                WHERE distribution_id = ? AND node_id = ? AND status = ?
+                AND EXISTS (SELECT 1 FROM file_distributions WHERE id = ? AND status = ?)`,
+		status, encodeTime(time.Now().UTC()), id, nodeID, TargetStatePending, id, DistributionDispatching)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved > 0, err
+}
+
+// FailOpenDistribution rejects unsubmitted staging without touching a bound
+// task. The caller commits its failure audit in the same transaction.
+func (r *Repo) FailOpenDistribution(ctx context.Context, q storage.Queryer, id, actualSHA, errorCode string) (bool, error) {
+	res, err := q.Exec(ctx, `UPDATE file_distributions SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?
+                WHERE id = ? AND status = ? AND task_id = ''`,
+		DistributionFailed, actualSHA, errorCode, encodeTime(time.Now().UTC()), id, DistributionOpen)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved == 1, err
+}
+
+// FinishDistribution atomically converges the distribution terminal state
+// from dispatching. The first caller wins; later calls are no-ops.
+func (r *Repo) FinishDistribution(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string) (bool, error) {
+	switch status {
+	case DistributionCompleted, DistributionPartial, DistributionFailed, DistributionCancelled, DistributionAborted:
+	default:
+		return false, ErrInvalidTransfer
+	}
+	res, err := q.Exec(ctx, `UPDATE file_distributions SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?
+                WHERE id = ? AND status = ?`,
+		status, actualSHA, errorCode, encodeTime(time.Now().UTC()), id, DistributionDispatching)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved > 0, err
+}
+
+// AbortDistributionRow converges an OPEN staging distribution to aborted.
+// Only the open state can be aborted; dispatching distributions must go
+// through the unified cancellation path instead.
+func (r *Repo) AbortDistributionRow(ctx context.Context, q storage.Queryer, id string) error {
+	res, err := q.Exec(ctx, `UPDATE file_distributions SET status = ?, error_code = 'aborted', updated_at = ?
+                WHERE id = ? AND status = ?`, DistributionAborted, encodeTime(time.Now().UTC()), id, DistributionOpen)
+	if err != nil {
+		return err
+	}
+	moved, err := res.RowsAffected()
+	if err == nil && moved == 0 {
+		return ErrDistributionClosed
+	}
+	return err
+}
+
+func (r *Repo) ListDispatchingDistributions(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `SELECT id FROM file_distributions WHERE status = ?`, DistributionDispatching)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// FreezeDistributionTargetPaths persists the worker-mapped per-node write
+// paths before the unified task is submitted, so the frozen rows and the task
+// parameters agree exactly from the first frame.
+func (r *Repo) FreezeDistributionTargetPaths(ctx context.Context, id string, paths map[string]string) error {
+	for node, writePath := range paths {
+		res, err := r.db.Exec(ctx, `UPDATE file_distribution_targets SET write_path = ?, updated_at = ?
+			WHERE distribution_id = ? AND node_id = ? AND write_path = ''`,
+			writePath, encodeTime(time.Now().UTC()), id, node)
+		if err != nil {
+			return err
+		}
+		moved, err := res.RowsAffected()
+		if err == nil && moved == 0 {
+			return ErrInvalidTargets
+		}
+	}
+	return nil
+}

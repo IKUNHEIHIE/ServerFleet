@@ -71,5 +71,43 @@ func Migrations() []storage.Migration {
 			`ALTER TABLE file_uploads ADD COLUMN task_id TEXT NOT NULL DEFAULT ''`,
 			`CREATE INDEX file_uploads_task ON file_uploads (task_id)`,
 		},
+	}, {
+		// New schema allocated by the coordinator for AM-02 review repair.
+		// Existing migration statements/checksums remain byte-for-byte intact.
+		Version: "ds/0042_file_distribution",
+		Name:    "frozen multi-target distribution and per-target results",
+		Statements: []string{
+			`CREATE TABLE file_distributions (
+				id TEXT PRIMARY KEY,
+				subject_id TEXT NOT NULL,
+				node_id TEXT NOT NULL,
+				destination_path TEXT NOT NULL,
+				status TEXT NOT NULL,
+				bytes_received INTEGER NOT NULL DEFAULT 0,
+				expected_size INTEGER,
+				sha256_expected TEXT NOT NULL DEFAULT '',
+				sha256_actual TEXT NOT NULL DEFAULT '',
+				error_code TEXT NOT NULL DEFAULT '',
+				staging_name TEXT NOT NULL,
+				task_id TEXT NOT NULL DEFAULT '',
+				created_at TEXT NOT NULL,
+				updated_at TEXT NOT NULL
+			)`,
+			`CREATE TABLE file_distribution_targets (
+				distribution_id TEXT NOT NULL REFERENCES file_distributions (id) ON DELETE CASCADE,
+				sequence INTEGER NOT NULL,
+				node_id TEXT NOT NULL,
+				write_path TEXT NOT NULL,
+				status TEXT NOT NULL,
+				bytes INTEGER NOT NULL DEFAULT 0,
+				sha256 TEXT NOT NULL DEFAULT '',
+				error_code TEXT NOT NULL DEFAULT '',
+				error_message TEXT NOT NULL DEFAULT '',
+				updated_at TEXT NOT NULL,
+				PRIMARY KEY (distribution_id, sequence)
+			)`,
+			`CREATE UNIQUE INDEX file_distribution_nodes ON file_distribution_targets (distribution_id, node_id)`,
+			`CREATE INDEX file_distributions_task ON file_distributions (task_id)`,
+		},
 	}}
 }

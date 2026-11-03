@@ -25,3 +25,6 @@ apis:
 
   v09-r8-files:
     root: api/openapi/revisions/v09-r8/files-candidate.yaml
+
+  v09-r9-file-distributions:
+    root: api/openapi/revisions/v09-r9/file-distributions-candidate.yaml
