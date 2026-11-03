@@ -1,0 +1,39 @@
+diff --git a/tests/integration/v09/controller_wave2_test.go b/tests/integration/v09/controller_wave2_test.go
+index c261c6e..b8fa5c5 100644
+--- a/tests/integration/v09/controller_wave2_test.go
++++ b/tests/integration/v09/controller_wave2_test.go
+@@ -69,7 +69,7 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
+ 	if err != nil {
+ 		t.Fatalf("AppliedVersions: %v", err)
+ 	}
+-	if len(versions) != 25 {
++	if len(versions) != 26 {
+ 		t.Fatalf("applied migrations = %d (%v), want 25", len(versions), versions)
+ 	}
+ 
+diff --git a/tests/integration/v09/services/backup_restore_test.go b/tests/integration/v09/services/backup_restore_test.go
+index 623151e..f09dc4a 100644
+--- a/tests/integration/v09/services/backup_restore_test.go
++++ b/tests/integration/v09/services/backup_restore_test.go
+@@ -132,7 +132,7 @@ func TestBackupRestoreAcrossDomains(t *testing.T) {
+ 		t.Fatalf("reapply migrations: %+v %v", report, err)
+ 	}
+ 	versions, err := storage.AppliedVersions(ctx, restored)
+-	if err != nil || len(versions) != 13 {
++	if err != nil || len(versions) != 14 {
+ 		t.Fatalf("versions = %v, %v", versions, err)
+ 	}
+ 
+diff --git a/tests/integration/v09/wave6_r1_migration_test.go b/tests/integration/v09/wave6_r1_migration_test.go
+index 41ba446..13ce01b 100644
+--- a/tests/integration/v09/wave6_r1_migration_test.go
++++ b/tests/integration/v09/wave6_r1_migration_test.go
+@@ -45,7 +45,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
+ 		t.Fatal("migration replay changed history", err)
+ 	}
+ 	versions, err := storage.AppliedVersions(ctx, db)
+-	if err != nil || len(versions) != 25 {
++	if err != nil || len(versions) != 26 {
+ 		t.Fatal(versions, err)
+ 	}
+ 	var name, gateways string

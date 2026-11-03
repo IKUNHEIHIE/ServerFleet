@@ -29,9 +29,16 @@ func TestR3ActualProductAgentHTTPApprovedSignedInstallAndCompatibleRollback(t *t
 	if runtime.GOOS != "linux" || os.Geteuid() == 0 {
 		t.Skip("non-root actual Agent product")
 	}
-	oldBinary, nextBinary := os.Getenv("SF_R3_AGENT_V1"), os.Getenv("SF_R3_AGENT_V2")
-	if !filepath.IsAbs(oldBinary) || !filepath.IsAbs(nextBinary) {
-		t.Fatal("actual release builds required")
+	oldBinary, okV1 := explicitBinary("SF_R3_AGENT_V1", "agent 1.0.0")
+	nextBinary, okV2 := explicitBinary("SF_R3_AGENT_V2", "agent 1.0.1")
+	if !okV1 || !okV2 {
+		_, _, builtV1, builtV2 := buildActualProducts(t)
+		if !okV1 {
+			oldBinary = builtV1
+		}
+		if !okV2 {
+			nextBinary = builtV2
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 90*time.Second)
 	defer cancel()

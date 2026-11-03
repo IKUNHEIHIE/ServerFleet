@@ -21,16 +21,16 @@ func NewRepo(db *storage.DB) (*Repo, error) {
 }
 
 const transferSelect = `SELECT id, task_id, submitter_id, source_node_id, destination_node_id,
-	destination_dir, conflict_policy, follow_symlinks, dry_run, status, progress, total_bytes,
-	copied_bytes, error_message, request_id, idempotency_key, created_at, updated_at, started_at, completed_at
-	FROM file_transfers`
+        destination_dir, conflict_policy, follow_symlinks, dry_run, status, progress, total_bytes,
+        copied_bytes, error_message, request_id, idempotency_key, created_at, updated_at, started_at, completed_at
+        FROM file_transfers`
 
 func (r *Repo) CreateTransfer(ctx context.Context, q storage.Queryer, transfer Transfer) error {
 	_, err := q.Exec(ctx, `INSERT INTO file_transfers
-		(id, task_id, submitter_id, source_node_id, destination_node_id, destination_dir,
-		 conflict_policy, follow_symlinks, dry_run, status, progress, total_bytes, copied_bytes,
-		 error_message, request_id, idempotency_key, created_at, updated_at, started_at, completed_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, '', ?, ?, ?, ?, NULL, NULL)`,
+                (id, task_id, submitter_id, source_node_id, destination_node_id, destination_dir,
+                 conflict_policy, follow_symlinks, dry_run, status, progress, total_bytes, copied_bytes,
+                 error_message, request_id, idempotency_key, created_at, updated_at, started_at, completed_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, '', ?, ?, ?, ?, NULL, NULL)`,
 		transfer.ID, transfer.TaskID, transfer.SubmitterID, transfer.SourceNodeID,
 		transfer.DestinationNodeID, transfer.DestinationDir, string(transfer.ConflictPolicy),
 		boolInt(transfer.FollowSymlinks), boolInt(transfer.DryRun), string(transfer.Status),
@@ -40,8 +40,8 @@ func (r *Repo) CreateTransfer(ctx context.Context, q storage.Queryer, transfer T
 	}
 	for _, item := range transfer.Items {
 		if _, err := q.Exec(ctx, `INSERT INTO file_transfer_items
-			(transfer_id, sequence, source_path, destination_path, status, bytes_copied, error_code, error_message)
-			VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+                        (transfer_id, sequence, source_path, destination_path, status, bytes_copied, error_code, error_message)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
 			transfer.ID, item.Sequence, item.SourcePath, item.DestinationPath, string(item.Status),
 			item.BytesCopied, item.ErrorCode, item.ErrorMessage); err != nil {
 			return err
@@ -140,7 +140,7 @@ func (r *Repo) AttachTask(ctx context.Context, q storage.Queryer, id, taskID str
 func (r *Repo) MarkTransferFailed(ctx context.Context, q storage.Queryer, id, message string) error {
 	now := time.Now().UTC()
 	_, err := q.Exec(ctx, `UPDATE file_transfers SET status = ?, error_message = ?, completed_at = ?, updated_at = ?
-		WHERE id = ? AND completed_at IS NULL`, string(TransferFailed), message, encodeTime(now), encodeTime(now), id)
+                WHERE id = ? AND completed_at IS NULL`, string(TransferFailed), message, encodeTime(now), encodeTime(now), id)
 	return err
 }
 
@@ -155,8 +155,8 @@ func (r *Repo) ApplyTaskUpdate(ctx context.Context, q storage.Queryer, id string
 		progress = 100
 	}
 	_, err := q.Exec(ctx, `UPDATE file_transfers SET status = ?, progress = ?, total_bytes = COALESCE(?, total_bytes),
-		copied_bytes = COALESCE(?, copied_bytes), error_message = ?, started_at = COALESCE(started_at, ?),
-		completed_at = ?, updated_at = ? WHERE id = ?`,
+                copied_bytes = COALESCE(?, copied_bytes), error_message = ?, started_at = COALESCE(started_at, ?),
+                completed_at = ?, updated_at = ? WHERE id = ?`,
 		string(status), progress, nullableInt(total), nullableInt(copied), message,
 		encodeTime(started), encodeTime(completed), encodeTime(time.Now().UTC()), id)
 	if err != nil {
@@ -164,7 +164,7 @@ func (r *Repo) ApplyTaskUpdate(ctx context.Context, q storage.Queryer, id string
 	}
 	for _, item := range items {
 		if _, err := q.Exec(ctx, `UPDATE file_transfer_items SET destination_path = ?, status = ?,
-			bytes_copied = ?, error_code = ?, error_message = ? WHERE transfer_id = ? AND sequence = ?`,
+                        bytes_copied = ?, error_code = ?, error_message = ? WHERE transfer_id = ? AND sequence = ?`,
 			item.DestinationPath, string(item.Status), item.BytesCopied, item.ErrorCode,
 			item.ErrorMessage, id, item.Sequence); err != nil {
 			return err
@@ -175,7 +175,7 @@ func (r *Repo) ApplyTaskUpdate(ctx context.Context, q storage.Queryer, id string
 
 func transferItems(ctx context.Context, q storage.Queryer, transferID string) ([]TransferItem, error) {
 	rows, err := q.Query(ctx, `SELECT sequence, source_path, destination_path, status, bytes_copied,
-		error_code, error_message FROM file_transfer_items WHERE transfer_id = ? ORDER BY sequence`, transferID)
+                error_code, error_message FROM file_transfer_items WHERE transfer_id = ? ORDER BY sequence`, transferID)
 	if err != nil {
 		return nil, err
 	}
@@ -247,9 +247,9 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 
 func (r *Repo) CreateUpload(ctx context.Context, q storage.Queryer, upload Upload) error {
 	_, err := q.Exec(ctx, `INSERT INTO file_uploads
-		(id, subject_id, node_id, destination_path, status, bytes_received, expected_size,
-		 sha256_expected, sha256_actual, error_code, staging_name, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, 0, ?, ?, '', '', ?, ?, ?)`,
+                (id, subject_id, node_id, destination_path, status, bytes_received, expected_size,
+                 sha256_expected, sha256_actual, error_code, staging_name, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, '', '', ?, ?, ?)`,
 		upload.ID, upload.SubjectID, upload.NodeID, upload.DestinationPath, upload.Status,
 		nullableInt(upload.ExpectedSize), upload.SHA256Expected, upload.StagingName,
 		encodeTime(upload.CreatedAt), encodeTime(upload.UpdatedAt))
@@ -263,10 +263,10 @@ func (r *Repo) GetUpload(ctx context.Context, id string) (Upload, error) {
 		created, updated string
 	)
 	err := r.db.QueryRow(ctx, `SELECT id, subject_id, node_id, destination_path, status, bytes_received,
-		expected_size, sha256_expected, sha256_actual, error_code, staging_name, created_at, updated_at
-		FROM file_uploads WHERE id = ?`, id).Scan(&upload.ID, &upload.SubjectID, &upload.NodeID,
+                expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at
+                FROM file_uploads WHERE id = ?`, id).Scan(&upload.ID, &upload.SubjectID, &upload.NodeID,
 		&upload.DestinationPath, &upload.Status, &upload.BytesReceived, &expected,
-		&upload.SHA256Expected, &upload.SHA256Actual, &upload.ErrorCode, &upload.StagingName,
+		&upload.SHA256Expected, &upload.SHA256Actual, &upload.ErrorCode, &upload.StagingName, &upload.TaskID,
 		&created, &updated)
 	if storage.IsNotFound(err) {
 		return Upload{}, ErrUploadNotFound
@@ -292,8 +292,68 @@ func (r *Repo) UpdateUploadProgress(ctx context.Context, q storage.Queryer, id s
 
 func (r *Repo) UpdateUploadStatus(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string) error {
 	_, err := q.Exec(ctx, `UPDATE file_uploads SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?
-		WHERE id = ?`, status, actualSHA, errorCode, encodeTime(time.Now().UTC()), id)
+                WHERE id = ?`, status, actualSHA, errorCode, encodeTime(time.Now().UTC()), id)
 	return err
+}
+
+// BindUploadTask atomically moves an open upload into dispatching under exactly
+// one unified task. The guarded WHERE clause makes double dispatch impossible.
+func (r *Repo) BindUploadTask(ctx context.Context, q storage.Queryer, id, taskID string) (bool, error) {
+	res, err := q.Exec(ctx, `UPDATE file_uploads SET task_id = ?, status = ?, updated_at = ?
+                WHERE id = ? AND status = ? AND task_id = ''`, taskID, UploadDispatching,
+		encodeTime(time.Now().UTC()), id, UploadOpen)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved > 0, err
+}
+
+// GetUploadByTask resolves the upload bound to one unified task.
+func (r *Repo) GetUploadByTask(ctx context.Context, taskID string) (Upload, error) {
+	var (
+		upload           Upload
+		expected         *int64
+		created, updated string
+	)
+	err := r.db.QueryRow(ctx, `SELECT id, subject_id, node_id, destination_path, status, bytes_received,
+                expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at
+                FROM file_uploads WHERE task_id = ?`, taskID).Scan(&upload.ID, &upload.SubjectID, &upload.NodeID,
+		&upload.DestinationPath, &upload.Status, &upload.BytesReceived, &expected,
+		&upload.SHA256Expected, &upload.SHA256Actual, &upload.ErrorCode, &upload.StagingName, &upload.TaskID,
+		&created, &updated)
+	if storage.IsNotFound(err) {
+		return Upload{}, ErrUploadNotFound
+	}
+	if err != nil {
+		return Upload{}, err
+	}
+	upload.ExpectedSize = expected
+	if upload.CreatedAt, err = storage.DecodeTime(created); err != nil {
+		return Upload{}, err
+	}
+	if upload.UpdatedAt, err = storage.DecodeTime(updated); err != nil {
+		return Upload{}, err
+	}
+	return upload, nil
+}
+
+// FinishUploadTask applies the trusted terminal task outcome exactly once. A
+// transition out of dispatching succeeds only for the first caller; later
+// calls with the same terminal state are idempotent no-ops.
+func (r *Repo) FinishUploadTask(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string) (bool, error) {
+	switch status {
+	case UploadCompleted, UploadFailed, UploadCancelled, UploadAborted:
+	default:
+		return false, ErrInvalidTransfer
+	}
+	res, err := q.Exec(ctx, `UPDATE file_uploads SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?
+                WHERE id = ? AND status = ?`, status, actualSHA, errorCode, encodeTime(time.Now().UTC()), id, UploadDispatching)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved > 0, err
 }
 
 func nullableInt(value *int64) any {
@@ -322,7 +382,7 @@ func encodeTime(value time.Time) any {
 // second byte channel.
 func (r *Repo) ClaimTransfer(ctx context.Context, taskID string, now time.Time) (Transfer, bool, error) {
 	result, err := r.db.Exec(ctx, `UPDATE file_transfers SET status = ?, started_at = COALESCE(started_at, ?),
-		updated_at = ? WHERE task_id = ? AND status = ?`,
+                updated_at = ? WHERE task_id = ? AND status = ?`,
 		string(TransferRunning), encodeTime(now), encodeTime(now), taskID, string(TransferQueued))
 	if err != nil {
 		return Transfer{}, false, err
@@ -362,9 +422,9 @@ func (r *Repo) RecoverRunningTransfers(ctx context.Context, now time.Time) (int,
 		}
 		for _, id := range ids {
 			result, err := tx.Exec(txCtx, `UPDATE file_transfers SET
-				status = CASE WHEN copied_bytes > 0 THEN ? ELSE ? END,
-				error_message = ?, completed_at = ?, updated_at = ?
-				WHERE id = ? AND status IN (?,?)`,
+                                status = CASE WHEN copied_bytes > 0 THEN ? ELSE ? END,
+                                error_message = ?, completed_at = ?, updated_at = ?
+                                WHERE id = ? AND status IN (?,?)`,
 				string(TransferPartialFailure), string(TransferFailed),
 				"controller restarted during transfer; result unknown",
 				encodeTime(now), encodeTime(now), id, string(TransferRunning), string(TransferCancelling))
@@ -379,7 +439,7 @@ func (r *Repo) RecoverRunningTransfers(ctx context.Context, now time.Time) (int,
 				continue
 			}
 			if _, err := tx.Exec(txCtx, `UPDATE file_transfer_items SET status = ?, error_code = ?, error_message = ?
-				WHERE transfer_id = ? AND status IN (?, ?)`,
+                                WHERE transfer_id = ? AND status IN (?, ?)`,
 				string(ItemFailed), "controller_restarted_unknown", "result unknown after controller restart",
 				id, string(ItemQueued), string(ItemCopying)); err != nil {
 				return err

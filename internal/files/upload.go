@@ -17,6 +17,11 @@ const (
 	UploadCompleted = "completed"
 	UploadAborted   = "aborted"
 	UploadFailed    = "failed"
+	// UploadDispatching marks a verified staging upload bound to a unified
+	// task. The task worker owns the actual frame-authorized push and the
+	// upload terminal state; nothing is claimed before the agent result.
+	UploadDispatching = "dispatching"
+	UploadCancelled   = "cancelled"
 
 	maxChunkBytes = 8 << 20
 )
@@ -273,6 +278,30 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 		}
 		_ = s.audit.Append(ctx, s.event(subjectID, ActionUploadComplete, "failure", requestID, []string{upload.NodeID}, "checksum_mismatch"))
 		return Upload{}, ErrChecksumMismatch
+	}
+	// Unified path: a trusted program assembly moves the verified upload
+	// into the sole task queue. The worker owns the frame-authorized push,
+	// approval and the actual terminal state; no transport claim is made
+	// here. The legacy direct transport port below stays for isolated
+	// compositions without the controlled agent channel.
+	if submitter := s.uploadTaskSubmitter(); submitter != nil {
+		taskID, submitErr := submitter.SubmitUpload(ctx, UploadCommand{
+			SubjectID: subjectID, RequestID: requestID, UploadID: upload.ID,
+			NodeID: upload.NodeID, DestinationPath: upload.DestinationPath,
+			SHA256Expected: digest, Size: upload.BytesReceived,
+		})
+		if submitErr != nil {
+			auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = s.audit.Append(auditCtx, s.event(subjectID, ActionTransferSubmitFailed, "failure", requestID, []string{upload.NodeID}, "upload_submit_failed"))
+			return Upload{}, fmt.Errorf("%w: %v", ErrTaskSubmitter, submitErr)
+		}
+		if err := s.SubmitUploadTask(ctx, upload, taskID); err != nil {
+			return Upload{}, err
+		}
+		upload.Status = UploadDispatching
+		upload.TaskID = taskID
+		return upload, nil
 	}
 	if s.uploads == nil {
 		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)

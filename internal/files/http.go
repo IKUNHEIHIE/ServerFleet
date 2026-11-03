@@ -265,10 +265,20 @@ func uploadProgressDTO(upload Upload) map[string]any {
 	if upload.ExpectedSize != nil {
 		expected = *upload.ExpectedSize
 	}
-	return map[string]any{
-		"uploadId": upload.ID, "status": "awaiting_data", "bytesReceived": upload.BytesReceived,
+	status := "awaiting_data"
+	if upload.Status != UploadOpen {
+		// Non-open uploads expose their real state, including the unified
+		// task dispatch and terminal outcomes.
+		status = upload.Status
+	}
+	dto := map[string]any{
+		"uploadId": upload.ID, "status": status, "bytesReceived": upload.BytesReceived,
 		"expectedSize": expected,
 	}
+	if upload.TaskID != "" {
+		dto["taskId"] = upload.TaskID
+	}
+	return dto
 }
 
 func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
@@ -295,9 +305,20 @@ func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
 		"type": "file", "sizeBytes": completed.BytesReceived,
 		"version": completed.SHA256Actual,
 	}}
-	writeJSON(w, http.StatusOK, map[string]any{
+	status := http.StatusOK
+	if completed.Status == UploadDispatching {
+		// The verified upload is accepted into the unified task queue. The
+		// frame-authorized push, approval and the terminal state are owned by
+		// the task worker; this response claims no transport success.
+		status = http.StatusAccepted
+	}
+	dto := map[string]any{
 		"uploadId": completed.ID, "status": completed.Status, "files": files,
-	})
+	}
+	if completed.TaskID != "" {
+		dto["taskId"] = completed.TaskID
+	}
+	writeJSON(w, status, dto)
 }
 
 func (api *httpAPI) principal(w http.ResponseWriter, r *http.Request) (Principal, bool) {
