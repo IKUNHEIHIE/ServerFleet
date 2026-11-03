@@ -41,6 +41,13 @@ func (b *agentLinkBridge) allowedActions() map[string]string {
 }
 
 func agentValidationLimits() transport.ValidationLimits {
+	// The protocol whitelist admits the two typed gateway action ids so a
+	// gateway-enabled link can negotiate them. Actual grant stays dynamic:
+	// handshake and admit only offer them when the trusted gateway chain is
+	// installed, so a non-gateway controller still never grants them.
+	allowed := agentAllowedActions()
+	allowed[gateway.NginxActionApply] = "1"
+	allowed[gateway.NginxActionRemove] = "1"
 	return transport.ValidationLimits{
 		MaxMessageBytes:    64 << 10,
 		MaxTextBytes:       256,
@@ -51,7 +58,7 @@ func agentValidationLimits() transport.ValidationLimits {
 		MaxCapabilities:    32,
 		MaxTimeoutSeconds:  600,
 		MaxOfferLifetime:   10 * time.Minute,
-		AllowedActions:     agentAllowedActions(),
+		AllowedActions:     allowed,
 	}
 }
 
