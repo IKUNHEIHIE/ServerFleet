@@ -1,0 +1,135 @@
+{
+  "task": "V09-CLOUD-WB-01",
+  "scope": "B06 灾难恢复前置条件探测（不是恢复成功验收）",
+  "mode": "complete",
+  "acceptanceComplete": false,
+  "verdict": "INCOMPLETE",
+  "modeNote": "严格完整模式：BLOCKED 令退出码为 1，只有全 PASS 才算通过。",
+  "command": "node tests/browser/v09/run-recovery-prerequisite-probe.mjs --require-complete",
+  "generatedAt": "2026-11-03T07:51:45.086Z",
+  "ports": {
+    "apiPort": 36583,
+    "webPort": 41553,
+    "aiPort": 41505,
+    "controlPort": 38187
+  },
+  "backup": {
+    "id": "wb01-dr-backup",
+    "sha256": "21f7eaeb577188310f47aec2e54260d33ff220b9e18b4c37ef233dba946e3762"
+  },
+  "counts": {
+    "pass": 11,
+    "blocked": 3,
+    "fail": 0
+  },
+  "results": [
+    {
+      "id": "R00",
+      "title": "环境与身份",
+      "status": "PASS",
+      "detail": "uid=1000 node=v24.22.1 go=go version go1.27.3 linux/amd64 work=/home/ubuntu/sf-wb01-recovery-probe mode=700"
+    },
+    {
+      "id": "R01",
+      "title": "构建 fixturehost（生产同构宿主）",
+      "status": "PASS",
+      "detail": "built /home/ubuntu/sf-wb01-recovery-probe/fixturehost"
+    },
+    {
+      "id": "R02",
+      "title": "私有 PKI 与目录",
+      "status": "PASS",
+      "detail": "TLS 证书 + AI upstream 证书 + 0600 合成 secret"
+    },
+    {
+      "id": "R03",
+      "title": "启动宿主：生产同构（不注入 RecoveryExecute）",
+      "status": "PASS",
+      "detail": "api=36583 web=41553 ai=41505 control=38187"
+    },
+    {
+      "id": "R04",
+      "title": "Web 同源宿主就绪",
+      "status": "PASS",
+      "detail": "https://127.0.0.1:41553 → :36583"
+    },
+    {
+      "id": "R05",
+      "title": "首次 bootstrap 会话（浏览器内完成）",
+      "status": "PASS",
+      "detail": "admin"
+    },
+    {
+      "id": "R06",
+      "title": "生成真实一致性备份（SQLite VACUUM INTO）并核对迁移账本",
+      "status": "PASS",
+      "detail": "backupId=wb01-dr-backup ledger=1 integrity=ok sha256=21f7eaeb577188310f47aec2e54260d33ff220b9e18b4c37ef233dba946e3762"
+    },
+    {
+      "id": "R07",
+      "title": "POST /backups/{id}/verify 真实通过（200 且 verified=true）",
+      "status": "PASS",
+      "detail": "200 verified=true backup_integrity=passed againstSha=21f7eaeb57718831…"
+    },
+    {
+      "httpStatus": 200,
+      "checks": [
+        {
+          "name": "backup_integrity",
+          "passed": true
+        },
+        {
+          "name": "target_controller_identity",
+          "passed": false,
+          "reason": "target_identity_not_observed"
+        },
+        {
+          "name": "old_controller_fenced",
+          "passed": false,
+          "reason": "fencing_evidence_unavailable"
+        },
+        {
+          "name": "recovery_key_reference",
+          "passed": true
+        }
+      ],
+      "id": "R08",
+      "title": "POST /disaster-recovery/preview 返回 200 但 eligible 恒为 false",
+      "status": "BLOCKED",
+      "detail": "200 eligible=false，未通过项 2/4: target_controller_identity/target_identity_not_observed; old_controller_fenced/fencing_evidence_unavailable"
+    },
+    {
+      "httpStatus": 501,
+      "id": "R09",
+      "title": "POST /disaster-recovery/jobs 返回 501（生产未装配 RecoveryExecute）",
+      "status": "BLOCKED",
+      "detail": "501 RECOVERY_EXECUTOR_UNAVAILABLE；作业未创建，未触碰任何主控或数据"
+    },
+    {
+      "httpStatus": 404,
+      "id": "R10",
+      "title": "GET /disaster-recovery/jobs/{id} 恒为 404（作业状态不可读回）",
+      "status": "BLOCKED",
+      "detail": "404 RECOVERY_JOB_NOT_FOUND；作业状态读回端点无条件 404，即使作业创建成功也无法从服务端读回阶段"
+    },
+    {
+      "id": "R11",
+      "title": "负向：未知备份 ID 必须 404 且不泄露内容",
+      "status": "PASS",
+      "detail": "404 BACKUP_NOT_FOUND，响应无路径/SQLite 细节"
+    },
+    {
+      "id": "R12",
+      "title": "负向：未认证会话必须 403 且不暴露检查项",
+      "status": "PASS",
+      "detail": "403 NOT_AUTHORIZED，未返回任何检查项或备份信息"
+    },
+    {
+      "id": "R13",
+      "title": "页面实况：备份与恢复页对当前能力一致呈现",
+      "status": "PASS",
+      "detail": "页面标注契约缺口，未出现「恢复成功」类陈述"
+    }
+  ],
+  "disclaimer": "R08–R10 的 BLOCKED 只在 HTTP 状态、problem 结构、code 与检查项集合精确匹配时成立；任何偏差均记 FAIL。BLOCKED 表示产品侧当前确无该能力（预览恒不合格、执行器未装配、作业状态不可读回），不计为本任务通过项；本脚本未注入自制恢复执行器，因此不对实际恢复、新权威、旧主控 fence、旧信任代次拒绝下结论。"
+}
