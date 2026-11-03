@@ -1,5 +1,13 @@
 # V09-CLOUD-SHARED-UPLOAD-01
 
+## 最终接收回执（2026-11-03）
+
+本共享修正已作为PR #5合并：最终审查head fc9739971c06e3ecaa93513571deffc324b3ca72，main3a1aefb92082565282eb5e35991b975722a45d7b。原错误候选e982的历史SQL漂移已纠正，旧hash不变；正式Controller迁移26项，旧库升级/重放回归PASS。AM实现随后作为PR #3合入最终产品基线51e0ee57；GET/202相关实现已有接收，不再仅停留候选文档，契约仍未冻结。
+
+最终main独立CI成功，范围与失败历史见[V09-CLOUD-R1-REVIEW](V09-CLOUD-R1-REVIEW.md)。以下prepared/not merged及“本PR尚未提供路由”描述属于提案时刻，不代表当前整体状态。B03/B04/B05/B06/G2/发布准入保持OPEN，不重放旧patch或改写已应用SQL。
+
+## 提案时记录（保留历史）
+
 2026-11-03 (Asia/Shanghai). Coordinator/session: chatgpt-review-01.
 Branch: `contract/cloud-upload-task-review01`. Depends on shared prerequisite PR #4,
 head `78e5e366f198379cf1cf1040d376cefe3b722259`; original main

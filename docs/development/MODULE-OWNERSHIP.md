@@ -1,6 +1,6 @@
 # 模块所有权
 
-这里的 Agent 是建议岗位，不是已经启动的会话。实际分配必须在 TASK-BOARD 写唯一会话 ID；同一模型的两个会话不能共享一份写权限。
+这里的初始模块表记录早期职责/端口来源，包含当时的占位描述；实际实现状态见CURRENT-PROGRESS，现行写权限见本文末尾Cloud R2及TASK-BOARD。登记的READY不代表平台已运行；必须有唯一会话ID，同一模型的两个会话不能共享一份写权限。
 
 | 目录/模块 | 职责与当前端口 | 数据模型归属 | 允许依赖（自身包除外） | 禁止直接访问 | 建议执行人 / 公共接口审查人 |
 |---|---|---|---|---|---|
@@ -18,11 +18,11 @@
 | `plugins` | 后续独立可选业务包，当前 README | Xray 等插件业务模型（仅 Xray 已批准） | 受控 Host SDK（尚未冻结） | 核心直接编入 Release、直连 Agent/秘密 | 后续独立插件任务 / 平台+安全负责人 |
 | `tests`、`scripts`、CI、根配置 | 跨模块基础设施与边界规则 | 合成测试数据、工具版本 | 测试可依赖模块，生产不可反向引用 | 降低门槛掩盖失败 | Codex 集成负责人 / 涉及 owner |
 
-目前端口没有生产实现，内部类型不是 OpenAPI 完整对象；增加字段需在所属模块审查，不能用临时 Request 取代授权/审批设计。
+已有多个领域端口、生产目录实现与已验证检查点，仍不等于全部能力已正式装配或完整验收。内部类型不自动成为冻结的OpenAPI对象；增加字段须在所属模块审查，不能用临时Request取代授权/审批设计。
 
 `go.mod`、`go.sum`、根及 Web `package.json`、`package-lock.json`、`buf*.yaml`、`redocly.yaml`、依赖规则、数据库公共迁移序列、CI 与根 AGENTS 是**共享文件**。模块 Agent 提交具体需求/差异，集成负责人单独协调修改；不要由多个工作目录同时更新锁文件。
 
-GitHub 账号未提供，CODEOWNERS 尚无真实审批人，当前依靠任务单和本地审查执行。远程仓库获批后再绑定真实账号和 main 分支保护，不能把文档规则当作 GitHub 已强制执行。
+仓库现为IKUNHEIHIE/ServerFleet私有仓库。三平台使用同一GitHub账号不构成三位独立审核人；主控以实际diff/证据及COMMENT记录审查，不自我APPROVE。保护规则以GitHub实际设置为准，不擅改CODEOWNERS/分支保护，也不能把文档要求当作平台已经强制执行。
 
 ## 完整v0.9五日复合包的新增目录归属
 
@@ -42,3 +42,16 @@ GitHub 账号未提供，CODEOWNERS 尚无真实审批人，当前依靠任务�
 ## Wave6-R2具体任务调整
 
 以`sprints/v09-five-day/WAVE6-R2.md`为当前授权：CX-03/codex-06接管`internal/files`与新增Controller file_*.go/ai_budget_http.go，DS-03暂停该模块写入，避免文件执行生命周期分散；DS可写新增Agent gateway_capability.go及同名前缀测试、Controller gateway_tasks.go。GM-03可写测试专用`tests/browser/v09/fixturehost` Go宿主，不得从生产引用。三位各自新增v09-r7候选文件范围见任务单，中央server/enrollment/bootstrap/Agent注册、迁移登记/Proto/gen/根锁/CI仍由总控接收patch。依赖白名单和统一任务/审批边界未放宽。
+
+## 2026-11-03 Cloud R2当前所有权（覆盖上方旧平台分工）
+
+完整精确文件清单和验收见`sprints/v09-five-day/cloud-r2/PLAN.md`及三份提示词。任务均READY，开工/提交尚待实际回报核验，不表示已运行；起点为经CI验证的51e0ee57。旧历史保留，按用户最新授权转交，不改原始资料/ADR或依赖白名单。
+
+| owner | 当前独占范围 | 中央与共享边界 |
+|---|---|---|
+| agentmore-02 / AM-02 | files/tasks/transport/updates/recovery/ai/workflows；列明文件/平台程序与platform非插件测试 | 不承担插件/代理组件，不写Web或gateway；其他中央字段交精确候选，不能争改HW窗口 |
+| codearts-02 / HW-02 | DNS/证书/网关/服务组/发布/监控/通知/配额；gateway_*.go与services测试 | 独立integration/cloud-gateway-wiring-hw02唯一候选窗口：网关所需server/agent_links/Controller main/Agent connect-main-runtime与测试、迁移/全局断言；主控审查接收前不称正式能力 |
+| workbuddy-02 / WB-02 | apps/web（锁/配置除外）、tests/browser/fixturehost；plugins/xray-manager、internal/plugins、auth的xray_materials*.go、server/plugins.go与新增xray_*.go；明确Xray测试与脚本 | 旧“禁止生产Go”只在此Xray域内被本次授权覆盖；不写其他Go/中央入口。Host/注册/消息/schema/锁/CI交主控协调；Runtime未获准入不得运行或默认启用 |
+| chatgpt-review-02 / 总控 | 公共接口/编号/生成/锁/CI/独立审查/顺序合并/任务板 | 不与HW候选窗口同时修改同批中央文件；窗口以明确接收或释放结束。其余两家中央请求排队成精确patch，不能形成隐藏overlay |
+
+Xray所有工作由WorkBuddy承担；这不是Runtime批准。可选插件不编入核心Release/被核心直接导入，WASM/Eino未准入。预留网关候选cx/0010_gateway_artifact_bindings仅作唯一编号预约，当前正式迁移仍26，必须主控审查与升级验证后才登记，禁止改旧SQL/hash。
