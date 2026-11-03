@@ -72,11 +72,9 @@ func Migrations() []storage.Migration {
 			`CREATE INDEX file_uploads_task ON file_uploads (task_id)`,
 		},
 	}, {
-		// Candidate schema for V09-CLOUD-AM-02 multi-target distribution. The
-		// final version number is allocated by the integration owner; the exact
-		// SQL bytes are delivered as a precise candidate diff in the progress
-		// docs and may be renumbered verbatim on adoption.
-		Version: "am/0001_file_distribution",
+		// New schema allocated by the coordinator for AM-02 review repair.
+		// Existing migration statements/checksums remain byte-for-byte intact.
+		Version: "ds/0042_file_distribution",
 		Name:    "frozen multi-target distribution and per-target results",
 		Statements: []string{
 			`CREATE TABLE file_distributions (

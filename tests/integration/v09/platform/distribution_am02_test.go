@@ -32,8 +32,8 @@ import (
 // worker against two resident real Agent processes with per-target honest
 // outcomes:
 //  1. normal two-target distribution (both files verified on disk);
-//  2. partial success with one offline target (online target keeps its
-//     result, offline target fails honestly, no batch replay);
+//  2. a frozen offline target keeps the plan queued; cancellation converges
+//     every target without any destination write;
 //  3. current-permission revocation mid-flight (revoked target fails
 //     denied_now, the sibling target still succeeds);
 //  4. unified task-interface cancellation before any write frame (per-target
@@ -372,27 +372,53 @@ func TestAM02DistributionMultiTargetRealAgents(t *testing.T) {
 		t.Fatal("offline target received a file")
 	}
 
-	// 3. Current-permission revocation: the gate hook only NOTIFIES that the
-	// worker's first frame arrived (never blocking a frame), so the test can
-	// revoke nodeB's grant deterministically while nodeA is still streaming a
-	// large file: nodeA completes, nodeB fails denied_now without a write
-	// frame, status converges to partial and nodeA's result is never replayed
-	// or overwritten.
+	// 3. Wait for a positively persisted partial write on A, then briefly hold
+	// one scope check while B's grant is revoked. This explicit, bounded barrier
+	// replaces the old 23 MiB timing race; it never holds a DB transaction and
+	// returns within 2s (below the existing 5s transport write budget).
+	// Per-frame authorization and all real Agent/byte assertions stay enabled.
 	var revokeEngaged atomic.Bool
+	revokeAt := make(chan uint64, 1)
+	continueRevoke := make(chan struct{})
+	var continueOnce sync.Once
+	releaseRevoke := func() { continueOnce.Do(func() { close(continueRevoke) }) }
+	t.Cleanup(releaseRevoke)
 	pauseMu.Lock()
 	pause = func(ctx context.Context, task tasks.Task) error {
-		revokeEngaged.Store(true)
-		return nil
+		if revokeEngaged.Load() {
+			return nil
+		}
+		var raw []byte
+		if err := composed.DB.QueryRow(ctx, `SELECT payload FROM cx_file_execution_bindings WHERE task_id = ? AND node_id = ?`, task.ID, nodeA).Scan(&raw); err != nil {
+			return nil // No child or confirmed write yet.
+		}
+		var binding files.ExecutionBinding
+		if json.Unmarshal(raw, &binding) != nil || binding.Offset == 0 || binding.Complete || !revokeEngaged.CompareAndSwap(false, true) {
+			return nil
+		}
+		revokeAt <- binding.Offset
+		timer := time.NewTimer(2 * time.Second)
+		defer timer.Stop()
+		select {
+		case <-continueRevoke:
+			return nil
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-timer.C:
+			return fmt.Errorf("revocation barrier exceeded its bounded scope window")
+		}
 	}
 	pauseMu.Unlock()
-	revokePayload := bytes.Repeat([]byte("am02-revocation-payload-24mb-"), 24*(1<<20)/30)
+	revokePayload := bytes.Repeat([]byte("am02-revocation-payload-"), 12_000)
 	revokeID, revokeTask := distribute("revoke.bin", revokePayload, []string{nodeA, nodeB})
-	revokeWait := time.Now().Add(30 * time.Second)
-	for !revokeEngaged.Load() && time.Now().Before(revokeWait) {
-		time.Sleep(5 * time.Millisecond)
-	}
-	if !revokeEngaged.Load() {
-		t.Fatal("gate hook never engaged for the revocation scenario")
+	select {
+	case offset := <-revokeAt:
+		if offset == 0 || offset >= uint64(len(revokePayload)) {
+			t.Fatalf("revocation did not interrupt a positively confirmed partial write: offset=%d size=%d", offset, len(revokePayload))
+		}
+		t.Logf("revoking B while A has confirmed %d/%d bytes", offset, len(revokePayload))
+	case <-time.After(30 * time.Second):
+		t.Fatal("no confirmed partial-write boundary for the revocation scenario")
 	}
 	grants := must("GET", "/api/v1/resource-grants", nil, 200)
 	var grantList struct {
@@ -413,6 +439,7 @@ func TestAM02DistributionMultiTargetRealAgents(t *testing.T) {
 		t.Fatal("nodeB grant missing")
 	}
 	must("DELETE", "/api/v1/resource-grants/"+nodeBGrant, nil, 204)
+	releaseRevoke()
 	pauseMu.Lock()
 	pause = nil
 	pauseMu.Unlock()
@@ -456,6 +483,10 @@ func TestAM02DistributionMultiTargetRealAgents(t *testing.T) {
 	}
 	if _, e := os.Stat(filepath.Join(incomingB, "revoke.bin")); !os.IsNotExist(e) {
 		t.Fatal("revoked target received a file")
+	}
+	var revokedOffers int
+	if err := composed.DB.QueryRow(ctx, `SELECT count(*) FROM cx_file_execution_bindings WHERE task_id = ? AND node_id = ?`, revokeTask, nodeB).Scan(&revokedOffers); err != nil || revokedOffers != 0 {
+		t.Fatalf("revoked target received an execution reservation: offers=%d err=%v", revokedOffers, err)
 	}
 
 	// 4. Unified task-interface cancellation before any write frame: the cancel

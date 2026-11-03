@@ -425,11 +425,11 @@ func writeError(w http.ResponseWriter, err error) {
 	switch {
 	case errors.Is(err, auth.ErrDenied):
 		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
-	case errors.Is(err, ErrTransferNotFound), errors.Is(err, ErrUploadNotFound):
+	case errors.Is(err, ErrTransferNotFound), errors.Is(err, ErrUploadNotFound), errors.Is(err, ErrDistributionNotFound):
 		writeFixed(w, http.StatusNotFound, "not_found", "resource was not found")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
-	case errors.Is(err, ErrOffsetConflict), errors.Is(err, ErrUploadClosed), errors.Is(err, ErrSubjectMismatch):
+	case errors.Is(err, ErrOffsetConflict), errors.Is(err, ErrUploadClosed), errors.Is(err, ErrDistributionClosed), errors.Is(err, ErrSubjectMismatch):
 		writeFixed(w, http.StatusConflict, "conflict", "upload state changed")
 	case errors.Is(err, ErrChecksumMismatch):
 		writeFixed(w, http.StatusUnprocessableEntity, "checksum_mismatch", "uploaded file failed verification")
@@ -440,7 +440,7 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrSameNode):
 		writeFixed(w, http.StatusConflict, "same_node", "source and destination nodes must differ")
 	case errors.Is(err, ErrInvalidPath), errors.Is(err, ErrSymlinkForbidden), errors.Is(err, ErrInvalidTransfer),
-		errors.Is(err, ErrRequestIDRequired), errors.Is(err, ErrMissingAuthorizer):
+		errors.Is(err, ErrInvalidTargets), errors.Is(err, ErrRequestIDRequired), errors.Is(err, ErrMissingAuthorizer):
 		writeFixed(w, http.StatusBadRequest, "invalid_request", "request is invalid")
 	case errors.Is(err, ErrTransportFailure):
 		writeFixed(w, http.StatusBadGateway, "transport_failure", "node file transport failed")
@@ -509,6 +509,10 @@ func (api *httpAPI) distributionContent(w http.ResponseWriter, r *http.Request) 
 	distribution, err := api.service.GetDistribution(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("distributionId"))
 	if err != nil {
 		writeError(w, err)
+		return
+	}
+	if distribution.Status != DistributionOpen {
+		writeError(w, ErrDistributionClosed)
 		return
 	}
 	offset, ok := uploadOffset(w, r)

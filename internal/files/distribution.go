@@ -368,11 +368,22 @@ func (s *Service) CompleteDistribution(ctx context.Context, subjectID, requestID
 		return Distribution{}, err
 	}
 	if distribution.SHA256Expected != "" && digest != distribution.SHA256Expected {
-		_ = os.Remove(staging)
-		if _, statusErr := s.repo.FinishDistribution(ctx, s.db, distribution.ID, DistributionFailed, digest, "checksum_mismatch"); statusErr != nil {
-			return Distribution{}, statusErr
+		err := s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+			moved, err := s.repo.FailOpenDistribution(txCtx, tx, distribution.ID, digest, "checksum_mismatch")
+			if err != nil {
+				return err
+			}
+			if !moved {
+				return ErrDistributionClosed
+			}
+			return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionDistributionComplete, "failure", requestID, distributionTargetNodes(distribution), "checksum_mismatch"))
+		})
+		if err != nil {
+			return Distribution{}, err
 		}
-		_ = s.audit.Append(ctx, s.event(subjectID, ActionDistributionComplete, "failure", requestID, distributionTargetNodes(distribution), "checksum_mismatch"))
+		// Retain staging if the durable rejection/audit did not commit. After a
+		// committed rejection it can never be submitted or replayed.
+		_ = os.Remove(staging)
 		return Distribution{}, ErrChecksumMismatch
 	}
 	submitter := s.distributionTaskSubmitter()

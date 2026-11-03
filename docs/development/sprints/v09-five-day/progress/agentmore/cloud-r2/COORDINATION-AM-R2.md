@@ -1,5 +1,7 @@
 # AM-02 协调差异（第一检查点）
 
+2026-11-04主控返修：新候选确定为`ds/0042_file_distribution`，仅新Version重编号，SQL字节不变。本PR单独组合27项；#7未接收，日后与cx/0010组合才28项。R9契约/错误DTO及真正25项历史fixture修复见[REPAIR-R1.md](REPAIR-R1.md)。下方占位编号/机械计数为原提案历史，不能据此放宽旧库断言。
+
 ## 候选迁移（am/0001_file_distribution）
 
 - 位置：internal/files/migrations.go 末尾新增一项，SQL 字节见该文件；最终版本号由主控分配（当前用 `am/0001_file_distribution` 占位，主控可按其序列重编号，SQL 字节不变）。

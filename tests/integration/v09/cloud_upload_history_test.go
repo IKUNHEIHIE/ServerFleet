@@ -31,7 +31,7 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 	var old []storage.Migration
 	for _, set := range server.Migrations() {
 		for _, m := range set {
-			if m.Version == "ds/0041_file_upload_task" {
+			if m.Version == "ds/0041_file_upload_task" || m.Version == "ds/0042_file_distribution" {
 				continue
 			}
 			if m.Version == fixture.Migration.Version {
@@ -40,8 +40,8 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 			old = append(old, m)
 		}
 	}
-	if len(old) != 26 {
-		t.Fatalf("adopted migration count=%d, want 26", len(old))
+	if len(old) != 25 {
+		t.Fatalf("adopted migration count=%d, want 25", len(old))
 	}
 	db := testkit.NewDB(t, old)
 	ctx := context.Background()

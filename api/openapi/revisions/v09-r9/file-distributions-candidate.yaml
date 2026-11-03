@@ -1,0 +1,213 @@
+openapi: 3.1.0
+info:
+  title: Frozen multi-target file distribution (PROPOSED)
+  version: 0.9.0-r9-candidate
+  description: Additive AM-02 checkpoint; not G2 freeze or persistent execution resume admission. Existing upload and transfer routes are unchanged. Mutations use the Controller browser Origin/CSRF guard and unified task authorization. Staging acceptance is not remote execution; the actual file capability remains bounded to 64 MiB per file. This checkpoint uses overwrite for its frozen distribution plan; it does not remove skip/overwrite/rename from existing transfers.
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/files/distributions:
+    post:
+      operationId: createFileDistributionR9
+      summary: Stage one file for a frozen set of 1 to 16 distinct targets
+      description: Requires current files.write on every requested target. No Agent is contacted. The configured staging size limit may reject input. No targets may be added after creation. A correlation request ID is supplied by the Controller.
+      parameters: &mutationHeaders
+        - {$ref: '#/components/parameters/CSRF'}
+        - {$ref: '#/components/parameters/RequestedWith'}
+        - {$ref: '#/components/parameters/Origin'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/CreateDistribution'}
+      responses:
+        '201':
+          description: Local staging created; no remote write or task completion
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [distributionId, status]
+                properties:
+                  distributionId: {type: string, minLength: 1}
+                  status: {const: awaiting_data}
+        '400': &invalid {$ref: '#/components/responses/Invalid'}
+        '401': &unauthenticated {$ref: '#/components/responses/Unauthenticated'}
+        '403': &denied {$ref: '#/components/responses/Denied'}
+        '413': &large {$ref: '#/components/responses/TooLarge'}
+        '422': &digest {$ref: '#/components/responses/Digest'}
+        '500': &internal {$ref: '#/components/responses/Internal'}
+  /api/v1/files/distributions/{distributionId}:
+    parameters: &distributionId
+      - {$ref: '#/components/parameters/DistributionId'}
+    get:
+      operationId: getFileDistributionR9
+      summary: Read the authenticated owner's distribution and per-target evidence
+      description: Does not require Idempotency-Key. Open staging is projected as open here (creation alone uses awaiting_data). Reads may reconcile from persisted unified task results; missing evidence is never remote success or permission to replay. This owner-only metadata read does not grant execution authority.
+      responses:
+        '200': &progressResponse
+          description: Current persisted distribution projection
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Distribution'}
+        '400': *invalid
+        '401': *unauthenticated
+        '404': &missing {$ref: '#/components/responses/Missing'}
+        '409': &conflict {$ref: '#/components/responses/Conflict'}
+        '500': *internal
+  /api/v1/files/distributions/{distributionId}/content:
+    parameters: *distributionId
+    put:
+      operationId: appendFileDistributionR9
+      summary: Append staging bytes at the exact persisted offset
+      description: Requires the authenticated owner and open staging. This is local staging, not an Agent write. Query offset takes precedence over X-Upload-Offset; omitted offset is zero. A closed session rejects before content sizing. No claim of complete cross-process execution resume is made.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+        - {$ref: '#/components/parameters/RequestedWith'}
+        - {$ref: '#/components/parameters/Origin'}
+        - {in: query, name: offset, schema: {type: integer, format: int64, minimum: 0}}
+        - {in: header, name: X-Upload-Offset, schema: {type: integer, format: int64, minimum: 0}}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200': *progressResponse
+        '400': *invalid
+        '401': *unauthenticated
+        '403': *denied
+        '404': *missing
+        '408': &interrupted {$ref: '#/components/responses/Interrupted'}
+        '409': *conflict
+        '413': *large
+        '500': *internal
+  /api/v1/files/distributions/{distributionId}/complete:
+    parameters: *distributionId
+    post:
+      operationId: submitFileDistributionR9
+      summary: Verify staging and bind the sole frozen unified task
+      description: Requires the owner and current files.write on all frozen targets; unified files.transfer authorization, approval policy and current per-frame checks remain mandatory. An already completed/partial distribution is returned without replay. Missing trusted task assembly returns 503. A rejected checksum commits failed plus the actual digest and audit before staging cleanup; persistence/audit failure is an error, not a claimed rejection. Retry of a dispatching session is 409, not a new task or implicit resume.
+      parameters: *mutationHeaders
+      responses:
+        '202':
+          description: Bound task accepted, remote outcome still pending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/Distribution'}
+                  - {type: object, required: [taskId], properties: {status: {const: dispatching}}}
+        '200': *progressResponse
+        '400': *invalid
+        '401': *unauthenticated
+        '403': *denied
+        '404': *missing
+        '408': *interrupted
+        '409': *conflict
+        '422': *digest
+        '503': &unavailable {$ref: '#/components/responses/Unavailable'}
+        '500': *internal
+  /api/v1/files/distributions/{distributionId}/cancel:
+    parameters: *distributionId
+    post:
+      operationId: cancelFileDistributionR9
+      summary: Abort open staging or request cancellation through its unified task
+      description: Requires the owner. Open staging becomes aborted with audit; a dispatching distribution uses the registered unified task cancellation port and its authorization. The response may still be dispatching. Cancellation does not undo positive writes or prove that an unknown side effect did not occur; terminal outcomes are retained.
+      parameters: *mutationHeaders
+      responses:
+        '200': *progressResponse
+        '400': *invalid
+        '401': *unauthenticated
+        '403': *denied
+        '404': *missing
+        '408': *interrupted
+        '409': *conflict
+        '503': *unavailable
+        '500': *internal
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: __Host-sf_session}
+  parameters:
+    DistributionId: {in: path, name: distributionId, required: true, schema: {type: string, minLength: 1}}
+    CSRF: {in: header, name: X-CSRF-Token, required: true, schema: {type: string, minLength: 1}}
+    RequestedWith: {in: header, name: X-Requested-With, required: true, schema: {const: ServerFleetWeb}}
+    Origin: {in: header, name: Origin, required: true, schema: {type: string, format: uri}}
+  schemas:
+    CreateDistribution:
+      type: object
+      additionalProperties: false
+      required: [destinationDir, targetNodes, files]
+      properties:
+        destinationDir: {type: string, pattern: '^/'}
+        targetNodes: {type: array, minItems: 1, maxItems: 16, uniqueItems: true, items: {type: string, minLength: 1, maxLength: 128}}
+        files:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [name]
+            properties:
+              name: {type: string, minLength: 1}
+              sizeBytes: {type: integer, format: int64, minimum: 0, default: 0}
+              sha256: {type: string, pattern: '^([0-9a-f]{64})?$'}
+    Distribution:
+      type: object
+      additionalProperties: false
+      required: [distributionId, status, destination, targetNodes, bytesReceived]
+      properties:
+        distributionId: {type: string, minLength: 1}
+        status: {type: string, enum: [open, dispatching, completed, partial, failed, cancelled, aborted]}
+        destination: {type: string}
+        bytesReceived: {type: integer, format: int64, minimum: 0}
+        sizeBytes: {type: integer, format: int64, minimum: 0}
+        taskId: {type: string, minLength: 1}
+        sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        error: {$ref: '#/components/schemas/ErrorDetail'}
+        targetNodes:
+          type: array
+          minItems: 1
+          maxItems: 16
+          items:
+            type: object
+            additionalProperties: false
+            required: [nodeId, status, bytes]
+            properties:
+              nodeId: {type: string}
+              status: {type: string, enum: [pending, dispatching, completed, failed, cancelled, unknown]}
+              bytes: {type: integer, format: int64, minimum: 0}
+              sha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+              error: {$ref: '#/components/schemas/ErrorDetail'}
+    ErrorDetail:
+      type: object
+      additionalProperties: false
+      required: [code, message]
+      properties:
+        code: {type: string}
+        message: {type: string}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error: {$ref: '#/components/schemas/ErrorDetail'}
+  responses:
+    Invalid: &errorResponse
+      description: Invalid input, duplicate/empty/oversized target set, invalid offset, path or JSON; code invalid_request or invalid_json (unsupported_batch_upload for a non-single-file request)
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Error'}
+    Unauthenticated: {<<: *errorResponse, description: Authentication required; code unauthorized}
+    Denied: {<<: *errorResponse, description: Current authorization or browser mutation guard rejected; code forbidden}
+    Missing: {<<: *errorResponse, description: Distribution not found; code not_found}
+    Conflict: {<<: *errorResponse, description: Wrong owner or changed offset/session state; code conflict}
+    TooLarge: {<<: *errorResponse, description: Configured or declared staging byte limit exceeded; code upload_too_large}
+    Digest: {<<: *errorResponse, description: Invalid or mismatched SHA-256; code checksum_mismatch}
+    Interrupted: {<<: *errorResponse, description: Request interrupted; code request_timeout}
+    Unavailable: {<<: *errorResponse, description: Trusted task assembly or cancellation port unavailable; code unavailable}
+    Internal: {<<: *errorResponse, description: Persistence/audit/infrastructure error; code internal_error. This is not evidence that an uncertain side effect did not occur.}

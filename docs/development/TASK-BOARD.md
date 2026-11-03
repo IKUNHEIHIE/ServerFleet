@@ -17,6 +17,7 @@
 | V09-CLOUD-HW-02 | READY / 开工与提交尚待实际回报核验 | codearts-02 | feature/cloud-services-hw02；独立共享候选integration/cloud-gateway-wiring-hw02 | 正式网关发布/补偿整链、ACME/cleanup与服务域 |
 | V09-CLOUD-WB-02 | READY / 开工与提交尚待实际回报核验 | workbuddy-02 | feature/cloud-console-xray-wb02 | Xray可选插件/准入证据、正式Web/浏览器/矩阵；新增Go权限仅限明确Xray域 |
 | V09-CLOUD-COORD-02 | DISPATCH PREPARED / 文档同步；后续按实际PR接收审查 | chatgpt-review-02 | docs/cloud-r2-dispatch-review02 | 当前登记；共享接口/迁移/顺序合并/组合审查，未启动外部Agent |
+| V09-CLOUD-AM-02-FIX1 | REPAIR IN PROGRESS：2026-11-04用户授权接管#11的A1—A4；原head0e57714的CI失败，不称接收 | chatgpt-am02-fix1；主控chatgpt-review-02 | 本地fix/cloud-platform-am02-review1；常规追加原feature/cloud-platform-am02 / PR#11 | 本轮文件分发返修、测试/新候选号/R9与AM进度；完成后停止，不启动续传/更新/恢复等后续包 |
 
 三平台环境互不共享。任务派发、开工回报及PR回传由用户手动完成；未收到实际证据时保留READY，不推断平台没有本地活动，也不自动标IN PROGRESS。只接收经审查的main+明确候选组合，不重放历史prepare/overlay。B03/B04/B05/B06、外部/物理双机/ARM实际运行/硬1C1G、正式资料和ENV-W6-01保持OPEN。没有生产/VPS/awskr/真实供应商或云API授权。
 

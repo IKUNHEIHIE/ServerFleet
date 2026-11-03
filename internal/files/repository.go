@@ -647,20 +647,34 @@ func (r *Repo) FinishDistributionTarget(ctx context.Context, q storage.Queryer, 
 	return moved > 0, err
 }
 
-// SetDistributionTargetState marks a pending target row as dispatching.
+// SetDistributionTargetState atomically claims a pending target. A dispatching
+// or terminal row cannot be claimed again, including after reconciliation.
 func (r *Repo) SetDistributionTargetState(ctx context.Context, id, nodeID, status string) (bool, error) {
-	switch status {
-	case TargetStatePending, TargetStateDispatching:
-	default:
+	if status != TargetStateDispatching {
 		return false, ErrInvalidTargets
 	}
-	res, err := r.db.Exec(ctx, `UPDATE file_distribution_targets SET status = ?, updated_at = ? WHERE distribution_id = ? AND node_id = ?`,
-		status, encodeTime(time.Now().UTC()), id, nodeID)
+	res, err := r.db.Exec(ctx, `UPDATE file_distribution_targets SET status = ?, updated_at = ?
+                WHERE distribution_id = ? AND node_id = ? AND status = ?
+                AND EXISTS (SELECT 1 FROM file_distributions WHERE id = ? AND status = ?)`,
+		status, encodeTime(time.Now().UTC()), id, nodeID, TargetStatePending, id, DistributionDispatching)
 	if err != nil {
 		return false, err
 	}
 	moved, err := res.RowsAffected()
 	return moved > 0, err
+}
+
+// FailOpenDistribution rejects unsubmitted staging without touching a bound
+// task. The caller commits its failure audit in the same transaction.
+func (r *Repo) FailOpenDistribution(ctx context.Context, q storage.Queryer, id, actualSHA, errorCode string) (bool, error) {
+	res, err := q.Exec(ctx, `UPDATE file_distributions SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?
+                WHERE id = ? AND status = ? AND task_id = ''`,
+		DistributionFailed, actualSHA, errorCode, encodeTime(time.Now().UTC()), id, DistributionOpen)
+	if err != nil {
+		return false, err
+	}
+	moved, err := res.RowsAffected()
+	return moved == 1, err
 }
 
 // FinishDistribution atomically converges the distribution terminal state

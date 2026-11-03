@@ -1,13 +1,13 @@
 # AM-02 剩余项交接（第一检查点后）
 
-状态日期：2026-11-04。会话 agentmore-02；分支 `feature/cloud-platform-am02`；PR #10（Draft，head 39a8660）。第一检查点（多目标分发）已交付，剩余四项按 AGENTMORE-02.md 顺序推进。新会话从 PR #10 的 head 或主控合并后的新 main 建下一检查点分支，前一个合并后从新 main 重建分支（规范要求）。
+状态日期：2026-11-04。原会话agentmore-02；分支`feature/cloud-platform-am02`。当前PR为#11；#10已关闭未合并，39a8660是旧记录。第一检查点仅已提交、首审未通过，不能称已接收。用户授权ChatGPT只接管本轮返修，见[REPAIR-R1.md](REPAIR-R1.md)；下列四项保持未完成，不自动启动。下一检查点须另行派发，从届时已接收main新建分支。
 
 ## 已完成的基建（复用清单）
 
 - 分发全链：internal/files/distribution.go（模型/服务/对账）、repository.go（分发 CRUD+终态守卫）、migrations.go（候选 am/0001）、http.go（五路由）、apps/controller/server/file_distribution.go（worker 执行）、file_worker.go（liveForNode 帧级接线）
 - CheckExecutionForNode（internal/tasks/worker.go）：帧级节点作用域 task_execute 授权——多目标计划必备
 - e2e 模板：tests/integration/v09/platform/distribution_am02_test.go（三节点注册/双真实 Agent/门控通知钩子/任务转储），新测试直接复制其 harness 段
-- 调试经验：进程内控制器→stderr 打印会进 go test -v 日志；Gate 内阻塞帧会踩 transport 5s 写超时（controller_link.go write），需要"到场通知"而非阻塞；pkill 会误杀自己会话（用 pkill -f platform.test 且单独调用）
+- 调试经验：保留实际帧/执行证据；测试同步须有明确事件及取消/超时边界，不持有DB事务等待其他请求。只通过夹具直接拥有且已记录的Process/PID停止自身进程，不按名称或全局匹配终止。
 
 ## 2. 持久续传（下一检查点优先）
 

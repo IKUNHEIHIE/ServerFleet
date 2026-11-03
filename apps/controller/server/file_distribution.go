@@ -191,7 +191,7 @@ func (w *FileExecutionWorker) liveDistribute(ctx context.Context, t tasks.Task, 
 		}
 		// Frames never re-push a target whose honest terminal result is already
 		// persisted: the per-frame fence for this exact node.
-		if frameNode == item.Node && target.Status == files.TargetStateCompleted {
+		if frameNode == item.Node && target.Status != files.TargetStateDispatching {
 			return files.ErrTransferIdentity
 		}
 		relative, err := w.config.Paths.RelativePath(ctx, item.Node, item.Source)
@@ -267,14 +267,16 @@ func (w *FileExecutionWorker) executeDistribute(ctx context.Context, t tasks.Tas
 		}
 		code, targetStatus, errorCode, message, bytes := w.distributeTarget(ctx, t, p, item, i, staging, digest)
 		results[item.Node] = tasks.WorkerResult{Code: code, Message: message}
-		finishCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
-		_, updateErr := w.server.Files.ApplyDistributionTaskUpdate(finishCtx, t.ID, files.DistributionTaskUpdate{
-			TargetNode: item.Node, Status: targetStatus, Bytes: bytes, SHA256: digest,
-			ErrorCode: errorCode, ErrorMessage: message, RequestID: t.RequestID,
-		})
-		stop()
-		if updateErr != nil {
-			return nil, updateErr
+		if targetStatus != "" {
+			finishCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			_, updateErr := w.server.Files.ApplyDistributionTaskUpdate(finishCtx, t.ID, files.DistributionTaskUpdate{
+				TargetNode: item.Node, Status: targetStatus, Bytes: bytes, SHA256: digest,
+				ErrorCode: errorCode, ErrorMessage: message, RequestID: t.RequestID,
+			})
+			stop()
+			if updateErr != nil {
+				return nil, updateErr
+			}
 		}
 		// Re-open the staging file for the next target: each target streams
 		// the same frozen bytes from the beginning.
@@ -294,7 +296,31 @@ func (w *FileExecutionWorker) distributeTarget(ctx context.Context, t tasks.Task
 		e error
 	)
 	code, targetStatus, errorCode, message, bytes = tasks.NodeResultSucceeded, files.TargetStateCompleted, "", "file distribution target succeeded", p.UploadSize
-	_, _ = w.repo.SetDistributionTargetState(ctx, p.TransferID, item.Node, files.TargetStateDispatching)
+	claimed, claimErr := w.repo.SetDistributionTargetState(ctx, p.TransferID, item.Node, files.TargetStateDispatching)
+	if claimErr != nil || !claimed {
+		// No claim means no execution authority. In particular, never reopen a
+		// terminal row or send a second offer while another claim is in flight.
+		code, targetStatus, errorCode, message, bytes = tasks.NodeResultUnknown, "", files.UploadErrorAgentUnknown, "distribution target not claimed; reconcile without replay", 0
+		if claimErr == nil {
+			rows, readErr := w.repo.ListDistributionTargets(ctx, p.TransferID)
+			if readErr == nil {
+				for _, row := range rows {
+					if row.NodeID != item.Node {
+						continue
+					}
+					switch row.Status {
+					case files.TargetStateCompleted:
+						code, message, bytes = tasks.NodeResultSucceeded, "distribution target already completed; not replayed", row.Bytes
+					case files.TargetStateFailed:
+						code, message = tasks.NodeResultFailed, row.ErrorMessage
+					case files.TargetStateCancelled:
+						code, message = tasks.NodeResultCanceled, row.ErrorMessage
+					}
+				}
+			}
+		}
+		return
+	}
 	execution := childExecutionID(t, item.Node, i)
 	var session *transport.FileSession
 	var opened *agentv1.FileOpenReply
@@ -319,6 +345,12 @@ func (w *FileExecutionWorker) distributeTarget(ctx context.Context, t tasks.Task
 			return
 		}
 		code, targetStatus, errorCode, message, bytes = tasks.NodeResultUnknown, files.TargetStateUnknown, files.UploadErrorAgentUnknown, "file execution uncertain; reconcile without replay", 0
+		return
+	}
+	// Recheck the unified task and its registered scope gate before reserving
+	// a child or entering a transport exchange. Per-frame checks remain intact.
+	if e = w.liveForNode(ctx, t, p, item.Node); e != nil {
+		code, targetStatus, errorCode, message, bytes = tasks.NodeResultUnknown, files.TargetStateUnknown, files.UploadErrorAgentUnknown, "task execution no longer authorized; reconcile without replay", 0
 		return
 	}
 	if e == nil {
