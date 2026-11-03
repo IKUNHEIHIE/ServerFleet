@@ -2,6 +2,7 @@ package dns
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -66,13 +67,28 @@ func (p *ACMEChallengePublisher) Publish(ctx context.Context, fqdn, value string
 		return "", nil, err
 	}
 	var (
-		once       sync.Once
-		cleanupErr error
+		mu      sync.Mutex
+		done    bool
+		unknown error
 	)
 	return record.ID, func(cleanupCtx context.Context) error {
-		once.Do(func() {
-			cleanupErr = p.service.DeleteRecord(cleanupCtx, p.subjectID, p.requestID, record.ID)
-		})
-		return cleanupErr
+		mu.Lock()
+		defer mu.Unlock()
+		if done {
+			return nil
+		}
+		if unknown != nil {
+			return unknown
+		}
+		err := p.service.DeleteRecord(cleanupCtx, p.subjectID, p.requestID, record.ID)
+		if err == nil {
+			done = true
+			return nil
+		}
+		if errors.Is(err, ErrProviderOutcomeUnknown) {
+			unknown = fmt.Errorf("%w: %v", ErrProviderOutcomeUnknown, err)
+			return unknown
+		}
+		return err
 	}, nil
 }

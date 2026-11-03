@@ -378,7 +378,7 @@ func (p *CloudflareProvider) rawRequest(ctx context.Context, method, path, token
 		if ctx.Err() != nil {
 			return 0, nil, nil, ctx.Err()
 		}
-		return 0, nil, nil, fmt.Errorf("%w: %s: %w", ErrCloudflareTransport, operation, err)
+		return 0, nil, nil, fmt.Errorf("%w: %w: %s: %w", ErrProviderOutcomeUnknown, ErrCloudflareTransport, operation, err)
 	}
 	defer response.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(response.Body, maxCloudflareBodyBytes+1))

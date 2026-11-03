@@ -18,6 +18,7 @@ var (
 	ErrRecordConflict          = errors.New("dns: record already exists")
 	ErrProviderUnavailable     = errors.New("dns: provider is not configured")
 	ErrProviderFailed          = errors.New("dns: provider request failed")
+	ErrProviderOutcomeUnknown  = errors.New("dns: provider outcome is unknown; do not replay delete or create automatically")
 	ErrProviderNotFound        = errors.New("dns: provider resource not found")
 	ErrCredentialNotConfigured = errors.New("dns: account has no credential reference")
 	ErrCredentialUnverified    = errors.New("dns: credential is not verified")
