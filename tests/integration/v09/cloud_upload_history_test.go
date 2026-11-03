@@ -40,8 +40,8 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 			old = append(old, m)
 		}
 	}
-	if len(old) != 25 {
-		t.Fatalf("adopted migration count=%d, want25", len(old))
+	if len(old) != 26 {
+		t.Fatalf("adopted migration count=%d, want 26", len(old))
 	}
 	db := testkit.NewDB(t, old)
 	ctx := context.Background()
