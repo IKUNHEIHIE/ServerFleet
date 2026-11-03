@@ -252,7 +252,20 @@ func (d *gatewayTaskDispatcher) Dispatch(ctx context.Context, command tasks.Comm
 		return tasks.DispatchResult{Accepted: false, Reason: "authorization_revoked"}, nil
 	}
 	if command.ActionID == gateway.NginxActionApply {
-		if err := d.artifacts.Upload(ctx, command.TaskID, command.NodeID, planned.ArtifactPath, planned.Content, planned.Digest); err != nil {
+		if bound, ok := d.artifacts.(GatewayBoundArtifactUploader); ok {
+			err := bound.UploadBound(ctx, GatewayArtifactBinding{
+				TaskID: command.TaskID, NodeID: command.NodeID,
+				ExecutionID: executionIDFor(command.TaskID, command.NodeID, task.PlanHash),
+				TransferID:  gatewayArtifactTransferID(command.TaskID, command.NodeID, planned.ArtifactPath),
+				PlanDigest:  task.PlanHash,
+				GatewayID:   planned.GatewayID, PlanID: planned.PlanID,
+				TargetRevision: planned.TargetRevision,
+				AbsolutePath:   planned.ArtifactPath, Content: planned.Content, SHA256: planned.Digest,
+			})
+			if err != nil {
+				return tasks.DispatchResult{Accepted: false, Reason: "artifact_upload_failed"}, nil
+			}
+		} else if err := d.artifacts.Upload(ctx, command.TaskID, command.NodeID, planned.ArtifactPath, planned.Content, planned.Digest); err != nil {
 			return tasks.DispatchResult{Accepted: false, Reason: "artifact_upload_failed"}, nil
 		}
 		latest, err := d.repo.Get(ctx, command.TaskID)
@@ -346,6 +359,42 @@ func (d *gatewayTaskDispatcher) currentNodeAuthority(ctx context.Context, task t
 	return d.authorizer.Authorize(ctx, auth.Check{
 		SubjectID: task.SubmitterID, Action: task.ActionID, NodeIDs: []string{nodeID},
 	})
+}
+
+// CheckArtifactStage is the equivalent reviewed gate for the queued upload
+// phase. It runs before the first chunk and again before every subsequent chunk
+// through the channel authorizer. It never relaxes tasks.CheckExecution, which
+// still requires running for Agent execution frames.
+func (d *gatewayTaskDispatcher) CheckArtifactStage(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID string) error {
+	if d == nil || d.repo == nil {
+		return gateway.ErrTaskSubmitterUnavailable
+	}
+	task, err := d.repo.Get(ctx, taskID)
+	if err != nil || task.Status != tasks.StatusQueued || task.CancelRequested || task.PlanHash == "" {
+		return tasks.ErrApprovalInvalid
+	}
+	pending := false
+	for _, target := range task.Targets {
+		if target.NodeID == nodeID && target.State == tasks.TargetPending {
+			pending = true
+			break
+		}
+	}
+	if !pending {
+		return tasks.ErrApprovalInvalid
+	}
+	if err := d.currentApproval(ctx, task); err != nil {
+		return err
+	}
+	if err := d.authority.Current(ctx, planID, targetRevision, gatewayID); err != nil {
+		return err
+	}
+	return d.currentNodeAuthority(ctx, task, nodeID)
+}
+
+func gatewayArtifactTransferID(taskID, nodeID, absolutePath string) string {
+	digest := sha256.Sum256([]byte(taskID + "\x00" + nodeID + "\x00" + absolutePath))
+	return "gwa-" + hex.EncodeToString(digest[:16])
 }
 
 // gatewayTaskHost submits exactly one approved unified task per plan action,
