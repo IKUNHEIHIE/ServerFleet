@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -94,15 +93,19 @@ func loadGatewayArtifactBinding(ctx context.Context, db *storage.DB, executionID
 	if db == nil || executionID == "" {
 		return GatewayArtifactBinding{}, ErrGatewayArtifactTransport
 	}
+	var count int
+	if err := db.QueryRow(ctx, `SELECT count(*) FROM gateway_artifact_bindings WHERE execution_id=?`, executionID).Scan(&count); err != nil {
+		return GatewayArtifactBinding{}, fmt.Errorf("gateway: inspect artifact binding: %w", err)
+	}
+	if count == 0 {
+		return GatewayArtifactBinding{}, errGatewayArtifactBindingNotFound
+	}
 	var binding GatewayArtifactBinding
 	err := db.QueryRow(ctx, `SELECT execution_id,task_id,node_id,transfer_id,plan_digest,gateway_id,plan_id,target_revision,absolute_path,relative_path,size,sha256 FROM gateway_artifact_bindings WHERE execution_id=?`, executionID).
 		Scan(&binding.ExecutionID, &binding.TaskID, &binding.NodeID, &binding.TransferID, &binding.PlanDigest,
 			&binding.GatewayID, &binding.PlanID, &binding.TargetRevision, &binding.AbsolutePath,
 			&binding.RelativePath, &binding.Size, &binding.SHA256)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return GatewayArtifactBinding{}, errGatewayArtifactBindingNotFound
-		}
 		return GatewayArtifactBinding{}, fmt.Errorf("gateway: load artifact binding: %w", err)
 	}
 	return binding, nil
