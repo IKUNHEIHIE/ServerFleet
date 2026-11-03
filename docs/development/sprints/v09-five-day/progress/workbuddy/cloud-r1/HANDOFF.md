@@ -166,4 +166,3 @@ node tests/browser/v09/run-recovery-prerequisite-probe.mjs --require-complete   
 已补齐：`.tools/go` → 已下载的 `go1.27.3` toolchain（`GOTOOLCHAIN=local`），Node `v24.22.1` 置于 `/opt/node24`。
 `.tools/` 在 `.gitignore` 内，不进入提交。`check:go` 所需的 `SF_R*_BINARY` 用本轮真实构建提供，
 不提供时对应测试会以「explicit prebuilt actual Agent binary is required」失败——这是基线环境依赖。
-

@@ -62,5 +62,14 @@ func Migrations() []storage.Migration {
 				updated_at TEXT NOT NULL
 			)`,
 		},
+	}, {
+		// Allocated by the integration owner after the unchanged ds/0040.
+		// Keep adopted SQL bytes intact: the ledger checks raw statement hashes.
+		Version: "ds/0041_file_upload_task",
+		Name:    "unified upload task binding and dispatch state",
+		Statements: []string{
+			`ALTER TABLE file_uploads ADD COLUMN task_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE INDEX file_uploads_task ON file_uploads (task_id)`,
+		},
 	}}
 }

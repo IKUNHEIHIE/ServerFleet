@@ -73,4 +73,3 @@ CI、`scripts/**`、任务板、其他作者目录。`.tools/`（工具链链接
 
 对产品行为无新增假设：P18B 只消费既有 `UpdateProduct` 装配路径与 `internal/updates` 的
 回滚语义（与 main 的 `update_product_r3_test.go` 同源），未新增接口、未改契约、未注入恢复执行器。
-

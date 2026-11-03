@@ -22,3 +22,6 @@ apis:
 
   v09-r7-services:
     root: api/openapi/revisions/v09-r7/services-candidate.yaml
+
+  v09-r8-files:
+    root: api/openapi/revisions/v09-r8/files-candidate.yaml

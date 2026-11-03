@@ -1,0 +1,15 @@
+{
+  "sourceCommit": "1ca79072232bfdcee2b9f4582ac020d4430d0c2b",
+  "checksum": "a7b7ed891f79d592593e1eea435d1430df94965f075458dc222d1a435fe210f7",
+  "migration": {
+    "Version": "ds/0040_files",
+    "Name": "file transfers, uploads and item results",
+    "Statements": [
+      "CREATE TABLE file_transfers (\n\t\t\t\tid TEXT PRIMARY KEY,\n\t\t\t\ttask_id TEXT NOT NULL DEFAULT '',\n\t\t\t\tsubmitter_id TEXT NOT NULL,\n\t\t\t\tsource_node_id TEXT NOT NULL,\n\t\t\t\tdestination_node_id TEXT NOT NULL,\n\t\t\t\tdestination_dir TEXT NOT NULL,\n\t\t\t\tconflict_policy TEXT NOT NULL,\n\t\t\t\tfollow_symlinks INTEGER NOT NULL DEFAULT 0,\n\t\t\t\tdry_run INTEGER NOT NULL DEFAULT 0,\n\t\t\t\tstatus TEXT NOT NULL,\n\t\t\t\tprogress REAL NOT NULL DEFAULT 0,\n\t\t\t\ttotal_bytes INTEGER,\n\t\t\t\tcopied_bytes INTEGER NOT NULL DEFAULT 0,\n\t\t\t\terror_message TEXT NOT NULL DEFAULT '',\n\t\t\t\trequest_id TEXT NOT NULL,\n\t\t\t\tidempotency_key TEXT NOT NULL DEFAULT '',\n\t\t\t\tcreated_at TEXT NOT NULL,\n\t\t\t\tupdated_at TEXT NOT NULL,\n\t\t\t\tstarted_at TEXT,\n\t\t\t\tcompleted_at TEXT\n\t\t\t)",
+      "CREATE INDEX file_transfers_task ON file_transfers (task_id)",
+      "CREATE UNIQUE INDEX file_transfers_idempotency ON file_transfers (submitter_id, idempotency_key)\n\t\t\t\tWHERE idempotency_key <> ''",
+      "CREATE TABLE file_transfer_items (\n\t\t\t\ttransfer_id TEXT NOT NULL REFERENCES file_transfers (id) ON DELETE CASCADE,\n\t\t\t\tsequence INTEGER NOT NULL,\n\t\t\t\tsource_path TEXT NOT NULL,\n\t\t\t\tdestination_path TEXT NOT NULL DEFAULT '',\n\t\t\t\tstatus TEXT NOT NULL,\n\t\t\t\tbytes_copied INTEGER NOT NULL DEFAULT 0,\n\t\t\t\terror_code TEXT NOT NULL DEFAULT '',\n\t\t\t\terror_message TEXT NOT NULL DEFAULT '',\n\t\t\t\tPRIMARY KEY (transfer_id, sequence)\n\t\t\t)",
+      "CREATE TABLE file_uploads (\n\t\t\t\tid TEXT PRIMARY KEY,\n\t\t\t\tsubject_id TEXT NOT NULL,\n\t\t\t\tnode_id TEXT NOT NULL,\n\t\t\t\tdestination_path TEXT NOT NULL,\n\t\t\t\tstatus TEXT NOT NULL,\n\t\t\t\tbytes_received INTEGER NOT NULL DEFAULT 0,\n\t\t\t\texpected_size INTEGER,\n\t\t\t\tsha256_expected TEXT NOT NULL DEFAULT '',\n\t\t\t\tsha256_actual TEXT NOT NULL DEFAULT '',\n\t\t\t\terror_code TEXT NOT NULL DEFAULT '',\n\t\t\t\tstaging_name TEXT NOT NULL,\n\t\t\t\tcreated_at TEXT NOT NULL,\n\t\t\t\tupdated_at TEXT NOT NULL\n\t\t\t)"
+    ]
+  }
+}
