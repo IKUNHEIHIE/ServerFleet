@@ -281,14 +281,16 @@ func TestRunConnectOnceCarriesTrustedGatewayConfiguration(t *testing.T) {
 	rootCert, _ := runtimeCA(t)
 	deps := &fakeDeps{connect: ConnectResult{NodeID: "node-1", ConnectionID: "connection-1", HeartbeatSent: true, MetricsSent: true}}
 	var stdout, stderr bytes.Buffer
+	gatewayPrefix := filepath.Join(dir, "nginx")
 	code := Run(context.Background(), []string{
 		"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local",
-		"-root-cert", rootCert, "-gateway-prefix", "/srv/fleet/nginx", "-nginx-binary", "/usr/bin/nginx",
+		"-root-cert", rootCert, "-file-root", dir, "-gateway-prefix", gatewayPrefix,
+		"-nginx-binary", "/usr/bin/nginx",
 	}, deps.deps(), &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("code = %d: %s", code, stderr.String())
 	}
-	if deps.lastConnect.GatewayPrefix != "/srv/fleet/nginx" || deps.lastConnect.NginxBinary != "/usr/bin/nginx" {
+	if deps.lastConnect.GatewayPrefix != gatewayPrefix || deps.lastConnect.NginxBinary != "/usr/bin/nginx" {
 		t.Fatalf("gateway configuration not carried: %+v", deps.lastConnect)
 	}
 }
