@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 	"serverfleet.local/serverfleet/internal/files"
@@ -40,6 +41,12 @@ func (w *gatewayWiring) validate(ctx context.Context, repo *gateway.Repo, querye
 	}
 	for gatewayID, install := range w.deployment.Gateways {
 		record, err := repo.GetGateway(ctx, queryer, gatewayID)
+		if errors.Is(err, gateway.ErrGatewayNotFound) {
+			// The trusted document may be installed before the gateway record is
+			// created. The first publication still requires the record and the
+			// mapped roots, so an absent record cannot bypass the boundary.
+			continue
+		}
 		if err != nil {
 			return ErrGatewayDeployment
 		}
