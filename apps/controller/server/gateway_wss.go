@@ -9,6 +9,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
@@ -335,4 +336,51 @@ func (a gatewayStageAuthorizer) AuthorizeChannel(ctx context.Context, direction 
 func gatewayArtifactExecutionID(taskID, nodeID, planHash, gatewayID string) string {
 	digest := sha256.Sum256([]byte(taskID + "\x00" + nodeID + "\x00" + planHash + "\x00" + gatewayID + "\x00artifact"))
 	return "gwa-" + hex.EncodeToString(digest[:20])
+}
+
+// GatewayArtifactStageSlot breaks the construction cycle between the real
+// uploader (needs the dispatcher as its stage gate) and the dispatcher (needs
+// the uploader as its artifact sink). Until Bind is called every check fails
+// closed; it is a real type used by the central composition, not a placeholder.
+type GatewayArtifactStageSlot struct {
+	mu    sync.RWMutex
+	stage GatewayArtifactStageChecker
+}
+
+func (s *GatewayArtifactStageSlot) Bind(stage GatewayArtifactStageChecker) error {
+	if stage == nil {
+		return files.ErrChannelUnavailable
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.stage != nil {
+		return files.ErrTransferExecution
+	}
+	s.stage = stage
+	return nil
+}
+
+func (s *GatewayArtifactStageSlot) bound() GatewayArtifactStageChecker {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.stage
+}
+
+func (s *GatewayArtifactStageSlot) CheckArtifactStage(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID, planDigest, artifactPath, sitePath, configDigest string) error {
+	stage := s.bound()
+	if stage == nil {
+		return files.ErrTaskBindingRequired
+	}
+	return stage.CheckArtifactStage(ctx, taskID, nodeID, planID, targetRevision, gatewayID, planDigest, artifactPath, sitePath, configDigest)
+}
+
+func (s *GatewayArtifactStageSlot) CheckArtifactChild(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID, planDigest, artifactPath, sitePath, configDigest string) error {
+	stage := s.bound()
+	if stage == nil {
+		return files.ErrTaskBindingRequired
+	}
+	return stage.CheckArtifactChild(ctx, taskID, nodeID, planID, targetRevision, gatewayID, planDigest, artifactPath, sitePath, configDigest)
 }

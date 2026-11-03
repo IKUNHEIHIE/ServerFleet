@@ -207,10 +207,50 @@ gofmt -l <新文件>                              # 空
   需要应用 `CENTRAL-PATCH-R2.md` 后才能在启动组合中验证；当前未伪造该证据。
   Agent 侧真实 WSS/Nginx/HTTP 仍由 `TestActualWSSGatewayApplyReloadAndHTTPBytes` 覆盖。
 
+## 检查点 5（R3）：子账本持久终态原子保护（2026-11-03）
+
+### 修复
+
+- `GatewayArtifactObserver.Observe` 改为 compare-and-set：`UPDATE ... WHERE execution_id=?
+  AND state=? AND result=?`，以 `RowsAffected` 判定；失败则重新读取并重新判断，
+  不使用实例内 mutex，跨实例/多 Observer 同样安全。
+- `gatewayChildTransition` 将 `finished`（含 UNKNOWN）与 `rejected` 视为不可变终态：
+  迟到 Ack(false)、重复 Started、并发 Started 均不能回退；UNKNOWN 不会被升级为 SUCCEEDED。
+- stage 检查每帧只执行一次（使用不可变 plan/参数），CAS 重试只重读可变的 `(state,result)`。
+- 新增 `GatewayArtifactStageSlot`（真实类型）：绑定前所有检查 fail closed，绑定后转发给
+  dispatcher，供中央组合打破 uploader↔dispatcher 构造循环。
+
+### 审查回归（原样纳入）
+
+- `apps/controller/server/review_r3_terminal_test.go`：迟到 Ack(false) 覆盖成功、并发 Started
+  覆盖 Finished 两条探针，均 **PASS（-race）**（此前 FAIL）。
+
+### 新增覆盖
+
+- 多个 Observer 交替/迟到事件保持终态；UNKNOWN 不可升级；重复幂等；拒绝闭锁；重连接受；
+  异节点拒绝（`gateway_child_test.go`）。
+
+### 验证
+
+```sh
+go test ./apps/controller/server -run "^TestReviewR3Gateway" -count=1 -race -v
+# PASS（2 条审查探针）
+
+go test ./apps/controller/server ./apps/agent ./tests/architecture -count=1 -race
+# ok 5.333s / ok 21.433s / ok 1.166s
+
+go vet ./apps/agent ./apps/controller/server   # 无输出
+gofmt -l <新文件>                              # 空
+```
+
+### 中央装配
+
+`CENTRAL-PATCH-R2.md` 已重写为真实符号、完整上下文的候选 diff（迁移 append、StageSlot、
+observer/gate、`agent_links.go` 插入、Agent 入参），不含占位类型或省略参数。
+
 ## 尚未完成（保持 OPEN）
 
-- CI 已全绿（head `501c16e`，run 41601254969）；同步 main `cce2b290` 后 platform 前置失败消除。
-- 中央接线（迁移版本、`server.New`、Agent runtime 参数、observer/gate 组合）需主控应用 `CENTRAL-PATCH-R2.md`。
-- 公开 HTTP→审批→工件→真实 Agent WSS→nginx→HTTP 字节→持久终态→逆序补偿的**进程级组合证据**尚未跑通（需中央接线后可启动组合）。
+- 中央装配未应用；跨进程完整组合（Controller 子执行 → 真实 Agent ledger → Nginx → HTTP 字节
+  → 父终态）保持 **UNTESTED**，不以模块测试冒充整链。
 - ACME/cleanup 产品组合与供应商未知结果独立项仍未完成。
 - `check:web`、`npm run check` 全量未执行。

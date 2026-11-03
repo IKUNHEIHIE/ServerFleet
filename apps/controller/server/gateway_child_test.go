@@ -133,3 +133,60 @@ func TestGatewayArtifactObserverIgnoresUnrelatedExecutions(t *testing.T) {
 		t.Fatalf("unrelated execution owned=%v err=%v", owned, err)
 	}
 }
+
+func TestGatewayArtifactObserverMultipleObserversKeepTerminal(t *testing.T) {
+	fixture, first, binding, observation := newGatewayChildFixture(t)
+	ctx := context.Background()
+	second, err := NewGatewayArtifactObserver(fixture.db, fixture.stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	steps := []struct {
+		observer *GatewayArtifactObserver
+		envelope *agentv1.Envelope
+	}{
+		{first, gatewayChildAck(binding.TaskID, binding.ExecutionID, true)},
+		{second, gatewayChildStarted(binding.TaskID, binding.ExecutionID)},
+		{first, gatewayChildFinished(binding.TaskID, binding.ExecutionID, agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED)},
+	}
+	for _, step := range steps {
+		if owned, err := step.observer.Observe(ctx, observation, step.envelope); err != nil || !owned {
+			t.Fatalf("step owned=%v err=%v", owned, err)
+		}
+	}
+	late := []*agentv1.Envelope{
+		gatewayChildAck(binding.TaskID, binding.ExecutionID, false),
+		gatewayChildStarted(binding.TaskID, binding.ExecutionID),
+		gatewayChildFinished(binding.TaskID, binding.ExecutionID, agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN),
+	}
+	for _, envelope := range late {
+		if _, err := second.Observe(ctx, observation, envelope); err != nil && !errors.Is(err, files.ErrTransferIdentity) {
+			t.Fatalf("late event err=%v", err)
+		}
+	}
+	stored, err := loadGatewayArtifactBinding(ctx, fixture.db, binding.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.State != "finished" || stored.Result != "EXECUTION_RESULT_SUCCEEDED" {
+		t.Fatalf("multiple observers moved terminal: state=%q result=%q", stored.State, stored.Result)
+	}
+}
+
+func TestGatewayArtifactObserverUnknownNeverUpgradesToSuccess(t *testing.T) {
+	fixture, observer, binding, observation := newGatewayChildFixture(t)
+	ctx := context.Background()
+	if _, err := observer.Observe(ctx, observation, gatewayChildFinished(binding.TaskID, binding.ExecutionID, agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := observer.Observe(ctx, observation, gatewayChildFinished(binding.TaskID, binding.ExecutionID, agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED)); err != nil && !errors.Is(err, files.ErrTransferIdentity) {
+		t.Fatalf("unknown upgrade err=%v", err)
+	}
+	stored, err := loadGatewayArtifactBinding(ctx, fixture.db, binding.ExecutionID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stored.Result != "EXECUTION_RESULT_UNKNOWN" {
+		t.Fatalf("UNKNOWN upgraded to %q", stored.Result)
+	}
+}
