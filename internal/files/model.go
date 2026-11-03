@@ -160,6 +160,7 @@ type Upload struct {
 	SHA256Actual    string
 	ErrorCode       string
 	StagingName     string
+	TaskID          string
 	CreatedAt       time.Time
 	UpdatedAt       time.Time
 }

@@ -17,6 +17,11 @@ const (
 	UploadCompleted = "completed"
 	UploadAborted   = "aborted"
 	UploadFailed    = "failed"
+	// UploadDispatching marks a verified staging upload bound to a unified
+	// task. The task worker owns the actual frame-authorized push and the
+	// upload terminal state; nothing is claimed before the agent result.
+	UploadDispatching = "dispatching"
+	UploadCancelled   = "cancelled"
 
 	maxChunkBytes = 8 << 20
 )
@@ -274,6 +279,31 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 		_ = s.audit.Append(ctx, s.event(subjectID, ActionUploadComplete, "failure", requestID, []string{upload.NodeID}, "checksum_mismatch"))
 		return Upload{}, ErrChecksumMismatch
 	}
+	// Unified path: a trusted program assembly moves the verified upload
+	// into the sole task queue. The worker owns the frame-authorized push,
+	// approval and the actual terminal state; no transport claim is made
+	// here. The legacy direct transport port below stays for isolated
+	// compositions without the controlled agent channel.
+	if submitter := s.uploadTaskSubmitter(); submitter != nil {
+		taskID, submitErr := submitter.SubmitUpload(ctx, UploadCommand{
+			SubjectID: subjectID, RequestID: requestID, UploadID: upload.ID,
+			NodeID: upload.NodeID, DestinationPath: upload.DestinationPath,
+			SHA256Expected: digest, Size: upload.BytesReceived,
+		})
+		if submitErr != nil {
+			auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+			defer cancel()
+			_ = s.audit.Append(auditCtx, s.event(subjectID, ActionTransferSubmitFailed, "failure", requestID, []string{upload.NodeID}, "upload_submit_failed"))
+			return Upload{}, fmt.Errorf("%w: %v", ErrTaskSubmitter, submitErr)
+		}
+		if err := s.SubmitUploadTask(ctx, upload, taskID, digest); err != nil {
+			return Upload{}, err
+		}
+		upload.Status = UploadDispatching
+		upload.TaskID = taskID
+		upload.SHA256Actual = digest
+		return upload, nil
+	}
 	if s.uploads == nil {
 		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
@@ -356,6 +386,26 @@ func (s *Service) GetUpload(ctx context.Context, subjectID, requestID, uploadID 
 	// Content/complete handlers use this precheck before their own write gate.
 	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_status"); err != nil {
 		return Upload{}, err
+	}
+	if upload.Status == UploadDispatching && upload.TaskID != "" {
+		// Lazy convergence for a task that reached a terminal state without
+		// the worker applying an upload outcome (direct task-interface
+		// cancellation, queued expiry or rejection). Evidence-based and
+		// exactly-once; failures leave the upload untouched.
+		if reader := s.taskOutcomeReader(); reader != nil {
+			if task, err := reader.ReadTaskOutcome(ctx, upload.TaskID); err == nil && task.Status.Terminal() {
+				if status, errorCode, ok := uploadTerminalFromTask(task); ok {
+					if _, err := s.ApplyUploadTaskUpdate(ctx, upload.TaskID, UploadTaskUpdate{
+						Status: status, ErrorCode: errorCode, RequestID: task.RequestID,
+					}); err == nil {
+						upload, err = s.repo.GetUpload(ctx, uploadID)
+						if err != nil {
+							return Upload{}, err
+						}
+					}
+				}
+			}
+		}
 	}
 	return upload, nil
 }

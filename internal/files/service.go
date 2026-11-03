@@ -337,8 +337,17 @@ func (s *Service) RecoverTransfers(ctx context.Context) (int, error) {
 		return 0, ErrCoordinatorUnavailable
 	}
 	recovered, err := s.repo.RecoverRunningTransfers(ctx, s.now())
-	if err != nil || recovered == 0 {
+	if err != nil {
 		return recovered, err
+	}
+	// Upload task reconciliation rides the same startup hook: dispatching
+	// uploads whose unified task already reached a terminal state converge
+	// with the trusted task outcome instead of staying dispatching forever.
+	if _, reconcileErr := s.ReconcileUploadTasks(ctx); reconcileErr != nil {
+		return recovered, reconcileErr
+	}
+	if recovered == 0 {
+		return recovered, nil
 	}
 	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()
@@ -437,9 +446,9 @@ func (s *Service) CancelTransfer(ctx context.Context, subjectID, requestID, id s
 		// atomically: a queued transfer has no byte execution to wait for; once
 		// canceled it cannot be claimed. A running one still needs worker evidence.
 		if _, err := tx.Exec(txCtx, `UPDATE file_transfers SET
-			status=CASE WHEN status=? THEN ? ELSE ? END, error_message=?,
-			completed_at=CASE WHEN status=? THEN ? ELSE ? END, updated_at=?
-			WHERE id=? AND status IN (?,?,?)`,
+                        status=CASE WHEN status=? THEN ? ELSE ? END, error_message=?,
+                        completed_at=CASE WHEN status=? THEN ? ELSE ? END, updated_at=?
+                        WHERE id=? AND status IN (?,?,?)`,
 			string(TransferQueued), string(TransferCanceled), string(status), "canceled by operator",
 			string(TransferQueued), encodeTime(s.now()), encodeTime(completed), encodeTime(s.now()), transfer.ID,
 			string(TransferQueued), string(TransferRunning), string(TransferCancelling)); err != nil {

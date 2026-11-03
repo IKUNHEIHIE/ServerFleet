@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/nodes"
+	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
 )
@@ -38,9 +40,17 @@ type FileExecutionWorker struct {
 }
 type filePlanItem struct{ Source, Destination, ReadPath, WritePath, ExpectedSHA256 string }
 type fileTaskPlan struct {
-	TransferID, SourceNode, DestinationNode string
-	ConflictPolicy                          files.ConflictPolicy
-	Items                                   []filePlanItem
+	// Kind distinguishes the two unified files.transfer task shapes: an empty
+	// kind is the classic node-to-node copy; "upload" is a controller staging
+	// push with a single destination write and no source node read.
+	Kind            string
+	TransferID      string
+	SourceNode      string
+	DestinationNode string
+	ConflictPolicy  files.ConflictPolicy
+	// UploadSize is the frozen staged size for kind=upload plans.
+	UploadSize int64
+	Items      []filePlanItem
 }
 
 // NewFileExecutionWorker is the program assembly port used by the central patch.
@@ -106,10 +116,76 @@ func (w *FileExecutionWorker) SubmitTransfer(ctx context.Context, c files.Transf
 	t, err := w.server.Tasks.Submit(ctx, tasks.SubmitRequest{SubjectID: c.SubjectID, RequestID: c.RequestID, Name: "file transfer", ActionID: files.ActionTransfer, OperationClass: tasks.OperationClassStandard, TargetType: "node_ids", TargetNodeIDs: []string{c.SourceNodeID, c.DestinationNodeID}, Params: params, IdempotencyKey: c.TransferID})
 	return t.ID, err
 }
+
+// uploadPlan freezes the controller staging push: exactly one destination
+// write inside the operator-mapped file root, overwrite policy only (rename
+// and skip have no upload semantics), size bounded by the controlled channel.
+func (w *FileExecutionWorker) uploadPlan(ctx context.Context, c files.UploadCommand) (fileTaskPlan, map[string]string, error) {
+	p := fileTaskPlan{Kind: "upload", TransferID: c.UploadID, DestinationNode: c.NodeID, ConflictPolicy: files.ConflictOverwrite, UploadSize: c.Size}
+	if !transport.FileID(c.UploadID) || files.ValidateRemotePath(c.DestinationPath) != nil || c.Size < 0 || c.Size > int64(transport.FileMaxBytes) {
+		return p, nil, files.ErrInvalidTransfer
+	}
+	if c.SHA256Expected != "" && !transport.FileDigest(c.SHA256Expected) {
+		return p, nil, files.ErrInvalidTransfer
+	}
+	writePath, err := w.config.Paths.RelativePath(ctx, c.NodeID, c.DestinationPath)
+	if err != nil || !transport.FilePath(writePath) {
+		return p, nil, files.ErrPathMappingUnavailable
+	}
+	p.Items = []filePlanItem{{Source: c.DestinationPath, Destination: c.DestinationPath, WritePath: writePath, ExpectedSHA256: c.SHA256Expected}}
+	params := map[string]string{
+		"kind": "upload", "upload_id": c.UploadID, "dest_node": c.NodeID,
+		"destination": c.DestinationPath, "write_path": writePath,
+		"sha256": c.SHA256Expected, "size": strconv.FormatInt(c.Size, 10),
+		"conflict_policy": string(files.ConflictOverwrite),
+	}
+	return p, params, nil
+}
+
+// ValidateUpload validates the frozen upload plan without submitting it.
+func (w *FileExecutionWorker) ValidateUpload(ctx context.Context, c files.UploadCommand) error {
+	_, _, err := w.uploadPlan(ctx, c)
+	return err
+}
+
+// SubmitUpload moves a verified staging upload into the sole unified task
+// queue under the files.transfer action. The task freezes the destination,
+// size and digest; the staging bytes themselves never enter the parameters.
+func (w *FileExecutionWorker) SubmitUpload(ctx context.Context, c files.UploadCommand) (string, error) {
+	_, params, err := w.uploadPlan(ctx, c)
+	if err != nil {
+		return "", err
+	}
+	t, err := w.server.Tasks.Submit(ctx, tasks.SubmitRequest{SubjectID: c.SubjectID, RequestID: c.RequestID, Name: "file upload", ActionID: files.ActionTransfer, OperationClass: tasks.OperationClassStandard, TargetType: "node_ids", TargetNodeIDs: []string{c.NodeID}, Params: params, IdempotencyKey: c.UploadID})
+	return t.ID, err
+}
+
+func decodeUploadTask(t tasks.Task, params map[string]string) (fileTaskPlan, error) {
+	var p fileTaskPlan
+	if len(t.Targets) != 1 || len(params) != 8 {
+		return p, files.ErrTransferIdentity
+	}
+	size, err := strconv.ParseInt(params["size"], 10, 63)
+	if err != nil || size < 0 || size > int64(transport.FileMaxBytes) {
+		return p, files.ErrTransferIdentity
+	}
+	p = fileTaskPlan{Kind: "upload", TransferID: params["upload_id"], DestinationNode: params["dest_node"], ConflictPolicy: files.ConflictPolicy(params["conflict_policy"]), UploadSize: size}
+	if !transport.FileID(p.TransferID) || p.ConflictPolicy != files.ConflictOverwrite || files.ValidateRemotePath(params["destination"]) != nil || !transport.FilePath(params["write_path"]) || params["sha256"] != "" && !transport.FileDigest(params["sha256"]) || t.Targets[0].NodeID != p.DestinationNode {
+		return p, files.ErrTransferIdentity
+	}
+	p.Items = []filePlanItem{{Source: params["destination"], Destination: params["destination"], WritePath: params["write_path"], ExpectedSHA256: params["sha256"]}}
+	return p, nil
+}
 func decodeFileTask(t tasks.Task) (fileTaskPlan, error) {
 	var params map[string]string
 	var p fileTaskPlan
-	if json.Unmarshal([]byte(t.Params), &params) != nil || t.ActionID != files.ActionTransfer || t.OperationClass != tasks.OperationClassStandard || len(t.Targets) != 2 {
+	if json.Unmarshal([]byte(t.Params), &params) != nil || t.ActionID != files.ActionTransfer || t.OperationClass != tasks.OperationClassStandard {
+		return p, files.ErrTransferIdentity
+	}
+	if params["kind"] == "upload" {
+		return decodeUploadTask(t, params)
+	}
+	if len(t.Targets) != 2 {
 		return p, files.ErrTransferIdentity
 	}
 	p.ConflictPolicy = files.ConflictPolicy(params["conflict_policy"])
@@ -154,6 +230,9 @@ func (w *FileExecutionWorker) live(ctx context.Context, t tasks.Task, p fileTask
 	if w.config.ScopeGate != nil && w.config.ScopeGate(ctx, current) != nil {
 		return files.ErrTransferExecution
 	}
+	if p.Kind == "upload" {
+		return w.liveUpload(ctx, t, p)
+	}
 	for _, check := range []auth.Check{{SubjectID: t.SubmitterID, Action: files.ActionRead, NodeIDs: []string{p.SourceNode}}, {SubjectID: t.SubmitterID, Action: files.ActionWrite, NodeIDs: []string{p.DestinationNode}}} {
 		node, err := w.server.NodesRepo.Get(ctx, check.NodeIDs[0])
 		if err != nil || node.Status != nodes.StatusOnline {
@@ -179,6 +258,35 @@ func (w *FileExecutionWorker) live(ctx context.Context, t tasks.Task, p fileTask
 		if e != nil || r != item.WritePath {
 			return files.ErrPathMappingUnavailable
 		}
+	}
+	return nil
+}
+
+// liveUpload rechecks the current node, permission, task and the durable
+// upload binding on every frame and execution step. An upload that left the
+// dispatching state, or a plan that drifted from the persisted record, is
+// rejected before any byte moves.
+func (w *FileExecutionWorker) liveUpload(ctx context.Context, t tasks.Task, p fileTaskPlan) error {
+	node, err := w.server.NodesRepo.Get(ctx, p.DestinationNode)
+	if err != nil || node.Status != nodes.StatusOnline {
+		return files.ErrAgentUnauthorized
+	}
+	if err := w.authorizer.Authorize(ctx, auth.Check{SubjectID: t.SubmitterID, Action: files.ActionWrite, NodeIDs: []string{p.DestinationNode}}); err != nil {
+		return err
+	}
+	upload, err := w.repo.GetUpload(ctx, p.TransferID)
+	if err != nil || upload.TaskID != t.ID || upload.SubjectID != t.SubmitterID || upload.Status != files.UploadDispatching || upload.NodeID != p.DestinationNode || upload.DestinationPath != p.Items[0].Destination || upload.BytesReceived != p.UploadSize {
+		return files.ErrTransferIdentity
+	}
+	if upload.SHA256Actual != "" && upload.SHA256Actual != p.Items[0].ExpectedSHA256 {
+		return files.ErrTransferIdentity
+	}
+	if upload.SHA256Expected != "" && upload.SHA256Expected != p.Items[0].ExpectedSHA256 {
+		return files.ErrTransferIdentity
+	}
+	relative, err := w.config.Paths.RelativePath(ctx, p.DestinationNode, upload.DestinationPath)
+	if err != nil || relative != p.Items[0].WritePath {
+		return files.ErrPathMappingUnavailable
 	}
 	return nil
 }
@@ -510,6 +618,9 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 	if err != nil {
 		return nil, err
 	}
+	if p.Kind == "upload" {
+		return w.executeUpload(ctx, t, p)
+	}
 	started := time.Now().UTC()
 	// AttachTask follows submission in a separate durable transaction. No child
 	// effects before that exact linkage exists; a missing linkage never falls back.
@@ -597,4 +708,183 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 	}
 	result := tasks.WorkerResult{Code: code, Message: fmt.Sprintf("file transfer %s; inspect item results", status)}
 	return map[string]tasks.WorkerResult{p.SourceNode: result, p.DestinationNode: result}, nil
+}
+
+// executeUpload streams the verified controller staging file through the
+// controlled agent channel under the frozen unified task. Every protocol frame
+// is authorized by Gate through the same reservation state machine as a
+// transfer destination write; the upload terminal state is applied only from
+// the observed agent result, never from an optimistic local claim.
+func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p fileTaskPlan) (map[string]tasks.WorkerResult, error) {
+	// SubmitUploadTask binds the upload to this task in a separate durable
+	// transaction. No child effects before that exact linkage exists.
+	deadline := time.NewTimer(5 * time.Second)
+	defer deadline.Stop()
+	for {
+		upload, e := w.repo.GetUpload(ctx, p.TransferID)
+		if e != nil {
+			return nil, e
+		}
+		if upload.TaskID == t.ID {
+			break
+		}
+		if upload.TaskID != "" {
+			return nil, files.ErrTransferIdentity
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-deadline.C:
+			return nil, files.ErrTransferIdentity
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+	if err := w.liveUpload(ctx, t, p); err != nil {
+		return nil, err
+	}
+	staging, _, err := w.server.Files.DispatchedStaging(ctx, t.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer staging.Close()
+	execution := childExecutionID(t, p.DestinationNode, 0)
+	digest := p.Items[0].ExpectedSHA256
+	h := sha256.New()
+	var (
+		e         error
+		code      = tasks.NodeResultSucceeded
+		status    = files.UploadCompleted
+		errorCode = ""
+		message   = "file upload completed"
+	)
+	session, opened, e := w.open(ctx, t, p, 0, true, uint64(p.UploadSize), digest)
+	if e == nil {
+		defer session.Close()
+		if opened.RelativePath != p.Items[0].WritePath {
+			// Overwrite plans publish exactly the planned path; no rename sibling.
+			e = files.ErrTransferIdentity
+		}
+	}
+	if e == nil && !opened.Skipped {
+		buffer := make([]byte, transport.FileChunkBytes)
+		defer clear(buffer)
+		for offset := uint64(0); offset < uint64(p.UploadSize) || p.UploadSize == 0; {
+			limit := min(uint64(len(buffer)), uint64(p.UploadSize)-offset)
+			if _, e = io.ReadFull(staging, buffer[:limit]); e != nil {
+				break
+			}
+			h.Write(buffer[:limit])
+			var reply *agentv1.FileChunkReply
+			reply, e = session.Chunk(ctx, &agentv1.FileChunkRequest{TaskId: t.ID, ExecutionId: execution, TransferId: execution, Offset: offset, Data: buffer[:limit], Finish: offset+limit == uint64(p.UploadSize)})
+			if e != nil {
+				break
+			}
+			offset = reply.NextOffset
+			if reply.Complete {
+				break
+			}
+		}
+		if e == nil {
+			// The staged bytes are re-verified while streaming; the agent-side
+			// session verifies the same digest before accepting the write.
+			if hex.EncodeToString(h.Sum(nil)) != digest {
+				e = files.ErrAgentChecksum
+			} else if e = w.waitDone(ctx, execution); e == nil {
+				e = w.liveUpload(ctx, t, p)
+			}
+		}
+	}
+	if e != nil || session == nil {
+		if e == nil {
+			e = files.ErrTransferExecution
+		}
+		defer func() {
+			if session != nil {
+				w.cancelChild(t.ID, p.DestinationNode, execution)
+			}
+		}()
+		// Only positive persisted evidence supports a known terminal
+		// classification (AM-R3): a binding query timeout or database failure
+		// is not evidence of absence; without positive evidence the upload
+		// keeps the honest UNKNOWN result and is never replayed.
+		var state string
+		checkCtx, done := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
+		stateErr := w.server.DB.QueryRow(checkCtx, `SELECT json_extract(payload,'$.State') FROM cx_file_execution_bindings WHERE execution_id=?`, execution).Scan(&state)
+		current, taskErr := w.server.TasksRepo.Get(checkCtx, t.ID)
+		cancelRequested := taskErr == nil && current.CancelRequested
+		denied := taskErr == nil && w.deniedNow(checkCtx, t.SubmitterID, p.DestinationNode)
+		done()
+		code, status, errorCode, message = classifyUploadFailure(uploadEvidence{
+			StateQueryErr: stateErr, State: state, TaskReadErr: taskErr,
+			CancelRequested: cancelRequested, ChecksumRejected: e == files.ErrAgentChecksum, DeniedNow: denied,
+		})
+	}
+	finishCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer stop()
+	_, err = w.server.Files.ApplyUploadTaskUpdate(finishCtx, t.ID, files.UploadTaskUpdate{Status: status, ErrorCode: errorCode, ErrorNote: message, RequestID: t.RequestID})
+	if err != nil {
+		return nil, err
+	}
+	result := tasks.WorkerResult{Code: code, Message: message}
+	return map[string]tasks.WorkerResult{p.DestinationNode: result}, nil
+}
+
+// deniedNow reports only a positive authorization denial for the upload
+// destination. Authorization infrastructure failures are not denial evidence
+// and must not turn an UNKNOWN outcome into a known terminal result.
+func (w *FileExecutionWorker) deniedNow(ctx context.Context, subjectID, nodeID string) bool {
+	if err := w.authorizer.Authorize(ctx, auth.Check{SubjectID: subjectID, Action: files.ActionWrite, NodeIDs: []string{nodeID}}); err == nil {
+		return false
+	} else if errors.Is(err, auth.ErrDenied) {
+		return true
+	}
+	return false
+}
+
+// ReadTaskOutcome exposes the trusted unified task state for upload
+// reconciliation. files.Service type-asserts its task submitter for this port;
+// no central registration is required.
+func (w *FileExecutionWorker) ReadTaskOutcome(ctx context.Context, taskID string) (tasks.Task, error) {
+	return w.server.Tasks.Get(ctx, taskID)
+}
+
+// uploadEvidence is the positively observable state an upload failure is
+// classified from. Every field carries its own error so infrastructure
+// failures never masquerade as positive evidence.
+type uploadEvidence struct {
+	StateQueryErr    error
+	State            string
+	TaskReadErr      error
+	CancelRequested  bool
+	ChecksumRejected bool
+	DeniedNow        bool
+}
+
+// classifyUploadFailure maps failure evidence to the honest terminal result.
+// Unknown stays the default: a binding in the opened/done states, a binding
+// query failure, or an unreadable task leaves the outcome uncertain.
+func classifyUploadFailure(ev uploadEvidence) (code tasks.NodeResultCode, status, errorCode, message string) {
+	code, status, errorCode, message = tasks.NodeResultUnknown, files.UploadFailed, files.UploadErrorAgentUnknown, "file execution uncertain; reconcile without replay"
+	// A binding that is absent (query succeeded with no row) or still before
+	// the agent opened the destination means no write frame was ever issued.
+	beforeWrite := false
+	switch {
+	case ev.StateQueryErr == nil:
+		beforeWrite = ev.State == "" || ev.State == "reserved" || ev.State == "offered" || ev.State == "accepted"
+	case storage.IsNotFound(ev.StateQueryErr):
+		beforeWrite = true
+	}
+	if !beforeWrite {
+		return
+	}
+	if ev.TaskReadErr == nil && ev.CancelRequested {
+		return tasks.NodeResultCanceled, files.UploadCancelled, "cancelled_before_write", "cancelled before destination write"
+	}
+	if ev.ChecksumRejected {
+		return tasks.NodeResultFailed, files.UploadFailed, "denied_before_write", "checksum rejected before destination write"
+	}
+	if ev.TaskReadErr == nil && ev.DeniedNow {
+		return tasks.NodeResultFailed, files.UploadFailed, "denied_before_write", "current permission rejected before destination write"
+	}
+	return
 }

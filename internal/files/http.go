@@ -40,6 +40,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/transfers/{transferId}", api.get)
 	mux.HandleFunc("POST /api/v1/transfers/{transferId}/cancel", api.cancel)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads", api.createUpload)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/files/uploads/{uploadId}", api.getUpload)
 	mux.HandleFunc("PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content", api.uploadContent)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete", api.completeUpload)
 	return nil
@@ -204,6 +205,23 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func (api *httpAPI) getUpload(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("uploadId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if upload.NodeID != r.PathValue("nodeId") {
+		writeFixed(w, http.StatusNotFound, "not_found", "upload was not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, uploadProgressDTO(upload))
+}
+
 func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {
 	principal, ok := api.principal(w, r)
 	if !ok {
@@ -265,10 +283,20 @@ func uploadProgressDTO(upload Upload) map[string]any {
 	if upload.ExpectedSize != nil {
 		expected = *upload.ExpectedSize
 	}
-	return map[string]any{
-		"uploadId": upload.ID, "status": "awaiting_data", "bytesReceived": upload.BytesReceived,
+	status := "awaiting_data"
+	if upload.Status != UploadOpen {
+		// Non-open uploads expose their real state, including the unified
+		// task dispatch and terminal outcomes.
+		status = upload.Status
+	}
+	dto := map[string]any{
+		"uploadId": upload.ID, "status": status, "bytesReceived": upload.BytesReceived,
 		"expectedSize": expected,
 	}
+	if upload.TaskID != "" {
+		dto["taskId"] = upload.TaskID
+	}
+	return dto
 }
 
 func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
@@ -295,9 +323,20 @@ func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
 		"type": "file", "sizeBytes": completed.BytesReceived,
 		"version": completed.SHA256Actual,
 	}}
-	writeJSON(w, http.StatusOK, map[string]any{
+	status := http.StatusOK
+	if completed.Status == UploadDispatching {
+		// The verified upload is accepted into the unified task queue. The
+		// frame-authorized push, approval and the terminal state are owned by
+		// the task worker; this response claims no transport success.
+		status = http.StatusAccepted
+	}
+	dto := map[string]any{
 		"uploadId": completed.ID, "status": completed.Status, "files": files,
-	})
+	}
+	if completed.TaskID != "" {
+		dto["taskId"] = completed.TaskID
+	}
+	writeJSON(w, status, dto)
 }
 
 func (api *httpAPI) principal(w http.ResponseWriter, r *http.Request) (Principal, bool) {
