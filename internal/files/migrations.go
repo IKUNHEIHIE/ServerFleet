@@ -6,11 +6,11 @@ package files
 import "serverfleet.local/serverfleet/internal/storage"
 
 func Migrations() []storage.Migration {
-        return []storage.Migration{{
-                Version: "ds/0040_files",
-                Name:    "file transfers, uploads and item results",
-                Statements: []string{
-                        `CREATE TABLE file_transfers (
+	return []storage.Migration{{
+		Version: "ds/0040_files",
+		Name:    "file transfers, uploads and item results",
+		Statements: []string{
+			`CREATE TABLE file_transfers (
                                 id TEXT PRIMARY KEY,
                                 task_id TEXT NOT NULL DEFAULT '',
                                 submitter_id TEXT NOT NULL,
@@ -32,10 +32,10 @@ func Migrations() []storage.Migration {
                                 started_at TEXT,
                                 completed_at TEXT
                         )`,
-                        `CREATE INDEX file_transfers_task ON file_transfers (task_id)`,
-                        `CREATE UNIQUE INDEX file_transfers_idempotency ON file_transfers (submitter_id, idempotency_key)
+			`CREATE INDEX file_transfers_task ON file_transfers (task_id)`,
+			`CREATE UNIQUE INDEX file_transfers_idempotency ON file_transfers (submitter_id, idempotency_key)
                                 WHERE idempotency_key <> ''`,
-                        `CREATE TABLE file_transfer_items (
+			`CREATE TABLE file_transfer_items (
                                 transfer_id TEXT NOT NULL REFERENCES file_transfers (id) ON DELETE CASCADE,
                                 sequence INTEGER NOT NULL,
                                 source_path TEXT NOT NULL,
@@ -46,7 +46,7 @@ func Migrations() []storage.Migration {
                                 error_message TEXT NOT NULL DEFAULT '',
                                 PRIMARY KEY (transfer_id, sequence)
                         )`,
-                        `CREATE TABLE file_uploads (
+			`CREATE TABLE file_uploads (
                                 id TEXT PRIMARY KEY,
                                 subject_id TEXT NOT NULL,
                                 node_id TEXT NOT NULL,
@@ -61,25 +61,25 @@ func Migrations() []storage.Migration {
                                 created_at TEXT NOT NULL,
                                 updated_at TEXT NOT NULL
                         )`,
-                },
-        }, {
-                // Allocated by the integration owner after the unchanged ds/0040.
-                // Keep adopted SQL bytes intact: the ledger checks raw statement hashes.
-                Version: "ds/0041_file_upload_task",
-                Name:    "unified upload task binding and dispatch state",
-                Statements: []string{
-                        `ALTER TABLE file_uploads ADD COLUMN task_id TEXT NOT NULL DEFAULT ''`,
-                        `CREATE INDEX file_uploads_task ON file_uploads (task_id)`,
-                },
-        }, {
-                // Candidate schema for V09-CLOUD-AM-02 multi-target distribution. The
-                // final version number is allocated by the integration owner; the exact
-                // SQL bytes are delivered as a precise candidate diff in the progress
-                // docs and may be renumbered verbatim on adoption.
-                Version: "am/0001_file_distribution",
-                Name:    "frozen multi-target distribution and per-target results",
-                Statements: []string{
-                        `CREATE TABLE file_distributions (
+		},
+	}, {
+		// Allocated by the integration owner after the unchanged ds/0040.
+		// Keep adopted SQL bytes intact: the ledger checks raw statement hashes.
+		Version: "ds/0041_file_upload_task",
+		Name:    "unified upload task binding and dispatch state",
+		Statements: []string{
+			`ALTER TABLE file_uploads ADD COLUMN task_id TEXT NOT NULL DEFAULT ''`,
+			`CREATE INDEX file_uploads_task ON file_uploads (task_id)`,
+		},
+	}, {
+		// Candidate schema for V09-CLOUD-AM-02 multi-target distribution. The
+		// final version number is allocated by the integration owner; the exact
+		// SQL bytes are delivered as a precise candidate diff in the progress
+		// docs and may be renumbered verbatim on adoption.
+		Version: "am/0001_file_distribution",
+		Name:    "frozen multi-target distribution and per-target results",
+		Statements: []string{
+			`CREATE TABLE file_distributions (
                                 id TEXT PRIMARY KEY,
                                 subject_id TEXT NOT NULL,
                                 node_id TEXT NOT NULL,
@@ -95,7 +95,7 @@ func Migrations() []storage.Migration {
                                 created_at TEXT NOT NULL,
                                 updated_at TEXT NOT NULL
                         )`,
-                        `CREATE TABLE file_distribution_targets (
+			`CREATE TABLE file_distribution_targets (
                                 distribution_id TEXT NOT NULL REFERENCES file_distributions (id) ON DELETE CASCADE,
                                 sequence INTEGER NOT NULL,
                                 node_id TEXT NOT NULL,
@@ -108,8 +108,8 @@ func Migrations() []storage.Migration {
                                 updated_at TEXT NOT NULL,
                                 PRIMARY KEY (distribution_id, sequence)
                         )`,
-                        `CREATE UNIQUE INDEX file_distribution_nodes ON file_distribution_targets (distribution_id, node_id)`,
-                        `CREATE INDEX file_distributions_task ON file_distributions (task_id)`,
-                },
-        }}
+			`CREATE UNIQUE INDEX file_distribution_nodes ON file_distribution_targets (distribution_id, node_id)`,
+			`CREATE INDEX file_distributions_task ON file_distributions (task_id)`,
+		},
+	}}
 }
