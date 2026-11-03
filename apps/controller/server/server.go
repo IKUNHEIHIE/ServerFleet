@@ -380,6 +380,8 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: gateway.ActionRead, Description: "Read gateways and routes on granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: gateway.ActionWrite, Description: "Manage gateways and routes on granted nodes", ResourceType: "node"},
 		{Key: gateway.ActionProvision, Description: "Provision gateway runtime on granted nodes", ResourceType: "node"},
+		{Key: gateway.NginxActionApply, Description: "Apply managed nginx sites on granted gateway nodes", ResourceType: "node"},
+		{Key: gateway.NginxActionRemove, Description: "Remove managed nginx sites on granted gateway nodes", ResourceType: "node"},
 		{Key: dns.ActionAccountsRead, Description: "Read DNS provider accounts", ResourceType: "node", ReadOnly: true},
 		{Key: dns.ActionZonesRead, Description: "Read DNS zones", ResourceType: "node", ReadOnly: true},
 		{Key: dns.ActionRecordsRead, Description: "Read DNS records", ResourceType: "node", ReadOnly: true},
