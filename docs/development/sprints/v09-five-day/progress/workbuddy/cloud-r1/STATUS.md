@@ -94,6 +94,16 @@
 已就地 `--amend` 为 `chore(v09): sync origin/main cce2b29 into cloud-console branch`（父提交不变：
 `6f6dc96` + `cce2b29`），随后 policy PASS。属本地未推送提交的消息修正，不涉及强推或改写远端历史。
 
+## 远端 CI
+
+| head | run | 结果 |
+|---|---|---|
+| `6f6dc96`（R1） | `41584839080` | failure：`foundation` 的网关夹具/预构建依赖（基线环境缺口） |
+| `83694c0`（R2 代码改动） | [`41600628682`](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/41600628682) | **success**：`dependencies` success、`foundation` success（`Policy, contracts, generation, Go and Web` 步骤通过） |
+
+主控 PR #4 合并后，此前 `foundation` 的两类失败（无 nginx、缺预构建）已在基线消除；
+本 PR 未改 CI、未降门槛。旧 `41526891590` 与本 head 无关，不再引用。
+
 ## 明确未完成（不得据此关单）
 
 - **B03 / B04 / B05 / B06 继续 OPEN。** 21 PASS 只覆盖「Agent 组件本地签名更新」一条链路，
