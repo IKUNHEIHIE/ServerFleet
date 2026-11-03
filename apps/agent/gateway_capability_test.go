@@ -312,18 +312,40 @@ func TestGatewayCapabilityFixedArgvHasNoCallerCommands(t *testing.T) {
 
 func asciiTestRoot(t *testing.T) string {
 	t.Helper()
-	candidates := []string{"C:/temp", "D:/temp"}
-	for _, candidate := range candidates {
-		if err := os.MkdirAll(candidate, 0o700); err == nil {
-			if probe, err := os.CreateTemp(candidate, "probe-*"); err == nil {
-				name := probe.Name()
-				_ = probe.Close()
-				_ = os.Remove(name)
-				return candidate
+	// Drive-letter prefixes are only absolute on Windows. On Unix they would
+	// resolve to a relative "C:/temp" under the package directory, and every
+	// capability root check would reject the fixture as non-absolute.
+	if runtime.GOOS == "windows" {
+		candidates := []string{"C:/temp", "D:/temp"}
+		for _, candidate := range candidates {
+			if err := os.MkdirAll(candidate, 0o700); err == nil {
+				if probe, err := os.CreateTemp(candidate, "probe-*"); err == nil {
+					name := probe.Name()
+					_ = probe.Close()
+					_ = os.Remove(name)
+					return candidate
+				}
 			}
 		}
 	}
 	return os.TempDir()
+}
+
+// waitForGatewayProcess waits until nginx has written its pid file. Without the
+// wait an immediate reload can race a master that has not finished starting and
+// the capability correctly reports an unknown rollback outcome.
+func waitForGatewayProcess(t *testing.T, pidPath string) {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if info, err := os.Stat(pidPath); err == nil && info.Mode().IsRegular() {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("nginx pid file %s did not appear", pidPath)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 func TestGatewayCapabilityRealNginxIsolated(t *testing.T) {
@@ -378,6 +400,7 @@ func TestGatewayCapabilityRealNginxIsolated(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() { _ = start.Wait() }()
+	waitForGatewayProcess(t, filepath.Join(env.prefix, "nginx.pid"))
 	t.Cleanup(func() {
 		_ = exec.Command(nginxPath, "-s", "stop", "-p", filepath.ToSlash(env.prefix)+"/", "-c", filepath.ToSlash(mainConfig)).Run()
 		_ = start.Process.Kill()
