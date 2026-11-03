@@ -1,0 +1,44 @@
+# V09-CLOUD-HW-01 · 交接记录
+
+## 2026-11-03 检查点 1
+
+- 分支：`feature/cloud-services-hw01`
+- 起点：`1ca79072232bfdcee2b9f4582ac020d4430d0c2b`
+- 检查点 HEAD：`4be0f32`
+- 内容：修复真实 gateway CI 失败（Unix 下测试夹具使用相对 `C:/temp` 被私有根检查拒绝）。
+- 证据：`STATUS.md` 的复现/修复/验证章节；本地 `apps/agent` 全包 PASS。
+- 仍 OPEN：Foundation CI 的 `tests/integration/v09/platform` 三项失败不属于本任务写权限；Node/npm 版本尚未对齐；网关工件链与 ACME/cleanup 组合待继续。
+
+## 2026-11-03 检查点 2
+
+- 检查点内容：实际 `GatewayArtifactUploader`（`files.UploadTransport` 端口、重算 SHA、64KiB/绝对路径限制）与 Agent 侧 `newGatewayRegistration`（私有 prefix 推导、缺配置关闭）。
+- 验证：新增 13 个用例全部 PASS；`go vet` 无输出；`apps/agent`、`apps/controller/server` 全包 PASS；gofmt 无差异。
+- 未接线：`server.New` 默认组合、Agent runtime 参数、真实 `files.AgentFileChannel` 由主控/AgentMore 协调，已在 `SHARED-CHANGES.md` 列出精确接缝。
+
+## 2026-11-03 检查点 3（R1）
+
+- 检查点 HEAD：`8869172`（中间检查点 `34e3750`）。
+- 内容：真实 WSS `files.transfer.v1` 通道适配、`WithChannelScope`（task/execution/transfer/plan）、
+  逐块 stage 授权、持久 `gateway_artifact_bindings` 与候选迁移、网关 file gate、中央接线精确补丁。
+- 验证：6 个新用例 PASS；`apps/controller/server`、`apps/agent`、`tests/architecture` 包 PASS；
+  `go vet` 空；`npm run check:security` PASS（0 audit / 0 govulncheck）。
+- 环境：Node `v24.22.1` / npm `11.19.1`；`npm ci` 与 `npm run tools:install` 成功。
+- 失败/未跑：`npm run check:go` 仅 `tests/integration/v09/platform` 两项缺预构建产物失败；
+  `check:web`、`npm run check` 未执行，保留 UNTESTED。
+- 仍 OPEN：中央接线后的进程级组合链、ACME/cleanup 产品组合、供应商未知结果独立项。
+
+## 2026-11-03 检查点 4（R2）
+
+- 内容：三项 P1 返修。工件子执行使用独立 `gwa-...` 身份；新增 `GatewayArtifactObserver`
+  消费子 Ack/Started/Finished 且不完成父任务；`CheckArtifactStage/Child` 每帧核对冻结
+  PlanHash/参数/审批/target revision。
+- 验证：审查方 `TestReviewerGatewayArtifactAndApplyNeedDistinctExecutions` 由 FAIL 转 PASS；
+  R2 新增 10 个用例 PASS；`apps/controller/server`、`tests/architecture` 全包 PASS；vet 空。
+- 中央装配：`CENTRAL-PATCH-R2.md`（含 `agent_links.go` 精确插入、迁移列、observer/gate 组合）。
+- 仍 OPEN：进程级组合需中央接线；ACME/cleanup 未完成；`check:web` 未跑。
+
+## 环境注意事项
+
+- 本机以 `service`（uid 1000）执行 Go/Nginx 测试；`root` 仅用于创建私有目录、部署密钥和安装系统级工具，不作为安全验收依据。
+- 通过 `ssh.github.com:443` 访问仓库；未在仓库内提交私钥或 token。
+- 测试夹具全部在 `/home/service/.tools` 与 `os.TempDir()` 下生成，不共享其他作者缓存或旧 worktree。
