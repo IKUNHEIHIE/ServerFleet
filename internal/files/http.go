@@ -40,6 +40,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/transfers/{transferId}", api.get)
 	mux.HandleFunc("POST /api/v1/transfers/{transferId}/cancel", api.cancel)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads", api.createUpload)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/files/uploads/{uploadId}", api.getUpload)
 	mux.HandleFunc("PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content", api.uploadContent)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete", api.completeUpload)
 	return nil
@@ -202,6 +203,23 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"uploadId": upload.ID, "status": "awaiting_data",
 	})
+}
+
+func (api *httpAPI) getUpload(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	upload, err := api.service.GetUpload(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("uploadId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if upload.NodeID != r.PathValue("nodeId") {
+		writeFixed(w, http.StatusNotFound, "not_found", "upload was not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, uploadProgressDTO(upload))
 }
 
 func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {

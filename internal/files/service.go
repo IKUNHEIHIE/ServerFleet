@@ -337,8 +337,17 @@ func (s *Service) RecoverTransfers(ctx context.Context) (int, error) {
 		return 0, ErrCoordinatorUnavailable
 	}
 	recovered, err := s.repo.RecoverRunningTransfers(ctx, s.now())
-	if err != nil || recovered == 0 {
+	if err != nil {
 		return recovered, err
+	}
+	// Upload task reconciliation rides the same startup hook: dispatching
+	// uploads whose unified task already reached a terminal state converge
+	// with the trusted task outcome instead of staying dispatching forever.
+	if _, reconcileErr := s.ReconcileUploadTasks(ctx); reconcileErr != nil {
+		return recovered, reconcileErr
+	}
+	if recovered == 0 {
+		return recovered, nil
 	}
 	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer cancel()

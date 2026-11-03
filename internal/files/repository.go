@@ -297,10 +297,12 @@ func (r *Repo) UpdateUploadStatus(ctx context.Context, q storage.Queryer, id, st
 }
 
 // BindUploadTask atomically moves an open upload into dispatching under exactly
-// one unified task. The guarded WHERE clause makes double dispatch impossible.
-func (r *Repo) BindUploadTask(ctx context.Context, q storage.Queryer, id, taskID string) (bool, error) {
-	res, err := q.Exec(ctx, `UPDATE file_uploads SET task_id = ?, status = ?, updated_at = ?
-                WHERE id = ? AND status = ? AND task_id = ''`, taskID, UploadDispatching,
+// one unified task and persists the verified staging digest as the upload's
+// actual checksum evidence. The guarded WHERE clause makes double dispatch
+// impossible.
+func (r *Repo) BindUploadTask(ctx context.Context, q storage.Queryer, id, taskID, verifiedSHA string) (bool, error) {
+	res, err := q.Exec(ctx, `UPDATE file_uploads SET task_id = ?, sha256_actual = ?, status = ?, updated_at = ?
+                WHERE id = ? AND status = ? AND task_id = ''`, taskID, verifiedSHA, UploadDispatching,
 		encodeTime(time.Now().UTC()), id, UploadOpen)
 	if err != nil {
 		return false, err
@@ -336,6 +338,43 @@ func (r *Repo) GetUploadByTask(ctx context.Context, taskID string) (Upload, erro
 		return Upload{}, err
 	}
 	return upload, nil
+}
+
+// ListDispatchingUploads returns the ids of uploads still awaiting a trusted
+// unified task outcome. Used by startup and lazy reconciliation only.
+func (r *Repo) ListDispatchingUploads(ctx context.Context) ([]string, error) {
+	rows, err := r.db.Query(ctx, `SELECT id FROM file_uploads WHERE status = ?`, UploadDispatching)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
+// TaskBindingState returns the persisted execution binding state for one task.
+// An empty state with a nil error is positive evidence that no binding (and
+// therefore no write frame) exists; a non-nil error is infrastructure failure
+// and must never be treated as absence.
+func (r *Repo) TaskBindingState(ctx context.Context, taskID string) (string, error) {
+	var state *string
+	if err := r.db.QueryRow(ctx, `SELECT json_extract(payload,'$.State') FROM cx_file_execution_bindings WHERE task_id=? LIMIT 1`, taskID).Scan(&state); err != nil {
+		if storage.IsNotFound(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if state == nil {
+		return "", nil
+	}
+	return *state, nil
 }
 
 // FinishUploadTask applies the trusted terminal task outcome exactly once. A

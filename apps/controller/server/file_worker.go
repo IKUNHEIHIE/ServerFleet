@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/nodes"
+	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
 )
@@ -274,6 +276,9 @@ func (w *FileExecutionWorker) liveUpload(ctx context.Context, t tasks.Task, p fi
 	}
 	upload, err := w.repo.GetUpload(ctx, p.TransferID)
 	if err != nil || upload.TaskID != t.ID || upload.SubjectID != t.SubmitterID || upload.Status != files.UploadDispatching || upload.NodeID != p.DestinationNode || upload.DestinationPath != p.Items[0].Destination || upload.BytesReceived != p.UploadSize {
+		return files.ErrTransferIdentity
+	}
+	if upload.SHA256Actual != "" && upload.SHA256Actual != p.Items[0].ExpectedSHA256 {
 		return files.ErrTransferIdentity
 	}
 	if upload.SHA256Expected != "" && upload.SHA256Expected != p.Items[0].ExpectedSHA256 {
@@ -798,23 +803,21 @@ func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p
 				w.cancelChild(t.ID, p.DestinationNode, execution)
 			}
 		}()
-		code, status, errorCode, message = tasks.NodeResultUnknown, files.UploadFailed, files.UploadErrorAgentUnknown, "file execution uncertain; reconcile without replay"
-		// A binding still before the agent opened the destination means no
-		// write frame was ever issued: only positive known pre-write
-		// failures and cancellation use known terminal results.
+		// Only positive persisted evidence supports a known terminal
+		// classification (AM-R3): a binding query timeout or database failure
+		// is not evidence of absence; without positive evidence the upload
+		// keeps the honest UNKNOWN result and is never replayed.
 		var state string
 		checkCtx, done := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
-		checkErr := w.server.DB.QueryRow(checkCtx, `SELECT json_extract(payload,'$.State') FROM cx_file_execution_bindings WHERE execution_id=?`, execution).Scan(&state)
-		beforeWrite := checkErr != nil || state == "" || state == "reserved" || state == "offered" || state == "accepted"
+		stateErr := w.server.DB.QueryRow(checkCtx, `SELECT json_extract(payload,'$.State') FROM cx_file_execution_bindings WHERE execution_id=?`, execution).Scan(&state)
 		current, taskErr := w.server.TasksRepo.Get(checkCtx, t.ID)
-		if beforeWrite {
-			if taskErr == nil && current.CancelRequested {
-				code, status, errorCode, message = tasks.NodeResultCanceled, files.UploadCancelled, "cancelled_before_write", "cancelled before destination write"
-			} else if e == files.ErrAgentChecksum || w.authorizer.Authorize(checkCtx, auth.Check{SubjectID: t.SubmitterID, Action: files.ActionWrite, NodeIDs: []string{p.DestinationNode}}) != nil {
-				code, status, errorCode, message = tasks.NodeResultFailed, files.UploadFailed, "denied_before_write", "checksum or current permission rejected before destination write"
-			}
-		}
+		cancelRequested := taskErr == nil && current.CancelRequested
+		denied := taskErr == nil && w.deniedNow(checkCtx, t.SubmitterID, p.DestinationNode)
 		done()
+		code, status, errorCode, message = classifyUploadFailure(uploadEvidence{
+			StateQueryErr: stateErr, State: state, TaskReadErr: taskErr,
+			CancelRequested: cancelRequested, ChecksumRejected: e == files.ErrAgentChecksum, DeniedNow: denied,
+		})
 	}
 	finishCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
@@ -824,4 +827,64 @@ func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p
 	}
 	result := tasks.WorkerResult{Code: code, Message: message}
 	return map[string]tasks.WorkerResult{p.DestinationNode: result}, nil
+}
+
+// deniedNow reports only a positive authorization denial for the upload
+// destination. Authorization infrastructure failures are not denial evidence
+// and must not turn an UNKNOWN outcome into a known terminal result.
+func (w *FileExecutionWorker) deniedNow(ctx context.Context, subjectID, nodeID string) bool {
+	if err := w.authorizer.Authorize(ctx, auth.Check{SubjectID: subjectID, Action: files.ActionWrite, NodeIDs: []string{nodeID}}); err == nil {
+		return false
+	} else if errors.Is(err, auth.ErrDenied) {
+		return true
+	}
+	return false
+}
+
+// ReadTaskOutcome exposes the trusted unified task state for upload
+// reconciliation. files.Service type-asserts its task submitter for this port;
+// no central registration is required.
+func (w *FileExecutionWorker) ReadTaskOutcome(ctx context.Context, taskID string) (tasks.Task, error) {
+	return w.server.Tasks.Get(ctx, taskID)
+}
+
+// uploadEvidence is the positively observable state an upload failure is
+// classified from. Every field carries its own error so infrastructure
+// failures never masquerade as positive evidence.
+type uploadEvidence struct {
+	StateQueryErr    error
+	State            string
+	TaskReadErr      error
+	CancelRequested  bool
+	ChecksumRejected bool
+	DeniedNow        bool
+}
+
+// classifyUploadFailure maps failure evidence to the honest terminal result.
+// Unknown stays the default: a binding in the opened/done states, a binding
+// query failure, or an unreadable task leaves the outcome uncertain.
+func classifyUploadFailure(ev uploadEvidence) (code tasks.NodeResultCode, status, errorCode, message string) {
+	code, status, errorCode, message = tasks.NodeResultUnknown, files.UploadFailed, files.UploadErrorAgentUnknown, "file execution uncertain; reconcile without replay"
+	// A binding that is absent (query succeeded with no row) or still before
+	// the agent opened the destination means no write frame was ever issued.
+	beforeWrite := false
+	switch {
+	case ev.StateQueryErr == nil:
+		beforeWrite = ev.State == "" || ev.State == "reserved" || ev.State == "offered" || ev.State == "accepted"
+	case storage.IsNotFound(ev.StateQueryErr):
+		beforeWrite = true
+	}
+	if !beforeWrite {
+		return
+	}
+	if ev.TaskReadErr == nil && ev.CancelRequested {
+		return tasks.NodeResultCanceled, files.UploadCancelled, "cancelled_before_write", "cancelled before destination write"
+	}
+	if ev.ChecksumRejected {
+		return tasks.NodeResultFailed, files.UploadFailed, "denied_before_write", "checksum rejected before destination write"
+	}
+	if ev.TaskReadErr == nil && ev.DeniedNow {
+		return tasks.NodeResultFailed, files.UploadFailed, "denied_before_write", "current permission rejected before destination write"
+	}
+	return
 }

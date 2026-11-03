@@ -296,11 +296,12 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 			_ = s.audit.Append(auditCtx, s.event(subjectID, ActionTransferSubmitFailed, "failure", requestID, []string{upload.NodeID}, "upload_submit_failed"))
 			return Upload{}, fmt.Errorf("%w: %v", ErrTaskSubmitter, submitErr)
 		}
-		if err := s.SubmitUploadTask(ctx, upload, taskID); err != nil {
+		if err := s.SubmitUploadTask(ctx, upload, taskID, digest); err != nil {
 			return Upload{}, err
 		}
 		upload.Status = UploadDispatching
 		upload.TaskID = taskID
+		upload.SHA256Actual = digest
 		return upload, nil
 	}
 	if s.uploads == nil {
@@ -385,6 +386,26 @@ func (s *Service) GetUpload(ctx context.Context, subjectID, requestID, uploadID 
 	// Content/complete handlers use this precheck before their own write gate.
 	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_status"); err != nil {
 		return Upload{}, err
+	}
+	if upload.Status == UploadDispatching && upload.TaskID != "" {
+		// Lazy convergence for a task that reached a terminal state without
+		// the worker applying an upload outcome (direct task-interface
+		// cancellation, queued expiry or rejection). Evidence-based and
+		// exactly-once; failures leave the upload untouched.
+		if reader := s.taskOutcomeReader(); reader != nil {
+			if task, err := reader.ReadTaskOutcome(ctx, upload.TaskID); err == nil && task.Status.Terminal() {
+				if status, errorCode, ok := uploadTerminalFromTask(task); ok {
+					if _, err := s.ApplyUploadTaskUpdate(ctx, upload.TaskID, UploadTaskUpdate{
+						Status: status, ErrorCode: errorCode, RequestID: task.RequestID,
+					}); err == nil {
+						upload, err = s.repo.GetUpload(ctx, uploadID)
+						if err != nil {
+							return Upload{}, err
+						}
+					}
+				}
+			}
+		}
 	}
 	return upload, nil
 }
