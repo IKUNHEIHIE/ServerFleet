@@ -194,6 +194,13 @@ go vet ./apps/controller/server               # 无输出
 gofmt -l <新文件>                              # 空
 ```
 
+### CI（同步 main `cce2b290` 后）
+
+- Head `501c16ef0f516cbaa5b3073632b6366550aa999c`，run 41601254969：
+  `foundation` **success**、`dependencies` **success**。
+- 同步 `cce2b290`（含主控 PR #4 的 platform 构建前置）后，此前两项 platform 失败已消除；
+  本任务未修改 CI 或 platform 测试。
+
 ### 仍未完成
 
 - 跨进程完整组合（Controller 子执行 → 真实 Agent ledger → Nginx → HTTP 字节 → 父终态）
@@ -202,7 +209,7 @@ gofmt -l <新文件>                              # 空
 
 ## 尚未完成（保持 OPEN）
 
-- 整体 Foundation CI 仍 FAIL，真实原因仅 `tests/integration/v09/platform` 两项缺预构建产物；本任务不宣称 CI 全绿。
+- CI 已全绿（head `501c16e`，run 41601254969）；同步 main `cce2b290` 后 platform 前置失败消除。
 - 中央接线（迁移版本、`server.New`、Agent runtime 参数、observer/gate 组合）需主控应用 `CENTRAL-PATCH-R2.md`。
 - 公开 HTTP→审批→工件→真实 Agent WSS→nginx→HTTP 字节→持久终态→逆序补偿的**进程级组合证据**尚未跑通（需中央接线后可启动组合）。
 - ACME/cleanup 产品组合与供应商未知结果独立项仍未完成。
