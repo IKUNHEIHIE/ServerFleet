@@ -1,5 +1,27 @@
 # 任务登记板
 
+## 当前云端分工（2026-11-03，优先于下方历史快照）
+
+总控/审查ChatGPT（chatgpt-review-02）。已接收产品main `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立CI run41615351426 success：Go顶层902 PASS/7 SKIP/0 FAIL、Web348 PASS，正式迁移26项。上一轮只接收可运行检查点，完整v0.9/G2/D01-D07/P1-C10/发布准入未完成。
+
+本轮完整范围、目录和停止条件以[Cloud R2计划](sprints/v09-five-day/cloud-r2/PLAN.md)及三份自包含提示词为准。用户最新指定：插件与Xray全部由WorkBuddy承担，AgentMore没有此域任务。中央网关接线单列CodeArts早期共享候选，主控独立审查接收。
+
+| 任务 | 当前状态 | 唯一会话 | 分支 | 范围/证据 |
+|---|---|---|---|---|
+| V09-CLOUD-AM-01 | CHECKPOINT ACCEPTED / PARTIAL；剩余转AM-02，插件范围转WB-02 | agentmore-01 | feature/cloud-platform-am01（已合并） | PR #3；最终集成head4ceedd9；上传统一任务与终态，非整包完成 |
+| V09-CLOUD-HW-01 | CHECKPOINT ACCEPTED / PARTIAL；剩余转HW-02 | codearts-01 | feature/cloud-services-hw01（已合并） | PR #2；最终head2d99eb5；网关部件/子账本，完整装配仍OPEN |
+| V09-CLOUD-WB-01 | CHECKPOINT ACCEPTED / PARTIAL；剩余转WB-02 | workbuddy-01 | feature/cloud-console-wb01（已合并） | PR #1；最终head7767d78；Agent更新浏览器专项，非完整B05 |
+| V09-CLOUD-AM-02 | READY / 待用户手动派发 | agentmore-02 | feature/cloud-platform-am02 | 文件多目标/续传、更新、恢复、平台负向；不含插件/代理组件 |
+| V09-CLOUD-HW-02 | READY / 待用户手动派发 | codearts-02 | feature/cloud-services-hw02；独立共享候选integration/cloud-gateway-wiring-hw02 | 正式网关发布/补偿整链、ACME/cleanup与服务域 |
+| V09-CLOUD-WB-02 | READY / 待用户手动派发 | workbuddy-02 | feature/cloud-console-xray-wb02 | Xray可选插件/准入证据、正式Web/浏览器/矩阵；新增Go权限仅限明确Xray域 |
+| V09-CLOUD-COORD-02 | DISPATCH PREPARED；后续按实际PR接收审查 | chatgpt-review-02 | docs/cloud-r2-dispatch-review02 | 当前登记；共享接口/迁移/顺序合并/组合审查，未启动外部Agent |
+
+三平台环境互不共享。任务派发、PR回传由用户手动完成，READY不代表实际运行。只接收经审查的main+明确候选组合，不重放历史prepare/overlay。B03/B04/B05/B06、外部/物理双机/ARM实际运行/硬1C1G、正式资料和ENV-W6-01保持OPEN。没有生产/VPS/awskr/真实供应商或云API授权。
+
+## 2026-11-02及更早历史（保留追溯）
+
+下方旧日期、旧会话/Windows目录、当时CI待确认和暂停状态均为历史；不能覆盖上方本轮授权，也不能推断旧会话已被启动。
+
 更新：2026-11-02。codex-review-02总控；三线Wave6-R3（CX/DS/CA-04）已审查、返修和正式共享组合，技术8df0154（根/安全及13组Linux在1069519，之后仅浏览器WSL传参修复）：Go 839顶层+1198子测试PASS/28 SKIP、Web348 PASS；原生Linux382顶层PASS/5 SKIP，实际CLI文件/Agent产品更新2组PASS；浏览器回归70/70、桩16/16、严格正向31 PASS/4 BLOCKED/0 FAIL（退出1）。已接收25项迁移、三策略文件页面/预算UI与queued取消修复；完整v0.9/G2/D01—D07/P1-C10仍未验收。新WAVE6-R4.md三线-05 READY：CX文件上传任务化/平台，DS独占完整网关工件/执行/补偿和ACME，CA直接消费UpdateProduct补B05宿主并继续独立Web/验收；不自动启动。ENV-W6-01沿用未关闭，本轮未复查/修改awskr。a70694b已确认来自Codex Arts分支，旧Gemini目录保留。
 
 | 任务 | 状态 | 唯一会话 | 分支 / Worktree | 允许写入 | 审查人 / 基线 |
@@ -7,9 +29,9 @@
 | V09-GITHUB-UPLOAD | DONE：2026-11-02正常推送d7d57f9，ls-remote及连接器已核验；远端历史保留，干净目录综合/安全PASS；GitHub Actions尚未确认；下一轮仍未开始 | codex-review-02 | main集成；复验integration/github-upload-cx02 / `.worktrees/integration--github-upload-cx02` | 指定仓库IKUNHEIHIE/ServerFleet的主线上传、origin配置、进度/上传记录；普通推送和核验后停止 | 项目负责人；起始cf88dfc；结果见reviews/V09-GITHUB-UPLOAD.md |
 | V09-WAVE6-R3-REVIEW | 三线-04审查/必要返修/正式共享组合及根安全、Linux、浏览器复验完成；接收/干净目录同步和续派后停止 | codex-review-02 | integration/v09-wave6-r3-review-cx02 / `.worktrees/integration--v09-wave6-r3-review-cx02` | 本轮必要修复/中央注册/迁移/契约、证据与后续任务；不改既有远端服务 | 项目负责人；起始fafbe93；技术8df0154；见reviews/V09-WAVE6-R3-REVIEW.md |
 | V09-W6R3-CHECKPOINT | 负责人要求保存当前进度，明确下一轮尚未开始；仅文档记录/核验后停止 | codex-review-02 | main / 主目录（集成负责人） | CURRENT-PROGRESS.md、TASK-BOARD、WAVE6-R4开工状态及README入口；不实现/不启动作者/不改作者目录 | 项目负责人；已验收基线65c759c |
-| V09-R6-CX-05 | NOT STARTED：2026-11-02负责人确认尚未开工，任务包已准备；用户上传统一任务/审批、多目标/续传与平台 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6-R4.md的CX包；独占files，允许新增R8文件候选/新迁移候选，中央注册/公共生成交patch | codex-review-02+安全/通信；起点65c759c |
-| V09-R6-DS-05 | NOT STARTED：2026-11-02负责人确认尚未开工，任务包已准备；完整网关工件/执行/补偿及ACME/cleanup产品组合 | deepseek-06 | feature/v09-r6-services-ds06 / `.worktrees/feature--v09-r6-services-ds06` | WAVE6-R4.md的DS包；新增gateway_artifact/registration等明确授权；中央已有文件交patch，不写files | codex-review-02+安全/数据；起点65c759c |
-| V09-R6-GM-05 | NOT STARTED：2026-11-02负责人确认尚未开工，任务包已准备；B05实际Agent更新浏览器宿主及其余Web/验收 | codex-arts-01 | feature/v09-r6-console-ca01 / `.worktrees/feature--v09-r6-console-ca01` | WAVE6-R4.md的CA包；Web/tests/browser/v09/测试专用fixturehost，progress/codex-arts/wave6-r4；不改产品Go/共享配置/锁 | codex-review-02+UI/安全；起点65c759c |
+| V09-R6-CX-05 | TRANSFERRED：Windows旧包未启动；原范围经AM-01检查点接收后续转AM-02；插件/代理组件现转WB-02；整包未DONE | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | WAVE6-R4.md的CX包；独占files，允许新增R8文件候选/新迁移候选，中央注册/公共生成交patch | codex-review-02+安全/通信；起点65c759c |
+| V09-R6-DS-05 | TRANSFERRED：Windows旧包未启动；原范围经HW-01检查点接收后续转HW-02；整包未DONE | deepseek-06 | feature/v09-r6-services-ds06 / `.worktrees/feature--v09-r6-services-ds06` | WAVE6-R4.md的DS包；新增gateway_artifact/registration等明确授权；中央已有文件交patch，不写files | codex-review-02+安全/数据；起点65c759c |
+| V09-R6-GM-05 | TRANSFERRED：Windows旧包未启动；原范围经WB-01检查点接收后续转WB-02；整包未DONE | codex-arts-01 | feature/v09-r6-console-ca01 / `.worktrees/feature--v09-r6-console-ca01` | WAVE6-R4.md的CA包；Web/tests/browser/v09/测试专用fixturehost，progress/codex-arts/wave6-r4；不改产品Go/共享配置/锁 | codex-review-02+UI/安全；起点65c759c |
 | V09-GM04-TRANSFER | 转交登记/独立CA目录/完整提示词完成，policy/git检查PASS；快进新CA目录后交接停止，未启动实现或代发消息 | codex-review-02 | main / 主目录（集成负责人） | 本次交接文档、TASK-BOARD、WAVE6-R3的GM执行人/目录/进度记录；不改作者代码/历史证据或同步CX/DS目录 | 项目负责人；起始db3cf87；见GM04-CODEX-ARTS-HANDOFF.md |
 | V09-WAVE6-R2-REVIEW | 三线-03审查/必要返修/正式组合及根安全、Linux、浏览器复验完成；完成接收/干净目录快进和续派后停止 | codex-review-02 | integration/v09-wave6-r2-review-cx02 / `.worktrees/integration--v09-wave6-r2-review-cx02` | 本轮增量必要修复、中央注册/契约/迁移、证据/后续任务；未改既有awskr服务 | 项目负责人；起始c9013f4；技术23e56d5；见reviews/V09-WAVE6-R2-REVIEW.md |
 | V09-R6-CX-04 | f643c49增量及两中央patch已接收；CLI三策略/实际Agent更新通过，上传/多目标/续传/恢复等未完成项转CX-05 | codex-06 | feature/v09-r6-platform-cx06 / `.worktrees/feature--v09-r6-platform-cx06` | 原WAVE6-R3.md的CX包；保留历史证据和patch，不重放 | codex-review-02+安全/通信；起始db3cf87 |

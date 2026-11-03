@@ -1,5 +1,19 @@
 # Server Fleet · 当前进度快照
 
+## 最新云端接收与下一轮（2026-11-03，Asia/Shanghai）
+
+产品基线main `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立CI [41615351426](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/41615351426) completed/success：foundation/dependencies均success；Go顶层902 PASS/7 SKIP/0 FAIL，Web348 PASS；policy/contracts/生成/锁/安全与Linux双架构交叉构建通过。交叉构建不是ARM运行验收。旧失败和edited触发的取消记录保留；新结果不替代全量产品验收。
+
+PR #1/#2/#3与共享#4/#5已审查合入：用户上传统一任务/审批/取消/终态对账/摘要；网关工件/独立子执行/冻结计划/持久终态CAS；真实Agent本地签名更新/健康回滚浏览器专项。正式迁移26项；ds/0040旧SQL/hash保持，冻结真实旧库升级/重放验证通过。网关中央装配尚未应用，Agent本地inbox不是Controller升级或可信在线发行。
+
+下一轮授权见[Cloud R2计划](cloud-r2/PLAN.md)：AM-02文件/更新/恢复/平台；HW-02正式网关链/补偿/ACME/cleanup/服务域；WB-02新增独占Xray全部工作并继续Web/浏览器。三家均READY/待用户手动派发，未代发消息或启动Agent。旧CX/DS/GM-05转交而非重新标DONE。总控chatgpt-review-02协调独立共享PR/迁移/契约/合并。
+
+完整v0.9仍未完成：B03安全工件/Runtime、B04完整发布/补偿、B05 Controller可信更新/部署装配、B06实际恢复/新权威/旧主控隔离仍OPEN；另有多目标/完整续传、真实provider、物理双机/ARM/硬1C1G、正式资料与G2/D01-D07/P1-C10/发布准入缺口。严格31 PASS/4 BLOCKED/0 FAIL仍是历史未完整验收证据；不按重叠测试数累计完成率。
+
+## 以下为2026-11-02历史快照
+
+历史正文保留，其“下一轮尚未开始”、Windows目录/旧平台和CI未确认是当时状态，不作为本轮云端已接收结果或任务授权。上方最新节及TASK-BOARD/Cloud R2优先。
+
 记录日期：2026-11-02（Asia/Shanghai）；总控codex-review-02；记录任务V09-W6R3-CHECKPOINT。负责人本次明确：**下一轮尚未开始**。
 
 ## 当前停留位置
