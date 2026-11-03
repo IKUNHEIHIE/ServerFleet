@@ -59,3 +59,18 @@ CP-3 实测后，B06 的前端与宿主侧已无缺件；剩余阻塞全部在 `
 
 在 1 与 2 补齐前，任何「浏览器恢复成功」的声明都不可能成立；本任务不会以页面出现或 `202`
 受理来替代证据。3 若不解决，恢复过程对管理员不可观测，验收只能停在「已受理」。
+
+## 7. 返修轮 R1 的增量变更（仍无共享面改动）
+
+| 文件 | 类型 | 说明 |
+|---|---|---|
+| `tests/browser/v09/run-recovery-prerequisite-probe.mjs` | 修改 | R08—R10 严格分类（`probeBlocked`/`problemMismatches`/`previewMismatches`）；新增 `--require-complete`；修复 `extra.status` 覆盖判定字段 |
+| `tests/browser/v09/run-product-update-acceptance.mjs` | 修改 | P18 严格断言 + 合格对照；删除「计划通过则继续 apply」兜底；新增 P18B 真实回滚；P19 增加失败终态持久与作业数不增 |
+| `tests/browser/v09/run-probe-classification-selftest.mjs` | 新增 | WB-R1 回归自测：vm 抽取 R08—R10 片段，10 组响应断言分类；不启动产品 |
+
+未触碰：`package.json` / `package-lock.json`、`go.mod` / `go.sum`、`api/**`、`gen/**`、迁移、
+CI、`scripts/**`、任务板、其他作者目录。`.tools/`（工具链链接与已装工具）在 `.gitignore` 内，不提交。
+
+对产品行为无新增假设：P18B 只消费既有 `UpdateProduct` 装配路径与 `internal/updates` 的
+回滚语义（与 main 的 `update_product_r3_test.go` 同源），未新增接口、未改契约、未注入恢复执行器。
+

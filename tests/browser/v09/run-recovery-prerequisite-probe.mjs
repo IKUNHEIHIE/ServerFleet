@@ -16,12 +16,25 @@
  *
  * 观测点：
  *   R05 备份生成（真实 VACUUM INTO + SHA-256）
- *   R06 POST /api/v1/backups/{id}/verify      期望 200 且 valid=true
- *   R07 POST /api/v1/disaster-recovery/preview 期望 200，但 eligible=false
- *   R08 POST /api/v1/disaster-recovery/jobs    期望 501 RECOVERY_EXECUTOR_UNAVAILABLE
- *   R09 GET  /api/v1/disaster-recovery/jobs/{id} 期望 404 RECOVERY_JOB_NOT_FOUND
- *   R10 未知备份 → 404 BACKUP_NOT_FOUND（负向）
- *   R11 未认证会话 → 403 NOT_AUTHORIZED（负向）
+ *   R06 POST /api/v1/backups/{id}/verify      期望 200 且 verified=true
+ *   R07 同上，定点断言 backup_integrity 检查项
+ *   R08 POST /api/v1/disaster-recovery/preview 期望 200 + eligible=false + 精确检查项
+ *   R09 POST /api/v1/disaster-recovery/jobs    期望 501 RECOVERY_EXECUTOR_UNAVAILABLE
+ *   R10 GET  /api/v1/disaster-recovery/jobs/{id} 期望 404 RECOVERY_JOB_NOT_FOUND
+ *   R11 未知备份 → 404 BACKUP_NOT_FOUND（负向）
+ *   R12 未认证会话 → 403 NOT_AUTHORIZED（负向）
+ *   R13 页面实况
+ *
+ * 分类规则（R08–R10）：
+ *   只有「HTTP 状态 + 错误码/problem 结构 + 检查项集合」与下方常量精确匹配时才记 BLOCKED。
+ *   任何偏差——包括 500、401、403、其他 code、错误 shape、检查项漂移——一律记 FAIL 并以 1 退出。
+ *   产品行为若已变更（例如执行器被装配，501 变成 202），同样记 FAIL 并标注「行为已变更」：
+ *   那意味着 B06 的结论必须重新评估，不能静默沿用旧的 BLOCKED。
+ *
+ * 模式：
+ *   默认 = 诊断模式（diagnostic）。BLOCKED 不影响退出码，但**不代表完整验收**，输出与
+ *   JSON 证据都会显式标注。加 --require-complete 进入严格完整模式：任何 BLOCKED 都使
+ *   退出码为 1，只有全部 PASS 才算通过。
  */
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -54,6 +67,9 @@ const value = (name, fallback) => {
 const outDir = resolve(value("--out", join(repoRoot, "reports/wb01-recovery-probe")));
 const keep = opt("--keep");
 const skipBuild = opt("--skip-build");
+// 严格完整模式：BLOCKED 使退出码为 1。默认诊断模式保留可读性，但不构成完整验收。
+const requireComplete = opt("--require-complete");
+const mode = requireComplete ? "complete" : "diagnostic";
 const work = join(homedir() || tmpdir(), "sf-wb01-recovery-probe");
 const base = () => `https://127.0.0.1:${env.ports.webPort}`;
 
@@ -63,7 +79,10 @@ const results = [];
 const children = [];
 
 function record(id, title, status, detail, extra = {}) {
-  results.push({ id, title, status, detail, ...extra });
+  // extra 展开在前：调用方附加的诊断字段绝不能覆盖判定本身（曾因 extra.status 覆盖 status
+  // 把 FAIL 记录成 HTTP 状态码，导致汇总与退出码全部失真）。
+  const entry = { ...extra, id, title, status, detail };
+  results.push(entry);
   const line = `[${status}] ${id} ${title} :: ${detail}`;
   console.log(line);
   if (status === "FAIL") process.exitCode = 1;
@@ -80,10 +99,116 @@ async function step(id, title, run) {
   }
 }
 
-/** 观测到「产品未实现」时用此记录：状态码符合预期，但结论是 BLOCKED，不计为通过。 */
+/**
+ * 观测到「产品未实现」时用此记录。**只有** status/code/shape/检查项全部精确匹配才允许走到这里：
+ * 前版对任何 HTTP 结果都记 BLOCKED，会把 500/401/403 和错误结构一起伪装成「阻塞」，
+ * 从而掩盖真实回归。现在唯一入口是 probeBlocked()，不匹配一律 FAIL。
+ */
 function blocked(id, title, detail, extra = {}) {
-  results.push({ id, title, status: "BLOCKED", detail, ...extra });
+  const entry = { ...extra, id, title, status: "BLOCKED", detail };
+  results.push(entry);
   console.log(`[BLOCKED] ${id} ${title} :: ${detail}`);
+}
+
+/** RFC7807 problem 响应：HTTP 状态、content-type、type/title/status/code 与泄露面全部要核对。 */
+function problemMismatches(response, expectedStatus, expectedCode) {
+  const problems = [];
+  if (response.status !== expectedStatus) problems.push(`HTTP ${response.status} != ${expectedStatus}`);
+  const mediaType = String(response.contentType ?? "").split(";")[0].trim().toLowerCase();
+  if (mediaType !== "application/problem+json") {
+    problems.push(`content-type=${mediaType || "?"} != application/problem+json`);
+  }
+  const body = response.json;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    problems.push(`body 不是 JSON 对象: ${String(response.text).slice(0, 160)}`);
+    return problems;
+  }
+  if (body.type !== "about:blank") problems.push(`body.type=${JSON.stringify(body.type)} != "about:blank"`);
+  if (body.status !== expectedStatus) problems.push(`body.status=${JSON.stringify(body.status)} != ${expectedStatus}`);
+  if (body.code !== expectedCode) {
+    problems.push(`body.code=${JSON.stringify(body.code)} != ${JSON.stringify(expectedCode)}`);
+  }
+  if (typeof body.title !== "string" || body.title === "") problems.push("body.title 缺失");
+  for (const field of ["checks", "plan", "job", "backupId", "path"]) {
+    if (field in body) problems.push(`错误响应不应包含字段 ${field}`);
+  }
+  if (/sqlite|\/backups\/|\.db/i.test(String(response.text ?? ""))) {
+    problems.push("响应文本泄露路径/SQLite 细节");
+  }
+  return problems;
+}
+
+/**
+ * 预览响应必须证明的精确事实：真实备份校验通过，且恰好两项因已知原因不合格。
+ * 少一项、多一项、原因或 eligible 变化，都意味着 B06 结论已过期，必须重新评估。
+ */
+const KNOWN_PREVIEW_FAILURES = [
+  { name: "target_controller_identity", reason: "target_identity_not_observed" },
+  { name: "old_controller_fenced", reason: "fencing_evidence_unavailable" },
+];
+
+function previewMismatches(response) {
+  if (response.status !== 200) return [`HTTP ${response.status} != 200`];
+  const body = response.json;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    return [`body 不是 JSON 对象: ${String(response.text).slice(0, 160)}`];
+  }
+  const problems = [];
+  if (body.eligible !== false) problems.push(`eligible=${JSON.stringify(body.eligible)} != false`);
+  if (body.verified !== true) problems.push(`verified=${JSON.stringify(body.verified)} != true`);
+  if (!Array.isArray(body.checks) || body.checks.length === 0) {
+    problems.push("checks 不是非空数组");
+    return problems;
+  }
+  const byName = new Map();
+  for (const check of body.checks) {
+    if (
+      !check ||
+      typeof check !== "object" ||
+      typeof check.name !== "string" ||
+      check.name === "" ||
+      typeof check.passed !== "boolean"
+    ) {
+      problems.push(`检查项结构非法: ${JSON.stringify(check).slice(0, 120)}`);
+      continue;
+    }
+    if (byName.has(check.name)) problems.push(`检查项重复: ${check.name}`);
+    byName.set(check.name, check);
+  }
+  const integrity = byName.get("backup_integrity");
+  if (!integrity || integrity.passed !== true) problems.push("backup_integrity 未通过（真实备份未被确认）");
+  for (const known of KNOWN_PREVIEW_FAILURES) {
+    const got = byName.get(known.name);
+    if (!got) {
+      problems.push(`缺少已知检查项 ${known.name}`);
+      continue;
+    }
+    if (got.passed !== false) problems.push(`${known.name}.passed=${JSON.stringify(got.passed)} != false`);
+    if ((got.reason ?? "") !== known.reason) {
+      problems.push(`${known.name}.reason=${JSON.stringify(got.reason)} != ${JSON.stringify(known.reason)}`);
+    }
+  }
+  return problems;
+}
+
+/**
+ * BLOCKED 的唯一入口。probe() 返回 {label, mismatches, detail, extra}：
+ * mismatches 为空才记 BLOCKED；否则记 FAIL（退出码 1）。label 区分两种成因：
+ *   「非预期响应」——回归或环境异常；「行为已变更」——产品可能已实现，B06 结论需重评。
+ */
+async function probeBlocked(id, title, probe) {
+  let outcome;
+  try {
+    outcome = await probe();
+  } catch (error) {
+    record(id, title, "FAIL", `探针自身失败: ${error?.message ?? error}`);
+    return;
+  }
+  if (outcome.mismatches.length === 0) {
+    blocked(id, title, outcome.detail, outcome.extra ?? {});
+    return;
+  }
+  record(id, title, "FAIL", `${outcome.label}: ${outcome.mismatches.join("; ")}`, outcome.extra ?? {});
 }
 
 function sleep(ms) {
@@ -279,7 +404,7 @@ async function browserFetch(session, method, path, body) {
       body: ${body === undefined ? "undefined" : JSON.stringify(JSON.stringify(body))},
     });
     const text = await response.text();
-    return JSON.stringify({ status: response.status, text });
+    return JSON.stringify({ status: response.status, text, contentType: response.headers.get("content-type") || "" });
   })()`;
   const raw = await evaluate(session, script);
   const envelope = JSON.parse(raw);
@@ -289,7 +414,7 @@ async function browserFetch(session, method, path, body) {
   } catch {
     json = null;
   }
-  return { status: envelope.status, text: envelope.text, json };
+  return { status: envelope.status, text: envelope.text, json, contentType: envelope.contentType ?? "" };
 }
 
 function cleanup() {
@@ -311,6 +436,10 @@ function cleanup() {
 }
 
 async function main() {
+  console.log(
+    `[V09-CLOUD-WB-01] B06 前置条件探测 · mode=${mode}` +
+      (requireComplete ? "（严格完整模式：BLOCKED 推出非零）" : "（诊断模式：BLOCKED 不推出非零，不代表完整验收）"),
+  );
   await mkdir(outDir, { recursive: true });
   await rm(work, { recursive: true, force: true });
   await mkdir(work, { recursive: true });
@@ -451,7 +580,7 @@ async function main() {
       return `backupId=wb01-dr-backup ledger=${info.ledger} integrity=${info.integrity} sha256=${backupSha}`;
     });
 
-    await step("R07", "POST /backups/{id}/verify 真实通过（200 且 valid=true）", async () => {
+    await step("R07", "POST /backups/{id}/verify 真实通过（200 且 verified=true）", async () => {
       const response = await browserFetch(env.session, "POST", `/api/v1/backups/${env.ids.backupId}/verify`);
       if (response.status !== 200) throw new Error(`verify -> ${response.status}: ${response.text.slice(0, 300)}`);
       const integrity = (response.json?.checks ?? []).find(item => item.name === "backup_integrity");
@@ -467,54 +596,51 @@ async function main() {
       expectedVersion: "0.9.0",
     };
 
-    await blocked(
-      "R08",
-      "POST /disaster-recovery/preview 返回 200 但 eligible 恒为 false",
-      await (async () => {
-        const response = await browserFetch(env.session, "POST", "/api/v1/disaster-recovery/preview", previewBody);
-        if (response.status !== 200) {
-          return `preview -> ${response.status}（预期 200）: ${response.text.slice(0, 200)}`;
-        }
-        const checks = response.json?.checks ?? [];
-        const failed = checks.filter(item => !item.passed);
-        const reasons = failed.map(item => `${item.name}/${item.reason ?? ""}`);
-        env.ids.previewChecks = checks;
-        if (response.json?.eligible !== false) {
-          return `preview eligible=${response.json?.eligible}（预期 false，产品可能已变更，需重新评估 B06 结论）`;
-        }
-        return `200 eligible=false，未通过项 ${failed.length}/${checks.length}: ${reasons.join("; ")}`;
-      })(),
-      { checks: undefined },
-    );
+    await probeBlocked("R08", "POST /disaster-recovery/preview 返回 200 但 eligible 恒为 false", async () => {
+      const response = await browserFetch(env.session, "POST", "/api/v1/disaster-recovery/preview", previewBody);
+      const mismatches = previewMismatches(response);
+      const checks = response.json?.checks ?? [];
+      const failed = checks.filter(item => item && item.passed === false);
+      const reasons = failed.map(item => `${item.name}/${item.reason ?? ""}`);
+      env.ids.previewChecks = checks;
+      return {
+        mismatches,
+        label: `非预期预览响应（预期 200 + eligible=false + ${KNOWN_PREVIEW_FAILURES.length} 项已知不合格）`,
+        detail: `200 eligible=false，未通过项 ${failed.length}/${checks.length}: ${reasons.join("; ")}`,
+        extra: { httpStatus: response.status, checks },
+      };
+    });
 
-    await blocked(
-      "R09",
-      "POST /disaster-recovery/jobs 返回 501（生产未装配 RecoveryExecute）",
-      await (async () => {
-        const response = await browserFetch(env.session, "POST", "/api/v1/disaster-recovery/jobs", previewBody);
-        if (response.status !== 501) {
-          return `jobs -> ${response.status} code=${response.json?.code ?? "?"}（预期 501 RECOVERY_EXECUTOR_UNAVAILABLE）`;
-        }
-        if (response.json?.code !== "RECOVERY_EXECUTOR_UNAVAILABLE") {
-          return `501 但 code=${response.json?.code}`;
-        }
-        env.ids.blockedJob = "unknown";
-        return "501 RECOVERY_EXECUTOR_UNAVAILABLE；作业未创建，未触碰任何主控或数据";
-      })(),
-    );
+    await probeBlocked("R09", "POST /disaster-recovery/jobs 返回 501（生产未装配 RecoveryExecute）", async () => {
+      const response = await browserFetch(env.session, "POST", "/api/v1/disaster-recovery/jobs", previewBody);
+      if (response.status === 200 || response.status === 202) {
+        // 执行器已被装配：这不是回归，而是 B06 阻塞解除，旧结论必须重新评估。
+        return {
+          mismatches: [`HTTP ${response.status}：作业已可创建，B06 阻塞前提已变化，必须重新评估`],
+          label: "行为已变更（执行器可能已装配）",
+          detail: "",
+        };
+      }
+      const mismatches = problemMismatches(response, 501, "RECOVERY_EXECUTOR_UNAVAILABLE");
+      env.ids.blockedJob = "unknown";
+      return {
+        mismatches,
+        label: "非预期 jobs 响应（预期 501 RECOVERY_EXECUTOR_UNAVAILABLE + problem 结构）",
+        detail: "501 RECOVERY_EXECUTOR_UNAVAILABLE；作业未创建，未触碰任何主控或数据",
+        extra: { httpStatus: response.status },
+      };
+    });
 
-    await blocked(
-      "R10",
-      "GET /disaster-recovery/jobs/{id} 恒为 404（作业状态不可读回）",
-      await (async () => {
-        const response = await browserFetch(env.session, "GET", "/api/v1/disaster-recovery/jobs/wb01-probe-job");
-        if (response.status !== 404) {
-          return `job -> ${response.status}（预期 404）: ${response.text.slice(0, 200)}`;
-        }
-        const code = response.json?.code ?? "?";
-        return `404 code=${code}；即使作业创建成功也无法从服务端读回状态与阶段`;
-      })(),
-    );
+    await probeBlocked("R10", "GET /disaster-recovery/jobs/{id} 恒为 404（作业状态不可读回）", async () => {
+      const response = await browserFetch(env.session, "GET", "/api/v1/disaster-recovery/jobs/wb01-probe-job");
+      const mismatches = problemMismatches(response, 404, "RECOVERY_JOB_NOT_FOUND");
+      return {
+        mismatches,
+        label: "非预期作业读回响应（预期 404 RECOVERY_JOB_NOT_FOUND + problem 结构）",
+        detail: `404 RECOVERY_JOB_NOT_FOUND；作业状态读回端点无条件 404，即使作业创建成功也无法从服务端读回阶段`,
+        extra: { httpStatus: response.status },
+      };
+    });
 
     await step("R11", "负向：未知备份 ID 必须 404 且不泄露内容", async () => {
       const response = await browserFetch(env.session, "POST", "/api/v1/backups/wb01-no-such-backup/verify");
@@ -561,33 +687,46 @@ async function main() {
   } catch (error) {
     console.error(`\n运行中断: ${error?.message ?? error}`);
   } finally {
+    const counts = {
+      pass: results.filter(item => item.status === "PASS").length,
+      blocked: results.filter(item => item.status === "BLOCKED").length,
+      fail: results.filter(item => item.status === "FAIL").length,
+    };
+    const complete = counts.fail === 0 && counts.blocked === 0;
     const summary = {
       task: "V09-CLOUD-WB-01",
       scope: "B06 灾难恢复前置条件探测（不是恢复成功验收）",
+      mode,
+      acceptanceComplete: complete,
+      verdict: complete ? "COMPLETE" : counts.fail > 0 ? "REGRESSION" : "INCOMPLETE",
+      modeNote:
+        mode === "complete"
+          ? "严格完整模式：BLOCKED 令退出码为 1，只有全 PASS 才算通过。"
+          : "诊断模式：BLOCKED 不改变退出码，本结果**不构成完整验收**，不得作为发布准入证据。",
+      command: `node tests/browser/v09/run-recovery-prerequisite-probe.mjs${requireComplete ? " --require-complete" : ""}`,
       generatedAt: new Date().toISOString(),
       ports: env.ports,
       backup: { id: env.ids.backupId ?? null, sha256: backupSha || null },
-      counts: {
-        pass: results.filter(item => item.status === "PASS").length,
-        blocked: results.filter(item => item.status === "BLOCKED").length,
-        fail: results.filter(item => item.status === "FAIL").length,
-      },
+      counts,
       results,
       disclaimer:
-        "R08–R10 的 BLOCKED 是产品侧当前行为（预览恒不合格、执行器未装配、作业状态不可读回），" +
+        "R08–R10 的 BLOCKED 只在 HTTP 状态、problem 结构、code 与检查项集合精确匹配时成立；" +
+        "任何偏差均记 FAIL。BLOCKED 表示产品侧当前确无该能力（预览恒不合格、执行器未装配、作业状态不可读回），" +
         "不计为本任务通过项；本脚本未注入自制恢复执行器，因此不对实际恢复、新权威、旧主控 fence、旧信任代次拒绝下结论。",
     };
     await writeFile(join(outDir, "recovery-probe-results.json"), JSON.stringify(summary, null, 2));
-    console.log(`\n证据: ${join(outDir, "recovery-probe-results.json")}`);
-    console.log(
-      `汇总: PASS=${summary.counts.pass} BLOCKED=${summary.counts.blocked} FAIL=${summary.counts.fail}`,
-    );
+    console.log(`\n模式: ${mode} (${summary.verdict})`);
+    console.log(`证据: ${join(outDir, "recovery-probe-results.json")}`);
+    console.log(`汇总: PASS=${counts.pass} BLOCKED=${counts.blocked} FAIL=${counts.fail}`);
+    if (!complete && mode === "diagnostic") {
+      console.log("提示: 诊断模式不构成完整验收；需要完整门禁请加 --require-complete（BLOCKED 将返回非零）。");
+    }
     cleanup();
     if (!keep) {
       await sleep(600);
       await rm(work, { recursive: true, force: true }).catch(() => {});
     }
-    process.exit(results.some(item => item.status === "FAIL") ? 1 : 0);
+    process.exit(mode === "complete" ? (complete ? 0 : 1) : counts.fail > 0 ? 1 : 0);
   }
 }
 

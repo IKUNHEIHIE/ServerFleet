@@ -1,16 +1,21 @@
 {
   "task": "V09-CLOUD-WB-01",
   "scope": "B06 灾难恢复前置条件探测（不是恢复成功验收）",
-  "generatedAt": "2026-11-02T21:23:52.374Z",
+  "mode": "complete",
+  "acceptanceComplete": false,
+  "verdict": "INCOMPLETE",
+  "modeNote": "严格完整模式：BLOCKED 令退出码为 1，只有全 PASS 才算通过。",
+  "command": "node tests/browser/v09/run-recovery-prerequisite-probe.mjs --require-complete",
+  "generatedAt": "2026-11-03T05:01:25.766Z",
   "ports": {
-    "apiPort": 46437,
-    "webPort": 43365,
-    "aiPort": 45597,
-    "controlPort": 39877
+    "apiPort": 34819,
+    "webPort": 41055,
+    "aiPort": 42899,
+    "controlPort": 43079
   },
   "backup": {
     "id": "wb01-dr-backup",
-    "sha256": "3447fa3491a60f73c8f727a238222154b8a834985dc8b4279e57e85d72f14c55"
+    "sha256": "7ede3278f04733190649eceb9d6505b0b2558a00c6048be6c5aa8a1f270013bb"
   },
   "counts": {
     "pass": 11,
@@ -40,13 +45,13 @@
       "id": "R03",
       "title": "启动宿主：生产同构（不注入 RecoveryExecute）",
       "status": "PASS",
-      "detail": "api=46437 web=43365 ai=45597 control=39877"
+      "detail": "api=34819 web=41055 ai=42899 control=43079"
     },
     {
       "id": "R04",
       "title": "Web 同源宿主就绪",
       "status": "PASS",
-      "detail": "https://127.0.0.1:43365 → :46437"
+      "detail": "https://127.0.0.1:41055 → :34819"
     },
     {
       "id": "R05",
@@ -58,31 +63,54 @@
       "id": "R06",
       "title": "生成真实一致性备份（SQLite VACUUM INTO）并核对迁移账本",
       "status": "PASS",
-      "detail": "backupId=wb01-dr-backup ledger=1 integrity=ok sha256=3447fa3491a60f73c8f727a238222154b8a834985dc8b4279e57e85d72f14c55"
+      "detail": "backupId=wb01-dr-backup ledger=1 integrity=ok sha256=7ede3278f04733190649eceb9d6505b0b2558a00c6048be6c5aa8a1f270013bb"
     },
     {
       "id": "R07",
-      "title": "POST /backups/{id}/verify 真实通过（200 且 valid=true）",
+      "title": "POST /backups/{id}/verify 真实通过（200 且 verified=true）",
       "status": "PASS",
-      "detail": "200 verified=true backup_integrity=passed againstSha=3447fa3491a60f73…"
+      "detail": "200 verified=true backup_integrity=passed againstSha=7ede3278f0473319…"
     },
     {
+      "httpStatus": 200,
+      "checks": [
+        {
+          "name": "backup_integrity",
+          "passed": true
+        },
+        {
+          "name": "target_controller_identity",
+          "passed": false,
+          "reason": "target_identity_not_observed"
+        },
+        {
+          "name": "old_controller_fenced",
+          "passed": false,
+          "reason": "fencing_evidence_unavailable"
+        },
+        {
+          "name": "recovery_key_reference",
+          "passed": true
+        }
+      ],
       "id": "R08",
       "title": "POST /disaster-recovery/preview 返回 200 但 eligible 恒为 false",
       "status": "BLOCKED",
       "detail": "200 eligible=false，未通过项 2/4: target_controller_identity/target_identity_not_observed; old_controller_fenced/fencing_evidence_unavailable"
     },
     {
+      "httpStatus": 501,
       "id": "R09",
       "title": "POST /disaster-recovery/jobs 返回 501（生产未装配 RecoveryExecute）",
       "status": "BLOCKED",
       "detail": "501 RECOVERY_EXECUTOR_UNAVAILABLE；作业未创建，未触碰任何主控或数据"
     },
     {
+      "httpStatus": 404,
       "id": "R10",
       "title": "GET /disaster-recovery/jobs/{id} 恒为 404（作业状态不可读回）",
       "status": "BLOCKED",
-      "detail": "404 code=RECOVERY_JOB_NOT_FOUND；即使作业创建成功也无法从服务端读回状态与阶段"
+      "detail": "404 RECOVERY_JOB_NOT_FOUND；作业状态读回端点无条件 404，即使作业创建成功也无法从服务端读回阶段"
     },
     {
       "id": "R11",
@@ -103,5 +131,5 @@
       "detail": "页面标注契约缺口，未出现「恢复成功」类陈述"
     }
   ],
-  "disclaimer": "R08–R10 的 BLOCKED 是产品侧当前行为（预览恒不合格、执行器未装配、作业状态不可读回），不计为本任务通过项；本脚本未注入自制恢复执行器，因此不对实际恢复、新权威、旧主控 fence、旧信任代次拒绝下结论。"
+  "disclaimer": "R08–R10 的 BLOCKED 只在 HTTP 状态、problem 结构、code 与检查项集合精确匹配时成立；任何偏差均记 FAIL。BLOCKED 表示产品侧当前确无该能力（预览恒不合格、执行器未装配、作业状态不可读回），不计为本任务通过项；本脚本未注入自制恢复执行器，因此不对实际恢复、新权威、旧主控 fence、旧信任代次拒绝下结论。"
 }

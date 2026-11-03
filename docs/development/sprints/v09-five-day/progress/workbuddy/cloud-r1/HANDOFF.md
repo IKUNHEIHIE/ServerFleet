@@ -113,3 +113,46 @@ node tests/browser/v09/run-recovery-prerequisite-probe.mjs --skip-build --keep
 ```
 
 运行态目录 `~/sf-wb01-recovery-probe`（0700）。
+
+---
+
+## 返修轮 R1（覆盖上面 CP-2 的 20 PASS 计数）
+
+首轮独立审查（锚定 `d0dd938`）提出四项。以下为处置与复核方式，正文细节见 `STATUS.md`。
+
+### 代码改动
+
+| 文件 | 改动 |
+|---|---|
+| `tests/browser/v09/run-recovery-prerequisite-probe.mjs` | R08—R10 改由 `probeBlocked()` 唯一入口记账：只有 status + problem content-type/type/status/code + 预览检查项集合全部精确匹配才 BLOCKED，其余 FAIL；新增 `--require-complete`；修掉 `extra.status` 覆盖判定字段的 bug |
+| `tests/browser/v09/run-product-update-acceptance.mjs` | P18 增加 `expectUpdateProblem()` 严格断言（503 + problem 结构）与 1.0.3 合格对照；删除「计划通过就继续 apply」兜底；新增 P18B 真实回滚；P19 增加失败终态持久与作业数不增的断言 |
+| `tests/browser/v09/run-probe-classification-selftest.mjs` | 新增：把 R08—R10 片段抽到 vm 里喂 10 组响应，固化 WB-R1 的回归（含审查给的「三端点全 500」口径） |
+
+### 复核命令
+
+```sh
+node tests/browser/v09/run-probe-classification-selftest.mjs           # 10/10，退出 0
+node tests/browser/v09/run-product-update-acceptance.mjs               # 21 PASS / 0 FAIL
+node tests/browser/v09/run-recovery-prerequisite-probe.mjs             # 11/3/0，退出 0（INCOMPLETE）
+node tests/browser/v09/run-recovery-prerequisite-probe.mjs --require-complete   # 同结果，退出 1
+```
+
+### P18B 的构造要点（复验时最容易搞错的地方）
+
+- 候选版本必须让**旧槽位字节 ≠ 候选字节**，否则「回滚成功」与「新版本继续运行」在字节层面无法区分。
+  因此 1.0.3 的工件使用 **1.0.0 的真实字节**（声明 1.0.3）：签名、SHA-256、平台、序号全部合法，
+  失败点被强制推到安装后的运行版本校验。
+- 不用 `1.0.1` 做对照计划：它与已安装版本同序号，`FrozenInstallPlan.valid()` 要求
+  `Attempted.Sequence > Previous.Sequence`，会被策略挡掉，据此判断「planner 可用」是错的。
+- 回滚完成的判据是账本（`receipt.State=rolled_back` + `Current=1.0.1` + `switched`/`rollback-switching`
+  阶段标记）与槽位字节、进程镜像、健康文件；作业 `failed` 只是必要条件。
+- 作业终态判断用白名单（completed/partial_failure/failed/canceled/expired/unknown），
+  不要用中间态黑名单——原先漏了 `running`，会把执行中的作业当终态。
+
+### 本轮环境修复（非产品改动）
+
+容器重建后系统 Go 为 1.21.4、Node 为 18/22，低于 `go.mod`（1.27.3）与 `scripts/tool-versions.json`（24.22.1）。
+已补齐：`.tools/go` → 已下载的 `go1.27.3` toolchain（`GOTOOLCHAIN=local`），Node `v24.22.1` 置于 `/opt/node24`。
+`.tools/` 在 `.gitignore` 内，不进入提交。`check:go` 所需的 `SF_R*_BINARY` 用本轮真实构建提供，
+不提供时对应测试会以「explicit prebuilt actual Agent binary is required」失败——这是基线环境依赖。
+

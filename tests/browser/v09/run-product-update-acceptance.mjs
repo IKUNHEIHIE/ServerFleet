@@ -30,7 +30,7 @@
  */
 import { createHash, generateKeyPairSync, randomBytes, sign } from "node:crypto";
 import { spawn, spawnSync } from "node:child_process";
-import { chmod, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, readdir, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import https from "node:https";
 import { DatabaseSync } from "node:sqlite";
 import { tmpdir } from "node:os";
@@ -292,7 +292,7 @@ async function browserFetch(session, method, path, body) {
       body: ${body === undefined ? "undefined" : JSON.stringify(JSON.stringify(body))},
     });
     const text = await response.text();
-    return JSON.stringify({ status: response.status, text });
+    return JSON.stringify({ status: response.status, text, contentType: response.headers.get("content-type") || "" });
   })()`;
   const raw = await evaluate(session, script);
   const envelope = JSON.parse(raw);
@@ -302,7 +302,7 @@ async function browserFetch(session, method, path, body) {
   } catch {
     json = null;
   }
-  return { status: envelope.status, text: envelope.text, json };
+  return { status: envelope.status, text: envelope.text, json, contentType: envelope.contentType ?? "" };
 }
 
 async function browserMust(session, method, path, body, expected) {
@@ -311,6 +311,71 @@ async function browserMust(session, method, path, body, expected) {
     throw new Error(`${method} ${path} -> ${response.status} want ${expected}: ${response.text.slice(0, 260)}`);
   }
   return response;
+}
+
+/**
+ * 严格核对 updates 的 problem 响应：只看 code 不够——500/401/403 只要 code 恰好相同就会被
+ * 误判为预期失败。这里要求 HTTP 状态、content-type、type/status/code 全部对上。
+ */
+function expectUpdateProblem(response, expectedStatus, expectedCode) {
+  const problems = [];
+  if (response.status !== expectedStatus) problems.push(`HTTP ${response.status} != ${expectedStatus}`);
+  const mediaType = String(response.contentType ?? "").split(";")[0].trim().toLowerCase();
+  if (mediaType !== "application/problem+json") {
+    problems.push(`content-type=${mediaType || "?"} != application/problem+json`);
+  }
+  const body = response.json;
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
+    problems.push(`body 不是 JSON 对象: ${String(response.text).slice(0, 160)}`);
+    return problems;
+  }
+  if (body.type !== "about:blank") problems.push(`body.type=${JSON.stringify(body.type)} != "about:blank"`);
+  if (body.status !== expectedStatus) problems.push(`body.status=${JSON.stringify(body.status)} != ${expectedStatus}`);
+  if (body.code !== expectedCode) {
+    problems.push(`body.code=${JSON.stringify(body.code)} != ${JSON.stringify(expectedCode)}`);
+  }
+  if (typeof body.title !== "string" || body.title === "") problems.push("body.title 缺失");
+  return problems;
+}
+
+/**
+ * 读取槽位下的安装账本：update-<executionID>/ 的阶段标记与 receipt.json。
+ * 阶段标记是产品自己在切换前逐个落盘的（switched / rollback-switching …），
+ * 因此它能证明「确实安装过候选」，而不是只相信作业终态标签。
+ */
+async function readSlotLedger(slotDir) {
+  let entries = [];
+  try {
+    entries = await readdir(slotDir, { withFileTypes: true });
+  } catch {
+    return [];
+  }
+  const ledgers = [];
+  for (const entry of entries) {
+    if (!entry.isDirectory() || !entry.name.startsWith("update-")) continue;
+    const dir = join(slotDir, entry.name);
+    let files = [];
+    try {
+      files = await readdir(dir);
+    } catch {
+      continue;
+    }
+    let receipt = null;
+    if (files.includes("receipt.json")) {
+      try {
+        receipt = JSON.parse(await readFile(join(dir, "receipt.json"), "utf8"));
+      } catch {
+        receipt = null;
+      }
+    }
+    ledgers.push({
+      dir,
+      files,
+      markers: files.filter(name => name.endsWith(".json") && name !== "receipt.json" && name !== "intent.json").map(name => name.replace(/\.json$/, "")),
+      receipt,
+    });
+  }
+  return ledgers;
 }
 
 async function main() {
@@ -526,6 +591,10 @@ async function main() {
     const initial = await writeRelease(manifestOf("1.0.0", 1, v1bytes), v1bytes, false);
     await writeRelease(manifestOf("1.0.1", 2, v2bytes), v2bytes, false);
     await writeRelease(manifestOf("1.0.2", 3, v2bytes), v2bytes, true);
+    // 1.0.3 是「签名与摘要都合法、但装上去运行版本不符」的候选：manifest 声明 1.0.3，
+    // 工件却是真实的 1.0.0 字节。计划/签名/哈希都会通过，失败只能发生在安装后的版本校验，
+    // 因此它是验证真实回滚（而非状态标签）的唯一可靠素材。
+    await writeRelease(manifestOf("1.0.3", 4, v1bytes), v1bytes, false);
     const config = {
       directory: join(work, "slot"),
       inbox: join(work, "inbox"),
@@ -547,7 +616,11 @@ async function main() {
     const configPath = join(work, "product-update.json");
     await writeFile(configPath, JSON.stringify(config, null, 2), { mode: 0o600 });
     await chmod(configPath, 0o600);
-    return `initial=${initial.sha256.slice(0, 16)}… target=${v2bytes.length}b`;
+    environment.binaries.inbox103 = await sha256(join(work, "inbox/1.0.3/artifact"));
+    if (environment.binaries.inbox103 !== environment.binaries.agent100) {
+      throw new Error("1.0.3 回滚候选用例的工件必须等于 1.0.0 真实字节");
+    }
+    return `initial=${initial.sha256.slice(0, 16)}… target=${v2bytes.length}b rollbackCandidate=1.0.3(工件=1.0.0 字节)`;
   });
 
   // ---- 4. 阶段 B：带 UpdateProduct 的宿主（可重启，用于持久性验证）----
@@ -730,63 +803,153 @@ async function main() {
       return `job=${job.id} status=${job.status} task=${job.taskId}`;
     });
 
-    await step("P18", "负向：工件与清单 SHA 不一致的 1.0.2 必须失败且不替换当前产品", async () => {
+    await step("P18", "负向：工件与清单 SHA 不一致的 1.0.2 必须在计划阶段被拒（状态/码/结构精确核对）", async () => {
+      // 对照必须用一个「签名与摘要都合法、序号可递进」的候选（1.0.3）：
+      // 1.0.1 与已安装版本序号相同，本来就被 frozen 校验挡住，当对照会把
+      // 「策略拒绝」误当成「planner 可用」；没有合格对照，503 也无法排除 planner 未装配。
+      const control = await browserFetch(session, "POST", "/api/v1/system/updates/plan", { targetVersion: "1.0.3", dryRun: true });
+      if (control.status !== 200) {
+        throw new Error(`对照 1.0.3 计划 -> ${control.status} want 200: ${control.text.slice(0, 240)}`);
+      }
+      if (control.json?.eligible !== true) {
+        throw new Error(`对照 1.0.3 eligible=${JSON.stringify(control.json?.eligible)} want true`);
+      }
+
+      // 篡改工件必须在计划阶段被拒：503 + UPDATE_PLANNER_UNAVAILABLE + problem 结构，
+      // 三者缺一都判 FAIL。旧版只比 code，500/401 只要码相同就能混过去。
       const plan = await browserFetch(session, "POST", "/api/v1/system/updates/plan", { targetVersion: "1.0.2", dryRun: true });
-      if (plan.status !== 200) {
-        // 篡改工件在计划阶段就被签名/哈希校验拒绝：不产生作业、不触碰运行中的产品。
-        if (plan.json?.code !== "UPDATE_PLANNER_UNAVAILABLE") {
-          throw new Error(`unexpected plan failure ${plan.status}: ${plan.text.slice(0, 200)}`);
-        }
-        const jobsAfter = await browserMust(session, "GET", "/api/v1/system/updates/jobs", undefined, 200);
-        if ((jobsAfter.json?.items ?? []).some(entry => entry.targetVersion === "1.0.2")) {
-          throw new Error("a job was created for a tampered artifact");
-        }
-        const healthNow = JSON.parse(await readFile(join(work, "slot/health.json"), "utf8"));
-        if (healthNow.version !== "1.0.1" || healthNow.pid !== environment.pidAfter) {
-          throw new Error(`product replaced while rejecting tampered artifact: ${healthNow.version}`);
-        }
-        if (sha256(join(work, "slot/active")) !== environment.binaries.agent101) {
-          throw new Error("slot bytes changed while rejecting tampered artifact");
-        }
-        return `plan rejected (${plan.json.code}); no job, product still 1.0.1 pid ${healthNow.pid}`;
+      const problems = expectUpdateProblem(plan, 503, "UPDATE_PLANNER_UNAVAILABLE");
+      if (problems.length > 0) {
+        throw new Error(`篡改工件未被预期的计划拒绝: ${problems.join("; ")}`);
       }
-      if (!plan.json?.eligible) throw new Error(`1.0.2 plan not eligible: ${plan.text.slice(0, 200)}`);
-      await browserMust(session, "POST", "/api/v1/system/updates/apply", { planId: plan.json.planId, confirmation: "1.0.2", backupMode: "required" }, 202);
-      const listed = await browserMust(sessionB, "GET", "/api/v1/tasks", undefined, 200);
-      const awaiting = (listed.json?.items ?? []).filter(entry => entry.planDigest && /awaiting|pending|approval/i.test(entry.state ?? ""));
-      if (awaiting.length !== 1) throw new Error(`expected one awaiting task, got ${awaiting.length}`);
-      const task = awaiting[0];
-      await browserMust(sessionB, "POST", `/api/v1/tasks/${task.taskId ?? task.jobId}/approve`, {
-        planDigest: task.planDigest,
-        decision: "approve",
-        reason: "wb01 负向：损坏工件必须被拒绝",
-      }, 200);
-      const busy = ["awaiting_approval", "queued", "preflight", "verifying", "backing_up", "installing", "restarting", "health_check"];
-      const deadline = Date.now() + 40_000;
-      let status = "";
-      while (Date.now() < deadline) {
-        const jobs = await browserMust(session, "GET", "/api/v1/system/updates/jobs", undefined, 200);
-        const found = (jobs.json?.items ?? []).find(entry => entry.targetVersion === "1.0.2");
-        if (found && !busy.includes(found.status)) {
-          status = found.status;
-          break;
-        }
-        await sleep(400);
+      const jobsAfter = await browserMust(session, "GET", "/api/v1/system/updates/jobs", undefined, 200);
+      if ((jobsAfter.json?.items ?? []).some(entry => entry.targetVersion === "1.0.2")) {
+        throw new Error("a job was created for a tampered artifact");
       }
-      if (!["failed", "unknown", "rolled_back"].includes(status)) {
-        throw new Error(`damaged artifact ended ${status || "without terminal state"}`);
-      }
-      const health = JSON.parse(await readFile(join(work, "slot/health.json"), "utf8"));
-      if (health.version !== "1.0.1" || health.pid !== environment.pidAfter) {
-        throw new Error(`damaged artifact replaced the product: ${health.version} pid ${health.pid}`);
+      const healthNow = JSON.parse(await readFile(join(work, "slot/health.json"), "utf8"));
+      if (healthNow.version !== "1.0.1" || healthNow.pid !== environment.pidAfter) {
+        throw new Error(`product replaced while rejecting tampered artifact: ${healthNow.version} pid ${healthNow.pid}`);
       }
       if (sha256(join(work, "slot/active")) !== environment.binaries.agent101) {
-        throw new Error("slot bytes changed by damaged artifact");
+        throw new Error("slot bytes changed while rejecting tampered artifact");
       }
-      return `status=${status}; product still 1.0.1 pid ${health.pid}`;
+      return `对照 1.0.3 eligible=true；1.0.2 被 503 UPDATE_PLANNER_UNAVAILABLE + problem 结构拒绝；无作业，产品仍 1.0.1 pid ${healthNow.pid}`;
     });
 
-    await step("P19", "重启宿主：已安装版本与作业终态持久，未知结果不重放", async () => {
+    await step("P18B", "真实回滚：签名与摘要合法但安装后版本不符，必须恢复旧槽位字节、进程与健康", async () => {
+      const slotBefore = sha256(join(work, "slot/active"));
+      if (slotBefore !== environment.binaries.agent101) {
+        throw new Error(`回滚前槽位不是 1.0.1: ${slotBefore.slice(0, 16)}`);
+      }
+      const healthBefore = JSON.parse(await readFile(join(work, "slot/health.json"), "utf8"));
+      const pidBefore = healthBefore.pid;
+
+      const plan = await browserMust(session, "POST", "/api/v1/system/updates/plan", { targetVersion: "1.0.3", dryRun: true }, 200);
+      if (plan.json?.eligible !== true) throw new Error(`1.0.3 plan not eligible: ${plan.text.slice(0, 240)}`);
+      if (plan.json?.targetVersion !== "1.0.3") throw new Error(`plan targetVersion=${plan.json?.targetVersion} != 1.0.3`);
+
+      const applied = await browserMust(session, "POST", "/api/v1/system/updates/apply", {
+        planId: plan.json.planId,
+        confirmation: "1.0.3",
+        backupMode: "required",
+      }, 202);
+      if (applied.json?.status !== "awaiting_approval") {
+        throw new Error(`apply status=${applied.json?.status} want awaiting_approval`);
+      }
+      // 审批前不得动产品：这是「审批不是自动通过」的控制点。
+      const healthPending = JSON.parse(await readFile(join(work, "slot/health.json"), "utf8"));
+      if (healthPending.pid !== pidBefore || healthPending.version !== "1.0.1") {
+        throw new Error(`产品在人工审批前就被改动: ${healthPending.version} pid ${healthPending.pid}`);
+      }
+
+      const taskId = applied.json.taskId;
+      const task = await browserMust(sessionB, "GET", `/api/v1/tasks/${taskId}`, undefined, 200);
+      const digest = task.json?.planDigest;
+      if (!digest) throw new Error(`任务缺少 planDigest: ${task.text.slice(0, 200)}`);
+      await browserMust(sessionB, "POST", `/api/v1/tasks/${taskId}/approve`, {
+        planDigest: digest,
+        decision: "approve",
+        reason: "wb01 真实回滚：安装后运行版本不符",
+      }, 200);
+
+      // 用终态白名单而不是中间态黑名单：此前漏了 running，会把仍在执行的作业当终态。
+      const terminal = ["completed", "partial_failure", "failed", "canceled", "expired", "unknown"];
+      const deadline = Date.now() + 90_000;
+      let job = null;
+      while (Date.now() < deadline) {
+        const jobs = await browserMust(session, "GET", "/api/v1/system/updates/jobs", undefined, 200);
+        const found = (jobs.json?.items ?? []).find(entry => entry.targetVersion === "1.0.3");
+        if (found && terminal.includes(found.status)) {
+          job = found;
+          break;
+        }
+        await sleep(500);
+      }
+      if (!job) throw new Error("1.0.3 作业未达终态（安装或回滚未完成）");
+      // 终态标签本身不作为回滚证据：这里只要求它是 failed，其余全部用文件系统与进程事实核对。
+      if (job.status !== "failed") throw new Error(`1.0.3 作业终态 ${job.status} != failed`);
+
+      const activeAfter = sha256(join(work, "slot/active"));
+      if (activeAfter !== environment.binaries.agent101) {
+        throw new Error(`回滚后槽位字节 ${activeAfter.slice(0, 16)} != 1.0.1 ${environment.binaries.agent101.slice(0, 16)}`);
+      }
+      if (activeAfter === environment.binaries.inbox103) {
+        throw new Error("槽位仍是 1.0.3 候选字节，未回滚");
+      }
+      const healthAfter = JSON.parse(await readFile(join(work, "slot/health.json"), "utf8"));
+      if (healthAfter.version !== "1.0.1") throw new Error(`回滚后健康版本 ${healthAfter.version} != 1.0.1`);
+      if (!Number.isInteger(healthAfter.pid) || healthAfter.pid <= 0) throw new Error("回滚后没有可观测进程");
+      if (healthAfter.pid === pidBefore) {
+        throw new Error("回滚未重启进程：pid 与安装前相同，无法证明恢复的是旧槽位");
+      }
+
+      // 健康文件声明的 SHA 必须等于旧槽位字节；进程镜像必须指向 slot/active。
+      if (healthAfter.sha256 && healthAfter.sha256 !== environment.binaries.agent101) {
+        throw new Error(`回滚后健康 SHA ${String(healthAfter.sha256).slice(0, 16)} != 旧槽位字节`);
+      }
+      const exe = await readlink(`/proc/${healthAfter.pid}/exe`).catch(() => "");
+      if (!exe.endsWith("/slot/active")) {
+        throw new Error(`回滚后进程镜像 ${exe || "不可读"} 未指向 slot/active`);
+      }
+
+      // 安装账本：证明候选确实被切上去过，再由产品自己回滚。
+      const ledger = (await readSlotLedger(join(work, "slot"))).filter(item => item.receipt?.Attempted?.version === "1.0.3").pop();
+      if (!ledger) throw new Error("未找到 1.0.3 的安装账本 receipt.json");
+      if (ledger.receipt.State !== "rolled_back") throw new Error(`receipt.State=${ledger.receipt.State} != rolled_back`);
+      if (ledger.receipt.Current?.version !== "1.0.1") throw new Error(`receipt.Current=${ledger.receipt.Current?.version} != 1.0.1`);
+      if (ledger.receipt.Health?.Version !== "1.0.1") throw new Error(`receipt.Health.Version=${ledger.receipt.Health?.Version}`);
+      if (String(ledger.receipt.Health?.ProcessID) !== String(healthAfter.pid)) {
+        throw new Error(`receipt.Health.ProcessID=${ledger.receipt.Health?.ProcessID} 与实时 pid ${healthAfter.pid} 不一致`);
+      }
+      for (const marker of ["switched", "rollback-switching"]) {
+        if (!ledger.markers.includes(marker)) {
+          throw new Error(`安装账本缺少阶段标记 ${marker}（现有: ${ledger.markers.join(",")}）；无法证明安装与回滚真实发生`);
+        }
+      }
+
+      environment.rollback = {
+        taskId,
+        jobId: job.id,
+        attemptedVersion: "1.0.3",
+        attemptedArtifactSha: environment.binaries.inbox103,
+        restoredSha: activeAfter,
+        pidBefore,
+        pidAfter: healthAfter.pid,
+        ledger: ledger.dir,
+        state: ledger.receipt.State,
+      };
+      return `1.0.3 安装后版本不符 -> job=failed、receipt=rolled_back、槽位恢复 1.0.1、pid ${pidBefore}->${healthAfter.pid}、标记 switched+rollback-switching`;
+    });
+
+    await step("P19", "更新均已完成后的宿主重启：1.0.1 与失败作业终态持久，且不重放", async () => {
+      // 口径说明：本项只覆盖「所有作业都到终态之后重启」。
+      // 「安装执行中被 kill -9 的中断恢复」是另一类风险，本专项未构造，不能拿本项冒充。
+      const jobsBeforeRestart = (await browserMust(session, "GET", "/api/v1/system/updates/jobs", undefined, 200)).json?.items ?? [];
+      const countBefore = jobsBeforeRestart.length;
+      if (!jobsBeforeRestart.some(entry => entry.targetVersion === "1.0.3" && entry.status === "failed")) {
+        throw new Error(`重启前 1.0.3 作业不是 failed: ${JSON.stringify(jobsBeforeRestart.map(entry => [entry.targetVersion, entry.status]))}`);
+      }
+
       stageB.kill("SIGTERM");
       await sleep(3000);
       startStageB();
@@ -811,14 +974,23 @@ async function main() {
       }
       if (!health) throw new Error(`restart did not restore 1.0.1: ${hostLog.slice(-300)}`);
       const jobs = await browserMust(session, "GET", "/api/v1/system/updates/jobs", undefined, 200);
-      const done = (jobs.json?.items ?? []).find(entry => entry.targetVersion === "1.0.1");
+      const items = jobs.json?.items ?? [];
+      const done = items.find(entry => entry.targetVersion === "1.0.1");
       if (!done || done.status !== "completed") {
         throw new Error(`completed job not durable across restart: ${jobs.text.slice(0, 240)}`);
+      }
+      // 失败作业的终态同样必须持久：重启不得把它「修好」，也不得重新排队。
+      const failed = items.find(entry => entry.targetVersion === "1.0.3");
+      if (!failed || failed.status !== "failed") {
+        throw new Error(`1.0.3 失败终态未持久: ${JSON.stringify(failed ?? null)}`);
+      }
+      if (items.length !== countBefore) {
+        throw new Error(`重启后作业数 ${items.length} != 重启前 ${countBefore}（存在重放）`);
       }
       if (sha256(join(work, "slot/active")) !== environment.binaries.agent101) {
         throw new Error("slot bytes changed after restart");
       }
-      return `restored 1.0.1 pid ${health.pid}; completed job durable`;
+      return `restored 1.0.1 pid ${health.pid}; completed(1.0.1) 与 failed(1.0.3) 终态均持久，作业数 ${items.length} 未增加`;
     });
 
     await screenshot(session, join(outDir, "stage-updated.png"));

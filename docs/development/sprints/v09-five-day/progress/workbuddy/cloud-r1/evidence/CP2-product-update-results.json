@@ -9,27 +9,39 @@
     "work": "/home/ubuntu/sf-wb01-product-update",
     "outDir": "/home/ubuntu/ServerFleet-WB01-parent/ServerFleet-WB01/reports/wb01-product-update",
     "binaries": {
-      "fixturehost": "5dffb2f274eeca81b13ba7e30ad5f57ba07032c3d169eed6390a2c30581ac804",
-      "agent100": "9cc9c76a17fee40e13f13a28dc50cac9e185fd7150c0aafdcb881556cc38ffe2",
-      "agent101": "3a613a8fc6b472dea07b0a5e6ae3d40fdd2ebdba0f8a4c0259e27838a9019bdf"
+      "fixturehost": "f551e7d3f56b6f48c05011ce59b11b9f5cb57e89e662216e5a0dc6d560c3c3f6",
+      "agent100": "bb0edd8fbbc15be9cc43e503f428f5b2399268c45b7310aa6b371629394422ba",
+      "agent101": "91e18531634facdd0d120cf51e7db672352144079527fc33f602ae2f18aa0e13",
+      "inbox103": "bb0edd8fbbc15be9cc43e503f428f5b2399268c45b7310aa6b371629394422ba"
     },
     "ports": {
-      "apiPort": 33957,
-      "webPort": 40717,
-      "aiPort": 40527,
-      "controlPort": 33701
+      "apiPort": 43815,
+      "webPort": 38971,
+      "aiPort": 40127,
+      "controlPort": 41753
     },
-    "nodeId": "e933e20dcf41b94a4412e39da6e6fbbb",
-    "pidBefore": 631167,
-    "taskId": "tsk_744fbe4bcb9d3e6e02d35ed0",
-    "pidAfter": 631373
+    "nodeId": "81a9f9b6350dc5f885e7659ae4b62fb7",
+    "pidBefore": 1163735,
+    "taskId": "tsk_896d3f236501c943a2fd7e5a",
+    "pidAfter": 1164115,
+    "rollback": {
+      "taskId": "tsk_403ccea08e46c54ea31bcce6",
+      "jobId": "tsk_403ccea08e46c54ea31bcce6",
+      "attemptedVersion": "1.0.3",
+      "attemptedArtifactSha": "bb0edd8fbbc15be9cc43e503f428f5b2399268c45b7310aa6b371629394422ba",
+      "restoredSha": "91e18531634facdd0d120cf51e7db672352144079527fc33f602ae2f18aa0e13",
+      "pidBefore": 1164115,
+      "pidAfter": 1164306,
+      "ledger": "/home/ubuntu/sf-wb01-product-update/slot/update-update-176a2ebb6855e9ad2ed409f70d597466e0d92285",
+      "state": "rolled_back"
+    }
   },
   "results": [
     {
       "id": "P00",
       "title": "构建真实 fixturehost 与两个真实 Agent 发布版本",
       "status": "PASS",
-      "detail": "1.0.0=9cc9c76a17fee40e… 1.0.1=3a613a8fc6b472de…"
+      "detail": "1.0.0=bb0edd8fbbc15be9… 1.0.1=91e18531634facdd…"
     },
     {
       "id": "P01",
@@ -53,13 +65,13 @@
       "id": "P04",
       "title": "浏览器完成首次 bootstrap，再建立异人管理员账号",
       "status": "PASS",
-      "detail": "admin=? approver=AB0NQokepK8Ir95MwKLYkfbFIHvuVyL-L6UJByOnHQs"
+      "detail": "admin=? approver=OnQtgxpK7w-BtLDgFNFdBj-2qOG1JC2TEVv4nB3d-_w"
     },
     {
       "id": "P05",
       "title": "真实 Agent 接入令牌与 pending enrollment",
       "status": "PASS",
-      "detail": "node=e933e20dcf41b94a4412e39da6e6fbbb cli={\"state\":\"pending\",\"expiresAt\":\"2026-11-02T21:00:29.539701162Z\"}"
+      "detail": "node=81a9f9b6350dc5f885e7659ae4b62fb7 cli={\"state\":\"pending\",\"expiresAt\":\"2026-11-03T05:21:49.364183674Z\"}"
     },
     {
       "id": "P06",
@@ -77,13 +89,13 @@
       "id": "P08",
       "title": "真实发布构建入槽 + 合成 ed25519 签名 inbox",
       "status": "PASS",
-      "detail": "initial=9cc9c76a17fee40e… target=13873107b"
+      "detail": "initial=bb0edd8fbbc15be9… target=13873107b rollbackCandidate=1.0.3(工件=1.0.0 字节)"
     },
     {
       "id": "P09",
       "title": "阶段 B 宿主按真实库指纹装配 UpdateProduct 并启动受监督真实 Agent",
       "status": "PASS",
-      "detail": "health 1.0.0 pid=631167 fingerprint=85e399e882eb"
+      "detail": "health 1.0.0 pid=1163735 fingerprint=85e399e882eb"
     },
     {
       "id": "P10",
@@ -113,37 +125,43 @@
       "id": "P14",
       "title": "浏览器（异人管理员会话）：打开任务页并审批同一任务",
       "status": "PASS",
-      "detail": "task=tsk_744fbe4bcb9d3e6e02d35ed0 approved by distinct administrator"
+      "detail": "task=tsk_896d3f236501c943a2fd7e5a approved by distinct administrator"
     },
     {
       "id": "P15",
       "title": "真实 Agent 版本与健康：completed 且进程被替换",
       "status": "PASS",
-      "detail": "1.0.0(pid 631167) -> 1.0.1(pid 631373)"
+      "detail": "1.0.0(pid 1163735) -> 1.0.1(pid 1164115)"
     },
     {
       "id": "P16",
       "title": "槽位字节与 1.0.1 发布构建 SHA 一致（真实安装而非状态伪造）",
       "status": "PASS",
-      "detail": "active=3a613a8fc6b472de…"
+      "detail": "active=91e18531634facdd…"
     },
     {
       "id": "P17",
       "title": "作业/任务终态与审计持久（服务端为准）",
       "status": "PASS",
-      "detail": "job=tsk_744fbe4bcb9d3e6e02d35ed0 status=completed task=tsk_744fbe4bcb9d3e6e02d35ed0"
+      "detail": "job=tsk_896d3f236501c943a2fd7e5a status=completed task=tsk_896d3f236501c943a2fd7e5a"
     },
     {
       "id": "P18",
-      "title": "负向：工件与清单 SHA 不一致的 1.0.2 必须失败且不替换当前产品",
+      "title": "负向：工件与清单 SHA 不一致的 1.0.2 必须在计划阶段被拒（状态/码/结构精确核对）",
       "status": "PASS",
-      "detail": "plan rejected (UPDATE_PLANNER_UNAVAILABLE); no job, product still 1.0.1 pid 631373"
+      "detail": "对照 1.0.3 eligible=true；1.0.2 被 503 UPDATE_PLANNER_UNAVAILABLE + problem 结构拒绝；无作业，产品仍 1.0.1 pid 1164115"
+    },
+    {
+      "id": "P18B",
+      "title": "真实回滚：签名与摘要合法但安装后版本不符，必须恢复旧槽位字节、进程与健康",
+      "status": "PASS",
+      "detail": "1.0.3 安装后版本不符 -> job=failed、receipt=rolled_back、槽位恢复 1.0.1、pid 1164115->1164306、标记 switched+rollback-switching"
     },
     {
       "id": "P19",
-      "title": "重启宿主：已安装版本与作业终态持久，未知结果不重放",
+      "title": "更新均已完成后的宿主重启：1.0.1 与失败作业终态持久，且不重放",
       "status": "PASS",
-      "detail": "restored 1.0.1 pid 631572; completed job durable"
+      "detail": "restored 1.0.1 pid 1164331; completed(1.0.1) 与 failed(1.0.3) 终态均持久，作业数 2 未增加"
     }
   ],
   "failed": false
