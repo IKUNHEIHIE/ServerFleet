@@ -184,6 +184,9 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		minor = 1
 	}
 	if request.GatewayPrefix != "" {
+		if !agentPathWithinRoot(request.FileRoot, request.GatewayPrefix) {
+			return errAgentConnect
+		}
 		actions, err := newGatewayRegistration(gatewayRegistrationConfig{
 			Prefix: request.GatewayPrefix, NginxBinary: request.NginxBinary,
 		})
@@ -433,4 +436,15 @@ func readAgentFile(path string, limit int64) ([]byte, error) {
 		return nil, errAgentConnect
 	}
 	return raw, nil
+}
+
+func agentPathWithinRoot(root, path string) bool {
+	if root == "" || path == "" || !filepath.IsAbs(root) || !filepath.IsAbs(path) {
+		return false
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

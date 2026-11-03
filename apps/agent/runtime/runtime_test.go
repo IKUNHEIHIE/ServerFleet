@@ -292,3 +292,20 @@ func TestRunConnectOnceCarriesTrustedGatewayConfiguration(t *testing.T) {
 		t.Fatalf("gateway configuration not carried: %+v", deps.lastConnect)
 	}
 }
+
+func TestRunGatewayPrefixMustStayInsideTrustedFileRoot(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, _ := runtimeCA(t)
+	outside := t.TempDir()
+	deps := &fakeDeps{}
+	var stdout, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{
+		"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local",
+		"-root-cert", rootCert, "-file-root", dir, "-gateway-prefix", outside,
+	}, deps.deps(), &stdout, &stderr); code != 2 {
+		t.Fatalf("outside prefix code = %d: %s", code, stderr.String())
+	}
+	if deps.connectCalls != 0 {
+		t.Fatal("connection was attempted with a gateway prefix outside the file root")
+	}
+}

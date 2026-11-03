@@ -130,6 +130,9 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	if *gatewayPrefix != "" && (!filepath.IsAbs(*gatewayPrefix) || !(*serve || *connectOnce)) {
 		return 2
 	}
+	if *gatewayPrefix != "" && !agentPathWithinRoot(*fileRoot, *gatewayPrefix) {
+		return 2
+	}
 	if *nginxBinary != "" && *gatewayPrefix == "" {
 		return 2
 	}
@@ -294,6 +297,20 @@ func validNodeName(name string) bool {
 func writeJSON(w io.Writer, value any) {
 	encoder := json.NewEncoder(w)
 	_ = encoder.Encode(value)
+}
+
+// agentPathWithinRoot keeps the operator-owned gateway prefix inside the same
+// explicit file root. The artifact upload and nginx site roots must not cross
+// that reviewed filesystem boundary.
+func agentPathWithinRoot(root, path string) bool {
+	if root == "" || path == "" || !filepath.IsAbs(root) || !filepath.IsAbs(path) {
+		return false
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func validPin(pin string) bool {
