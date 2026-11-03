@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 )
 
@@ -18,6 +19,8 @@ type gatewayDeploymentEntry struct {
 	GatewayID   string `json:"gatewayId"`
 	SiteDir     string `json:"siteDir"`
 	ArtifactDir string `json:"artifactDir"`
+	HTTPListen  string `json:"httpListen"`
+	HTTPSListen string `json:"httpsListen"`
 }
 
 type certificateDeploymentEntry struct {
@@ -107,7 +110,13 @@ func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {
 		if !validGatewayDeploymentPath(entry.SiteDir) || !validGatewayDeploymentPath(entry.ArtifactDir) {
 			return nil, ErrGatewayDeployment
 		}
-		gateways[entry.GatewayID] = GatewayInstallPaths{SiteDir: entry.SiteDir, ArtifactDir: entry.ArtifactDir}
+		if !validGatewayListen(entry.HTTPListen) || !validGatewayListen(entry.HTTPSListen) {
+			return nil, ErrGatewayDeployment
+		}
+		gateways[entry.GatewayID] = GatewayInstallPaths{
+			SiteDir: entry.SiteDir, ArtifactDir: entry.ArtifactDir,
+			HTTPListen: entry.HTTPListen, HTTPSListen: entry.HTTPSListen,
+		}
 	}
 	certificates := make(map[string]CertificateInstallPaths, len(document.Certificates))
 	for _, entry := range document.Certificates {
@@ -125,6 +134,14 @@ func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {
 		}
 	}
 	return &GatewayDeployment{Gateways: gateways, Certificates: certificates}, nil
+}
+
+func validGatewayListen(listen string) bool {
+	if listen == "" {
+		return true
+	}
+	_, err := strconv.Atoi(listen)
+	return err == nil && len(listen) <= 5
 }
 
 func validGatewayDeploymentPath(path string) bool {

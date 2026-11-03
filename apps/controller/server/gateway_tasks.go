@@ -44,6 +44,8 @@ type CertificateInstallPaths struct {
 type GatewayInstallPaths struct {
 	SiteDir     string
 	ArtifactDir string
+	HTTPListen  string
+	HTTPSListen string
 }
 
 // ProductionPublishingConfig binds concrete DS owners to the production
@@ -345,6 +347,7 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		ServiceGroupRevision: request.ExpectedGroupRevision, UpstreamHosts: upstreams,
 		HTTPS: request.HTTPS, CertificatePath: certificatePath, PrivateKeyPath: keyPath,
 		SiteDir: sitePaths.SiteDir, ArtifactDir: sitePaths.ArtifactDir,
+		HTTPListen: sitePaths.HTTPListen, HTTPSListen: sitePaths.HTTPSListen,
 	})
 	if err != nil {
 		return gatewayPublicationState(gatewayPublicationSummary{
