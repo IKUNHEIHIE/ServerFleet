@@ -243,6 +243,11 @@ go vet ./apps/agent ./apps/controller/server   # 无输出
 gofmt -l <新文件>                              # 空
 ```
 
+### CI（R3）
+
+- Head `265cb914cd5306d0c2c08b407e96e167edc5295e`，run 41609816424：
+  `foundation` **success**、`dependencies` **success**。
+
 ### 中央装配
 
 `CENTRAL-PATCH-R2.md` 已重写为真实符号、完整上下文的候选 diff（迁移 append、StageSlot、
