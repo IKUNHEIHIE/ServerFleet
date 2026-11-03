@@ -2,7 +2,9 @@
 
 ## 当前云端分工（2026-11-03，优先于下方历史快照）
 
-总控/审查ChatGPT（chatgpt-review-02）。已接收产品main `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立CI run41615351426 success：Go顶层902 PASS/7 SKIP/0 FAIL、Web348 PASS，正式迁移26项。上一轮只接收可运行检查点，完整v0.9/G2/D01-D07/P1-C10/发布准入未完成。
+总控/审查ChatGPT（chatgpt-review-02）。已接收产品代码基线 `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立CI run41615351426 success：Go顶层902 PASS/7 SKIP/0 FAIL、Web348 PASS，正式迁移26项。上一轮只接收可运行检查点，完整v0.9/G2/D01-D07/P1-C10/发布准入未完成。
+
+本轮已接收证据见[云端首轮报告](reviews/V09-CLOUD-R1-REVIEW.md)及[机器摘要](reviews/V09-CLOUD-R1-RESULTS.json)。本次仅文档同步，不新增产品验收。
 
 本轮完整范围、目录和停止条件以[Cloud R2计划](sprints/v09-five-day/cloud-r2/PLAN.md)及三份自包含提示词为准。用户最新指定：插件与Xray全部由WorkBuddy承担，AgentMore没有此域任务。中央网关接线单列CodeArts早期共享候选，主控独立审查接收。
 
@@ -11,12 +13,12 @@
 | V09-CLOUD-AM-01 | CHECKPOINT ACCEPTED / PARTIAL；剩余转AM-02，插件范围转WB-02 | agentmore-01 | feature/cloud-platform-am01（已合并） | PR #3；最终集成head4ceedd9；上传统一任务与终态，非整包完成 |
 | V09-CLOUD-HW-01 | CHECKPOINT ACCEPTED / PARTIAL；剩余转HW-02 | codearts-01 | feature/cloud-services-hw01（已合并） | PR #2；最终head2d99eb5；网关部件/子账本，完整装配仍OPEN |
 | V09-CLOUD-WB-01 | CHECKPOINT ACCEPTED / PARTIAL；剩余转WB-02 | workbuddy-01 | feature/cloud-console-wb01（已合并） | PR #1；最终head7767d78；Agent更新浏览器专项，非完整B05 |
-| V09-CLOUD-AM-02 | READY / 待用户手动派发 | agentmore-02 | feature/cloud-platform-am02 | 文件多目标/续传、更新、恢复、平台负向；不含插件/代理组件 |
-| V09-CLOUD-HW-02 | READY / 待用户手动派发 | codearts-02 | feature/cloud-services-hw02；独立共享候选integration/cloud-gateway-wiring-hw02 | 正式网关发布/补偿整链、ACME/cleanup与服务域 |
-| V09-CLOUD-WB-02 | READY / 待用户手动派发 | workbuddy-02 | feature/cloud-console-xray-wb02 | Xray可选插件/准入证据、正式Web/浏览器/矩阵；新增Go权限仅限明确Xray域 |
-| V09-CLOUD-COORD-02 | DISPATCH PREPARED；后续按实际PR接收审查 | chatgpt-review-02 | docs/cloud-r2-dispatch-review02 | 当前登记；共享接口/迁移/顺序合并/组合审查，未启动外部Agent |
+| V09-CLOUD-AM-02 | READY / 开工与提交尚待实际回报核验 | agentmore-02 | feature/cloud-platform-am02 | 文件多目标/续传、更新、恢复、平台负向；不含插件/代理组件 |
+| V09-CLOUD-HW-02 | READY / 开工与提交尚待实际回报核验 | codearts-02 | feature/cloud-services-hw02；独立共享候选integration/cloud-gateway-wiring-hw02 | 正式网关发布/补偿整链、ACME/cleanup与服务域 |
+| V09-CLOUD-WB-02 | READY / 开工与提交尚待实际回报核验 | workbuddy-02 | feature/cloud-console-xray-wb02 | Xray可选插件/准入证据、正式Web/浏览器/矩阵；新增Go权限仅限明确Xray域 |
+| V09-CLOUD-COORD-02 | DISPATCH PREPARED / 文档同步；后续按实际PR接收审查 | chatgpt-review-02 | docs/cloud-r2-dispatch-review02 | 当前登记；共享接口/迁移/顺序合并/组合审查，未启动外部Agent |
 
-三平台环境互不共享。任务派发、PR回传由用户手动完成，READY不代表实际运行。只接收经审查的main+明确候选组合，不重放历史prepare/overlay。B03/B04/B05/B06、外部/物理双机/ARM实际运行/硬1C1G、正式资料和ENV-W6-01保持OPEN。没有生产/VPS/awskr/真实供应商或云API授权。
+三平台环境互不共享。任务派发、开工回报及PR回传由用户手动完成；未收到实际证据时保留READY，不推断平台没有本地活动，也不自动标IN PROGRESS。只接收经审查的main+明确候选组合，不重放历史prepare/overlay。B03/B04/B05/B06、外部/物理双机/ARM实际运行/硬1C1G、正式资料和ENV-W6-01保持OPEN。没有生产/VPS/awskr/真实供应商或云API授权。
 
 ## 2026-11-02及更早历史（保留追溯）
 

@@ -3,13 +3,13 @@
 日期：2026-11-03（Asia/Shanghai）。总控/审查：ChatGPT，唯一会话 chatgpt-review-02。
 产品统一起点：`51e0ee57e66493892eb5f5168b9e0690b53f3661`；main独立CI [41615351426](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/41615351426) success：Go顶层902 PASS/7 SKIP/0 FAIL、Web348 PASS。正式迁移26项。仅文档登记不改变这个产品基线或发布结论。
 
-三家环境完全独立；本文件与提示词只是 READY/待用户手动派发，不代表已启动。用户手动派发、回传PR；不代发平台消息、不启动其他Agent。三家同一个GitHub账号不等于三位独立审批身份。
+三家环境完全独立；本文件与提示词的初始状态为READY，当前开工/提交尚待实际回报核验，不代表已启动。执行状态以TASK-BOARD的实证更新为准。用户手动派发、回传PR；不代发平台消息、不启动其他Agent。三家同一个GitHub账号不等于三位独立审批身份。
 
 | 任务 | 唯一会话 | 分支 | 状态 | 首检查点及连续范围 |
 |---|---|---|---|---|
-| V09-CLOUD-AM-02 | agentmore-02 | feature/cloud-platform-am02 | READY/待用户派发 | 真实多目标文件/取消/部分结果；持续续传、更新、恢复、平台负向；没有任何插件/代理组件工作 |
-| V09-CLOUD-HW-02 | codearts-02 | feature/cloud-services-hw02 | READY/待用户派发 | 网关共享接线与真实正常路径；持续逆序补偿、ACME/cleanup和服务域独立项 |
-| V09-CLOUD-WB-02 | workbuddy-02 | feature/cloud-console-xray-wb02 | READY/待用户派发 | Xray工件/准入差距及异步上传Web；持续Xray插件、全部正式Web/浏览器矩阵 |
+| V09-CLOUD-AM-02 | agentmore-02 | feature/cloud-platform-am02 | READY/开工回报待核验 | 真实多目标文件/取消/部分结果；持续续传、更新、恢复、平台负向；没有任何插件/代理组件工作 |
+| V09-CLOUD-HW-02 | codearts-02 | feature/cloud-services-hw02 | READY/开工回报待核验 | 网关共享接线与真实正常路径；持续逆序补偿、ACME/cleanup和服务域独立项 |
+| V09-CLOUD-WB-02 | workbuddy-02 | feature/cloud-console-xray-wb02 | READY/开工回报待核验 | Xray工件/准入差距及异步上传Web；持续Xray插件、全部正式Web/浏览器矩阵 |
 | V09-CLOUD-COORD-02 | chatgpt-review-02 | docs/cloud-r2-dispatch-review02 | DISPATCH PREPARED | 当前文档登记；后续共享接缝审查/编号/顺序合并/独立验证由总控承担 |
 
 完整独立提示词：[AgentMore](AGENTMORE-02.md)、[CodeArts](CODEARTS-02.md)、[WorkBuddy](WORKBUDDY-02.md)。每份包含独立访问、精确基线、目录、验收、PR和停止条件，可单独复制。
