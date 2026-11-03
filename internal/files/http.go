@@ -43,6 +43,11 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/files/uploads/{uploadId}", api.getUpload)
 	mux.HandleFunc("PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content", api.uploadContent)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete", api.completeUpload)
+	mux.HandleFunc("POST /api/v1/files/distributions", api.createDistribution)
+	mux.HandleFunc("GET /api/v1/files/distributions/{distributionId}", api.getDistribution)
+	mux.HandleFunc("PUT /api/v1/files/distributions/{distributionId}/content", api.distributionContent)
+	mux.HandleFunc("POST /api/v1/files/distributions/{distributionId}/complete", api.completeDistribution)
+	mux.HandleFunc("POST /api/v1/files/distributions/{distributionId}/cancel", api.cancelDistribution)
 	return nil
 }
 
@@ -442,4 +447,163 @@ func writeError(w http.ResponseWriter, err error) {
 	default:
 		writeFixed(w, http.StatusInternalServerError, "internal_error", "request failed")
 	}
+}
+
+func (api *httpAPI) createDistribution(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		DestinationDir string   `json:"destinationDir"`
+		TargetNodes    []string `json:"targetNodes"`
+		Files          []struct {
+			Name      string `json:"name"`
+			SizeBytes int64  `json:"sizeBytes"`
+			SHA256    string `json:"sha256"`
+		} `json:"files"`
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	if len(body.Files) != 1 {
+		writeFixed(w, http.StatusBadRequest, "unsupported_batch_upload", "one file per distribution session is supported")
+		return
+	}
+	file := body.Files[0]
+	destination, err := JoinRemotePath(body.DestinationDir, file.Name)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	size := file.SizeBytes
+	distribution, err := api.service.CreateDistribution(r.Context(), principal.SubjectID, principal.RequestID,
+		body.TargetNodes, destination, &size, file.SHA256)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, map[string]any{
+		"distributionId": distribution.ID, "status": "awaiting_data",
+	})
+}
+
+func (api *httpAPI) getDistribution(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	distribution, err := api.service.GetDistribution(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("distributionId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, distributionDTO(distribution))
+}
+
+func (api *httpAPI) distributionContent(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	distribution, err := api.service.GetDistribution(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("distributionId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	offset, ok := uploadOffset(w, r)
+	if !ok {
+		return
+	}
+	if offset != distribution.BytesReceived {
+		writeFixed(w, http.StatusConflict, "conflict", "distribution offset does not match the received byte count")
+		return
+	}
+	if r.ContentLength > 0 {
+		remaining := api.service.UploadLimit() - offset
+		if distribution.ExpectedSize != nil && *distribution.ExpectedSize-offset < remaining {
+			remaining = *distribution.ExpectedSize - offset
+		}
+		if remaining < 0 || r.ContentLength > remaining {
+			writeFixed(w, http.StatusRequestEntityTooLarge, "upload_too_large", "content exceeds the declared distribution size")
+			return
+		}
+	}
+	updated, err := api.service.WriteDistributionContent(r.Context(), principal.SubjectID, principal.RequestID, distribution.ID, offset, r.Body)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, distributionDTO(updated))
+}
+
+func (api *httpAPI) completeDistribution(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	completed, err := api.service.CompleteDistribution(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("distributionId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	status := http.StatusOK
+	if completed.Status == DistributionDispatching {
+		// The verified distribution is accepted into the unified task queue.
+		// The frame-authorized per-target pushes and the terminal states are
+		// owned by the task worker; this response claims no transport success.
+		status = http.StatusAccepted
+	}
+	dto := distributionDTO(completed)
+	if completed.TaskID != "" {
+		dto["taskId"] = completed.TaskID
+	}
+	writeJSON(w, status, dto)
+}
+
+func (api *httpAPI) cancelDistribution(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	distribution, err := api.service.CancelDistribution(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("distributionId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, distributionDTO(distribution))
+}
+
+func distributionDTO(distribution Distribution) map[string]any {
+	targets := make([]map[string]any, 0, len(distribution.Targets))
+	for _, target := range distribution.Targets {
+		item := map[string]any{
+			"nodeId": target.NodeID, "status": target.Status, "bytes": target.Bytes,
+		}
+		if target.SHA256 != "" {
+			item["sha256"] = target.SHA256
+		}
+		if target.ErrorCode != "" {
+			item["error"] = map[string]string{"code": target.ErrorCode, "message": target.ErrorMessage}
+		}
+		targets = append(targets, item)
+	}
+	dto := map[string]any{
+		"distributionId": distribution.ID, "status": distribution.Status,
+		"destination": distribution.DestinationPath, "targetNodes": targets,
+		"bytesReceived": distribution.BytesReceived,
+	}
+	if distribution.TaskID != "" {
+		dto["taskId"] = distribution.TaskID
+	}
+	if distribution.ExpectedSize != nil {
+		dto["sizeBytes"] = *distribution.ExpectedSize
+	}
+	if distribution.SHA256Actual != "" {
+		dto["sha256"] = distribution.SHA256Actual
+	}
+	if distribution.ErrorCode != "" {
+		dto["error"] = map[string]string{"code": distribution.ErrorCode, "message": distribution.ErrorCode}
+	}
+	return dto
 }

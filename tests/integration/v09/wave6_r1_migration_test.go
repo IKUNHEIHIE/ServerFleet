@@ -45,7 +45,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 		t.Fatal("migration replay changed history", err)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 26 {
+	if err != nil || len(versions) != 27 {
 		t.Fatal(versions, err)
 	}
 	var name, gateways string

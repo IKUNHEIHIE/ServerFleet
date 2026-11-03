@@ -38,7 +38,12 @@ type FileExecutionWorker struct {
 	authorizer auth.Authorizer
 	config     FileExecutionConfig
 }
-type filePlanItem struct{ Source, Destination, ReadPath, WritePath, ExpectedSHA256 string }
+type filePlanItem struct {
+	Source, Destination, ReadPath, WritePath, ExpectedSHA256 string
+	// Node is the per-target identity for kind=distribute plans; it stays
+	// empty for classic and upload plans whose node comes from the plan.
+	Node string
+}
 type fileTaskPlan struct {
 	// Kind distinguishes the two unified files.transfer task shapes: an empty
 	// kind is the classic node-to-node copy; "upload" is a controller staging
@@ -94,7 +99,7 @@ func (w *FileExecutionWorker) plan(ctx context.Context, c files.TransferCommand)
 		if err != nil || !transport.FilePath(write) {
 			return p, nil, files.ErrInvalidTransfer
 		}
-		item := filePlanItem{source, dest, read, write, c.Checksums[source]}
+		item := filePlanItem{Source: source, Destination: dest, ReadPath: read, WritePath: write, ExpectedSHA256: c.Checksums[source]}
 		raw, _ := json.Marshal(item)
 		if len(raw) > 1024 {
 			return p, nil, files.ErrInvalidTransfer
@@ -185,6 +190,9 @@ func decodeFileTask(t tasks.Task) (fileTaskPlan, error) {
 	if params["kind"] == "upload" {
 		return decodeUploadTask(t, params)
 	}
+	if params["kind"] == "distribute" {
+		return decodeDistributeTask(t, params)
+	}
 	if len(t.Targets) != 2 {
 		return p, files.ErrTransferIdentity
 	}
@@ -220,7 +228,19 @@ func decodeFileTask(t tasks.Task) (fileTaskPlan, error) {
 	return p, nil
 }
 func (w *FileExecutionWorker) live(ctx context.Context, t tasks.Task, p fileTaskPlan) error {
-	current, err := w.server.Tasks.CheckExecution(ctx, t.ID, t.PlanHash)
+	return w.liveForNode(ctx, t, p, "")
+}
+func (w *FileExecutionWorker) liveForNode(ctx context.Context, t tasks.Task, p fileTaskPlan, frameNode string) error {
+	// Multi-target frames authorize on their OWN node's current permission so
+	// revoking one sibling target never breaks another target's in-flight
+	// frames; single-target plans keep the whole-task check.
+	var current tasks.Task
+	var err error
+	if p.Kind == "distribute" && frameNode != "" {
+		current, err = w.server.Tasks.CheckExecutionForNode(ctx, t.ID, t.PlanHash, frameNode)
+	} else {
+		current, err = w.server.Tasks.CheckExecution(ctx, t.ID, t.PlanHash)
+	}
 	if err != nil || current.Params != t.Params || current.SubmitterID != t.SubmitterID {
 		return files.ErrTransferExecution
 	}
@@ -232,6 +252,9 @@ func (w *FileExecutionWorker) live(ctx context.Context, t tasks.Task, p fileTask
 	}
 	if p.Kind == "upload" {
 		return w.liveUpload(ctx, t, p)
+	}
+	if p.Kind == "distribute" {
+		return w.liveDistribute(ctx, t, p, frameNode)
 	}
 	for _, check := range []auth.Check{{SubjectID: t.SubmitterID, Action: files.ActionRead, NodeIDs: []string{p.SourceNode}}, {SubjectID: t.SubmitterID, Action: files.ActionWrite, NodeIDs: []string{p.DestinationNode}}} {
 		node, err := w.server.NodesRepo.Get(ctx, check.NodeIDs[0])
@@ -316,7 +339,7 @@ func (w *FileExecutionWorker) Gate(ctx context.Context, o transport.LinkObservat
 		return err
 	}
 	p, err := decodeFileTask(t)
-	if err != nil || w.live(ctx, t, p) != nil || b.ParentPlan != t.PlanHash || b.TransferID != p.TransferID {
+	if err != nil || w.liveForNode(ctx, t, p, b.NodeID) != nil || b.ParentPlan != t.PlanHash || b.TransferID != p.TransferID {
 		return files.ErrTransferExecution
 	}
 	return w.repo.ObserveExecution(ctx, b.ExecutionID, "frame", w.server.Audit, func(b *files.ExecutionBinding) error {
@@ -446,7 +469,7 @@ func (w *FileExecutionWorker) Observe(ctx context.Context, o transport.LinkObser
 		return true, w.Gate(ctx, o, offer, e)
 	}
 	p, err := decodeFileTask(t)
-	if err != nil || w.live(ctx, t, p) != nil {
+	if err != nil || w.liveForNode(ctx, t, p, o.Identity.NodeID) != nil {
 		return true, files.ErrTransferExecution
 	}
 	if f := e.GetTaskFinished(); f != nil {
@@ -620,6 +643,9 @@ func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[st
 	}
 	if p.Kind == "upload" {
 		return w.executeUpload(ctx, t, p)
+	}
+	if p.Kind == "distribute" {
+		return w.executeDistribute(ctx, t, p)
 	}
 	started := time.Now().UTC()
 	// AttachTask follows submission in a separate durable transaction. No child

@@ -155,6 +155,17 @@ func (s *Service) stopWorkers() {
 // child frame. Unsupported automation/plugin scopes are rejected by the worker
 // until an explicitly registered scope gate exists; no implicit AI authority.
 func (s *Service) CheckExecution(ctx context.Context, id, plan string) (Task, error) {
+	return s.checkExecution(ctx, id, plan, "")
+}
+
+// CheckExecutionForNode scopes the task_execute authorization to ONE frozen
+// target node. Multi-target plans must keep each target's frames flowing on
+// that target's CURRENT permission: revoking one sibling target never breaks
+// another target's in-flight frames.
+func (s *Service) CheckExecutionForNode(ctx context.Context, id, plan, nodeID string) (Task, error) {
+	return s.checkExecution(ctx, id, plan, nodeID)
+}
+func (s *Service) checkExecution(ctx context.Context, id, plan, nodeID string) (Task, error) {
 	if s.runtimeGate != nil {
 		if err := s.runtimeGate(ctx); err != nil {
 			return Task{}, err
@@ -172,7 +183,21 @@ func (s *Service) CheckExecution(ctx context.Context, id, plan string) (Task, er
 			return Task{}, err
 		}
 	}
-	if err = s.authorize(ctx, t.SubmitterID, t.ActionID, t.RequestID, taskTargetIDs(t), "task_execute"); err != nil {
+	scope := taskTargetIDs(t)
+	if nodeID != "" {
+		found := false
+		for _, target := range scope {
+			if target == nodeID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return Task{}, ErrInvalidTask
+		}
+		scope = []string{nodeID}
+	}
+	if err = s.authorize(ctx, t.SubmitterID, t.ActionID, t.RequestID, scope, "task_execute"); err != nil {
 		return Task{}, err
 	}
 	return t, nil

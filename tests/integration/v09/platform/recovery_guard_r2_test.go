@@ -34,7 +34,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 			old = append(old, filtered)
 		}
 	}
-	if total != 26 {
+	if total != 27 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)
