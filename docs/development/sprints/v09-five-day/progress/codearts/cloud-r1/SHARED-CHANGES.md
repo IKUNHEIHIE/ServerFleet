@@ -4,14 +4,23 @@
 
 ## 当前需要主控接收的差异
 
-检查点 1、2 均未修改共享文件：只改 `apps/agent/gateway_capability_test.go` 并新增 `apps/agent/gateway_registration*.go`、`apps/controller/server/gateway_artifact*.go`，均在任务独占范围。
+检查点 1-3 均未修改中央共享文件。R1 新增的 `gateway_wss.go`、`gateway_binding.go` 与
+`gateway_worker.go` 改动均在 `apps/controller/server/gateway_*` 独占范围。
 
-## 中央接线请求（本任务不直接改）
+## 中央接线（精确补丁见 `CENTRAL-PATCH-R1.md`）
 
-1. **Controller 默认组合**（`apps/controller/server/server.go`）：当前 `server.New` 仍用 `LocalBridge`。需要主控在可信程序配置齐全时调用 `NewProductionPublishingBridge`，并用 `NewGatewayArtifactUploader(<真实 files.UploadTransport>)` 注入 `Artifacts`。缺任一依赖必须保持拒绝，不得回退到测试/本地传输。
-2. **Agent 入口**（`apps/agent/runtime/runtime.go`、`apps/agent/connect.go`）：新增 `-gateway-prefix`（绝对私有根，0700，当前用户）与可选 `-nginx-bin` 参数；仅当两者可信时调用 `newGatewayRegistration` 并把返回 actions 注册到 `agentExecutor.actions`。缺配置时不注册、不报告能力。
-3. **文件通道生产实现**：`files.AgentFileChannel` 目前只有测试 fake。若要用真实 WSS 文件帧承载网关工件，需要可信程序提供基于 `transport.FileClient` 的适配器和按节点 artifact 根的 `files.PathMapper`；本任务的 Uploader 已按 `files.UploadTransport` 端口解耦，等待该实现注入。
-4. **公共迁移/契约**：本检查点未新增表、未改 Proto/gen/OpenAPI；如后续需要 gateway 工件持久绑定表，只提交候选文件与编号请求，不自行占用正式编号。
+1. **迁移**：把 `gatewayArtifactBindingsSchema` 以主控分配的正式 `cx/....` 版本加入
+   `Migrations()`；本任务的候选版本 `cx/CANDIDATE_gateway_artifact_bindings` 未注册。
+2. **Controller**：`Config` 增加 `GatewayFileRoots map[nodeID]Agent 的 -file-root 绝对路径`；
+   `NewProductionPublishingBridge` 增加 `Channel files.AgentFileChannel`。先建 dispatcher，
+   再 `NewGatewayChannelUploader(channel, roots, db, dispatcher)`，最后赋回
+   `dispatcher.artifacts`，避免 stage/uploader 循环依赖。
+3. **文件 Gate**：`NewGatewayArtifactGate(db, dispatcher)`；在 `AgentFileGate` 组合中先用
+   `Matches(executionID)` 判定归属，命中走网关 Gate，否则回落 CX 文件 Gate；两者都为空拒绝。
+4. **Agent 入口**：新增 `-gateway-prefix` / `-nginx-bin` 并调用 `newGatewayRegistration`；
+   `-file-root` 必须包含 gateway prefix，Controller 的 roots 必须与之一致。
+5. 本任务**不再等待** AgentMore 提供 ArtifactUploader：真实 WSS 通道适配、scope/逐块授权、
+   持久绑定与 gate 已在本任务实现。
 
 ## 已识别的候选接缝（待实现后给出精确 diff）
 

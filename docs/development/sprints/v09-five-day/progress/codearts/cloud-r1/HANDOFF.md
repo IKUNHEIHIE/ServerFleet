@@ -15,6 +15,18 @@
 - 验证：新增 13 个用例全部 PASS；`go vet` 无输出；`apps/agent`、`apps/controller/server` 全包 PASS；gofmt 无差异。
 - 未接线：`server.New` 默认组合、Agent runtime 参数、真实 `files.AgentFileChannel` 由主控/AgentMore 协调，已在 `SHARED-CHANGES.md` 列出精确接缝。
 
+## 2026-11-03 检查点 3（R1）
+
+- 检查点 HEAD：`8869172`（中间检查点 `34e3750`）。
+- 内容：真实 WSS `files.transfer.v1` 通道适配、`WithChannelScope`（task/execution/transfer/plan）、
+  逐块 stage 授权、持久 `gateway_artifact_bindings` 与候选迁移、网关 file gate、中央接线精确补丁。
+- 验证：6 个新用例 PASS；`apps/controller/server`、`apps/agent`、`tests/architecture` 包 PASS；
+  `go vet` 空；`npm run check:security` PASS（0 audit / 0 govulncheck）。
+- 环境：Node `v24.22.1` / npm `11.19.1`；`npm ci` 与 `npm run tools:install` 成功。
+- 失败/未跑：`npm run check:go` 仅 `tests/integration/v09/platform` 两项缺预构建产物失败；
+  `check:web`、`npm run check` 未执行，保留 UNTESTED。
+- 仍 OPEN：中央接线后的进程级组合链、ACME/cleanup 产品组合、供应商未知结果独立项。
+
 ## 环境注意事项
 
 - 本机以 `service`（uid 1000）执行 Go/Nginx 测试；`root` 仅用于创建私有目录、部署密钥和安装系统级工具，不作为安全验收依据。

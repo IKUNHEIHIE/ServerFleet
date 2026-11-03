@@ -108,13 +108,59 @@ PR #2 触发 run 41526891590：
 
 第一次 PR run（41524264749，head `f00ab16`）在路径修复后暴露第二个真实失败：`EXECUTION_RESULT_UNKNOWN`。根因是夹具启动 nginx master 后立即 apply，慢速 runner 上 `nginx -s reload` 与 master 启动竞态，capability 正确返回 unknown 补偿结果。`75c5fce` 在两个真实 nginx 夹具中等待 pid 文件后再 apply；产品侧 unknown 语义与私有根检查未放宽，本地连续 3 轮 PASS。
 
-`foundation` job 仍为 failure，剩余原因均不在本任务写权限：
+`foundation` job 仍为 failure。**真实失败只有一项**：`tests/integration/v09/platform` 的
+`TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown`（缺预构建实际 Agent 二进制）与
+`TestR3ActualProductAgentHTTPApprovedSignedInstallAndCompatibleRollback`（缺真实 release 构建产物）。
+基线 CI #4（job 125266284154）已同样失败，非本 PR 回归。
 
-1. `tests/integration/v09/platform`：`TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown`、`TestR3ActualProductAgentHTTPApprovedSignedInstallAndCompatibleRollback`（CX/AgentMore）。
-2. 契约检查：`no-unresolved-refs`、`operation-operationId-unique`、`path-parameters-defined`（OpenAPI/Redocly，契约负责人）。
+**证据更正**：此前把 `no-unresolved-refs`、`operation-operationId-unique`、
+`path-parameters-defined` 记为“额外契约失败”不准确。它们来自 `reports/g2r03-negative/`
+的故意非法样本，是 Redocly 写入 stderr 的预期诊断，GitHub Actions 仅因 stderr 自动标红；
+随后 r03 套件继续执行并明确通过（`api/openapi/revisions/g2-r03/nodes-read-candidate.yaml`
+valid，8 项静态契约断言全 ✔）。因此它们不是 `foundation` 失败原因，也不影响退出码。
+真正的 `exit 1` 来自 `go-tests failed` 与上述两项 platform 测试。
+
+## 检查点 3（R1）：真实 WSS 任务/计划/执行绑定（2026-11-03）
+
+### 新增/修改
+
+| 文件 | 作用 |
+|---|---|
+| `apps/controller/server/gateway_wss.go` | 真实 `files.AgentFileChannel` 适配 `transport.FileClient`：构造合法 `files.transfer.v1` offer、相对路径映射、`WithChannelScope`（task/execution/transfer/plan）与逐块 `WithChannelAuthorizer` |
+| `apps/controller/server/gateway_binding.go` | 持久 `gateway_artifact_bindings` 绑定、候选迁移、`NewGatewayArtifactGate`（按持久 execution 判定归属并校验 offer/节点/参数/帧 ID） |
+| `apps/controller/server/gateway_worker.go` | dispatcher 优先 `UploadBound`，构造 execution/transfer/plan binding；新增 `CheckArtifactStage`（queued + 审批 + target revision + 节点授权 + 取消） |
+| `apps/controller/server/gateway_wss_test.go` | 真实 `ChannelTransport` + 持久绑定的 6 个用例 |
+| `docs/.../cloud-r1/CENTRAL-PATCH-R1.md` | 中央/Agent 入口可应用补丁、可信配置与组合验证步骤 |
+
+`tasks.CheckExecution`（running）未放宽；queued 上传使用等价受审阶段门。未绑定调用
+`Upload` 显式返回 `ErrTaskBindingRequired`，不回退本地 staging。
+
+### 验证
+
+```sh
+go test ./apps/controller/server -run "TestGatewayChannelUploader|TestGatewayFileOffer|TestGatewayArtifactGate" -count=1 -v
+# 6 个用例 PASS
+
+go test ./apps/controller/server -count=1     # ok 0.836s
+go test ./tests/architecture -count=1         # ok 0.103s
+go vet ./apps/controller/server               # 无输出
+gofmt -l <新文件>                              # 空
+```
+
+### Node/npm（已固定并实测）
+
+- 安装 Node `v24.22.1`、npm `11.19.1` 到 `/home/service/.tools/node`。
+- `npm ci`：成功，added 127 packages（46s）。
+- `npm run tools:install`：成功安装 protoc-gen-go / staticcheck / actionlint / govulncheck。
+- `npm run check:security`：**PASS**（`found npm-audit: 0 vulnerabilities`；govulncheck `No vulnerabilities found`）。
+- `npm run check:go`：**FAIL**，唯一失败为 `tests/integration/v09/platform` 两项缺预构建产物；
+  其余包（含 `apps/controller/server`、`apps/agent`、`tests/architecture`）通过。
+  `check:web`/`check` 全量未执行 → 保留 **BLOCKED/UNTESTED**，不记为通过。
 
 ## 尚未完成（保持 OPEN）
 
-- 整体 Foundation CI 仍为 FAIL：`tests/integration/v09/platform` 的三项（AgentMore/CX 范围）不在本任务写权限内，本任务不宣称 CI 全绿。
-- Node 24.22.1 / npm 11 安装与 `npm ci`、`tools:install`、`check`、`check:security` 尚未执行。
-- 网关整链（公开 HTTP→审批→上传→WSS→nginx reload→HTTP 字节→持久终态）、ACME/cleanup 产品组合、供应商独立项仍在推进。
+- 整体 Foundation CI 仍 FAIL，真实原因仅 `tests/integration/v09/platform` 两项缺预构建产物；本任务不宣称 CI 全绿。
+- 中央接线（迁移版本、`server.New`、Agent runtime 参数、file gate 组合）需主控应用 `CENTRAL-PATCH-R1.md`。
+- 公开 HTTP→审批→工件→真实 Agent WSS→nginx→HTTP 字节→持久终态→逆序补偿的**进程级组合证据**尚未跑通（需中央接线后可启动组合）。
+- ACME/cleanup 产品组合与供应商未知结果独立项仍未完成。
+- `check:web`、`npm run check` 全量未执行。
