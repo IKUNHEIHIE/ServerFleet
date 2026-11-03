@@ -27,7 +27,10 @@
  *
  * 分类规则（R08–R10）：
  *   只有「HTTP 状态 + 错误码/problem 结构 + 检查项集合」与下方常量精确匹配时才记 BLOCKED。
- *   任何偏差——包括 500、401、403、其他 code、错误 shape、检查项漂移——一律记 FAIL 并以 1 退出。
+ *   预览还必须满足：必需成功项（backup_integrity、recovery_key_reference）全部 passed=true，
+ *   且失败项集合恰好是已知两项、reason 逐字相同；少一项、多一项、重复、未知项、结构或
+ *   reason 漂移都记 FAIL。任何偏差——包括 500、401、403、其他 code、错误 shape——一律记
+ *   FAIL 并以 1 退出。
  *   产品行为若已变更（例如执行器被装配，501 变成 202），同样记 FAIL 并标注「行为已变更」：
  *   那意味着 B06 的结论必须重新评估，不能静默沿用旧的 BLOCKED。
  *
@@ -139,13 +142,31 @@ function problemMismatches(response, expectedStatus, expectedCode) {
 }
 
 /**
- * 预览响应必须证明的精确事实：真实备份校验通过，且恰好两项因已知原因不合格。
- * 少一项、多一项、原因或 eligible 变化，都意味着 B06 结论已过期，必须重新评估。
+ * 预览响应必须证明的精确事实。
+ *
+ * 只有「必需项全部通过」且「失败项集合恰好是已知两项、原因逐字相符」时才允许记 BLOCKED。
+ * 只看两个已知项是否存在、原因是否正确是不够的：`recovery_key_reference` 失败或缺失时
+ * 旧实现仍返回空 mismatches，会把「恢复密钥损坏」这类新的真实阻塞当成旧的未装配结论，
+ * 从而掩盖回归（审查 WB-R2-01 的复现口径）。
+ *
+ * 因此这里做四层核对：
+ *   1. 检查项名字集合与 PREVIEW_CHECK_NAMES 完全相等（少一项、多一项都不行）；
+ *   2. 结构合法：name 非空字符串、passed 布尔、reason 只允许字符串、无未知字段、无重复；
+ *   3. 必需成功项（backup_integrity / recovery_key_reference）必须 passed=true；
+ *   4. 实际失败项集合必须恰好等于 KNOWN_PREVIEW_FAILURES 的两项，且 reason 精确匹配。
  */
+const PREVIEW_CHECK_NAMES = [
+  "backup_integrity",
+  "target_controller_identity",
+  "old_controller_fenced",
+  "recovery_key_reference",
+];
+const PREVIEW_REQUIRED_PASSING = ["backup_integrity", "recovery_key_reference"];
 const KNOWN_PREVIEW_FAILURES = [
   { name: "target_controller_identity", reason: "target_identity_not_observed" },
   { name: "old_controller_fenced", reason: "fencing_evidence_unavailable" },
 ];
+const CHECK_FIELDS = ["name", "passed", "reason"];
 
 function previewMismatches(response) {
   if (response.status !== 200) return [`HTTP ${response.status} != 200`];
@@ -160,33 +181,75 @@ function previewMismatches(response) {
     problems.push("checks 不是非空数组");
     return problems;
   }
+
+  // 结构与重复：非法项不进入名字索引，避免用坏数据继续做集合比较。
   const byName = new Map();
-  for (const check of body.checks) {
-    if (
-      !check ||
-      typeof check !== "object" ||
-      typeof check.name !== "string" ||
-      check.name === "" ||
-      typeof check.passed !== "boolean"
-    ) {
-      problems.push(`检查项结构非法: ${JSON.stringify(check).slice(0, 120)}`);
+  for (const [index, check] of body.checks.entries()) {
+    if (!check || typeof check !== "object" || Array.isArray(check)) {
+      problems.push(`checks[${index}] 不是对象: ${JSON.stringify(check).slice(0, 120)}`);
       continue;
     }
-    if (byName.has(check.name)) problems.push(`检查项重复: ${check.name}`);
-    byName.set(check.name, check);
+    const unknown = Object.keys(check).filter(field => !CHECK_FIELDS.includes(field));
+    if (unknown.length > 0) problems.push(`checks[${index}] 含未知字段 ${unknown.join(",")}`);
+    if (typeof check.name !== "string" || check.name === "") {
+      problems.push(`checks[${index}].name 缺失或非字符串`);
+      continue;
+    }
+    if (typeof check.passed !== "boolean") {
+      problems.push(`${check.name}.passed=${JSON.stringify(check.passed)} 不是布尔`);
+      continue;
+    }
+    if (check.reason !== undefined && typeof check.reason !== "string") {
+      problems.push(`${check.name}.reason 不是字符串: ${JSON.stringify(check.reason)}`);
+      continue;
+    }
+    const seen = byName.get(check.name) ?? [];
+    seen.push(check);
+    byName.set(check.name, seen);
   }
-  const integrity = byName.get("backup_integrity");
-  if (!integrity || integrity.passed !== true) problems.push("backup_integrity 未通过（真实备份未被确认）");
-  for (const known of KNOWN_PREVIEW_FAILURES) {
-    const got = byName.get(known.name);
-    if (!got) {
-      problems.push(`缺少已知检查项 ${known.name}`);
-      continue;
+
+  for (const [name, entries] of byName) {
+    if (entries.length > 1) problems.push(`检查项重复: ${name}（${entries.length} 次）`);
+  }
+  const present = [...byName.keys()];
+  const missing = PREVIEW_CHECK_NAMES.filter(name => !byName.has(name));
+  const unexpected = present.filter(name => !PREVIEW_CHECK_NAMES.includes(name));
+  for (const name of missing) problems.push(`缺少必需检查项 ${name}`);
+  for (const name of unexpected) problems.push(`出现未知检查项 ${name}`);
+
+  const first = name => byName.get(name)?.[0];
+
+  // 必需成功项：失败或缺失都意味着前置条件已变化，不能沿用旧的「仅两项未装配」结论。
+  for (const name of PREVIEW_REQUIRED_PASSING) {
+    const got = first(name);
+    if (!got) continue;
+    if (got.passed !== true) {
+      problems.push(`${name} 未通过（必需成功项）：reason=${JSON.stringify(got.reason ?? "")}`);
+    } else if ((got.reason ?? "") !== "") {
+      problems.push(`${name} 通过却带 reason=${JSON.stringify(got.reason)}`);
     }
+  }
+
+  // 已知失败项：必须存在、passed=false、reason 逐字相符。
+  for (const known of KNOWN_PREVIEW_FAILURES) {
+    const got = first(known.name);
+    if (!got) continue;
     if (got.passed !== false) problems.push(`${known.name}.passed=${JSON.stringify(got.passed)} != false`);
-    if ((got.reason ?? "") !== known.reason) {
+    else if ((got.reason ?? "") !== known.reason) {
       problems.push(`${known.name}.reason=${JSON.stringify(got.reason)} != ${JSON.stringify(known.reason)}`);
     }
+  }
+
+  // 失败集合必须恰好两项：多一项、少一项（漏报）都要 FAIL。
+  const failedNow = [...byName.entries()]
+    .filter(([, entries]) => entries.some(entry => entry.passed === false))
+    .map(([name]) => name)
+    .sort();
+  const failedExpected = KNOWN_PREVIEW_FAILURES.map(item => item.name).sort();
+  if (JSON.stringify(failedNow) !== JSON.stringify(failedExpected)) {
+    problems.push(
+      `实际失败项集合=[${failedNow.join(", ")}] != 已知两项 [${failedExpected.join(", ")}]`,
+    );
   }
   return problems;
 }

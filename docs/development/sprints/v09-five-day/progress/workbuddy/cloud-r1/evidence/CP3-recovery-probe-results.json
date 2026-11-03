@@ -6,16 +6,16 @@
   "verdict": "INCOMPLETE",
   "modeNote": "严格完整模式：BLOCKED 令退出码为 1，只有全 PASS 才算通过。",
   "command": "node tests/browser/v09/run-recovery-prerequisite-probe.mjs --require-complete",
-  "generatedAt": "2026-11-03T05:01:25.766Z",
+  "generatedAt": "2026-11-03T07:51:45.086Z",
   "ports": {
-    "apiPort": 34819,
-    "webPort": 41055,
-    "aiPort": 42899,
-    "controlPort": 43079
+    "apiPort": 36583,
+    "webPort": 41553,
+    "aiPort": 41505,
+    "controlPort": 38187
   },
   "backup": {
     "id": "wb01-dr-backup",
-    "sha256": "7ede3278f04733190649eceb9d6505b0b2558a00c6048be6c5aa8a1f270013bb"
+    "sha256": "21f7eaeb577188310f47aec2e54260d33ff220b9e18b4c37ef233dba946e3762"
   },
   "counts": {
     "pass": 11,
@@ -45,13 +45,13 @@
       "id": "R03",
       "title": "启动宿主：生产同构（不注入 RecoveryExecute）",
       "status": "PASS",
-      "detail": "api=34819 web=41055 ai=42899 control=43079"
+      "detail": "api=36583 web=41553 ai=41505 control=38187"
     },
     {
       "id": "R04",
       "title": "Web 同源宿主就绪",
       "status": "PASS",
-      "detail": "https://127.0.0.1:41055 → :34819"
+      "detail": "https://127.0.0.1:41553 → :36583"
     },
     {
       "id": "R05",
@@ -63,13 +63,13 @@
       "id": "R06",
       "title": "生成真实一致性备份（SQLite VACUUM INTO）并核对迁移账本",
       "status": "PASS",
-      "detail": "backupId=wb01-dr-backup ledger=1 integrity=ok sha256=7ede3278f04733190649eceb9d6505b0b2558a00c6048be6c5aa8a1f270013bb"
+      "detail": "backupId=wb01-dr-backup ledger=1 integrity=ok sha256=21f7eaeb577188310f47aec2e54260d33ff220b9e18b4c37ef233dba946e3762"
     },
     {
       "id": "R07",
       "title": "POST /backups/{id}/verify 真实通过（200 且 verified=true）",
       "status": "PASS",
-      "detail": "200 verified=true backup_integrity=passed againstSha=7ede3278f0473319…"
+      "detail": "200 verified=true backup_integrity=passed againstSha=21f7eaeb57718831…"
     },
     {
       "httpStatus": 200,

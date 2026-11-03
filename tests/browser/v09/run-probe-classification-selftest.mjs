@@ -69,6 +69,14 @@ const fiveHundred = () => ({
   text: '{"code":"INTERNAL_SERVER_ERROR"}',
 });
 
+/** 在预期预览基础上替换 checks，其余字段（eligible=false / verified=true）保持不变。 */
+const previewWith = checks => ({
+  ...GOOD_PREVIEW,
+  json: { ...GOOD_PREVIEW.json, checks },
+});
+
+const GOOD_CHECKS = GOOD_PREVIEW.json.checks;
+
 const scenarios = [
   {
     name: "三个端点全部 500（审查复现口径）",
@@ -148,6 +156,81 @@ const scenarios = [
     }),
     want: ["FAIL", "BLOCKED", "BLOCKED"],
   },
+  // —— WB-R2-01：必需成功项与「恰好两项失败」的负向（审查给出的最小复现） ——
+  {
+    name: "preview recovery_key_reference 失败（审查复现）",
+    match: p => p.endsWith("/preview"),
+    respond: () =>
+      previewWith(
+        GOOD_CHECKS.map(check =>
+          check.name === "recovery_key_reference"
+            ? { name: "recovery_key_reference", passed: false, reason: "recovery_key_corrupted" }
+            : check,
+        ),
+      ),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /recovery_key_reference 未通过|实际失败项集合/,
+  },
+  {
+    name: "preview 缺失 recovery_key_reference（审查复现）",
+    match: p => p.endsWith("/preview"),
+    respond: () => previewWith(GOOD_CHECKS.filter(check => check.name !== "recovery_key_reference")),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /缺少必需检查项 recovery_key_reference/,
+  },
+  {
+    name: "preview 缺失 backup_integrity",
+    match: p => p.endsWith("/preview"),
+    respond: () => previewWith(GOOD_CHECKS.filter(check => check.name !== "backup_integrity")),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /缺少必需检查项 backup_integrity/,
+  },
+  {
+    name: "preview 检查项重复（已知项两次）",
+    match: p => p.endsWith("/preview"),
+    respond: () => previewWith([...GOOD_CHECKS, { name: "recovery_key_reference", passed: true }]),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /检查项重复: recovery_key_reference/,
+  },
+  {
+    name: "preview 多出一个未知失败项",
+    match: p => p.endsWith("/preview"),
+    respond: () =>
+      previewWith([...GOOD_CHECKS, { name: "cluster_capacity", passed: false, reason: "no_free_slot" }]),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /出现未知检查项 cluster_capacity|实际失败项集合/,
+  },
+  {
+    name: "preview 多出一个未知通过项",
+    match: p => p.endsWith("/preview"),
+    respond: () => previewWith([...GOOD_CHECKS, { name: "audit_ready", passed: true }]),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /出现未知检查项 audit_ready/,
+  },
+  {
+    name: "preview 检查项 passed 非布尔",
+    match: p => p.endsWith("/preview"),
+    respond: () =>
+      previewWith(
+        GOOD_CHECKS.map(check =>
+          check.name === "recovery_key_reference" ? { ...check, passed: "true" } : check,
+        ),
+      ),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /不是布尔/,
+  },
+  {
+    name: "preview 已知失败项变成通过（行为可能已实现）",
+    match: p => p.endsWith("/preview"),
+    respond: () =>
+      previewWith(
+        GOOD_CHECKS.map(check =>
+          check.passed === false ? { name: check.name, passed: true } : check,
+        ),
+      ),
+    want: ["FAIL", "BLOCKED", "BLOCKED"],
+    hint: /passed=true != false|实际失败项集合/,
+  },
   {
     name: "三个端点全部符合预期",
     match: () => false,
@@ -170,9 +253,14 @@ for (const scenario of scenarios) {
   vm.createContext(sandbox);
   await vm.runInContext(`${helper}\n(async () => {\n${segment}\n})()`, sandbox);
   const got = sandbox.results.map(item => item.status);
-  const ok = JSON.stringify(got) === JSON.stringify(scenario.want);
+  const hintOk = !scenario.hint || scenario.hint.test(String(sandbox.results[0]?.detail ?? ""));
+  const ok = JSON.stringify(got) === JSON.stringify(scenario.want) && hintOk;
   if (!ok) failures += 1;
-  console.log(`${ok ? "PASS" : "FAIL"} ${scenario.name} -> ${got.join("/")} (want ${scenario.want.join("/")})`);
+  console.log(
+    `${ok ? "PASS" : "FAIL"} ${scenario.name} -> ${got.join("/")} (want ${scenario.want.join("/")})${
+      hintOk ? "" : ` [明细未命中 ${scenario.hint}]`
+    }`,
+  );
   if (!ok) for (const item of sandbox.results) console.log(`   ${item.id} ${item.status} ${item.detail}`);
 }
 

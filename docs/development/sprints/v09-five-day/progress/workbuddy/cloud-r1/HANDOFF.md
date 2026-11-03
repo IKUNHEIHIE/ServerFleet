@@ -126,12 +126,23 @@ node tests/browser/v09/run-recovery-prerequisite-probe.mjs --skip-build --keep
 |---|---|
 | `tests/browser/v09/run-recovery-prerequisite-probe.mjs` | R08—R10 改由 `probeBlocked()` 唯一入口记账：只有 status + problem content-type/type/status/code + 预览检查项集合全部精确匹配才 BLOCKED，其余 FAIL；新增 `--require-complete`；修掉 `extra.status` 覆盖判定字段的 bug |
 | `tests/browser/v09/run-product-update-acceptance.mjs` | P18 增加 `expectUpdateProblem()` 严格断言（503 + problem 结构）与 1.0.3 合格对照；删除「计划通过就继续 apply」兜底；新增 P18B 真实回滚；P19 增加失败终态持久与作业数不增的断言 |
-| `tests/browser/v09/run-probe-classification-selftest.mjs` | 新增：把 R08—R10 片段抽到 vm 里喂 10 组响应，固化 WB-R1 的回归（含审查给的「三端点全 500」口径） |
+| `tests/browser/v09/run-probe-classification-selftest.mjs` | 新增：把 R08—R10 片段抽到 vm 里喂响应，固化 WB-R1 的回归（含审查给的「三端点全 500」口径）；R2 扩到 17 组，覆盖必需成功项失败/缺失、重复、未知失败/通过项、结构非法 |
+
+### 返修轮 R2（WB-R2-01）
+
+`previewMismatches()` 不再只看两个已知失败项，而是要求：项名集合恰好四项、结构合法、
+`backup_integrity` 与 `recovery_key_reference` 均通过、失败集合恰好两项且 reason 逐字相符。
+任一偏差（新的恢复密钥失败、缺项、重复、未知项、reason 漂移）都返回非空 mismatches → FAIL。
+最小复核：
+
+```sh
+node tests/browser/v09/run-probe-classification-selftest.mjs   # 17/17
+```
 
 ### 复核命令
 
 ```sh
-node tests/browser/v09/run-probe-classification-selftest.mjs           # 10/10，退出 0
+node tests/browser/v09/run-probe-classification-selftest.mjs           # 17/17，退出 0（R2 后）
 node tests/browser/v09/run-product-update-acceptance.mjs               # 21 PASS / 0 FAIL
 node tests/browser/v09/run-recovery-prerequisite-probe.mjs             # 11/3/0，退出 0（INCOMPLETE）
 node tests/browser/v09/run-recovery-prerequisite-probe.mjs --require-complete   # 同结果，退出 1
