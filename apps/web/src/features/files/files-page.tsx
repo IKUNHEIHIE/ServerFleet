@@ -7,10 +7,21 @@ import { Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
-import { describeApiError } from "@/lib/api/errors";
-import { filesApi, nodesApi, transfersApi } from "@/lib/api/endpoints";
+import { ApiError, describeApiError } from "@/lib/api/errors";
+import { filesApi, nodesApi, tasksApi, transfersApi } from "@/lib/api/endpoints";
 import type { ConflictPolicy, FileEntry, NodeSummary, TransferJob, TransferStatus } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
+import {
+  activePendingUploads,
+  describeUploadFailure,
+  describeUploadStatus,
+  loadPendingUploads,
+  mergeUploadState,
+  normalizeUploadStatus,
+  savePendingUploads,
+  taskStateLabel,
+  type PendingUpload,
+} from "./upload-queue";
 import { formatBytes, formatDateTime } from "@/lib/format";
 
 const TRANSFER_STATUS_TEXT: Record<TransferStatus, string> = {
@@ -78,6 +89,9 @@ function FilePane({
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
   const [sizeResult, setSizeResult] = useState<string | null>(null);
   const [uploadOutcome, setUploadOutcome] = useState<string | null>(null);
+  const [pendingUploads, setPendingUploads] = useState<readonly PendingUpload[]>([]);
+  const [pendingBusy, setPendingBusy] = useState<string | null>(null);
+  const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
   const [conflictPolicy, setConflictPolicy] = useState<ConflictPolicy>("skip");
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -185,6 +199,78 @@ function FilePane({
   const complete = useAction((uploadId: string) => filesApi.completeUpload(state.nodeId ?? "", uploadId));
   const transfer = useAction((body: Parameters<typeof transfersApi.create>[0], key: string) => transfersApi.create(body, key));
 
+  // 刷新/断线恢复：pending 记录只存在会话存储，状态一律以 GET 读回为准。
+  useEffect(() => {
+    if (!state.nodeId) {
+      setPendingUploads([]);
+      return;
+    }
+    setPendingUploads(loadPendingUploads(state.nodeId));
+    void refreshPending(state.nodeId);
+  }, [state.nodeId]);
+
+  async function refreshPending(nodeId: string) {
+    const current = loadPendingUploads(nodeId);
+    if (current.length === 0) return;
+    const next: PendingUpload[] = [];
+    for (const item of current) {
+      try {
+        const result = await filesApi.uploadStatus(nodeId, item.uploadId);
+        next.push(
+          mergeUploadState(item, {
+            status: normalizeUploadStatus(result.data.status),
+            ...(result.data.taskId ? { taskId: result.data.taskId } : {}),
+            bytesReceived: result.data.bytesReceived,
+            ...(result.data.expectedSize === undefined ? {} : { expectedSize: result.data.expectedSize }),
+          }),
+        );
+      } catch (error) {
+        const apiError = error instanceof ApiError ? error : null;
+        if (apiError?.status === 404) {
+          // 会话已被清理或过期：落一条 unknown 终态，避免永远 pending 且不伪装完成。
+          next.push({ ...item, status: "unknown", updatedAt: new Date().toISOString() });
+        } else {
+          next.push(item);
+        }
+      }
+    }
+    savePendingUploads(nodeId, next);
+    setPendingUploads(next);
+  }
+
+  async function cancelPending(item: PendingUpload) {
+    if (!state.nodeId || !item.taskId) {
+      setPendingNotice("该上传没有关联任务号，无法从任务链取消；请刷新状态后重试。");
+      return;
+    }
+    setPendingBusy(item.uploadId);
+    setPendingNotice(null);
+    try {
+      let revision: number | undefined;
+      try {
+        revision = (await tasksApi.get(item.taskId)).data.revision;
+      } catch (error) {
+        const apiError = error instanceof ApiError ? error : null;
+        setPendingNotice(`读取任务 ${item.taskId} 失败（${apiError?.status ?? "网络"}），未发起取消。`);
+        return;
+      }
+      try {
+        const cancelled = await tasksApi.cancel(item.taskId, {
+          reason: "operator cancelled dispatching file upload",
+          ...(revision === undefined ? {} : { expectedRevision: revision }),
+        });
+        setPendingNotice(`已提交取消：${item.taskId}（${taskStateLabel(cancelled.data.state)}）。`);
+      } catch (error) {
+        const apiError = error instanceof ApiError ? error : null;
+        setPendingNotice(`取消任务失败（${apiError?.status ?? "网络"} ${apiError?.code ?? apiError?.kind ?? ""}），状态以读回为准。`);
+        return;
+      }
+      await refreshPending(state.nodeId);
+    } finally {
+      setPendingBusy(null);
+    }
+  }
+
   // GM-W5-01b：单文件上传会话 → PUT 字节流（offset=0）→ POST complete 触发服务端
   // 字节数与 SHA-256 校验。传输通道未注入时服务端返回 503 unavailable，此时字节已
   // 落地暂存并通过校验，界面如实区分“校验通过”与“未送达远端节点”。
@@ -214,16 +300,43 @@ function FilePane({
       }
       const received = content.data.data.bytesReceived;
       const completed = await complete.run(uploadId);
-      if (completed.ok && completed.data && completed.data.data.status === "completed") {
-        lines.push(`${file.name}：上传完成，服务端校验通过（${received} B）。`);
-      } else if (completed.ok && completed.data) {
-        lines.push(`${file.name}：服务端返回 status=${completed.data.data.status}；不声称完成。`);
+      if (completed.ok && completed.data) {
+        const status = normalizeUploadStatus(completed.data.data.status);
+        if (status === "completed") {
+          lines.push(`${file.name}：上传完成，服务端校验通过（${received} B）。`);
+        } else if (status === "dispatching") {
+          // 202：只代表已受理进统一任务队列，远端尚未落盘。
+          const taskId = completed.data.data.taskId;
+          lines.push(
+            `${file.name}：已受理进入统一任务队列${taskId ? `（任务 ${taskId}）` : ""}，尚未完成；在“待确认上传”中按真实任务状态读回。`,
+          );
+          if (taskId && state.nodeId) {
+            const record: PendingUpload = {
+              uploadId,
+              nodeId: state.nodeId,
+              name: file.name,
+              status: "dispatching",
+              taskId,
+              bytesReceived: received,
+              expectedSize: file.size,
+              updatedAt: new Date().toISOString(),
+            };
+            setPendingUploads(previous => {
+              const merged = [record, ...previous.filter(item => item.uploadId !== record.uploadId)];
+              savePendingUploads(state.nodeId ?? "", merged);
+              return merged;
+            });
+          }
+        } else {
+          lines.push(`${file.name}：服务端返回 status=${completed.data.data.status}；不声称完成。`);
+        }
       } else if (completed.error && completed.error.status === 503) {
         lines.push(
           `文件字节流（${received} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）。`,
         );
       } else if (completed.error) {
-        lines.push(`${file.name}：完成校验失败（${completed.error.status} ${completed.error.code ?? completed.error.kind}）。`);
+        const failure = describeUploadFailure(completed.error.status, completed.error.code);
+        lines.push(`${file.name}：${failure.text}`);
       }
     }
     setUploadOutcome(lines.join(" "));
@@ -418,6 +531,70 @@ function FilePane({
           </Notice>
         ) : null}
         {sizeResult ? <p role="status" className="text-xs text-muted-foreground">{sizeResult}</p> : null}
+        {pendingUploads.length > 0 ? (
+          <div className="rounded-md border p-2 text-xs" role="region" aria-label="待确认上传">
+            <div className="flex items-center justify-between">
+              <span className="font-medium">
+                待确认上传（{activePendingUploads(pendingUploads).length} 项未到终态 / 共 {pendingUploads.length} 项）
+              </span>
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => (state.nodeId ? void refreshPending(state.nodeId) : undefined)}
+                loading={pendingBusy === "__all__"}
+              >
+                读回真实状态
+              </Button>
+            </div>
+            <ul className="mt-2 space-y-2">
+              {pendingUploads.map(item => {
+                const text = describeUploadStatus(item.status);
+                return (
+                  <li key={item.uploadId} className="rounded border p-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-medium">{item.name}</span>
+                      <span
+                        className={
+                          text.tone === "success"
+                            ? "text-emerald-600"
+                            : text.tone === "danger"
+                              ? "text-red-600"
+                              : text.tone === "pending"
+                                ? "text-amber-600"
+                                : "text-muted-foreground"
+                        }
+                      >
+                        {text.label}
+                      </span>
+                      {item.taskId ? <span className="text-muted-foreground">任务 {item.taskId}</span> : null}
+                      {item.bytesReceived !== undefined ? (
+                        <span className="text-muted-foreground">
+                          {item.bytesReceived} B{item.expectedSize ? ` / ${item.expectedSize} B` : ""}
+                        </span>
+                      ) : null}
+                      {item.taskId && !["completed", "failed", "cancelled"].includes(item.status) ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => void cancelPending(item)}
+                          loading={pendingBusy === item.uploadId}
+                        >
+                          取消任务
+                        </Button>
+                      ) : null}
+                    </div>
+                    <p className="mt-1 text-muted-foreground">{text.detail}</p>
+                  </li>
+                );
+              })}
+            </ul>
+            {pendingNotice ? <p role="status" className="mt-2 text-muted-foreground">{pendingNotice}</p> : null}
+            <p className="mt-2 text-muted-foreground">
+              “已受理（排队）”不等于远端完成：只有服务端读回 completed 才显示已完成。
+            </p>
+          </div>
+        ) : null}
       </div>
 
       {!state.nodeId ? (

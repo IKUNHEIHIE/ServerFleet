@@ -364,10 +364,25 @@ export interface UploadSession {
   readonly expiresAt?: string;
 }
 
+/**
+ * POST …/files/uploads/{uploadId}/complete 的真实回执（internal/files/http.go）。
+ * 202 + status:"dispatching" 表示已进入统一任务队列（带 taskId），**不是**远端完成；
+ * 只有 status:"completed" 才是服务端校验通过并落盘。
+ */
 export interface UploadCompletion {
   readonly uploadId: string;
-  readonly status: "completed" | "failed";
+  readonly status: "completed" | "failed" | "dispatching";
+  readonly taskId?: string;
   readonly files?: readonly FileEntry[];
+}
+
+/** GET …/files/uploads/{uploadId} 的真实状态读回，用于刷新/断线后恢复。 */
+export interface UploadState {
+  readonly uploadId: string;
+  readonly status: "awaiting_data" | "dispatching" | "completed" | "failed" | "cancelled" | string;
+  readonly bytesReceived: number;
+  readonly expectedSize?: number | null;
+  readonly taskId?: string;
 }
 
 /** PUT …/files/uploads/{uploadId}/content 的服务端进度回执（internal/files/upload.go）。 */

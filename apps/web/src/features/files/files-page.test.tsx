@@ -140,6 +140,48 @@ describe("files page", () => {
     expect(screen.queryByText(/字节通道未实现/)).toBeNull();
   });
 
+  it("shows 202 dispatching as queued with the task id, then reads the real terminal state back", async () => {
+    const { calls } = await renderAuthenticated("/files", {
+      ...fileRoutes(),
+      "POST /api/v1/nodes/n-1/files/uploads/up-1/complete": () =>
+        jsonResponse({ uploadId: "up-1", status: "dispatching", taskId: "task-9", files: [] }, 202),
+      "GET /api/v1/nodes/n-1/files/uploads/up-1": () =>
+        jsonResponse({ uploadId: "up-1", status: "completed", bytesReceived: 5, expectedSize: 5, taskId: "task-9" }),
+    });
+    await screen.findByRole("table", { name: "左侧目录内容" });
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(inputs[0], { target: { files: [new File(["hello"], "hello.txt", { type: "text/plain" })] } });
+    // 202 只表示已受理进队列：界面必须给出任务号，且不能声称上传完成。
+    expect(await screen.findByText(/已受理进入统一任务队列（任务 task-9），尚未完成/)).toBeVisible();
+    expect(screen.queryByText(/上传完成，服务端校验通过/)).toBeNull();
+    const panel = await screen.findByRole("region", { name: "待确认上传" });
+    expect(within(panel).getByText("已受理（排队）")).toBeVisible();
+    expect(within(panel).getByText("任务 task-9")).toBeVisible();
+    expect(calls.some(call => call.method === "POST" && call.url.includes("/files/uploads/up-1/complete"))).toBe(true);
+
+    fireEvent.click(within(panel).getByRole("button", { name: "读回真实状态" }));
+    await waitFor(() => expect(calls.some(call => call.method === "GET" && call.url === "/api/v1/nodes/n-1/files/uploads/up-1")).toBe(true));
+    expect(await within(panel).findByText("已完成")).toBeVisible();
+    expect(within(panel).queryByText("已受理（排队）")).toBeNull();
+  });
+
+  it("keeps dispatching honest when the queue task is still running after a reload", async () => {
+    await renderAuthenticated("/files", {
+      ...fileRoutes(),
+      "POST /api/v1/nodes/n-1/files/uploads/up-1/complete": () =>
+        jsonResponse({ uploadId: "up-1", status: "dispatching", taskId: "task-9", files: [] }, 202),
+      "GET /api/v1/nodes/n-1/files/uploads/up-1": () =>
+        jsonResponse({ uploadId: "up-1", status: "dispatching", bytesReceived: 5, expectedSize: 5, taskId: "task-9" }),
+    });
+    await screen.findByRole("table", { name: "左侧目录内容" });
+    const inputs = document.querySelectorAll<HTMLInputElement>('input[type="file"]');
+    fireEvent.change(inputs[0], { target: { files: [new File(["hello"], "hello.txt", { type: "text/plain" })] } });
+    const panel = await screen.findByRole("region", { name: "待确认上传" });
+    await waitFor(() => expect(within(panel).getByText("已受理（排队）")).toBeVisible());
+    expect(within(panel).queryByText("已完成")).toBeNull();
+    expect(within(panel).getByText(/只有服务端读回 completed 才显示已完成/)).toBeVisible();
+  });
+
   it("honestly reports verified bytes when the node transport is not injected (503 unavailable)", async () => {
     await renderAuthenticated("/files", {
       ...fileRoutes(),
