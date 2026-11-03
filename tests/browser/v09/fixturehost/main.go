@@ -27,6 +27,7 @@ import (
 	"serverfleet.local/serverfleet/apps/controller/server"
 	"serverfleet.local/serverfleet/internal/ai"
 	"serverfleet.local/serverfleet/internal/files"
+	"serverfleet.local/serverfleet/internal/updates"
 )
 
 type fixtureResponse struct {
@@ -58,6 +59,7 @@ func main() {
 	secretFile := flag.String("ai-secret-file", "", "private synthetic upstream secret file")
 	fileSpool := flag.String("file-spool", "", "private execution spool directory (enables the unified file worker)")
 	fileRoots := flag.String("file-roots", "", "private 0600 JSON registry mapping enrolled nodeID to its logical absolute root")
+	productUpdateConfig := flag.String("product-update-config", "", "private 0600 JSON enabling the trusted local Agent product update assembly")
 	flag.Parse()
 	controlHost, _, controlErr := net.SplitHostPort(*fixtureListen)
 	if controlErr != nil || net.ParseIP(controlHost) == nil || !net.ParseIP(controlHost).IsLoopback() {
@@ -139,6 +141,36 @@ func main() {
 		}
 		log.Printf("fixturehost: unified file worker enabled with controlled node registry %s", *fileRoots)
 	}
+	// Agent 组件本地签名更新：只在显式给出私有配置时装配。SchemaFingerprint 必须
+	// 来自真实迁移后的库定义，因此先用同一 DB 组合一次正式 Server 读取指纹，关闭后
+	// 再以真实指纹重新组合；配置文件中声明的指纹一律忽略。
+	if *productUpdateConfig != "" {
+		if agentMaterial == nil {
+			log.Fatal("fixturehost: product update requires -agent-pki-dir and the Agent WSS link")
+		}
+		productFile, loadErr := loadProductUpdateFile(*productUpdateConfig)
+		if loadErr != nil {
+			log.Fatalf("fixturehost: product update config: %v", loadErr)
+		}
+		probe, probeErr := server.New(ctx, composedConfig)
+		if probeErr != nil {
+			log.Fatalf("fixturehost: compose for schema fingerprint: %v", probeErr)
+		}
+		fingerprint, fpErr := updates.SQLiteSchemaFingerprint(ctx, probe.DB)
+		if closeErr := probe.Close(); closeErr != nil {
+			log.Fatalf("fixturehost: close fingerprint probe: %v", closeErr)
+		}
+		if fpErr != nil {
+			log.Fatalf("fixturehost: read schema fingerprint: %v", fpErr)
+		}
+		productOptions, optErr := productFile.options(fingerprint)
+		if optErr != nil {
+			log.Fatalf("fixturehost: product update options: %v", optErr)
+		}
+		composedConfig.UpdateProduct = &productOptions
+		log.Printf("fixturehost: trusted agent product update enabled; slot %s inbox %s key %s node %s candidate %s schema fingerprint %s",
+			productOptions.Directory, productOptions.Inbox, productOptions.KeyID, productOptions.NodeID, productOptions.CandidateVersion, fingerprint)
+	}
 	composed, err := server.New(ctx, composedConfig)
 	if err != nil {
 		log.Fatalf("fixturehost: compose server: %v", err)
@@ -195,8 +227,15 @@ func main() {
 		_ = controlServer.Shutdown(shutdownCtx)
 	}()
 	log.Printf("fixturehost: composed management API serving on https://%s", *listen)
-	if err := api.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
-		log.Fatalf("fixturehost: serve: %v", err)
+	serveErr := api.ListenAndServeTLS("", "")
+	// 生命周期必须闭合：正式的 Server.Close 会停止自有 Agent 进程并清理 supervisor
+	// 保留记录。缺少这一步时，下一次启动会被“installation reserved”拒绝（这是产品
+	// 的正确行为，不是宿主可以绕过的东西）。
+	if closeErr := composed.Close(); closeErr != nil {
+		log.Printf("fixturehost: close composed server: %v", closeErr)
+	}
+	if serveErr != nil && serveErr != http.ErrServerClosed {
+		log.Fatalf("fixturehost: serve: %v", serveErr)
 	}
 }
 
