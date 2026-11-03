@@ -255,12 +255,12 @@ func (d *gatewayTaskDispatcher) Dispatch(ctx context.Context, command tasks.Comm
 		if bound, ok := d.artifacts.(GatewayBoundArtifactUploader); ok {
 			err := bound.UploadBound(ctx, GatewayArtifactBinding{
 				TaskID: command.TaskID, NodeID: command.NodeID,
-				ExecutionID: executionIDFor(command.TaskID, command.NodeID, task.PlanHash),
+				ExecutionID: gatewayArtifactExecutionID(command.TaskID, command.NodeID, task.PlanHash, planned.GatewayID),
 				TransferID:  gatewayArtifactTransferID(command.TaskID, command.NodeID, planned.ArtifactPath),
 				PlanDigest:  task.PlanHash,
 				GatewayID:   planned.GatewayID, PlanID: planned.PlanID,
-				TargetRevision: planned.TargetRevision,
-				AbsolutePath:   planned.ArtifactPath, Content: planned.Content, SHA256: planned.Digest,
+				TargetRevision: planned.TargetRevision, SitePath: planned.SitePath,
+				AbsolutePath: planned.ArtifactPath, Content: planned.Content, SHA256: planned.Digest,
 			})
 			if err != nil {
 				return tasks.DispatchResult{Accepted: false, Reason: "artifact_upload_failed"}, nil
@@ -365,12 +365,19 @@ func (d *gatewayTaskDispatcher) currentNodeAuthority(ctx context.Context, task t
 // phase. It runs before the first chunk and again before every subsequent chunk
 // through the channel authorizer. It never relaxes tasks.CheckExecution, which
 // still requires running for Agent execution frames.
-func (d *gatewayTaskDispatcher) CheckArtifactStage(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID string) error {
+func (d *gatewayTaskDispatcher) CheckArtifactStage(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID, planDigest, artifactPath, sitePath, configDigest string) error {
 	if d == nil || d.repo == nil {
 		return gateway.ErrTaskSubmitterUnavailable
 	}
 	task, err := d.repo.Get(ctx, taskID)
-	if err != nil || task.Status != tasks.StatusQueued || task.CancelRequested || task.PlanHash == "" {
+	if err != nil || task.Status != tasks.StatusQueued || task.CancelRequested || task.PlanHash == "" ||
+		task.PlanHash != planDigest {
+		return tasks.ErrApprovalInvalid
+	}
+	params, err := gatewayCommandParams(json.RawMessage(task.Params))
+	if err != nil || params["operation"] != "apply" ||
+		params["artifact_path"] != artifactPath || params["site_path"] != sitePath ||
+		params["config_sha256"] != configDigest {
 		return tasks.ErrApprovalInvalid
 	}
 	pending := false
@@ -385,6 +392,41 @@ func (d *gatewayTaskDispatcher) CheckArtifactStage(ctx context.Context, taskID, 
 	}
 	if err := d.currentApproval(ctx, task); err != nil {
 		return err
+	}
+	if err := d.authority.Current(ctx, planID, targetRevision, gatewayID); err != nil {
+		return err
+	}
+	return d.currentNodeAuthority(ctx, task, nodeID)
+}
+
+// CheckArtifactChild is the child-lifecycle gate. It allows the upload to have
+// moved the parent task from queued to running, but still requires the same
+// frozen plan digest, task parameters, approval and current authority. It never
+// records a parent result.
+func (d *gatewayTaskDispatcher) CheckArtifactChild(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID, planDigest, artifactPath, sitePath, configDigest string) error {
+	if d == nil || d.repo == nil {
+		return gateway.ErrTaskSubmitterUnavailable
+	}
+	task, err := d.repo.Get(ctx, taskID)
+	if err != nil || task.CancelRequested || task.PlanHash == "" || task.PlanHash != planDigest ||
+		task.Status.Terminal() {
+		return tasks.ErrApprovalInvalid
+	}
+	params, err := gatewayCommandParams(json.RawMessage(task.Params))
+	if err != nil || params["operation"] != "apply" ||
+		params["artifact_path"] != artifactPath || params["site_path"] != sitePath ||
+		params["config_sha256"] != configDigest {
+		return tasks.ErrApprovalInvalid
+	}
+	if !task.ApprovalRequired {
+		return tasks.ErrApprovalInvalid
+	}
+	approval, err := d.repo.Approval(ctx, d.db, task.ID, task.Revision)
+	if err != nil || !approval.Approved() || approval.PlanHash != task.PlanHash || approval.ApproverID == task.SubmitterID {
+		return tasks.ErrApprovalInvalid
+	}
+	if d.approvalTTL > 0 && d.now().UTC().After(approval.DecidedAt.Add(d.approvalTTL)) {
+		return tasks.ErrApprovalInvalid
 	}
 	if err := d.authority.Current(ctx, planID, targetRevision, gatewayID); err != nil {
 		return err

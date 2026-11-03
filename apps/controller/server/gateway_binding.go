@@ -29,9 +29,13 @@ const gatewayArtifactBindingsSchema = `CREATE TABLE IF NOT EXISTS gateway_artifa
 	target_revision INTEGER NOT NULL,
 	absolute_path TEXT NOT NULL,
 	relative_path TEXT NOT NULL,
+	site_path TEXT NOT NULL,
 	size INTEGER NOT NULL,
 	sha256 TEXT NOT NULL,
-	created_at TEXT NOT NULL
+	state TEXT NOT NULL,
+	result TEXT NOT NULL,
+	created_at TEXT NOT NULL,
+	updated_at TEXT NOT NULL
 )`
 
 // GatewayArtifactMigrations is the candidate migration for central wiring. It
@@ -74,18 +78,19 @@ func saveGatewayArtifactBinding(ctx context.Context, db *storage.DB, binding Gat
 			existing.TransferID != binding.TransferID || existing.PlanDigest != binding.PlanDigest ||
 			existing.PlanID != binding.PlanID || existing.TargetRevision != binding.TargetRevision ||
 			existing.GatewayID != binding.GatewayID || existing.AbsolutePath != binding.AbsolutePath ||
-			existing.RelativePath != binding.RelativePath || existing.Size != binding.Size ||
-			existing.SHA256 != binding.SHA256 {
+			existing.RelativePath != binding.RelativePath || existing.SitePath != binding.SitePath ||
+			existing.Size != binding.Size || existing.SHA256 != binding.SHA256 {
 			return ErrGatewayArtifactInvalid
 		}
 		return nil
 	case !errors.Is(err, errGatewayArtifactBindingNotFound):
 		return err
 	}
-	_, err = db.Exec(ctx, `INSERT INTO gateway_artifact_bindings(execution_id,task_id,node_id,transfer_id,plan_digest,gateway_id,plan_id,target_revision,absolute_path,relative_path,size,sha256,created_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+	now := time.Now().UTC().Format(time.RFC3339)
+	_, err = db.Exec(ctx, `INSERT INTO gateway_artifact_bindings(execution_id,task_id,node_id,transfer_id,plan_digest,gateway_id,plan_id,target_revision,absolute_path,relative_path,site_path,size,sha256,state,result,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
 		binding.ExecutionID, binding.TaskID, binding.NodeID, binding.TransferID, binding.PlanDigest,
 		binding.GatewayID, binding.PlanID, binding.TargetRevision, binding.AbsolutePath,
-		binding.RelativePath, binding.Size, binding.SHA256, time.Now().UTC().Format(time.RFC3339))
+		binding.RelativePath, binding.SitePath, binding.Size, binding.SHA256, "reserved", "", now, now)
 	return err
 }
 
@@ -101,10 +106,10 @@ func loadGatewayArtifactBinding(ctx context.Context, db *storage.DB, executionID
 		return GatewayArtifactBinding{}, errGatewayArtifactBindingNotFound
 	}
 	var binding GatewayArtifactBinding
-	err := db.QueryRow(ctx, `SELECT execution_id,task_id,node_id,transfer_id,plan_digest,gateway_id,plan_id,target_revision,absolute_path,relative_path,size,sha256 FROM gateway_artifact_bindings WHERE execution_id=?`, executionID).
+	err := db.QueryRow(ctx, `SELECT execution_id,task_id,node_id,transfer_id,plan_digest,gateway_id,plan_id,target_revision,absolute_path,relative_path,site_path,size,sha256,state,result FROM gateway_artifact_bindings WHERE execution_id=?`, executionID).
 		Scan(&binding.ExecutionID, &binding.TaskID, &binding.NodeID, &binding.TransferID, &binding.PlanDigest,
 			&binding.GatewayID, &binding.PlanID, &binding.TargetRevision, &binding.AbsolutePath,
-			&binding.RelativePath, &binding.Size, &binding.SHA256)
+			&binding.RelativePath, &binding.SitePath, &binding.Size, &binding.SHA256, &binding.State, &binding.Result)
 	if err != nil {
 		return GatewayArtifactBinding{}, fmt.Errorf("gateway: load artifact binding: %w", err)
 	}
@@ -166,5 +171,6 @@ func (g *gatewayArtifactGate) Authorize(ctx context.Context, observation transpo
 		(task != binding.TaskID || execution != binding.ExecutionID || transfer != binding.TransferID) {
 		return files.ErrTaskBindingRequired
 	}
-	return g.stage.CheckArtifactStage(ctx, binding.TaskID, binding.NodeID, binding.PlanID, binding.TargetRevision, binding.GatewayID)
+	return g.stage.CheckArtifactStage(ctx, binding.TaskID, binding.NodeID, binding.PlanID, binding.TargetRevision,
+		binding.GatewayID, binding.PlanDigest, binding.AbsolutePath, binding.SitePath, binding.SHA256)
 }

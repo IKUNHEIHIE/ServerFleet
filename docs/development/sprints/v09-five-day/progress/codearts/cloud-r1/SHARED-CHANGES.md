@@ -7,20 +7,19 @@
 检查点 1-3 均未修改中央共享文件。R1 新增的 `gateway_wss.go`、`gateway_binding.go` 与
 `gateway_worker.go` 改动均在 `apps/controller/server/gateway_*` 独占范围。
 
-## 中央接线（精确补丁见 `CENTRAL-PATCH-R1.md`）
+## 中央接线（精确补丁见 `CENTRAL-PATCH-R2.md`）
 
-1. **迁移**：把 `gatewayArtifactBindingsSchema` 以主控分配的正式 `cx/....` 版本加入
-   `Migrations()`；本任务的候选版本 `cx/CANDIDATE_gateway_artifact_bindings` 未注册。
-2. **Controller**：`Config` 增加 `GatewayFileRoots map[nodeID]Agent 的 -file-root 绝对路径`；
-   `NewProductionPublishingBridge` 增加 `Channel files.AgentFileChannel`。先建 dispatcher，
-   再 `NewGatewayChannelUploader(channel, roots, db, dispatcher)`，最后赋回
-   `dispatcher.artifacts`，避免 stage/uploader 循环依赖。
-3. **文件 Gate**：`NewGatewayArtifactGate(db, dispatcher)`；在 `AgentFileGate` 组合中先用
-   `Matches(executionID)` 判定归属，命中走网关 Gate，否则回落 CX 文件 Gate；两者都为空拒绝。
-4. **Agent 入口**：新增 `-gateway-prefix` / `-nginx-bin` 并调用 `newGatewayRegistration`；
-   `-file-root` 必须包含 gateway prefix，Controller 的 roots 必须与之一致。
-5. 本任务**不再等待** AgentMore 提供 ArtifactUploader：真实 WSS 通道适配、scope/逐块授权、
-   持久绑定与 gate 已在本任务实现。
+1. **迁移**：R2 表新增 `site_path/state/result/updated_at`；`gatewayArtifactBindingsSchema`
+   以主控正式版本加入 `Migrations()`。
+2. **Agent 子事件路由**（`agent_links.go`）：`agentLinkBridge` 增加
+   `gatewayChildren *GatewayArtifactObserver`；在 `event` 的 `fileWorker.Observe` 前调用
+   `Observe`，owned 即返回，未命中继续原路由。子事件不调用 `tasks.RecordResult`。
+3. **Controller**：`Config` 增加 `GatewayFileRoots` 与 `Channel`；先建 dispatcher，再建
+   observer/gate/uploader，最后赋回 bridge/dispatcher。
+4. **文件 Gate**：`NewGatewayArtifactGate(db, dispatcher)` 先 `Matches` 再 `Authorize`，
+   未命中回落 CX 文件 Gate，两者都空拒绝。
+5. **Agent 入口**：`-gateway-prefix`/`-nginx-bin`，`-file-root` 必须包含 gateway prefix。
+6. 本任务不修改中央文件；上述 patch 由主控独立接收并组合验证。
 
 ## 已识别的候选接缝（待实现后给出精确 diff）
 

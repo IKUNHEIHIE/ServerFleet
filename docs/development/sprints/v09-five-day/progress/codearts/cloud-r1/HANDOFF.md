@@ -27,6 +27,16 @@
   `check:web`、`npm run check` 未执行，保留 UNTESTED。
 - 仍 OPEN：中央接线后的进程级组合链、ACME/cleanup 产品组合、供应商未知结果独立项。
 
+## 2026-11-03 检查点 4（R2）
+
+- 内容：三项 P1 返修。工件子执行使用独立 `gwa-...` 身份；新增 `GatewayArtifactObserver`
+  消费子 Ack/Started/Finished 且不完成父任务；`CheckArtifactStage/Child` 每帧核对冻结
+  PlanHash/参数/审批/target revision。
+- 验证：审查方 `TestReviewerGatewayArtifactAndApplyNeedDistinctExecutions` 由 FAIL 转 PASS；
+  R2 新增 10 个用例 PASS；`apps/controller/server`、`tests/architecture` 全包 PASS；vet 空。
+- 中央装配：`CENTRAL-PATCH-R2.md`（含 `agent_links.go` 精确插入、迁移列、observer/gate 组合）。
+- 仍 OPEN：进程级组合需中央接线；ACME/cleanup 未完成；`check:web` 未跑。
+
 ## 环境注意事项
 
 - 本机以 `service`（uid 1000）执行 Go/Nginx 测试；`root` 仅用于创建私有目录、部署密钥和安装系统级工具，不作为安全验收依据。

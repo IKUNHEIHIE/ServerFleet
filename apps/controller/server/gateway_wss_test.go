@@ -23,7 +23,15 @@ type fakeGatewayStage struct {
 	failAfter int
 }
 
-func (s *fakeGatewayStage) CheckArtifactStage(context.Context, string, string, string, uint64, string) error {
+func (s *fakeGatewayStage) CheckArtifactStage(context.Context, string, string, string, uint64, string, string, string, string, string) error {
+	return s.check()
+}
+
+func (s *fakeGatewayStage) CheckArtifactChild(context.Context, string, string, string, uint64, string, string, string, string, string) error {
+	return s.check()
+}
+
+func (s *fakeGatewayStage) check() error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.calls++
@@ -141,7 +149,8 @@ func (f *gatewayWSSFixture) binding(content []byte) GatewayArtifactBinding {
 		TaskID: "task-1", NodeID: "node-1", ExecutionID: "exec-1", TransferID: "gwa-1",
 		PlanDigest: gatewayContentDigest([]byte("plan")), GatewayID: "gw-1", PlanID: "plan-1",
 		TargetRevision: 2, AbsolutePath: f.root + "/artifacts/site.conf",
-		Content: content, SHA256: gatewayContentDigest(content),
+		SitePath: f.root + "/conf/site.conf",
+		Content:  content, SHA256: gatewayContentDigest(content),
 	}
 }
 

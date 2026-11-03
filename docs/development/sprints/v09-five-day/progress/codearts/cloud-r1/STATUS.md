@@ -157,10 +157,53 @@ gofmt -l <新文件>                              # 空
   其余包（含 `apps/controller/server`、`apps/agent`、`tests/architecture`）通过。
   `check:web`/`check` 全量未执行 → 保留 **BLOCKED/UNTESTED**，不记为通过。
 
+## 检查点 4（R2）：三项 P1 返修（2026-11-03）
+
+### R2-01 子执行身份独立
+
+- 新增 `gatewayArtifactExecutionID(taskID,nodeID,planHash,gatewayID)`，稳定产出 `gwa-...`；
+  与 `agentLinkBridge` 的 `executionIDFor`（`exec-...`）分离，Agent ledger 不会把文件 offer
+  与 Nginx apply 当作同一执行。
+- 审查方提供的 `TestReviewerGatewayArtifactAndApplyNeedDistinctExecutions` 已保存为
+  `apps/controller/server/reviewer_collision_test.go`，修复后 **PASS**（此前 FAIL）。
+
+### R2-02 子执行 Ack/Started/Finished 路由
+
+- `gateway_child.go`：`GatewayArtifactObserver` 按持久 `execution_id` 认领子事件，更新
+  `state/result`，**不调用 `tasks.RecordResult`**，因此上传成功不会提前完成父发布任务。
+- 状态机：Ack→accepted、Started→started、Finished→finished；重复事件幂等，终态冲突拒绝，
+  Finished 早于 Started 记 `EXECUTION_RESULT_UNKNOWN`，节点不符拒绝，重连（同节点新连接）接受。
+- 中央 `agent_links.go` 的三行插入在 `CENTRAL-PATCH-R2.md` 给出真实 diff，本任务未直接改中央文件。
+
+### R2-03 每帧校验冻结计划/参数/绑定
+
+- `CheckArtifactStage` 与新增 `CheckArtifactChild` 均校验：
+  `task.PlanHash == binding.PlanDigest`、`operation/artifact_path/site_path/config_sha256`
+  与绑定一致、当前审批（含 revision 与 TTL）仍有效、plan target revision 与节点授权未变。
+- 任务 `Revise` 并重新审批后，旧 `PlanDigest` 的绑定被拒绝（新增用例覆盖）。
+
+### 验证
+
+```sh
+go test ./apps/controller/server -run "TestGatewayArtifact|TestGatewayChild|TestReviewer|TestGatewayChannel|TestGatewayFileOffer" -count=1
+# PASS（含 reviewer 复现用例与 10 个 R2 用例）
+
+go test ./apps/controller/server -count=1     # ok 1.017s
+go test ./tests/architecture -count=1         # ok 0.096s
+go vet ./apps/controller/server               # 无输出
+gofmt -l <新文件>                              # 空
+```
+
+### 仍未完成
+
+- 跨进程完整组合（Controller 子执行 → 真实 Agent ledger → Nginx → HTTP 字节 → 父终态）
+  需要应用 `CENTRAL-PATCH-R2.md` 后才能在启动组合中验证；当前未伪造该证据。
+  Agent 侧真实 WSS/Nginx/HTTP 仍由 `TestActualWSSGatewayApplyReloadAndHTTPBytes` 覆盖。
+
 ## 尚未完成（保持 OPEN）
 
 - 整体 Foundation CI 仍 FAIL，真实原因仅 `tests/integration/v09/platform` 两项缺预构建产物；本任务不宣称 CI 全绿。
-- 中央接线（迁移版本、`server.New`、Agent runtime 参数、file gate 组合）需主控应用 `CENTRAL-PATCH-R1.md`。
+- 中央接线（迁移版本、`server.New`、Agent runtime 参数、observer/gate 组合）需主控应用 `CENTRAL-PATCH-R2.md`。
 - 公开 HTTP→审批→工件→真实 Agent WSS→nginx→HTTP 字节→持久终态→逆序补偿的**进程级组合证据**尚未跑通（需中央接线后可启动组合）。
 - ACME/cleanup 产品组合与供应商未知结果独立项仍未完成。
 - `check:web`、`npm run check` 全量未执行。

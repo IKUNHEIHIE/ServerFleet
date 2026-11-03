@@ -38,9 +38,13 @@ type GatewayArtifactBinding struct {
 	TargetRevision uint64
 	AbsolutePath   string
 	RelativePath   string
-	Size           int64
-	Content        []byte
-	SHA256         string
+	// SitePath is the frozen nginx site path from the approved task parameters.
+	SitePath string
+	Size     int64
+	Content  []byte
+	SHA256   string
+	State    string
+	Result   string
 }
 
 func (b GatewayArtifactBinding) validate() error {
@@ -53,6 +57,10 @@ func (b GatewayArtifactBinding) validate() error {
 	}
 	if !filepath.IsAbs(b.AbsolutePath) || filepath.Clean(b.AbsolutePath) != b.AbsolutePath ||
 		strings.ContainsRune(b.AbsolutePath, '\x00') || strings.ContainsRune(b.AbsolutePath, '\\') {
+		return ErrGatewayArtifactInvalid
+	}
+	if !filepath.IsAbs(b.SitePath) || filepath.Clean(b.SitePath) != b.SitePath ||
+		strings.ContainsRune(b.SitePath, '\x00') || strings.ContainsRune(b.SitePath, '\\') {
 		return ErrGatewayArtifactInvalid
 	}
 	if !transport.FilePath(b.RelativePath) {
@@ -69,7 +77,8 @@ func (b GatewayArtifactBinding) validate() error {
 // target revision, node authority and cancellation before every chunk. It never
 // relaxes tasks.CheckExecution, which still requires running for Agent frames.
 type GatewayArtifactStageChecker interface {
-	CheckArtifactStage(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID string) error
+	CheckArtifactStage(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID, planDigest, artifactPath, sitePath, configDigest string) error
+	CheckArtifactChild(ctx context.Context, taskID, nodeID, planID string, targetRevision uint64, gatewayID, planDigest, artifactPath, sitePath, configDigest string) error
 }
 
 // GatewayBoundArtifactUploader is the real-channel seam. The dispatcher prefers
@@ -289,7 +298,8 @@ func (u *gatewayChannelUploader) UploadBound(ctx context.Context, binding Gatewa
 	if err := binding.validate(); err != nil {
 		return err
 	}
-	if err := u.stage.CheckArtifactStage(ctx, binding.TaskID, binding.NodeID, binding.PlanID, binding.TargetRevision, binding.GatewayID); err != nil {
+	if err := u.stage.CheckArtifactStage(ctx, binding.TaskID, binding.NodeID, binding.PlanID, binding.TargetRevision,
+		binding.GatewayID, binding.PlanDigest, binding.AbsolutePath, binding.SitePath, binding.SHA256); err != nil {
 		return err
 	}
 	if err := saveGatewayArtifactBinding(ctx, u.db, binding); err != nil {
@@ -315,5 +325,14 @@ func (a gatewayStageAuthorizer) AuthorizeChannel(ctx context.Context, direction 
 	if a.stage == nil || direction != files.ChannelWrite {
 		return files.ErrTaskBindingRequired
 	}
-	return a.stage.CheckArtifactStage(ctx, a.binding.TaskID, a.binding.NodeID, a.binding.PlanID, a.binding.TargetRevision, a.binding.GatewayID)
+	return a.stage.CheckArtifactStage(ctx, a.binding.TaskID, a.binding.NodeID, a.binding.PlanID, a.binding.TargetRevision,
+		a.binding.GatewayID, a.binding.PlanDigest, a.binding.AbsolutePath, a.binding.SitePath, a.binding.SHA256)
+}
+
+// gatewayArtifactExecutionID is the stable child-execution identity domain for
+// one gateway artifact. The parent/Nginx agent execution id is never reused,
+// because the Agent ledger claims one action per execution id.
+func gatewayArtifactExecutionID(taskID, nodeID, planHash, gatewayID string) string {
+	digest := sha256.Sum256([]byte(taskID + "\x00" + nodeID + "\x00" + planHash + "\x00" + gatewayID + "\x00artifact"))
+	return "gwa-" + hex.EncodeToString(digest[:20])
 }
