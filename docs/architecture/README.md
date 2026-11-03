@@ -12,6 +12,14 @@
 
 G1 的 PLUGIN v0.3 替代旧编译期内置业务插件条款；DEPLOY v0.3 扩展全新安装 Nginx 路径；AI/PRIV 附录保留强制审批。`jobs.submit` 是历史内部能力名，当前公开候选只用 `/api/v1/tasks`。
 
-资料包未独立收录 PRIV、WC、PKI-OPS、UPDATE 的所有原始 ADR。涉及其详细实现前需从原项目归档核验；P1 不实施这些业务，也不捏造条款。历史包不展开到源码中。
+资料包未独立收录 PRIV、WC、PKI-OPS、UPDATE 的所有原始 ADR。涉及其详细规则需从原项目归档核验；P1 阶段的非业务实施边界是历史，当前已有更新/恢复等实现，但不能用实现反向补造缺失的正式条款。历史包不展开到源码中。
 
-1 vCPU / 1GB RAM 仍待硬限制/实机验收；WASM/Eino 未锁定。已有真实文件CLI/双Agent传输与三种冲突策略、文件页面、AI预算HTTP/UI与TLS生成；实际Agent签名本地更新/健康回滚、恢复运行门和cleanup原子claim有隔离证据。用户上传任务化/多目标/续传、完整产品发布、Controller更新/部署与真实灾备新权威等仍有缺口。最新状态以`../development/TASK-BOARD.md`与`../development/reviews/V09-WAVE6-R3-REVIEW.md`为准；默认缺可信配置仍拒绝，编译和静态检查不能代替运行时安全验证。
+## 当前实现与验证范围（2026-11-03）
+
+已接收产品基线为 `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立 main CI 成功，正式迁移26项。Controller/Agent、SQLite WAL、REST/SSE、WSS+mTLS、统一任务/审批/审计已有实现；真实文件CLI/双Agent多文件及三种冲突策略、文件页面、AI预算HTTP/UI与TLS生成已有验证。
+
+云端首轮补齐用户上传统一任务/审批/取消/终态对账/实际摘要；接收网关工件、独立子执行、冻结计划与持久终态CAS；Agent组件本地签名更新/健康回滚已有真实浏览器专项证据。仅这些检查点获接收，不代表全部业务已装配或G2冻结。
+
+多目标/完整续传、网关中央装配及完整发布/补偿、Controller可信更新/在线发行装配、实际灾备新权威/旧主控隔离等仍未完成。1 vCPU / 1 GB RAM、物理双机、ARM实际运行和真实外部供应商仍待验收；WASM/Eino未获Runtime准入。Xray当前全范围由WorkBuddy承担，所有权变更不代表准入获批，可选插件仍不能编入核心Release。
+
+最新状态见[任务板](../development/TASK-BOARD.md)、[当前进度](../development/sprints/v09-five-day/CURRENT-PROGRESS.md)、[云端首轮接收报告](../development/reviews/V09-CLOUD-R1-REVIEW.md)与[Cloud R2任务](../development/sprints/v09-five-day/cloud-r2/PLAN.md)。默认缺可信配置仍拒绝，编译/CI不能代替完整运行时安全与产品验收。

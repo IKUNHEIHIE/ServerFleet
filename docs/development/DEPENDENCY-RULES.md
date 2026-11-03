@@ -14,7 +14,7 @@
 | audit | storage |
 | storage / gen | 无领域反向依赖 |
 
-传输层收到事件时，通过上层组合注入的回调/适配端口交给 tasks/nodes；不得反向 import 业务包造成环。跨模块只能调用 owner 审查的端口，禁止取得其数据库表/内部 map 或绕过服务直接执行。业务模型由领域拥有；storage 管连接/事务/迁移机制，公共 schema 和迁移编号需要集成审查，P1 未建立业务数据库。
+传输层收到事件时，通过上层组合注入的回调/适配端口交给 tasks/nodes；不得反向 import 业务包造成环。跨模块只能调用 owner 审查的端口，禁止取得其数据库表/内部 map 或绕过服务直接执行。业务模型由领域拥有；storage 管连接/事务/迁移机制，公共schema和迁移编号需要集成审查。P1未建立业务数据库是历史阶段；当前SQLite业务schema已落地，正式26项迁移的既有SQL/hash不可改写，新增版本须独立审查/升级验证。
 
 Web 仅消费 Controller REST/SSE；API DTO 将来由契约适配层转换成 ViewModel。测试 fixture/mock 只能出现在 test 或 `*.test.*`；生产不得导入这些目录。`npm run check:policy` 包含前端 import 边界检查。TypeScript strict + Vite build 检查类型/模块可构建性。
 

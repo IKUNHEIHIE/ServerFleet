@@ -1,5 +1,13 @@
 # V09-CLOUD-SHARED-CI-01
 
+## 最终接收回执（2026-11-03）
+
+本共享前置已作为PR #4合并：审查head78e5e366f198379cf1cf1040d376cefe3b722259，main cce2b290536be650c8afd4a5962a1bd5a2717276。随后#1/#2/#3/#5也已分别接收；最终产品基线51e0ee57的独立main CI成功，当前正式迁移26项（本共享前置本身仍未改变当时25项）。
+
+最新范围和证据见[V09-CLOUD-R1-REVIEW](V09-CLOUD-R1-REVIEW.md)。以下是提出时的历史记录，其中“prepared/not merged”和作者Draft状态不再代表当前状态，不重放测试前置或旧补丁。完整B03/B04/B05/B06/G2和发布准入保持OPEN。
+
+## 提案时记录（保留历史）
+
 Date: 2026-11-03 (Asia/Shanghai). Coordinator/session: chatgpt-review-01.
 Base: `1ca79072232bfdcee2b9f4582ac020d4430d0c2b`.
 Branch: `integration/cloud-ci-prerequisites-review01`.
