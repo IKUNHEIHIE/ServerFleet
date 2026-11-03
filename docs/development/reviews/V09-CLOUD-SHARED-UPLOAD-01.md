@@ -16,8 +16,7 @@ The `ds/` prefix preserves historical numbering, not current author ownership.
 The additive migration adds a default-empty task binding and a nonunique index;
 it executes no file task and does not reinterpret existing upload status.
 Controller composition becomes 26 migrations, the services-only test 14.
-The source's candidate comment is historical proposal provenance; acceptance
-requires this shared PR's checks and actual merge.
+Acceptance requires this shared PR's checks and actual merge.
 
 Rollback the application without removing the additive column/index; do not
 rewrite a migration already recorded by the ledger. Test the existing database
@@ -48,3 +47,25 @@ upgrade/reapply/backup tests, full checks and security, and exact-head GitHub jo
 Record FAIL/BLOCKED/SKIP without reinterpretation. The coordinator's root-only
 container cannot certify ordinary-user actual product cases; use real runner
 logs and preserve local skips. B03/B04/B05/B06, G2 and release admission stay open.
+
+## Historical checksum correction (coordinator, 2026-11-03)
+
+The first candidate copied whitespace edits inside the adopted ds/0040 SQL from
+AM. This changes the raw migration checksum and rejects a real adopted database.
+The four previous upgrade tests rebuilt their legacy sets using current SQL,
+so their PASS did not establish compatibility with the actual older ledger.
+The coordinator reproduced FAIL with an independent frozen fixture before fixing
+it. The old SQL is now byte-for-byte preserved; only ds/0041 is appended.
+
+`cloud_upload_history_test.go` embeds `testdata/ds0040-files-adopted.json`, extracted
+from accepted main 1ca7907 (identical at cce2b29). It creates the adopted 25-entry
+ledger and an old upload, applies/reapplies all 26 migrations, and verifies the
+old checksum/status/default-empty binding remain unchanged. Adopted ds/0040 hash:
+`a7b7ed891f79d592593e1eea435d1430df94965f075458dc222d1a435fe210f7`.
+No checksum algorithm, migration version, historical ledger or safety check is
+relaxed. The earlier candidate and its CI are superseded and must not be merged.
+AM's later main synchronization must retain this exact migration definition.
+
+The branch also normally merges reviewed main 8b10e32 and removes only trailing
+blank EOF lines from two already merged WorkBuddy handoff documents, so a later
+branch synchronization passes git diff --check. Historical evidence is preserved.
