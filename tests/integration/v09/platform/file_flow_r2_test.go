@@ -57,9 +57,9 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Geteuid() == 0 {
 		t.Skip("actual non-root Linux Controller plus two Agent processes")
 	}
-	agentBinary := os.Getenv("SF_R2_AGENT_BINARY")
-	if !filepath.IsAbs(agentBinary) {
-		t.Fatal("explicit prebuilt actual Agent binary is required")
+	agentBinary, ok := explicitBinary("SF_R2_AGENT_BINARY", "agent")
+	if !ok {
+		_, agentBinary, _, _ = buildActualProducts(t)
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 160*time.Second)
 	defer cancel()

@@ -135,9 +135,16 @@ func TestR3TrustedFileDeploymentActualControllerAndTwoAgentCLI(t *testing.T) {
 	if runtime.GOOS != "linux" || os.Geteuid() == 0 {
 		t.Skip("non-root local Linux CLI deployment")
 	}
-	controller, agent := os.Getenv("SF_R3_CONTROLLER_BINARY"), os.Getenv("SF_R3_AGENT_BINARY")
-	if !filepath.IsAbs(controller) || !filepath.IsAbs(agent) {
-		t.Skip("explicit prebuilt actual Controller/Agent required")
+	controller, okController := explicitBinary("SF_R3_CONTROLLER_BINARY", "controller")
+	agent, okAgent := explicitBinary("SF_R3_AGENT_BINARY", "agent")
+	if !okController || !okAgent {
+		builtController, builtAgent, _, _ := buildActualProducts(t)
+		if !okController {
+			controller = builtController
+		}
+		if !okAgent {
+			agent = builtAgent
+		}
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Second)
 	defer cancel()
