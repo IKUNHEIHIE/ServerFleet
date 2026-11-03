@@ -63,15 +63,32 @@ $ gh api repos/XTLS/Xray-core/attestations/sha256:e4bd9119...b214
 
 > 紧急安全更新：[由于 Linux 内核刚被爆出监听 IPv4 MPTCP 极易被远程拿 root，且 Go 1.24+ 默认开了 MPTCP]，本版本默认关闭了 MPTCP 以显著减小攻击面（**v26.10.29 让位，已被撤版**），用户应尽快升级到该版本……
 
-## E-06 工件字节校验（linux/amd64）
+## E-06 工件字节校验（linux/amd64）—— 已完成
 
-`artifact-sha256`：见 `ARTIFACT-ADMISSION.md` §3 与下方“下载结果”；仅当本地 `sha256sum` 与 E-02 一致才记 PASS。**不执行该二进制**（Runtime 未准入）。
+```
+# 首段下载在 15,228,928/16,692,690 B 处停滞，用 HTTP Range(206) 补齐尾部
+$ curl -H "Range: bytes=15228928-" … → 206，追加 1,463,762 B
+$ stat -c%s ev/Xray-linux-64.zip → 16692690
+$ sha256sum ev/Xray-linux-64.zip
+e4bd9119f50ae7c41658b1abd0679ae06f98bd864a2907ff33f2f2cf7081b214  ev/Xray-linux-64.zip
+# 与 GitHub asset.digest 完全一致 → PASS（仅完整性/来源字节层面）
+$ unzip -l … → geosite.dat / LICENSE / README.md / geoip.dat / xray(35,151,996 B)
+$ sha256sum ev/xray/xray
+cc4b84d3069569f297a61f04b914f2bb37e9d202fd7b84cb50def1fc30fd40e1
+$ go version -m ev/xray/xray → go1.27.3，github.com/xtls/xray-core (devel)
+```
+**未执行该二进制**（未 `run -test`、未启动、未监听）。
 
-下载结果：**未在本次会话窗口内完成**（16.7 MB，实测约 10–20 KB/s）。因此：
-- `sha256sum` 本地比对：**UNTESTED（未完成）**
-- 二进制 govulncheck（v26.10.31）：**UNTESTED（未完成）**
+## E-06b 二进制漏洞扫描（v26.10.31 linux/amd64）
 
-> 该项不得用“GitHub 提供 digest”推定本地字节一致；也不是“已扫描安全”。
+```
+$ govulncheck -mode=binary ev/xray/xray   → EXIT 3
+Vulnerability #1: GO-2026-6866  golang.org/x/net@v0.61.0    fixed v0.62.0
+Vulnerability #2: GO-2026-6860  golang.org/x/net@v0.61.0    fixed v0.62.0
+Vulnerability #3: GO-2026-5932  golang.org/x/crypto@v0.58.0 (openpgp)
+→ "Your code is affected by 3 vulnerabilities from 2 modules."（44 行原始日志）
+```
+结论：**FAIL**（项目规则：扫描非零即不得作为安装目标）。符号为 `html.Parse*` 与 `openpgp/*`；可达性未评审，也不以“看似不可达”豁免。
 
 ## E-07 项目自检（本包改动后）
 
@@ -117,3 +134,5 @@ Tests 17 passed (17)
 - 浏览器 Live/Stub 专项（Playwright/fixturehost）：**UNTESTED**（本检查点仅组件测试）。
 - AC-01—24 严格矩阵重跑：**BLOCKED**（需最终组合 SHA + 非 root 环境；本环境 7 项既有 FAIL 使严格模式必然非零）。
 - 任何 Xray 进程启动/安装/部署：**未发生**（Runtime 未准入）。
+- arm64 工件下载/扫描/运行：**UNTESTED**（无 ARM 实机；不以交叉构建代替）。
+- 漏洞可达性调用图评审：**未做**（需真实配置路径与安全负责人判定）。

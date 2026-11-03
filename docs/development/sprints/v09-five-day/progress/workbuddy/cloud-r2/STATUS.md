@@ -10,7 +10,7 @@
 | 1 | 异步上传任务 Web 闭环（202/dispatching/taskId、刷新读回、取消、403/409/大小/摘要/UNKNOWN 文案） | `apps/web/src/features/files/upload-queue.ts`、`files-page.tsx`、`lib/api/dto.ts`、`lib/api/endpoints.ts` | `npm run check:web` 40 files / **361 tests PASS**（其中新增 13 项：11 纯逻辑 + 2 页面闭环） |
 | 2 | Xray 配额/进程重置业务状态机 | `plugins/xray-manager/quota.go` | `go test ./plugins/xray-manager/` 新增 9 项 PASS |
 | 3 | Xray 节点选择/批量审批/波次计划与 plan digest | `plugins/xray-manager/batch.go` | 同上，新增 6 项 PASS（含 digest 稳定性、目标漂移、接管审批） |
-| 4 | B03 工件/准入差距包 | `ARTIFACT-ADMISSION.md` | 官方 API 实时抓取 + 工件 SHA 校验（见 `EVIDENCE-INDEX.md`） |
+| 4 | B03 工件/准入差距包 | `ARTIFACT-ADMISSION.md` | 官方 API 抓取 + 工件本地 SHA256 与 digest 一致（PASS）+ govulncheck `-mode=binary` exit 3 / 3 项（FAIL）；**未执行工件** |
 | 5 | 中央接缝精确候选（未自行改公共文件） | `CANDIDATES.md` | — |
 
 **未做（明确不做假）**：Xray 安装/部署/重启仍未接线（`XRAY_RUNTIME_UNAVAILABLE` / 任务提交缺失），因为所需的统一任务动作类型属于 `internal/tasks`（AM 独占）与受控 Host，本包不得改；未运行任何 Xray 工件；未把 preview/健康 200/202 当成功。
@@ -45,8 +45,8 @@ Go 测试顶层统计（`reports/go-tests.log`）：**899 PASS / 19 SKIP / 7 FAI
 |---|---|---|
 | B03-01 固定版本 `v26.10.29` 可核 | BLOCKED | 上游已撤版（404）；官方 v26.10.31 说明原文“v26.10.29 让位，已被撤版” |
 | B03-02 上游签名/来源证明 | BLOCKED | 上游仅提供未签名 `.dgst`；无 `.sig/.asc/.sbom/.intoto`；GitHub attestations 404 |
-| B03-03 工件准入（linux/amd64） | BLOCKED | 校验和一致（PASS）但缺签名且在跑扫描未完成 |
-| B03-04 v26.10.31 二进制扫描 | UNTESTED | 本环境网络窗口内未完成 16.7 MB 工件下载/扫描 |
+| B03-03 工件准入（linux/amd64） | BLOCKED | 校验和一致（PASS），但**无签名**且二进制扫描 **FAIL**（exit 3 / 3 项） |
+| B03-04 v26.10.31 二进制扫描 | **FAIL** | GO-2026-6866、GO-2026-6860（x/net v0.61.0）、GO-2026-5932（x/crypto openpgp） |
 | B03-05 arm64 运行 | UNTESTED | 无 ARM 实机；交叉构建不算运行 |
 | B06-01 Xray 安装/部署/重启真实链路 | BLOCKED | 缺统一任务动作类型（AM 域）与受控 Host 准入；本包不改 `internal/tasks` |
 | B05-x 更新/发布/恢复真实宿主 | BLOCKED | AM/HW 正式接口未合入本分支基线（`UpdateProduct` 存在，但宿主验收需真实组合） |

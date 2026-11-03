@@ -13,9 +13,9 @@
 | 旧固定目标 `v26.6.1` 性质 | `prerelease=**true**`（2026-06-01 发布），非稳定发布 | releases API |
 | 许可证 | `MPL-2.0` | `GET /repos/XTLS/Xray-core` → `license.spdx_id` |
 | 上游签名/证明 | **无**。仅有 `.dgst` 校验和文本（MD5/SHA1/SHA256/SHA512），无 `.sig/.asc/.pem/.sbom/.intoto` 资产；GitHub attestations 查询 404 | 资产枚举 + `.dgst` 内容 + attestations API |
-| Linux amd64 字节与官方 digest 一致性 | **PASS（仅校验和层面）** | 下载后本地 `sha256sum` 与 GitHub `asset.digest` 比对 |
+| Linux amd64 字节与官方 digest 一致性 | **PASS（仅校验和层面）** | 本地 `sha256sum` = `e4bd9119…b214`，与 GitHub `asset.digest` 完全一致（16,692,690 B） |
 | 官方已知安全背景 | v26.10.31 为**紧急安全更新**：Linux 内核 IPv4 MPTCP 可被远程拿 root，Go 1.24+ 默认开启 MPTCP，该版默认关闭 MPTCP 并建议尽快升级 | release body 原文 |
-| 二进制漏洞扫描（当前稳定版） | **UNTESTED（本环境未完成）** | 见 §5 |
+| 二进制漏洞扫描（当前稳定版 v26.10.31） | **FAIL（exit 3，3 项，2 个模块）** | govulncheck 1.9.0 `-mode=binary`，见 §5 |
 | Linux arm64 运行验证 | **UNTESTED** | 无 ARM 实际环境，禁止用交叉构建冒充运行 |
 | 运行/安装/默认启用 | **未发生** | Runtime 未获准入，插件保持执行关闭 |
 
@@ -73,7 +73,30 @@ SHA2-512= d507c15ae81f4d658b8bd70070c1e17085b46c0512f4f4030d0e35240bbbe18caecbe7
 2. 由主控指定可信镜像/自建构建并签名（属于新的供应链工程，不在本包范围）；
 3. 维持 BLOCKED，插件只保留静态校验与拒绝路径。
 
-## 5. 漏洞与安全背景
+## 5. 本轮实测：v26.10.31 linux/amd64 二进制（未执行该程序）
+
+```
+$ sha256sum ev/Xray-linux-64.zip
+e4bd9119f50ae7c41658b1abd0679ae06f98bd864a2907ff33f2f2cf7081b214  Xray-linux-64.zip
+$ sha256sum ev/xray/xray
+cc4b84d3069569f297a61f04b914f2bb37e9d202fd7b84cb50def1fc30fd40e1
+$ go version -m ev/xray/xray
+ev/xray/xray: go1.27.3
+    path  github.com/xtls/xray-core/main
+    mod   github.com/xtls/xray-core  (devel)
+$ govulncheck -mode=binary ev/xray/xray   → EXIT 3
+Vulnerability #1: GO-2026-6866  x/net@v0.61.0  (fixed v0.62.0)
+Vulnerability #2: GO-2026-6860  x/net@v0.61.0  (fixed v0.62.0)
+Vulnerability #3: GO-2026-5932  x/crypto@v0.58.0 openpgp（无维护；修复版本为伪版本）
+→ "Your code is affected by 3 vulnerabilities from 2 modules."
+```
+
+判读（不夸大、不缩小）：
+- 三项是**符号级**发现：`html.Parse*`（x/net）与 `openpgp/*`（x/crypto）。在“仅 vless/tls | reality 入站”的典型服务端路径上，`html.Parse` 与 openpgp 未必可达，但**本包无权据此自行豁免**；可达性判定需要真实配置路径与调用图评审。
+- 扫描 `exit 3` 按项目规则即 **不得作为安装目标**；它与“有漏洞但不可达”是两个不同结论，不能互相替代。
+- 本次**没有执行**该二进制（未 `xray run -test`、未启动进程、未监听端口）：Runtime 未准入。
+
+## 5b. 历史与安全背景
 
 - 历史（项目已有记录，非本轮重跑）：固定 govulncheck 1.9.0 `-mode=binary` 对 **v26.6.1** Windows amd64 扫描 exit 3、55 项符号级发现；对 **v26.10.29** exit 3、3 项（GO-2026-6866、GO-2026-6860 的 `x/net v0.61.0`，修复版 v0.62.0；GO-2026-5932 `x/crypto v0.58.0` openpgp，无修复版本）。
 - 本轮新增事实：官方 v26.10.31 说明属于**紧急安全更新**，起因是 Linux 内核 IPv4 MPTCP 可被远程利用拿 root，而 Go 1.24+ 默认启用 MPTCP；该版默认关闭 MPTCP 以缩小攻击面。这使“继续停在旧固定版本”本身成为风险决策。
@@ -85,8 +108,8 @@ SHA2-512= d507c15ae81f4d658b8bd70070c1e17085b46c0512f4f4030d0e35240bbbe18caecbe7
 |---|---|---|---|
 | B03-01 | 固定版本 `v26.10.29` 来源与 SHA 可核 | BLOCKED | 上游已撤版，404；无对象可核 |
 | B03-02 | 上游签名/来源证明 | BLOCKED | 上游仅提供未签名 `.dgst`，无 attestation（404），非本包可弥补 |
-| B03-03 | Linux amd64 工件准入 | BLOCKED | 校验和可核（PASS），但缺签名且在跑扫描未完成 → 不得认定准入 |
-| B03-04 | Linux amd64 二进制漏洞扫描（v26.10.31） | UNTESTED | 本环境下载 16.7 MB 工件耗时>网络窗口，未完成扫描；不得外推旧结果 |
+| B03-03 | Linux amd64 工件准入 | BLOCKED | 校验和一致（PASS）但**无签名**且二进制扫描 **FAIL**（3 项）→ 不得认定准入 |
+| B03-04 | Linux amd64 二进制漏洞扫描（v26.10.31） | **FAIL** | exit 3：GO-2026-6866、GO-2026-6860（x/net v0.61.0→修复 v0.62.0）、GO-2026-5932（x/crypto openpgp，无维护） |
 | B03-05 | Linux arm64 运行验证 | UNTESTED | 无 ARM 实机/权限；交叉构建不算运行证据 |
 | B03-06 | 安装/启用/默认启用 | 未发生 | Runtime 未获准入，遵守“未准入不运行、不默认启用” |
 | B03-07 | 版本选择本身 | BLOCKED | 停在已撤版=已知风险；升到 26.10.31=新版本需重新扫描+验证，需主控决策 |
