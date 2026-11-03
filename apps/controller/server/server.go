@@ -69,6 +69,9 @@ type Config struct {
 	AgentFrameBytes  int
 	AgentFileGate    transport.FileFrameGate
 	FileExecution    *FileExecutionConfig
+	// GatewayDeployment is the trusted startup document for Agent-side nginx
+	// roots and certificate install paths. Nil keeps the gateway chain closed.
+	GatewayDeployment *GatewayDeployment
 
 	// Optional signed plugin package trust. Empty maps keep installation closed.
 	PluginTrustKeys         map[string]ed25519.PublicKey
@@ -201,6 +204,7 @@ func Migrations() [][]storage.Migration {
 		},
 		aiR1Migration("cx/0007_ai_budgets_and_model_audit"),
 	}
+	cxMigrations = append(cxMigrations, GatewayArtifactMigrations()...)
 	return [][]storage.Migration{
 		cxMigrations,
 		nodes.Migrations(),
@@ -626,6 +630,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	s.Nodes = nodesService
+	var gatewayChain *gatewayWiring
+	if cfg.GatewayDeployment != nil {
+		gatewayChain, err = newGatewayWiring(ctx, db, cfg.GatewayDeployment)
+		if err != nil {
+			return cleanup(err)
+		}
+		if cfg.FileExecution == nil || cfg.EnrollmentIssuer == nil || cfg.AgentAuthority == "" {
+			return cleanup(ErrGatewayDeployment)
+		}
+	}
 	if cfg.FileExecution != nil {
 		if cfg.AgentFileGate != nil || cfg.EnrollmentIssuer == nil || cfg.AgentAuthority == "" {
 			return cleanup(files.ErrTransferExecution)
@@ -636,9 +650,39 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 		cfg.AgentFileGate = s.FileWorker.Gate
 	}
+	if gatewayChain != nil {
+		if cfg.AgentFileGate == nil {
+			return cleanup(ErrGatewayDeployment)
+		}
+		cfg.AgentFileGate = composeGatewayFileGate(gatewayChain.artifactGate, cfg.AgentFileGate)
+	}
 	agentBridge, err := s.setupAgentTransport(cfg, nodesService, tasksRepo)
 	if err != nil {
 		return cleanup(err)
+	}
+	if gatewayChain != nil {
+		if agentBridge == nil || s.AgentFiles == nil || cfg.FileExecution == nil {
+			return cleanup(ErrGatewayDeployment)
+		}
+		channel, e := NewGatewayWSSChannel(s.AgentFiles)
+		if e != nil {
+			return cleanup(e)
+		}
+		gatewayChain.uploader, e = NewGatewayChannelUploaderWithMapper(channel, cfg.FileExecution.Paths, db, gatewayChain.stage)
+		if e != nil {
+			return cleanup(e)
+		}
+		gatewayChain.dispatcher, e = newGatewayTaskDispatcher(gatewayExecutionConfig{
+			Repo: tasksRepo, DB: db, Plans: publishingRepo, Artifacts: gatewayChain.uploader,
+			Next: agentBridge, Authorizer: authorizer, Nodes: nodesRepo,
+			Registry: gatewayChain.registry, Now: now,
+		})
+		if e != nil {
+			return cleanup(e)
+		}
+		if e := gatewayChain.stage.Bind(gatewayChain.dispatcher); e != nil {
+			return cleanup(e)
+		}
 	}
 
 	eligibility := &composedEligibility{nodes: nodesRepo, gateways: gatewayRepo, db: db, now: now}
@@ -660,7 +704,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 
 	nodeLookup := &composedNodeLookup{nodes: nodesRepo, now: now}
 	dispatcher := cfg.Dispatcher
-	if dispatcher == nil && agentBridge != nil {
+	if gatewayChain != nil {
+		if dispatcher != nil {
+			return cleanup(errors.New("controller: gateway wiring cannot share a supplied dispatcher"))
+		}
+		dispatcher = gatewayChain.dispatcher
+	} else if dispatcher == nil && agentBridge != nil {
 		dispatcher = agentBridge
 	}
 	workers := map[string]tasks.Worker{}
@@ -876,11 +925,39 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	productionBridge := publishing.LocalBridge{}
+	if gatewayChain != nil {
+		if e := gatewayChain.validate(ctx, gatewayRepo, db, cfg.FileExecution.Paths); e != nil {
+			return cleanup(e)
+		}
+		composed, _, e := NewProductionPublishingBridge(ProductionPublishingConfig{
+			Plans: publishingRepo, DNS: dnsService, Certificates: certificatesService,
+			Gateways: gatewayService, Nodes: nodesRepo, ServiceGroups: serviceGroupsRepo,
+			Tasks: tasksService, TasksRepo: tasksRepo, DB: db,
+			Artifacts: gatewayChain.uploader, NextDispatcher: agentBridge, Authorizer: authorizer,
+			Dispatcher: gatewayChain.dispatcher, Registry: gatewayChain.registry,
+			CertificatePath: gatewayChain.deployment.Certificates, GatewayPaths: gatewayChain.deployment.Gateways,
+			Now: now,
+		})
+		if e != nil {
+			return cleanup(e)
+		}
+		productionBridge = composed
+		observer, e := NewGatewayArtifactObserver(db, gatewayChain.dispatcher)
+		if e != nil {
+			return cleanup(e)
+		}
+		agentBridge.gatewayChild = observer
+	}
+
 	s.CertificateCleanup, err = certificates.NewCleanupJournal(certificates.CleanupJournalOptions{DB: db, Audit: auditRecorder, Authorizer: authorizer, Cleaner: cfg.CertificateCleanupCleaner, Now: now})
 	if err != nil {
 		return cleanup(err)
 	}
 	pubBridge := publishing.NewLocalBridge(cfg.PublishingBridge)
+	if gatewayChain != nil {
+		pubBridge = productionBridge
+	}
 	publishingService, err := publishing.NewService(publishing.Options{
 		DB:           db,
 		Repo:         publishingRepo,

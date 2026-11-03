@@ -38,12 +38,12 @@ const gatewayArtifactBindingsSchema = `CREATE TABLE IF NOT EXISTS gateway_artifa
 	updated_at TEXT NOT NULL
 )`
 
-// GatewayArtifactMigrations is the candidate migration for central wiring. It
-// must be added to Migrations() by the controller owner with an allocated
-// version; this task never occupies a shared number or edits history.
+// GatewayArtifactMigrations is the allocated central migration cx/0010 for the
+// durable gateway artifact binding table. It is registered only by the shared
+// wiring candidate and preserves every historical SQL byte and checksum.
 func GatewayArtifactMigrations() []storage.Migration {
 	return []storage.Migration{{
-		Version:    "cx/CANDIDATE_gateway_artifact_bindings",
+		Version:    "cx/0010_gateway_artifact_bindings",
 		Name:       "durable gateway artifact task/execution/transfer/plan bindings",
 		Statements: []string{gatewayArtifactBindingsSchema},
 	}}

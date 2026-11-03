@@ -12,6 +12,7 @@ import (
 	"unicode/utf8"
 
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
+	"serverfleet.local/serverfleet/internal/gateway"
 	"serverfleet.local/serverfleet/internal/nodes"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
@@ -26,6 +27,17 @@ func agentAllowedActions() map[string]string {
 		"host.patch":             "1",
 		"host.root":              "1",
 	}
+}
+
+// allowedActions adds the two typed gateway actions only after the trusted
+// gateway wiring has installed its real child observer and artifact channel.
+func (b *agentLinkBridge) allowedActions() map[string]string {
+	allowed := agentAllowedActions()
+	if b != nil && b.gatewayChild != nil {
+		allowed[gateway.NginxActionApply] = "1"
+		allowed[gateway.NginxActionRemove] = "1"
+	}
+	return allowed
 }
 
 func agentValidationLimits() transport.ValidationLimits {
@@ -55,6 +67,7 @@ type agentLinkBridge struct {
 	links        *transport.ControllerLinks
 	files        *transport.FileClient
 	fileWorker   *FileExecutionWorker
+	gatewayChild *GatewayArtifactObserver
 	now          func() time.Time
 
 	seqMu     sync.Mutex
@@ -73,7 +86,7 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	if err != nil || node.Status == nodes.StatusRevoked || node.Status == nodes.StatusSuspended {
 		return nil, transport.ErrLinkRejected
 	}
-	allowed := agentAllowedActions()
+	allowed := b.allowedActions()
 	granted := make([]string, 0, len(hello.CapabilityIds))
 	for _, capability := range hello.CapabilityIds {
 		if allowed[capability] != "" && (capability != transport.FileCapability || b.files != nil) {
@@ -105,7 +118,7 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	if task.PlanHash != offer.GetPlanDigestSha256() || task.ActionID != offer.GetActionId() || task.PluginID != offer.GetPluginId() {
 		return transport.ErrLinkRejected
 	}
-	if agentAllowedActions()[task.ActionID] != offer.GetActionSchemaVersion() {
+	if b.allowedActions()[task.ActionID] != offer.GetActionSchemaVersion() {
 		return transport.ErrLinkRejected
 	}
 	found := false
@@ -150,7 +163,18 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 			return nil
 		}
 	}
-	if fileChild {
+	var gatewayChild bool
+	if b.gatewayChild != nil {
+		owned, err := b.gatewayChild.Observe(ctx, observation, envelope)
+		if err != nil {
+			return err
+		}
+		gatewayChild = owned
+	}
+	// The child observer only records the artifact transfer lifecycle. TaskAck
+	// has already been delivered to FileSession above, so it is never swallowed;
+	// the parent task is not touched here.
+	if fileChild || gatewayChild {
 		return nil
 	}
 	if output := envelope.GetTaskOutput(); output != nil {
@@ -411,7 +435,7 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		TimeoutSeconds:          300,
 		ScopeRevision:           task.ScopeRevision,
 		PluginId:                task.PluginID,
-		ActionSchemaVersion:     agentAllowedActions()[command.ActionID],
+		ActionSchemaVersion:     b.allowedActions()[command.ActionID],
 	}
 	envelope := &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: offer}}
 	err = b.links.Send(ctx, command.NodeID, envelope)
