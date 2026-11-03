@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"google.golang.org/protobuf/proto"
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/storage/testkit"
@@ -143,17 +144,17 @@ func TestComposeGatewayFileGateRoutesOnlyPersistedReservations(t *testing.T) {
 	if delegated != 0 {
 		t.Fatalf("gateway reservation reached the file worker gate: %d", delegated)
 	}
-	foreign := *offer
+	foreign := proto.Clone(offer).(*agentv1.TaskOffer)
 	foreign.ExecutionId = "gwa-two"
-	if err := composed(ctx, observation, &foreign, &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: &foreign}}); err != nil {
+	if err := composed(ctx, observation, foreign, &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: foreign}}); err != nil {
 		t.Fatal(err)
 	}
 	if delegated != 1 {
 		t.Fatalf("unrelated file offer bypassed the file gate: %d", delegated)
 	}
-	mismatched := *offer
+	mismatched := proto.Clone(offer).(*agentv1.TaskOffer)
 	mismatched.PlanDigestSha256 = gatewayContentDigest([]byte("other-plan"))
-	if err := composed(ctx, observation, &mismatched, &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: &mismatched}}); err == nil {
+	if err := composed(ctx, observation, mismatched, &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: mismatched}}); err == nil {
 		t.Fatal("mismatched plan digest was accepted by the gateway gate")
 	}
 }
