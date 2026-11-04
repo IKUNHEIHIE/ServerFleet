@@ -98,27 +98,53 @@ func resetRequest() ProcessResetRequest {
 		OperatorID:    "admin-1",
 		TaskID:        "task-1",
 		SourcePresent: true,
+		Direction:     QuotaTotal,
 	}
 }
 
 func TestPlanProcessResetFreezesConsumedTotals(t *testing.T) {
+	// 段内 offset=100/50，观察值 140/70 → 本段已用 60；窗口内已结算 120。
+	// 冻结后新段从 0 开始，因此 180 全部进入 ConsumedBytes。
 	known := QuotaBaseline{
 		Uplink: 100, Downlink: 50, ConsumedBytes: 120, SegmentID: "seg-1",
 		WindowStart: time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC),
 	}
-	outcome, err := PlanProcessReset(resetRequest(), Baseline{Generation: 1, SegmentID: "seg-1"}, known,
-		QuotaUsage{Available: true, Uplink: 40, Downlink: 20, SegmentID: "seg-1", At: at(4)})
+	usage := QuotaUsage{Available: true, Uplink: 140, Downlink: 70, SegmentID: "seg-1", At: at(4)}
+	before, err := EvaluateQuota(quotaPolicy(), known, usage, at(4))
+	if err != nil {
+		t.Fatalf("evaluate: %v", err)
+	}
+	outcome, err := PlanProcessReset(resetRequest(), Baseline{Generation: 1, SegmentID: "seg-1"}, known, usage)
 	if err != nil {
 		t.Fatalf("plan: %v", err)
 	}
 	if outcome.AccountingUnknown {
 		t.Fatalf("accounting must stay known: %+v", outcome)
 	}
-	if outcome.Baseline.Uplink != 140 || outcome.Baseline.Downlink != 70 || outcome.Baseline.SegmentID != "seg-2" {
-		t.Fatalf("baseline not frozen correctly: %+v", outcome.Baseline)
+	if outcome.Baseline.Uplink != 0 || outcome.Baseline.Downlink != 0 {
+		t.Fatalf("new segment offsets must restart at zero: %+v", outcome.Baseline)
 	}
-	if outcome.Generation != 2 || outcome.SegmentID != "seg-2" {
-		t.Fatalf("generation wrong: %+v", outcome)
+	if outcome.Baseline.ConsumedBytes != before.UsedBytes {
+		t.Fatalf("frozen baseline must carry the settled total: baseline=%+v before=%+v", outcome.Baseline, before)
+	}
+	if outcome.Baseline.SegmentID != "seg-2" || outcome.Generation != 2 || outcome.SegmentID != "seg-2" {
+		t.Fatalf("generation/segment wrong: %+v", outcome)
+	}
+	after, err := EvaluateQuota(quotaPolicy(), outcome.Baseline,
+		QuotaUsage{Available: true, Uplink: 1, SegmentID: "seg-2", At: at(5)}, at(5))
+	if err != nil {
+		t.Fatalf("evaluate after reset: %v", err)
+	}
+	if after.Unknown || after.UsedBytes != before.UsedBytes+1 {
+		t.Fatalf("reset must not lose accounting: before=%+v after=%+v", before, after)
+	}
+}
+
+func TestPlanProcessResetRequiresDirection(t *testing.T) {
+	request := resetRequest()
+	request.Direction = ""
+	if _, err := PlanProcessReset(request, Baseline{Generation: 1}, QuotaBaseline{}, QuotaUsage{Available: true}); !errors.Is(err, ErrQuotaSpec) {
+		t.Fatalf("want ErrQuotaSpec for missing direction, got %v", err)
 	}
 }
 
@@ -181,12 +207,25 @@ func TestWindowRolloverResetsConsumedButNotLifetime(t *testing.T) {
 	if next.ConsumedBytes != 0 {
 		t.Fatalf("window consumption must restart: %+v", next)
 	}
-	if next.Uplink != 12 || next.Downlink != 8 {
-		t.Fatalf("lifetime counters must accumulate: %+v", next)
+	// 新窗口锚定在当前绝对计数上：2/3 是新窗口的 offset，不是累加值。
+	if next.Uplink != 2 || next.Downlink != 3 {
+		t.Fatalf("new window must be anchored on current counters: %+v", next)
+	}
+	after, err := EvaluateQuota(policy, next, QuotaUsage{Available: true, Uplink: 12, Downlink: 3}, at(6))
+	if err != nil {
+		t.Fatalf("evaluate after rollover: %v", err)
+	}
+	if after.Unknown || after.UsedBytes != 10 {
+		t.Fatalf("new window must charge only post-rollover bytes: %+v (baseline=%+v)", after, next)
 	}
 
 	// Replaying the same rollover time must not grant a second window.
 	if _, err := WindowRollover(policy, next, QuotaUsage{Available: true}, at(5)); !errors.Is(err, ErrQuotaSpec) {
 		t.Fatalf("want ErrQuotaSpec for non-elapsed window, got %v", err)
+	}
+	// Without an authenticated read the window must not be rolled over: zeroing
+	// accounting on a missing source would forgive usage.
+	if _, err := WindowRollover(policy, baseline, QuotaUsage{Available: false}, at(5)); !errors.Is(err, ErrQuotaSpec) {
+		t.Fatalf("want ErrQuotaSpec for missing source, got %v", err)
 	}
 }

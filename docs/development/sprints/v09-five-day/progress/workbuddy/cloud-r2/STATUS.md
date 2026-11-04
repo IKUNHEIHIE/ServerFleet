@@ -7,8 +7,8 @@
 
 | # | 内容 | 位置 | 证据 |
 |---|---|---|---|
-| 1 | 异步上传任务 Web 闭环（202/dispatching/taskId、刷新读回、取消、403/409/大小/摘要/UNKNOWN 文案） | `apps/web/src/features/files/upload-queue.ts`、`files-page.tsx`、`lib/api/dto.ts`、`lib/api/endpoints.ts` | `npm run check:web` 40 files / **361 tests PASS**（其中新增 13 项：11 纯逻辑 + 2 页面闭环） |
-| 2 | Xray 配额/进程重置业务状态机 | `plugins/xray-manager/quota.go` | `go test ./plugins/xray-manager/` 新增 9 项 PASS |
+| 1 | 异步上传任务 Web 闭环（202/dispatching/taskId、刷新读回、取消、403/409/大小/摘要/UNKNOWN 文案） | `apps/web/src/features/files/upload-queue.ts`、`files-page.tsx`、`lib/api/dto.ts`、`lib/api/endpoints.ts` | `npm run check:web` 41 files / **377 tests PASS**（R2 返修后重跑，见 §7） |
+| 2 | Xray 配额/进程重置业务状态机 | `plugins/xray-manager/quota.go` | `go test ./plugins/xray-manager/` 44 项 PASS / 3 项 SKIP（真实二进制），含 R2 组合回归 |
 | 3 | Xray 节点选择/批量审批/波次计划与 plan digest | `plugins/xray-manager/batch.go` | 同上，新增 6 项 PASS（含 digest 稳定性、目标漂移、接管审批） |
 | 4 | B03 工件/准入差距包 | `ARTIFACT-ADMISSION.md` | 官方 API 抓取 + 工件本地 SHA256 与 digest 一致（PASS）+ govulncheck `-mode=binary` exit 3 / 3 项（FAIL）；**未执行工件** |
 | 5 | 中央接缝精确候选（未自行改公共文件） | `CANDIDATES.md` | — |
@@ -20,13 +20,13 @@
 ```
 $ npm ci                     → added 127 packages（npm 11.19.1，Node 24.22.1）
 $ npm run tools:install      → protoc-gen-go / staticcheck / govulncheck 1.9.0 / actionlint 安装成功
-$ npm run check:web          → Test Files 40 passed (40) | Tests 361 passed (361)
+$ npm run check:web          → Test Files 41 passed (41) | Tests 377 passed (377)
 $ npm run check:security     → npm audit: found 0 vulnerabilities；govulncheck ./...: No vulnerabilities found
 $ go test ./plugins/xray-manager/ → ok（新增 batch/quota 全 PASS；3 项真实二进制测试保持 SKIP：未提供固定二进制）
 $ npm run check:go           → FAIL（exit 1），详见 §3
 ```
 
-Go 测试顶层统计（`reports/go-tests.log`）：**899 PASS / 19 SKIP / 7 FAIL**（含子测试 2113 PASS / 21 SKIP / 7 FAIL）。
+Go 测试顶层统计（`reports/go-tests.log`，R2 返修后）：**910 PASS / 19 SKIP / 7 FAIL**（FAIL 集合与 CP1 完全一致，见 §3.1）。
 
 ## 3. 失败与阻塞（不隐瞒、不吞掉）
 
@@ -51,6 +51,19 @@ Go 测试顶层统计（`reports/go-tests.log`）：**899 PASS / 19 SKIP / 7 FAI
 | B06-01 Xray 安装/部署/重启真实链路 | BLOCKED | 缺统一任务动作类型（AM 域）与受控 Host 准入；本包不改 `internal/tasks` |
 | B05-x 更新/发布/恢复真实宿主 | BLOCKED | AM/HW 正式接口未合入本分支基线（`UpdateProduct` 存在，但宿主验收需真实组合） |
 | AC 严格模式 | BLOCKED | 需最终组合 SHA + 非 root 环境重跑，本环境 7 项既有 FAIL 使严格模式必然非零 |
+
+### 3.3 主控首审返修（V09-CLOUD-REVIEW-R2-01，W1—W4）
+
+受审 head `3eacd28`；返修后语义变化与对应回归如下（全部在本包内完成，未改公共文件、未改 CI 门槛）。
+
+| # | 问题 | 修复后的语义 | 回归 |
+|---|---|---|---|
+| W1 [P1] | 缓存 `completed` 冒充当前已验证事实 | 持久存储**只存身份元数据**（uploadId/name/taskId/expectedSize），`loadPendingUploads` 一律返回 `evidence:"unverified"`+`status:"unknown"`；`claimsRemoteCompletion` 要求 `evidence==="verified" && status==="completed"`；401/403/404/5xx/网络失败把记录降级为 forbidden/not_found/unavailable 并作废旧 completed；`describeUploadStatus` 逐类给出“未核验/无权限/UNKNOWN/读取失败”文案 | `upload-queue.test.ts` 21 项；`review-cloud-r2.test.tsx` 4 项（缓存 completed+403、读回未落定、5xx、404） |
+| W2 [P1] | 切节点后旧异步读回覆盖新面板 | 记录带 `nodeId`+`epoch`(viewEpoch)；`refreshPending(nodeId, epoch, signal)` 用 AbortController 绑定作用域，`scopeIsCurrent` 通过后才提交；节点/身份变化整体作废旧在途请求；结果合并进**最新**列表（并发新增上传不丢）；`cancelPending` 校验当前节点/身份/`writesLocked`/写权限 | `review-cloud-r2.test.tsx` 2 项（A 挂起→切 B→A 回来；B 自身缓存 completed 也不得直接显示完成）、`isCurrentScope`/`mergeObservations` 纯逻辑 |
+| W3 [P1] | 重置/换窗基线与 `EvaluateQuota` 语义冲突 | 统一为 `UsedBytes = (current − SegmentOffset) + SettledBytes`：`PlanProcessReset` 新增**必填 Direction**，把段内用量折算进 `ConsumedBytes` 并把 offset 归零（新进程从 0 计数）；`WindowRollover` 用**当前绝对计数**作新窗口 offset、`ConsumedBytes=0`；缺来源/段不匹配/计数器倒退一律返回未知且**不清零**；`EvaluateQuota` 增加段一致性检查；80% 阈值改用 `bits.Mul64` 防溢出 | `review_cloud_r2_test.go` 6 项（含审查原文 2 条组合回归：150→151、新窗 20B）+ 既有配额测试改写为组合断言 |
+| W4 [P2] | 只比较缓存 digest 字符串 | `ApproveBatch` 重新 `plan.Policy.validate()`、重新 `digestPlan(plan)` 与 `plan.Digest` 比对（任何事后变更都会失配）、校验 `Eligible` 与 `Issues` 自洽、用 `verifyWaves` 从当前 targets+policy 重算波次、审批目标集合完全一致、审批人/审批号去除空白且不得相同；并明确注释：digest 是**无密钥**摘要，身份与审批台账在控制器，本函数只做“内容绑定” | `review_cloud_r2_test.go` 3 项（审查原文 concurrency 1→16 + 7 类字段漂移 + 重算 digest 后仍拒） |
+
+> 两份回归文件直接采用审查正文给出的用例（`TestReviewR2QuotaResetRoundTripPreservesUsedBytes`、`TestReviewR2QuotaRolloverChargesAllNewWindowBytes`、`TestReviewR2BatchApprovalRejectsChangedPolicy` 与两条 React 场景），并在其上补充负向；原 head 上全部 FAIL，本 head 上全部 PASS。
 
 ## 4. 环境限制（如实记录）
 

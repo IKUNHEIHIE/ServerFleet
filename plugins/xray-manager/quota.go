@@ -2,7 +2,9 @@ package xraymanager
 
 import (
 	"errors"
+	"fmt"
 	"math"
+	"math/bits"
 	"time"
 )
 
@@ -46,13 +48,26 @@ type QuotaUsage struct {
 	SegmentID string
 }
 
-// QuotaBaseline carries counters that were already consumed before the current
-// process segment (for example before a restart or a window rollover). Quota
-// accounting must survive process resets; totals do not restart at zero.
+// QuotaBaseline is the persisted anchor one quota evaluation is measured from.
+// The three concepts must stay distinct, because mixing them silently forgives
+// (or double-charges) traffic:
+//
+//	Uplink/Downlink  counter value when the **current process segment** started
+//	                 ("segment offset"). Process counters are absolute since
+//	                 process start, so segment usage is current - offset.
+//	ConsumedBytes    bytes already charged that **no current counter can
+//	                 reproduce** (earlier segments before a reset, earlier
+//	                 windows). It is settled usage, never a counter value.
+//	WindowStart      the start of the accounting window.
+//
+// UsedBytes = (current - segmentOffset) + ConsumedBytes (per policy direction).
+// A reset makes the new segment start at counter zero, so it must move the
+// segment usage into ConsumedBytes and zero the offsets — not add absolute
+// counters into the offset fields.
 type QuotaBaseline struct {
 	Uplink   uint64
 	Downlink uint64
-	// ConsumedBytes is the accounted amount at the start of the current window.
+	// ConsumedBytes is settled usage carried into this segment/window.
 	ConsumedBytes uint64
 	SegmentID     string
 	WindowStart   time.Time
@@ -127,6 +142,13 @@ func EvaluateQuota(policy QuotaPolicy, baseline QuotaBaseline, usage QuotaUsage,
 		state.Reason = "quota_source_unavailable"
 		return state, nil
 	}
+	if baseline.SegmentID != "" && usage.SegmentID != baseline.SegmentID {
+		// The observed counters belong to another process segment than the one the
+		// baseline was frozen from; subtracting them would forgive real usage.
+		state.Unknown = true
+		state.Reason = "quota_segment_mismatch"
+		return state, nil
+	}
 	current, ok := quotaCounters(usage, policy.Direction)
 	if !ok {
 		state.Unknown = true
@@ -166,8 +188,40 @@ func EvaluateQuota(policy QuotaPolicy, baseline QuotaBaseline, usage QuotaUsage,
 		return state, nil
 	}
 	state.RemainingBytes = policy.LimitBytes - used
-	state.Warning = used*100 >= policy.LimitBytes*quotaWarningPercent
+	state.Warning = quotaWarningReached(used, policy.LimitBytes)
 	return state, nil
+}
+
+// quotaWarningReached compares used/limit against the warning percentage in 128
+// bits, so a huge limit cannot overflow the multiplication into a false warning.
+func quotaWarningReached(used, limit uint64) bool {
+	hiUsed, loUsed := bits.Mul64(used, 100)
+	hiLimit, loLimit := bits.Mul64(limit, quotaWarningPercent)
+	if hiUsed != hiLimit {
+		return hiUsed > hiLimit
+	}
+	return loUsed >= loLimit
+}
+
+// segmentConsumption returns how many bytes the policy direction consumed
+// inside the observed process segment, refusing (ok=false) when the counters
+// went backwards: that means the observation is not from this baseline.
+func segmentConsumption(baseline QuotaBaseline, usage QuotaUsage, direction QuotaDirection) (uint64, bool) {
+	if usage.Uplink < baseline.Uplink || usage.Downlink < baseline.Downlink {
+		return 0, false
+	}
+	up := usage.Uplink - baseline.Uplink
+	down := usage.Downlink - baseline.Downlink
+	switch direction {
+	case QuotaUplink:
+		return up, true
+	case QuotaDownlink:
+		return down, true
+	case QuotaTotal:
+		return addUint64(up, down)
+	default:
+		return 0, false
+	}
 }
 
 // ErrProcessResetRefused explains why a restart intent cannot be recorded.
@@ -184,6 +238,10 @@ type ProcessResetRequest struct {
 	OperatorID    string
 	TaskID        string
 	SourcePresent bool
+	// Direction names the counter this baseline charges. It is required: freezing
+	// quota without knowing which counter applies would have to guess between
+	// uplink/downlink/total, and a guessed freeze silently loses accounting.
+	Direction QuotaDirection
 }
 
 // ProcessResetOutcome records what the reset does to quota accounting.
@@ -213,6 +271,11 @@ func PlanProcessReset(
 	if current.SegmentID == "" || len(current.SegmentID) > 128 || current.RequestedAt.IsZero() {
 		return ProcessResetOutcome{}, ErrQuotaSpec
 	}
+	switch current.Direction {
+	case QuotaTotal, QuotaUplink, QuotaDownlink:
+	default:
+		return ProcessResetOutcome{}, ErrQuotaSpec
+	}
 	if current.OperatorID == "" || current.TaskID == "" {
 		return ProcessResetOutcome{}, ErrProcessResetRefused
 	}
@@ -225,39 +288,52 @@ func PlanProcessReset(
 		return ProcessResetOutcome{}, ErrProcessResetRefused
 	}
 	outcome := ProcessResetOutcome{
-		Baseline:   known,
 		SegmentID:  current.SegmentID,
 		Generation: current.Generation,
+		// Anything below may leave this baseline untouched: a refused freeze must
+		// never look like a frozen (zeroed) one.
+		Baseline: known,
 	}
-	outcome.Baseline.SegmentID = current.SegmentID
 	if !usage.Available {
+		// Without an authenticated read the pre-reset total is unknown. Keeping the
+		// known baseline is the only honest answer; zeroing it would forgive usage.
 		outcome.AccountingUnknown = true
 		outcome.Reason = "quota_source_unavailable_before_reset"
 		return outcome, nil
 	}
-	if !known.WindowStart.IsZero() {
-		outcome.Baseline.WindowStart = known.WindowStart
-	} else if !current.RequestedAt.IsZero() {
-		outcome.Baseline.WindowStart = current.RequestedAt.UTC()
-	}
-	// Freeze everything consumed so far: post-reset counters start at zero, so
-	// the baseline must absorb the pre-reset total plus whatever was already
-	// accounted inside the current window.
-	uplink, okUp := addUint64(known.Uplink, usage.Uplink)
-	downlink, okDown := addUint64(known.Downlink, usage.Downlink)
-	if !okUp || !okDown {
-		outcome.AccountingUnknown = true
-		outcome.Reason = "quota_counter_overflow_before_reset"
-		return outcome, nil
-	}
-	outcome.Baseline.Uplink = uplink
-	outcome.Baseline.Downlink = downlink
 	if known.SegmentID == "" || known.SegmentID != usage.SegmentID {
 		// The observation belongs to another segment; it cannot be attributed to
 		// the counters we are about to freeze.
 		outcome.AccountingUnknown = true
 		outcome.Reason = "quota_segment_mismatch_before_reset"
 		return outcome, nil
+	}
+	consumedInSegment, ok := segmentConsumption(known, usage, current.Direction)
+	if !ok {
+		outcome.AccountingUnknown = true
+		outcome.Reason = "quota_counter_reset_before_reset"
+		return outcome, nil
+	}
+	settled, ok := addUint64(known.ConsumedBytes, consumedInSegment)
+	if !ok {
+		outcome.AccountingUnknown = true
+		outcome.Reason = "quota_counter_overflow_before_reset"
+		return outcome, nil
+	}
+	windowStart := known.WindowStart
+	if windowStart.IsZero() {
+		windowStart = current.RequestedAt.UTC()
+	}
+	// The new process counts from zero, so the settled amount moves into
+	// ConsumedBytes and the offsets restart at zero. Adding absolute counters into
+	// the offsets (the previous behaviour) made the next EvaluateQuota subtract
+	// them again and report Unknown/0 instead of the carried total.
+	outcome.Baseline = QuotaBaseline{
+		Uplink:        0,
+		Downlink:      0,
+		ConsumedBytes: settled,
+		SegmentID:     current.SegmentID,
+		WindowStart:   windowStart,
 	}
 	return outcome, nil
 }
@@ -268,9 +344,11 @@ type Baseline struct {
 	SegmentID  string
 }
 
-// WindowRollover advances the accounting window. It only resets the accounted
-// amount, never the underlying interface counters, and refuses to move the
-// window backwards so a replay cannot grant a second full quota.
+// WindowRollover advances the accounting window. The new window is anchored on
+// the **current absolute counters**, so the next evaluation charges only bytes
+// after this instant; it never accumulates offsets. It refuses to roll over
+// without an authenticated read (zeroing accounting would forgive usage) and
+// refuses to move the window backwards so a replay cannot grant a second quota.
 func WindowRollover(policy QuotaPolicy, baseline QuotaBaseline, usage QuotaUsage, now time.Time) (QuotaBaseline, error) {
 	if !validQuotaPolicy(policy) || now.IsZero() || !policy.ResetOnWindow {
 		return baseline, ErrQuotaSpec
@@ -280,18 +358,19 @@ func WindowRollover(policy QuotaPolicy, baseline QuotaBaseline, usage QuotaUsage
 		next = now.UTC()
 	}
 	if now.Before(next) {
-		return baseline, ErrQuotaSpec
+		return baseline, fmt.Errorf("%w: quota_window_not_elapsed", ErrQuotaSpec)
 	}
-	out := baseline
-	out.WindowStart = now.UTC()
-	if usage.Available {
-		uplink, okUp := addUint64(baseline.Uplink, usage.Uplink)
-		downlink, okDown := addUint64(baseline.Downlink, usage.Downlink)
-		if okUp && okDown {
-			out.Uplink, out.Downlink = uplink, downlink
-		}
+	if !usage.Available {
+		return baseline, fmt.Errorf("%w: quota_source_unavailable_for_rollover", ErrQuotaSpec)
 	}
-	// ConsumedBytes restarts for the new window; the lifetime counters stay.
-	out.ConsumedBytes = 0
-	return out, nil
+	if baseline.SegmentID != "" && usage.SegmentID != baseline.SegmentID {
+		return baseline, fmt.Errorf("%w: quota_segment_mismatch_for_rollover", ErrQuotaSpec)
+	}
+	return QuotaBaseline{
+		Uplink:        usage.Uplink,
+		Downlink:      usage.Downlink,
+		ConsumedBytes: 0,
+		SegmentID:     baseline.SegmentID,
+		WindowStart:   now.UTC(),
+	}, nil
 }

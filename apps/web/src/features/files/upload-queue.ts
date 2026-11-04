@@ -7,10 +7,25 @@
  *   - 只有真正 complete 的会话才返回 status:"completed"；
  *   - GET …/uploads/{uploadId} 读回真实状态（awaiting_data/dispatching/completed/…）。
  *
+ * 证据模型（本项目曾在此处出错，语义必须显式区分）：
+ *   - **持久存储只保存“待核验的身份元数据”**（uploadId/name/taskId/expectedSize）。
+ *     它绝不保存 status：缓存里的 completed 可能在重新登录、撤权或多端并发之后
+ *     早已不是事实，不能冒充当前已验证结果。
+ *   - **只有当前身份/当前节点下 GET 成功读回**才产生 verified 证据；
+ *     401/403/404/5xx/网络失败一律降级为“未核验 / 无权限 / 会话不存在”，
+ *     并且必须把先前缓存或旧一次读回得到的 completed 一并作废。
+ *   - 过期响应不回退：每条记录带单调 sequence，旧序号的读回结果直接丢弃；
+ *     节点或身份 viewEpoch 变化后，旧作用域的在途请求整体作废。
+ *
  * 因此：202/dispatching 只代表“已受理进队列”，本模块禁止把它当成远端完成。
  */
 
 export type UploadStatus = "awaiting_data" | "dispatching" | "completed" | "failed" | "cancelled" | "unknown";
+
+/**
+ * 当前记录的证据来源。只有 verified 才是“当前服务端事实”，其余都必须显示未核验。
+ */
+export type UploadEvidence = "unverified" | "verified" | "forbidden" | "not_found" | "unavailable";
 
 const TERMINAL: ReadonlySet<UploadStatus> = new Set<UploadStatus>(["completed", "failed", "cancelled"]);
 
@@ -32,9 +47,9 @@ export function isTerminalStatus(status: UploadStatus): boolean {
   return TERMINAL.has(status);
 }
 
-/** 只有服务端明确 completed 才允许显示“已完成”。 */
-export function claimsRemoteCompletion(status: UploadStatus): boolean {
-  return status === "completed";
+/** 只有“当前已验证”且服务端明确 completed，才允许显示“已完成”。 */
+export function claimsRemoteCompletion(item: { readonly status: UploadStatus; readonly evidence: UploadEvidence }): boolean {
+  return item.evidence === "verified" && item.status === "completed";
 }
 
 export interface UploadStatusText {
@@ -43,8 +58,41 @@ export interface UploadStatusText {
   readonly tone: "pending" | "success" | "danger" | "muted";
 }
 
-export function describeUploadStatus(status: UploadStatus): UploadStatusText {
-  switch (status) {
+export function describeUploadStatus(item: {
+  readonly status: UploadStatus;
+  readonly evidence: UploadEvidence;
+  readonly reason?: string;
+}): UploadStatusText {
+  const reason = item.reason ? `（${item.reason}）` : "";
+  switch (item.evidence) {
+    case "unverified":
+      return {
+        label: "待核验",
+        detail: "本地只有待核验的记录，尚未取得当前服务端状态；不声称远端完成。",
+        tone: "muted",
+      };
+    case "forbidden":
+      return {
+        label: "无权限读取（未核验）",
+        detail: `当前身份无权读取该上传会话${reason}：先前状态已作废，不声称完成；请确认权限或重新登录后读回。`,
+        tone: "danger",
+      };
+    case "not_found":
+      return {
+        label: "会话不存在（UNKNOWN）",
+        detail: `服务端没有该上传会话${reason}：无法确认是否落盘，不声称完成。`,
+        tone: "danger",
+      };
+    case "unavailable":
+      return {
+        label: "读取失败（未核验）",
+        detail: `服务端或网络不可用${reason}：无法确认状态，不声称完成；可稍后重试读回。`,
+        tone: "danger",
+      };
+    default:
+      break;
+  }
+  switch (item.status) {
     case "awaiting_data":
       return { label: "等待字节流", detail: "会话已创建，尚未提交完整字节。", tone: "muted" };
     case "dispatching":
@@ -54,9 +102,9 @@ export function describeUploadStatus(status: UploadStatus): UploadStatusText {
         tone: "pending",
       };
     case "completed":
-      return { label: "已完成", detail: "服务端返回 completed，远端落盘完成。", tone: "success" };
+      return { label: "已完成", detail: "服务端读回 completed，远端落盘完成。", tone: "success" };
     case "failed":
-      return { label: "失败", detail: "服务端返回 failed；按错误码排查后重新上传。", tone: "danger" };
+      return { label: "失败", detail: "服务端读回 failed；按错误码排查后重新上传。", tone: "danger" };
     case "cancelled":
       return { label: "已取消", detail: "任务已取消，未完整落盘。", tone: "danger" };
     default:
@@ -133,11 +181,30 @@ export interface PendingUpload {
   readonly uploadId: string;
   readonly nodeId: string;
   readonly name: string;
+  readonly taskId?: string;
+  readonly expectedSize?: number | null;
+  /** 最近一次**当前作用域**成功读回的状态；未验证时恒为 unknown。 */
   readonly status: UploadStatus;
+  readonly evidence: UploadEvidence;
+  /** evidence 的机器可读原因（http_403 / http_500 / network / aborted）。 */
+  readonly reason?: string;
+  readonly bytesReceived?: number;
+  readonly observedAt?: string;
+  /** 单调请求序号：旧序号的结果不回退新证据。 */
+  readonly sequence: number;
+  /** 记录所属的会话作用域（身份 viewEpoch）。节点由 nodeId 表达。 */
+  readonly epoch: string;
+}
+
+export interface UploadObservation {
+  readonly kind: "verified" | "forbidden" | "not_found" | "unavailable";
+  /** 仅 verified 使用；其余证据一律把状态降级为 unknown。 */
+  readonly status?: UploadStatus;
   readonly taskId?: string;
   readonly bytesReceived?: number;
   readonly expectedSize?: number | null;
-  readonly updatedAt: string;
+  readonly reason?: string;
+  readonly sequence: number;
 }
 
 const MAX_PENDING = 20;
@@ -151,7 +218,11 @@ function storage(): Storage | null {
   }
 }
 
-export function loadPendingUploads(nodeId: string): readonly PendingUpload[] {
+/**
+ * 读回本地记录：**只恢复身份元数据**，状态一律为“未核验”。
+ * 缓存里的 status/bytes/observedAt 被有意丢弃——它们不能冒充当前事实。
+ */
+export function loadPendingUploads(nodeId: string, epoch: string): readonly PendingUpload[] {
   const store = storage();
   if (!store || nodeId === "") return [];
   const raw = store.getItem(storageKey(nodeId));
@@ -169,13 +240,14 @@ export function loadPendingUploads(nodeId: string): readonly PendingUpload[] {
         uploadId: record.uploadId,
         nodeId,
         name: record.name,
-        status: normalizeUploadStatus(record.status),
         ...(typeof record.taskId === "string" && record.taskId ? { taskId: record.taskId } : {}),
-        ...(typeof record.bytesReceived === "number" ? { bytesReceived: record.bytesReceived } : {}),
         ...(typeof record.expectedSize === "number" || record.expectedSize === null
           ? { expectedSize: record.expectedSize as number | null }
           : {}),
-        updatedAt: typeof record.updatedAt === "string" ? record.updatedAt : "",
+        status: "unknown",
+        evidence: "unverified",
+        sequence: 0,
+        epoch,
       });
     }
     return items;
@@ -184,6 +256,7 @@ export function loadPendingUploads(nodeId: string): readonly PendingUpload[] {
   }
 }
 
+/** 只持久化身份元数据；status/evidence 绝不落盘。 */
 export function savePendingUploads(nodeId: string, items: readonly PendingUpload[]): void {
   const store = storage();
   if (!store || nodeId === "") return;
@@ -192,35 +265,118 @@ export function savePendingUploads(nodeId: string, items: readonly PendingUpload
       store.removeItem(storageKey(nodeId));
       return;
     }
-    store.setItem(storageKey(nodeId), JSON.stringify(items.slice(0, MAX_PENDING)));
+    const records = items.slice(0, MAX_PENDING).map(item => ({
+      uploadId: item.uploadId,
+      name: item.name,
+      ...(item.taskId ? { taskId: item.taskId } : {}),
+      ...(item.expectedSize === undefined ? {} : { expectedSize: item.expectedSize }),
+    }));
+    store.setItem(storageKey(nodeId), JSON.stringify(records));
   } catch {
     // 存储不可用时只影响刷新读回，不影响本次会话内的真实状态展示。
   }
 }
 
-/**
- * 以服务端读回为准合并一条记录。
- * 规则：终态不回退（除非服务端明确 cancelled/failed），且任何读回都不会升级成 completed。
- */
-export function mergeUploadState(previous: PendingUpload, state: {
-  readonly status: UploadStatus;
-  readonly taskId?: string;
-  readonly bytesReceived?: number;
-  readonly expectedSize?: number | null;
-}): PendingUpload {
-  const next: UploadStatus = isTerminalStatus(previous.status) && !isTerminalStatus(state.status)
-    ? previous.status
-    : state.status;
+/** 新建一条上传记录：202 受理是**服务端证据**（dispatching），不是完成。 */
+export function createPendingUpload(
+  input: {
+    readonly uploadId: string;
+    readonly nodeId: string;
+    readonly name: string;
+    readonly taskId?: string;
+    readonly bytesReceived?: number;
+    readonly expectedSize?: number | null;
+    readonly epoch: string;
+    readonly sequence: number;
+  },
+  observedAt: string = new Date().toISOString(),
+): PendingUpload {
   return {
-    ...previous,
-    status: next,
-    ...(state.taskId ?? previous.taskId ? { taskId: state.taskId ?? previous.taskId } : {}),
-    ...(state.bytesReceived !== undefined ? { bytesReceived: state.bytesReceived } : {}),
-    ...(state.expectedSize !== undefined ? { expectedSize: state.expectedSize } : {}),
-    updatedAt: new Date().toISOString(),
+    uploadId: input.uploadId,
+    nodeId: input.nodeId,
+    name: input.name,
+    ...(input.taskId ? { taskId: input.taskId } : {}),
+    ...(input.bytesReceived === undefined ? {} : { bytesReceived: input.bytesReceived }),
+    ...(input.expectedSize === undefined ? {} : { expectedSize: input.expectedSize }),
+    status: "dispatching",
+    evidence: "verified",
+    observedAt,
+    sequence: input.sequence,
+    epoch: input.epoch,
   };
 }
 
+/**
+ * 以一次读回结果更新记录。
+ *
+ * 规则（顺序即优先级）：
+ *   1. 过期结果不回退：observation.sequence 落后于现有 sequence 时原样返回；
+ *   2. 失败/无权限/不存在：状态降级为 unknown，并保留失败原因——缓存或旧读回的
+ *      completed 一律作废，不能“终态不倒退回”式地吞掉当前失败；
+ *   3. 成功读回：状态与字节取服务端事实，evidence=verified；
+ *   4. 任何路径都不会把记录升级成 completed，除非服务端明确返回 completed。
+ */
+export function mergeUploadState(previous: PendingUpload, observation: UploadObservation): PendingUpload {
+  if (observation.sequence !== 0 && observation.sequence < previous.sequence) {
+    return previous;
+  }
+  const observedAt = new Date().toISOString();
+  if (observation.kind !== "verified") {
+    return {
+      ...previous,
+      status: "unknown",
+      evidence: observation.kind,
+      ...(observation.reason ? { reason: observation.reason } : {}),
+      ...(observation.taskId ? { taskId: observation.taskId } : {}),
+      sequence: observation.sequence,
+      observedAt,
+    };
+  }
+  const status = normalizeUploadStatus(observation.status);
+  return {
+    ...previous,
+    status,
+    evidence: "verified",
+    ...(observation.reason ? { reason: observation.reason } : { reason: undefined }),
+    ...(observation.taskId ?? previous.taskId ? { taskId: observation.taskId ?? previous.taskId } : {}),
+    ...(observation.bytesReceived === undefined ? {} : { bytesReceived: observation.bytesReceived }),
+    ...(observation.expectedSize === undefined ? {} : { expectedSize: observation.expectedSize }),
+    sequence: observation.sequence,
+    observedAt,
+  };
+}
+
+/**
+ * 把一批读回结果合并进**最新**的记录列表：刷新期间新加入的上传不会被覆盖丢失。
+ * 结果里没有的 uploadId 保持原样（仍是未核验）。
+ */
+export function mergeObservations(
+  items: readonly PendingUpload[],
+  observations: ReadonlyMap<string, UploadObservation>,
+): readonly PendingUpload[] {
+  return items.map(item => {
+    const observation = observations.get(item.uploadId);
+    return observation ? mergeUploadState(item, observation) : item;
+  });
+}
+
+/** 未到终态、或尚未取得当前证据的记录，都属于“待确认”。 */
 export function activePendingUploads(items: readonly PendingUpload[]): readonly PendingUpload[] {
-  return items.filter(item => !isTerminalStatus(item.status));
+  return items.filter(item => item.evidence !== "verified" || !isTerminalStatus(item.status));
+}
+
+/** 记录是否仍属于当前节点+身份作用域。 */
+export function isCurrentScope(
+  item: { readonly nodeId: string; readonly epoch: string },
+  nodeId: string | null,
+  epoch: string,
+): boolean {
+  return nodeId !== null && item.nodeId === nodeId && item.epoch === epoch;
+}
+
+/** 把读回失败归类为证据种类，绝不当作“状态未变”。 */
+export function classifyReadFailure(status: number | null | undefined): UploadObservation["kind"] {
+  if (status === 401 || status === 403) return "forbidden";
+  if (status === 404) return "not_found";
+  return "unavailable";
 }

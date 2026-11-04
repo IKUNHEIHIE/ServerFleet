@@ -95,14 +95,14 @@ Vulnerability #3: GO-2026-5932  golang.org/x/crypto@v0.58.0 (openpgp)
 ```
 $ npm ci                                   → added 127 packages in 4s
 $ npm run tools:install                    → protoc-gen-go/staticcheck/govulncheck@v1.9.0/actionlint OK
-$ npm run check:web                        → Test Files 40 passed (40) | Tests 361 passed (361)
+$ npm run check:web                        → Test Files 41 passed (41) | Tests 377 passed (377)
 $ npm run check:security                   → npm audit: found 0 vulnerabilities
                                              govulncheck ./...: No vulnerabilities found
-$ go test ./plugins/xray-manager/          → ok（新增 batch/quota 15 项 PASS；3 项真实二进制测试 SKIP）
+$ go test ./plugins/xray-manager/          → ok（44 项 PASS；3 项真实二进制测试 SKIP）
 $ npm run check:go                         → FAIL（exit 1）：7 项环境性既有 FAIL，见 E-08
 ```
 
-顶层统计（`reports/go-tests.log`）：**899 PASS / 19 SKIP / 7 FAIL**；含子测试 **2113 PASS / 21 SKIP / 7 FAIL**。
+顶层统计（`reports/go-tests.log`，R2 返修后）：**910 PASS / 19 SKIP / 7 FAIL**（FAIL 集合与 CP1 完全一致，见 E-08）。
 
 ## E-08 既有 FAIL 的基线复现（证明与本包无关）
 
@@ -123,11 +123,48 @@ $ go test ./apps/agent/ -run TestAgentFileBytesResumeHashAndIndependentReadGate
 
 ```
 $ npx vitest run src/features/files
-✓ src/features/files/upload-queue.test.ts (11 tests)
-✓ src/features/files/files-page.test.tsx  (6 tests)
-Tests 17 passed (17)
+✓ src/features/files/upload-queue.test.ts        (21 tests)
+✓ src/features/files/files-page.test.tsx         (6 tests)
+✓ src/features/files/review-cloud-r2.test.tsx    (6 tests)
+Tests 33 passed (33)
 ```
-覆盖：202+`dispatching`+taskId 只显示“已受理（排队）/任务 task-9”且**不**显示“上传完成”；点击“读回真实状态”后 GET 返回 `completed` 才显示已完成；重复读回仍 `dispatching` 时保持未完成；403/409/413/503/摘要/UNKNOWN 文案。
+覆盖：202+`dispatching`+taskId 只显示“已受理（排队）/任务 task-9”且**不**显示“上传完成”；点击“读回真实状态”后 GET 返回 `completed` 才显示已完成；重复读回仍 `dispatching` 时保持未完成；403/409/413/503/摘要/UNKNOWN 文案；缓存 completed + 当前 403/5xx/404 一律降级；读回未落定前只有“待核验”；切节点后旧在途响应不得进入新面板。
+
+## E-09b R2 返修证据（W1—W4，本 head 实测）
+
+```
+# Go：审查正文给出的三条回归 + 本包补充负向
+$ go test ./plugins/xray-manager -run TestReviewR2 -count=1 -v
+--- PASS: TestReviewR2QuotaResetRoundTripPreservesUsedBytes   (before=150 → after=151)
+--- PASS: TestReviewR2QuotaRolloverChargesAllNewWindowBytes   (new window = 20)
+--- PASS: TestReviewR2BatchApprovalRejectsChangedPolicy       (concurrency 1→16 被拒)
+--- PASS: TestReviewR2QuotaResetRefusesWithoutZeroing         (缺来源/段不匹配/计数器倒退 → unknown 且不清零)
+--- PASS: TestReviewR2QuotaDirectionIsHonouredOnReset         (uplink 只结算上行)
+--- PASS: TestReviewR2QuotaRolloverRefusals                   (缺来源/跨段/未到期/未开启 ResetOnWindow)
+--- PASS: TestReviewR2QuotaSegmentMismatchAndWarningOverflow   (used*100 溢出不再误报 80%)
+--- PASS: TestReviewR2BatchApprovalRejectsMutatedPlan         (7 类字段漂移全部拒绝)
+--- PASS: TestReviewR2BatchApprovalVerifiesWavesEvenWithRecomputedDigest
+--- PASS: TestReviewR2BatchApprovalRejectsPastedIdentityStrings
+ok  serverfleet.local/serverfleet/plugins/xray-manager  0.010s
+
+# React：与审查正文同形的两条场景 + 补充负向
+$ npx vitest run src/features/files/review-cloud-r2.test.tsx
+✓ drops a cached completed status when the current read is forbidden (403)
+✓ does not show completion before the first read-back settles
+✓ maps a 5xx read failure to an unverified failure instead of a kept completion
+✓ shows UNKNOWN when the server has no such upload session
+✓ drops an in-flight response from the previous node after switching nodes
+✓ keeps the new node's own records unverified rather than inheriting the old node's evidence
+Tests 6 passed (6)
+
+# 全量
+$ npm run check:web        → Test Files 41 passed (41) | Tests 377 passed (377)
+$ npm run check:policy     → PASS（branch / commit titles / module boundaries / actionlint）
+$ npm run check:contracts  → PASS
+$ npm run check:security   → npm audit 0；govulncheck ./... 无发现
+$ npm run check:go         → FAIL（exit 1）：7 项既有环境 FAIL（E-08），本包新增用例全 PASS
+```
+原 head `3eacd28` 上这 10 条既有回归中的 5 条（审查给出的 3 Go + 2 React）实测 **FAIL**；本 head 全部 **PASS**。
 
 ## E-10 未执行（如实保留）
 

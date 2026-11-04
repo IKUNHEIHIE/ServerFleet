@@ -179,7 +179,7 @@ describe("files page", () => {
     const panel = await screen.findByRole("region", { name: "待确认上传" });
     await waitFor(() => expect(within(panel).getByText("已受理（排队）")).toBeVisible());
     expect(within(panel).queryByText("已完成")).toBeNull();
-    expect(within(panel).getByText(/只有服务端读回 completed 才显示已完成/)).toBeVisible();
+    expect(within(panel).getByText(/只有本节点、本身份下服务端读回 completed 才显示已完成/)).toBeVisible();
   });
 
   it("honestly reports verified bytes when the node transport is not injected (503 unavailable)", async () => {

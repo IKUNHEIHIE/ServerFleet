@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Button } from "@/components/ui/button";
@@ -13,14 +13,19 @@ import type { ConflictPolicy, FileEntry, NodeSummary, TransferJob, TransferStatu
 import { useAction, useResource } from "@/lib/data/use-resource";
 import {
   activePendingUploads,
+  claimsRemoteCompletion,
+  classifyReadFailure,
+  createPendingUpload,
   describeUploadFailure,
   describeUploadStatus,
+  isCurrentScope,
   loadPendingUploads,
-  mergeUploadState,
+  mergeObservations,
   normalizeUploadStatus,
   savePendingUploads,
   taskStateLabel,
   type PendingUpload,
+  type UploadObservation,
 } from "./upload-queue";
 import { formatBytes, formatDateTime } from "@/lib/format";
 
@@ -199,47 +204,91 @@ function FilePane({
   const complete = useAction((uploadId: string) => filesApi.completeUpload(state.nodeId ?? "", uploadId));
   const transfer = useAction((body: Parameters<typeof transfersApi.create>[0], key: string) => transfersApi.create(body, key));
 
-  // 刷新/断线恢复：pending 记录只存在会话存储，状态一律以 GET 读回为准。
+  // 刷新/断线恢复：缓存只提供待核验的身份元数据，状态一律以当前作用域的 GET 读回为准。
+  // 节点切换或身份 viewEpoch 变化都会作废旧作用域：在途响应不得写入新面板。
+  const pendingSequence = useRef(0);
+  const pendingScope = useRef<{
+    readonly nodeId: string;
+    readonly epoch: string;
+    readonly controller: AbortController;
+  } | null>(null);
+
   useEffect(() => {
+    pendingScope.current?.controller.abort();
+    pendingScope.current = null;
     if (!state.nodeId) {
       setPendingUploads([]);
+      setPendingNotice(null);
       return;
     }
-    setPendingUploads(loadPendingUploads(state.nodeId));
-    void refreshPending(state.nodeId);
-  }, [state.nodeId]);
+    const epoch = session.viewEpoch;
+    const controller = new AbortController();
+    pendingScope.current = { nodeId: state.nodeId, epoch, controller };
+    const restored = loadPendingUploads(state.nodeId, epoch);
+    setPendingUploads(restored);
+    setPendingNotice(null);
+    if (restored.length > 0) void refreshPending(state.nodeId, epoch, controller.signal);
+    return () => controller.abort();
+    // session.can 与 currentScope 由 viewEpoch/nodeId 完全决定，故只依赖这两个值。
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [state.nodeId, session.viewEpoch]);
 
-  async function refreshPending(nodeId: string) {
-    const current = loadPendingUploads(nodeId);
+  function nextPendingSequence(): number {
+    pendingSequence.current += 1;
+    return pendingSequence.current;
+  }
+
+  function scopeIsCurrent(nodeId: string, epoch: string, signal: AbortSignal): boolean {
+    const scope = pendingScope.current;
+    return !signal.aborted && scope !== null && scope.nodeId === nodeId && scope.epoch === epoch;
+  }
+
+  async function refreshPending(nodeId: string, epoch: string, signal: AbortSignal) {
+    if (!scopeIsCurrent(nodeId, epoch, signal)) return;
+    const current = loadPendingUploads(nodeId, epoch);
     if (current.length === 0) return;
-    const next: PendingUpload[] = [];
+    const observations = new Map<string, UploadObservation>();
     for (const item of current) {
+      const sequence = nextPendingSequence();
       try {
-        const result = await filesApi.uploadStatus(nodeId, item.uploadId);
-        next.push(
-          mergeUploadState(item, {
-            status: normalizeUploadStatus(result.data.status),
-            ...(result.data.taskId ? { taskId: result.data.taskId } : {}),
-            bytesReceived: result.data.bytesReceived,
-            ...(result.data.expectedSize === undefined ? {} : { expectedSize: result.data.expectedSize }),
-          }),
-        );
+        const result = await filesApi.uploadStatus(nodeId, item.uploadId, signal);
+        observations.set(item.uploadId, {
+          kind: "verified",
+          status: normalizeUploadStatus(result.data.status),
+          ...(result.data.taskId ? { taskId: result.data.taskId } : {}),
+          ...(result.data.bytesReceived === undefined ? {} : { bytesReceived: result.data.bytesReceived }),
+          ...(result.data.expectedSize === undefined ? {} : { expectedSize: result.data.expectedSize }),
+          sequence,
+        });
       } catch (error) {
+        // 作用域被切换：整批结果作废，一条都不提交。
+        if (signal.aborted) return;
         const apiError = error instanceof ApiError ? error : null;
-        if (apiError?.status === 404) {
-          // 会话已被清理或过期：落一条 unknown 终态，避免永远 pending 且不伪装完成。
-          next.push({ ...item, status: "unknown", updatedAt: new Date().toISOString() });
-        } else {
-          next.push(item);
-        }
+        observations.set(item.uploadId, {
+          kind: classifyReadFailure(apiError?.status),
+          reason: apiError ? `http_${apiError.status}` : "network",
+          sequence,
+        });
       }
     }
-    savePendingUploads(nodeId, next);
-    setPendingUploads(next);
+    if (!scopeIsCurrent(nodeId, epoch, signal)) return;
+    // 合并进最新列表：刷新期间新加入的上传记录不会被覆盖丢失。
+    const latest = loadPendingUploads(nodeId, epoch);
+    const merged = mergeObservations(latest, observations);
+    savePendingUploads(nodeId, merged);
+    setPendingUploads(merged);
   }
 
   async function cancelPending(item: PendingUpload) {
-    if (!state.nodeId || !item.taskId) {
+    if (!isCurrentScope(item, state.nodeId, session.viewEpoch)) {
+      setPendingNotice("该记录不属于当前节点/当前身份视图，已拒绝取消；请先读回真实状态。");
+      return;
+    }
+    if (session.writesLocked || !canWrite) {
+      setPendingNotice("当前身份为只读（缺少 CSRF 写凭据或文件写权限），不能取消推送任务。");
+      return;
+    }
+    if (!item.taskId) {
       setPendingNotice("该上传没有关联任务号，无法从任务链取消；请刷新状态后重试。");
       return;
     }
@@ -265,7 +314,8 @@ function FilePane({
         setPendingNotice(`取消任务失败（${apiError?.status ?? "网络"} ${apiError?.code ?? apiError?.kind ?? ""}），状态以读回为准。`);
         return;
       }
-      await refreshPending(state.nodeId);
+      const scope = pendingScope.current;
+      if (scope) await refreshPending(scope.nodeId, scope.epoch, scope.controller.signal);
     } finally {
       setPendingBusy(null);
     }
@@ -311,16 +361,17 @@ function FilePane({
             `${file.name}：已受理进入统一任务队列${taskId ? `（任务 ${taskId}）` : ""}，尚未完成；在“待确认上传”中按真实任务状态读回。`,
           );
           if (taskId && state.nodeId) {
-            const record: PendingUpload = {
+            // 202 是服务端证据（dispatching），不是完成；身份与序号绑定当前作用域。
+            const record = createPendingUpload({
               uploadId,
               nodeId: state.nodeId,
               name: file.name,
-              status: "dispatching",
               taskId,
               bytesReceived: received,
               expectedSize: file.size,
-              updatedAt: new Date().toISOString(),
-            };
+              epoch: session.viewEpoch,
+              sequence: nextPendingSequence(),
+            });
             setPendingUploads(previous => {
               const merged = [record, ...previous.filter(item => item.uploadId !== record.uploadId)];
               savePendingUploads(state.nodeId ?? "", merged);
@@ -540,7 +591,10 @@ function FilePane({
               <Button
                 type="button"
                 size="sm"
-                onClick={() => (state.nodeId ? void refreshPending(state.nodeId) : undefined)}
+                onClick={() => {
+                  const scope = pendingScope.current;
+                  if (scope) void refreshPending(scope.nodeId, scope.epoch, scope.controller.signal);
+                }}
                 loading={pendingBusy === "__all__"}
               >
                 读回真实状态
@@ -548,7 +602,8 @@ function FilePane({
             </div>
             <ul className="mt-2 space-y-2">
               {pendingUploads.map(item => {
-                const text = describeUploadStatus(item.status);
+                const text = describeUploadStatus(item);
+                const verifiedTerminal = claimsRemoteCompletion(item) || (item.evidence === "verified" && ["failed", "cancelled"].includes(item.status));
                 return (
                   <li key={item.uploadId} className="rounded border p-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -572,7 +627,10 @@ function FilePane({
                           {item.bytesReceived} B{item.expectedSize ? ` / ${item.expectedSize} B` : ""}
                         </span>
                       ) : null}
-                      {item.taskId && !["completed", "failed", "cancelled"].includes(item.status) ? (
+                      {item.observedAt ? (
+                        <span className="text-muted-foreground">读回于 {formatDateTime(item.observedAt)}</span>
+                      ) : null}
+                      {item.taskId && !verifiedTerminal ? (
                         <Button
                           type="button"
                           size="sm"
@@ -591,7 +649,7 @@ function FilePane({
             </ul>
             {pendingNotice ? <p role="status" className="mt-2 text-muted-foreground">{pendingNotice}</p> : null}
             <p className="mt-2 text-muted-foreground">
-              “已受理（排队）”不等于远端完成：只有服务端读回 completed 才显示已完成。
+              “已受理（排队）”不等于远端完成：只有本节点、本身份下服务端读回 completed 才显示已完成；缓存记录一律先显示“待核验”。
             </p>
           </div>
         ) : null}

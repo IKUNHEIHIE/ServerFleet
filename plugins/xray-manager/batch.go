@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"strings"
 )
 
 // ErrBatchSpec is returned for target/policy inputs that cannot be planned. It
@@ -217,7 +218,11 @@ func digestPlan(plan BatchPlan) (string, error) {
 	return hex.EncodeToString(sum[:]), nil
 }
 
-// BatchApproval binds an approval to the exact frozen plan.
+// BatchApproval binds an approval to the exact frozen plan. The plugin only
+// verifies that the approval is bound to the *current* plan content; it cannot
+// and does not verify who approved it — identity, role and the approval ledger
+// live in the controller. A non-empty ApprovedBy/ApprovalID pair is therefore
+// necessary but never sufficient on its own.
 type BatchApproval struct {
 	Digest         string
 	Targets        []string
@@ -226,17 +231,54 @@ type BatchApproval struct {
 	AdoptionAgreed bool
 }
 
-// ApproveBatch verifies that the approval matches the current frozen plan:
-// same digest, same sorted targets, a real approver and a real approval id, and
-// explicit adoption consent when the plan touches existing instances.
+// ApproveBatch re-derives the plan before accepting an approval.
+//
+// Comparing two stored digest strings is not enough: BatchPlan is a mutable Go
+// value, so a caller could plan, get approval, then raise Concurrency (or drop a
+// wave, change the failure budget, flip adoption) and the stored Digest would
+// still match. Every field that the digest covers is therefore re-validated from
+// the current content:
+//   - the policy must still be valid;
+//   - digestPlan(plan) must reproduce plan.Digest (any post-planning mutation
+//     shows up here);
+//   - eligibility must agree with the recorded issues;
+//   - Waves must be exactly the waves that the current targets+policy produce;
+//   - the approval must carry that same digest and the same target set, with
+//     distinct approver/approval identifiers.
 func ApproveBatch(plan BatchPlan, approval BatchApproval) error {
 	if plan.Digest == "" || len(plan.Targets) == 0 {
 		return ErrBatchSpec
 	}
-	if approval.Digest != plan.Digest {
+	if err := plan.Policy.validate(); err != nil {
 		return ErrBatchSpec
 	}
-	if approval.ApprovedBy == "" || len(approval.ApprovedBy) > 128 || approval.ApprovalID == "" || len(approval.ApprovalID) > 128 {
+	recomputed, err := digestPlan(plan)
+	if err != nil {
+		return ErrBatchSpec
+	}
+	if recomputed != plan.Digest {
+		// The plan no longer produces the digest it was approved under: something
+		// mutated the frozen plan after planning.
+		return ErrBatchSpec
+	}
+	if plan.Eligible != (len(plan.Issues) == 0 && len(plan.Targets) > 0) {
+		return ErrBatchSpec
+	}
+	if err := verifyWaves(plan); err != nil {
+		return ErrBatchSpec
+	}
+	if approval.Digest != recomputed {
+		return ErrBatchSpec
+	}
+	approver := strings.TrimSpace(approval.ApprovedBy)
+	approvalID := strings.TrimSpace(approval.ApprovalID)
+	if approver == "" || len(approver) > 128 || approvalID == "" || len(approvalID) > 128 {
+		// 空白字符串不是审批人，也不是审批记录号。
+		return ErrBatchSpec
+	}
+	if approver == approvalID {
+		// The approver and the approval record cannot be the same token: that is a
+		// pasted string, not an approval reference.
 		return ErrBatchSpec
 	}
 	if plan.RequiresAdoption && !approval.AdoptionAgreed {
@@ -250,6 +292,42 @@ func ApproveBatch(plan BatchPlan, approval BatchApproval) error {
 	for i := range sorted {
 		if sorted[i] != plan.Targets[i] {
 			return ErrBatchSpec
+		}
+	}
+	return nil
+}
+
+// verifyWaves re-derives the waves for the current plan content. Only eligible
+// targets get a wave, so a plan carrying issues may legitimately have none.
+func verifyWaves(plan BatchPlan) error {
+	blocked := make(map[string]bool, len(plan.Issues))
+	for _, issue := range plan.Issues {
+		if issue.NodeID == "" || issue.Code == "" {
+			return ErrBatchSpec
+		}
+		blocked[issue.NodeID] = true
+	}
+	eligible := make([]string, 0, len(plan.Targets))
+	for _, id := range plan.Targets {
+		if !blocked[id] {
+			eligible = append(eligible, id)
+		}
+	}
+	expected := buildWaves(eligible, plan.Policy)
+	if len(expected) != len(plan.Waves) {
+		return ErrBatchSpec
+	}
+	for index := range expected {
+		if plan.Waves[index].Index != expected[index].Index {
+			return ErrBatchSpec
+		}
+		if len(plan.Waves[index].NodeIDs) != len(expected[index].NodeIDs) {
+			return ErrBatchSpec
+		}
+		for position := range expected[index].NodeIDs {
+			if plan.Waves[index].NodeIDs[position] != expected[index].NodeIDs[position] {
+				return ErrBatchSpec
+			}
 		}
 	}
 	return nil
