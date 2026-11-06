@@ -45,3 +45,20 @@ func TestReviewR2GatewayDeploymentRejectsInvalidListeners(t *testing.T) {
 		}
 	}
 }
+
+// The real Agent file capability only accepts a missing final path component;
+// every parent directory of a write must already exist. The artifact file must
+// therefore live directly under the installed artifact directory (named by its
+// content digest) rather than in an implicit per-gateway subdirectory.
+func TestReviewR2GatewayArtifactLivesDirectlyUnderArtifactDir(t *testing.T) {
+	site, err := gateway.RenderNginxSite(gateway.NginxSiteRequest{
+		GatewayID: "gw-one", Domain: "app.example.com", Upstream: "127.0.0.1:19000",
+		SiteDir: "/srv/fleet/nginx/conf", ArtifactDir: "/srv/fleet/nginx/artifacts",
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "/srv/fleet/nginx/artifacts/" + site.Digest + ".conf"; site.ArtifactPath != want {
+		t.Fatalf("artifact path = %q, want %q", site.ArtifactPath, want)
+	}
+}

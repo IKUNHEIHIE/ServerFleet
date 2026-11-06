@@ -183,7 +183,7 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 	digestHex := hex.EncodeToString(digest[:])
 	return NginxSite{
 		GatewayID: request.GatewayID, Domain: domain, Path: sitePath,
-		ArtifactPath: path.Join(artifactDir, request.GatewayID, digestHex+".conf"),
+		ArtifactPath: path.Join(artifactDir, digestHex+".conf"),
 		Config:       payload, Digest: digestHex,
 	}, nil
 }
