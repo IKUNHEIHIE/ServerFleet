@@ -7,8 +7,9 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
+
+	"serverfleet.local/serverfleet/internal/gateway"
 )
 
 // ErrGatewayDeployment means the trusted startup gateway document is missing,
@@ -140,8 +141,7 @@ func validGatewayListen(listen string) bool {
 	if listen == "" {
 		return true
 	}
-	_, err := strconv.Atoi(listen)
-	return err == nil && len(listen) <= 5
+	return gateway.ValidateNginxListen(listen) == nil
 }
 
 func validGatewayDeploymentPath(path string) bool {

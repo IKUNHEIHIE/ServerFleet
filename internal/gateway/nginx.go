@@ -260,6 +260,15 @@ func nginxUpstreamHosts(request NginxSiteRequest) ([]string, error) {
 	return hosts, nil
 }
 
+// ValidateNginxListen reports whether an operator-supplied listen value uses
+// the same accepted syntax and port range as rendered sites. It accepts a bare
+// port or an explicit host:port, including loopback addresses, while rejecting
+// injection characters and out-of-range ports.
+func ValidateNginxListen(value string) error {
+	_, err := normalizeNginxListen(value, DefaultNginxHTTPListen)
+	return err
+}
+
 func normalizeNginxListen(value, fallback string) (string, error) {
 	if value == "" {
 		return fallback, nil
