@@ -7,6 +7,53 @@ servers:
 security:
   - cookieSession: []
 paths:
+  /api/v1/nodes/{nodeId}/files/uploads:
+    parameters:
+      - {$ref: '#/components/parameters/NodeId'}
+    post:
+      operationId: createOverwriteUploadR10
+      summary: Create one explicitly overwriting user upload
+      description: Current user-upload worker binds overwrite only. Omitted or empty policy preserves that existing default; skip, rename and unknown policies reject rather than silently overwriting. This restriction is specific to user uploads; independently implemented transfer policies remain unchanged. Requires owner authentication, current files.write, Origin and CSRF.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [destinationDir, files]
+              properties:
+                destinationDir: {type: string}
+                conflictPolicy: {type: string, enum: [overwrite, ''], default: overwrite}
+                files:
+                  type: array
+                  minItems: 1
+                  maxItems: 1
+                  items:
+                    type: object
+                    additionalProperties: false
+                    required: [name, sizeBytes]
+                    properties:
+                      name: {type: string}
+                      sizeBytes: {type: integer, format: int64, minimum: 0}
+                      sha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+      responses:
+        '201':
+          description: Staging session created; no remote execution or success implied.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [uploadId, status]
+                properties:
+                  uploadId: {type: string}
+                  status: {type: string, const: awaiting_data}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '500': {$ref: '#/components/responses/InternalError'}
   /api/v1/nodes/{nodeId}/files/uploads/{uploadId}:
     parameters:
       - {$ref: '#/components/parameters/NodeId'}
@@ -171,7 +218,7 @@ components:
             code: {type: string}
             message: {type: string}
   responses:
-    InvalidRequest: {description: invalid_request or missing_request_id, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    InvalidRequest: {description: invalid_request, unsupported_upload_conflict_policy, invalid_query or missing_request_id, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Unauthenticated: {description: unauthorized, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Denied: {description: forbidden, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     NotFound: {description: not_found, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}

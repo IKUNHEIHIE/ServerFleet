@@ -8,7 +8,7 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 截至2026-11-08（Asia/Shanghai），最近已核验的main基线为[f1d715b](https://github.com/IKUNHEIHIE/ServerFleet/commit/f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a)，[独立main CI42458157478](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/42458157478)成功。#7/#8/#9已通过协调#12返修接收；#13补齐Controller暂存崩溃恢复及四份正式ADR原文。#13精确候选CI为Go971顶层PASS/7SKIP/0FAIL、Web380PASS，安全与构建通过；合并树与候选一致。正式迁移28项，原25项旧库fixture及历史SQL/checksum保持。
 
-本分支继续V09-CLOUD-BROWSER-RESUME-01：正式文件页保存账号/节点隔离的待核验记录，用户重新选择原文件并核对完整摘要，再从Controller确认的偏移按1MiB分块继续。R10通过显式resumeBinding=true读取绑定，默认保留R8响应；已派发/终态/未知任务不重复提交。实现、接口和产品差异同步，最终验收以精确head的PR/CI记录为准，不提前当作完整发布认证。见[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r4/BROWSER-RESUME.md)和[R10差异](docs/contracts/revisions/v09-r10-file-resume.md)。
+本分支继续V09-CLOUD-BROWSER-RESUME-01：正式文件页保存账号/节点隔离的待核验记录，用户重新选择原文件并核对完整摘要，再从Controller确认的偏移按1MiB分块继续。R10通过显式resumeBinding=true读取绑定，默认保留R8响应；已派发/终态/未知任务不重复提交。用户上传现有worker仅实现覆盖同名，本分支明确标注并拒绝未实现策略，避免把skip静默变成overwrite；已验收的文件互传三策略保持。实现、接口和产品差异同步，最终验收以精确head的PR/CI记录为准，不提前当作完整发布认证。见[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r4/BROWSER-RESUME.md)和[R10差异](docs/contracts/revisions/v09-r10-file-resume.md)。
 
 ## 当前能力与剩余边界
 

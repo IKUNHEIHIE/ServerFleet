@@ -17,3 +17,7 @@ V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；起点main f1d715b。主控�
 集中核对真实HTTP绑定/拒绝、缓存隔离/不缓存成功、重新挂载后的续传、分块、错文件/目标/摘要/offset、403/断线/409、双击、换节点/身份和已受理不重放。DOM夹具不冒称真实浏览器/双Agent验收。Controller暂存与Agent执行续传、外部供应商、G2/发布准入分别记录。回退Web不改变持久任务，UNKNOWN不得因回退重放。
 
 待确认任务的sessionStorage也改为账号+节点键；不能证明owner的旧匿名缓存不自动迁移，旧任务仍可在统一任务列表按当前权限查看，不取消或重放。原403/乱序/切节点回归只更新夹具键以包含已登录owner，原断言与触发条件保持。
+
+## 复核补充：用户上传策略不能静默变更
+
+发现既有用户上传入口解析conflictPolicy却未传入执行计划，而worker只允许overwrite。旧Web发送skip不代表真正跳过。修复为Web明确标注/发送overwrite；本入口只接受overwrite或省略（保持原默认），skip/rename/未知一律400 unsupported_upload_conflict_policy，避免静默覆盖。此为安全兼容修正：旧客户端若发送未实现策略须更新，不能声称这些请求向后全兼容。CLI/双Agent文件互传的三策略实现不改、不恢复旧的overwrite blanket400；本入口完整三策略须另行持久化/冻结计划/实际字节验收，不冒称已完成。R10独立候选补创建操作及其边界，原资料不改。

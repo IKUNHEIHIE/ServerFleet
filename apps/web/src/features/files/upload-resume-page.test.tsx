@@ -35,6 +35,9 @@ it("remounts after an interrupted upload and resumes from the server offset, pre
  fireEvent.change(document.querySelector('input[type="file"]')!,{target:{files:[new File([bytes],"resume.bin")]}});
  await screen.findByText(/字节与任务状态未确认/);
  expect(first.calls.filter(c=>c.method==="PUT")).toHaveLength(2);
+ const creation = first.calls.find(c=>c.method==="POST"&&c.url.endsWith("/uploads"));
+ expect(JSON.parse(String(creation?.init?.body)).conflictPolicy).toBe("overwrite");
+ expect(screen.getAllByText("上传文件（覆盖同名）").length).toBeGreaterThan(0);
  expect(loadUploadDrafts("u-admin","n-1")).toHaveLength(1);
  cleanup(); sessionStorage.clear(); window.location.hash="";
  const next = await renderAuthenticated("/files", { ...base,

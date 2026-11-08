@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activePendingUploads,
   classifyReadFailure,
@@ -268,4 +268,11 @@ it("isolates pending identities by account and never imports unowned legacy cach
   expect(loadPendingUploads("n-1", EPOCH, "u-2")).toEqual([]);
   savePendingUploads("n-1", [record({name:"legacy.txt"})]);
   expect(loadPendingUploads("n-1", EPOCH, "u-2")).toEqual([]);
+});
+
+
+it("keeps unavailable browser storage from breaking the pending panel", () => {
+  const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked storage"); });
+  try { expect(loadPendingUploads("n-1", EPOCH, "u-1")).toEqual([]); }
+  finally { get.mockRestore(); }
 });

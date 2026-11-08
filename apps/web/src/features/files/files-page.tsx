@@ -421,7 +421,7 @@ function FilePane({
           const sha256 = await sha256Hex(file);
           if (!uploadIsCurrent(scope)) return;
           if (!draft) {
-            const created = await filesApi.createUpload(scope.nodeId, { destinationDir: state.path, conflictPolicy: "skip",
+            const created = await filesApi.createUpload(scope.nodeId, { destinationDir: state.path, conflictPolicy: "overwrite",
               files: [{ name: file.name, sizeBytes: file.size, ...(sha256 ? { sha256 } : {}) }] }, scope.controller.signal);
             if (!uploadIsCurrent(scope)) return;
             draft = { uploadId: created.data.uploadId, ownerId, nodeId: scope.nodeId, name: file.name, size: file.size,
@@ -644,7 +644,7 @@ function FilePane({
             新建文件夹
           </Button>
           <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
-            上传文件
+            上传文件（覆盖同名）
             <input
               type="file"
               multiple
@@ -667,7 +667,7 @@ function FilePane({
         {uploadBusy ? <p role="status" className="text-xs text-muted-foreground">正在核验或上传；仅服务端确认的字节计入进度。</p> : null}
         {uploadDrafts.length > 0 ? (
           <div role="region" aria-label="可恢复上传" className="space-y-2 rounded-md border p-2 text-xs">
-            <p>本地仅保存待核验记录。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
+            <p>用户上传会覆盖同名文件。本地仅保存待核验记录。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
             {uploadDrafts.map(draft => (
               <div key={draft.uploadId} className="space-y-1 border-t pt-2">
                 <p>{draft.name} · {formatBytes(draft.size)} · 目标（待核验）：{draft.destinationPath}</p>

@@ -20,3 +20,9 @@ V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；基于已接收main f1d715b�
 - Go go test ./internal/files -json -count=1：80顶层PASS/1既有SKIP/0FAIL；真实HTTP绑定、撤权403、owner mismatch409、不泄露、缺省/false旧投影及重复/无效参数均验证；staticcheck ./internal/files退出0。
 - check:policy、REDOCLY_TELEMETRY=off check:contracts、check:security、R10独立Redocly lint均退出0；npm audit0、govulncheck无已知漏洞；原69文件与3字节候选校验通过，git diff --check干净。自动审批遥测拒绝记录保留，关闭遥测后同一校验成功，不绕过门槛。
 - 最终head的完整普通用户CI与逐项代码复核待PR进行，未提前标合入/全量发布通过。README/架构/进度已同步上一轮#12/#13接收与本轮实现边界，不因文档更新关闭发布缺口。
+
+## 代码复核追加的实际安全修正
+
+最终候选4fcf163的CI已经启动后，逐项复核发现既有用户上传的conflictPolicy被解析却忽略，worker实际上固定overwrite，旧Web却发skip。本轮合入前修正UI明确覆盖、后台拒绝本入口尚未实现的skip/rename/未知策略；独立传输的三策略保持。这是实际数据安全问题，不为旧head碰绿灯或删用例；新head须重审并复验。旧默认请求不改，新HTTP/DOM回归证明不静默改策略。同步R10/产品差异，完整上传三策略仍登记缺口。另修sessionStorage.getItem故障返回未核验空列表而非令页面崩溃，增加故障专项。
+
+复核补丁集中复验：全Web412PASS/44文件，类型/生产构建成功；Go文件模块81顶层PASS/1SKIP/0FAIL；R10独立lint、staticcheck及diff检查通过。新策略HTTP专项包含skip/rename/unknown明确拒绝、overwrite/省略默认仍创建，DOM核对实际请求overwrite及覆盖文案。原Full-CI候选4fcf163不是最终接收依据；此次追加修复有实际安全依据，新head再进行完整CI，所有旧运行/取消状态保留。

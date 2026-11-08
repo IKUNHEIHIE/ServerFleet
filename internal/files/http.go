@@ -192,6 +192,13 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusBadRequest, "unsupported_batch_upload", "one file per upload session is supported")
 		return
 	}
+	// The upload task plan currently binds overwrite only. Never accept a
+	// caller's skip/rename/unknown policy and silently execute overwrite.
+	// Transfers keep their separately implemented three-policy semantics.
+	if body.ConflictPolicy != "" && body.ConflictPolicy != ConflictOverwrite {
+		writeFixed(w, http.StatusBadRequest, "unsupported_upload_conflict_policy", "user uploads currently require overwrite policy")
+		return
+	}
 	file := body.Files[0]
 	destination, err := JoinRemotePath(body.DestinationDir, file.Name)
 	if err != nil {

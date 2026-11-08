@@ -227,9 +227,9 @@ function storage(): Storage | null {
 export function loadPendingUploads(nodeId: string, epoch: string, ownerId?: string): readonly PendingUpload[] {
   const store = storage();
   if (!store || nodeId === "") return [];
-  const raw = store.getItem(storageKey(nodeId, ownerId));
-  if (!raw) return [];
   try {
+    const raw = store.getItem(storageKey(nodeId, ownerId));
+    if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const items: PendingUpload[] = [];

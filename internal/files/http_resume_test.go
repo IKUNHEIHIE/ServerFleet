@@ -1,6 +1,7 @@
 package files_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -77,5 +78,27 @@ func TestHTTPResumeProjectionRequiresCurrentOwnerAndNodeBinding(t *testing.T) {
 	_, body = doRaw(t, "GET", server.URL+"/api/v1/nodes/n-dst/files/uploads/"+unhashed+"?resumeBinding=true", nil)
 	if strings.Contains(string(body), "sha256Expected") {
 		t.Fatalf("invented absent digest: %s", body)
+	}
+}
+
+func TestHTTPUserUploadNeverSilentlyChangesRequestedConflictPolicy(t *testing.T) {
+	_, server := newHTTPFixture(t)
+	defer server.Close()
+	for _, policy := range []string{"skip", "rename", "unknown", "overwrite", ""} {
+		t.Run("policy="+policy, func(t *testing.T) {
+			body, _ := json.Marshal(map[string]any{"destinationDir": "/srv/app", "conflictPolicy": policy, "files": []map[string]any{{"name": "safe.bin", "sizeBytes": 1}}})
+			response, e := http.Post(server.URL+"/api/v1/nodes/n-dst/files/uploads", "application/json", bytes.NewReader(body))
+			if e != nil {
+				t.Fatal(e)
+			}
+			defer response.Body.Close()
+			expected := 400
+			if policy == "overwrite" || policy == "" {
+				expected = 201
+			}
+			if response.StatusCode != expected {
+				t.Fatalf("policy %q accepted with different semantics: %d", policy, response.StatusCode)
+			}
+		})
 	}
 }
