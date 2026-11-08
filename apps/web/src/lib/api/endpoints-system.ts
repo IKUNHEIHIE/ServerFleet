@@ -45,6 +45,7 @@ export interface EncryptedBackupPage {
   readonly items: readonly EncryptedBackupRecord[];
   readonly recipientFingerprint: string;
   readonly recoveryKeyConfirmed: boolean;
+ readonly automaticBackupsConfigured: boolean;
 }
 export interface BackupTaskAdmission {
   readonly taskId: string;

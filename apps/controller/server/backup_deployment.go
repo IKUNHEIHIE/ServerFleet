@@ -33,7 +33,9 @@ type BackupDeployment struct {
 	Recipient        string `json:"recipient"`
 	AutomaticOwnerID string `json:"automaticOwnerId,omitempty"`
 	// Fixed by the real management bootstrap, never accepted from deployment JSON.
-	PKIDirectory, RootPin, TLSCertificate, TLSKey, CredentialDirectory, AgentEndpoint, ReleaseVersion string `json:"-"`
+	PKIDirectory, RootPin, TLSCertificate, TLSKey, CredentialDirectory, AgentEndpoint, ReleaseVersion string            `json:"-"`
+	Configuration                                                                                     []byte            `json:"-"`
+	ConfigurationFiles                                                                                map[string]string `json:"-"`
 }
 
 func LoadBackupDeployment(filename string) (*BackupDeployment, error) {
@@ -107,6 +109,18 @@ func (s *Server) setupEncryptedBackups(ctx context.Context, cfg Config, workers 
 		}
 		sources = append(sources, source)
 	}
+	configuration, e := recovery.FreezeControllerConfiguration(d.Configuration)
+	if e != nil {
+		return nil, e
+	}
+	sources = append(sources, configuration)
+	for name, path := range d.ConfigurationFiles {
+		source, e := recovery.FreezeBackupFile(name, path)
+		if e != nil {
+			return nil, e
+		}
+		sources = append(sources, source)
+	}
 	validate := func(current context.Context) error {
 		if current.Err() != nil {
 			return current.Err()
@@ -156,7 +170,7 @@ func (s *Server) setupEncryptedBackups(ctx context.Context, cfg Config, workers 
 	}
 	manager, err := recovery.NewBackupManager(recovery.BackupDeploymentOptions{
 		DB: s.DB, Audit: s.Audit, Directory: d.Directory, StageDir: d.StageDir, Recipient: d.Recipient, Cipher: cipher, Files: sources,
-		AuthorityID: material.AuthorityID, RootSPKI: material.RootSPKI, TrustGeneration: material.TrustGeneration, AgentEndpoint: d.AgentEndpoint, Version: d.ReleaseVersion,
+		AutomaticConfigured: d.AutomaticOwnerID != "", AuthorityID: material.AuthorityID, RootSPKI: material.RootSPKI, TrustGeneration: material.TrustGeneration, AgentEndpoint: d.AgentEndpoint, Version: d.ReleaseVersion,
 		Authorize: s.Identity.AuthorizeAdministrator, RuntimeCurrent: s.runtimeGate, ValidateConfiguration: validate,
 		TaskCurrent: func(ctx context.Context, id, plan string) (tasks.Task, error) {
 			if s.Tasks == nil {

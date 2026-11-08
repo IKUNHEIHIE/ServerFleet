@@ -3,6 +3,7 @@ package recovery
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"os"
 	"path/filepath"
@@ -90,6 +91,13 @@ func FreezeBackupFile(name, path string) (BackupFileSource, error) {
 	return BackupFileSource{Name: name, Path: path, SHA256: hex.EncodeToString(hash[:]), MaxBytes: 128 << 10}, nil
 }
 func CheckBackupFile(file BackupFileSource) error {
+	if len(file.Inline) > 0 {
+		hash := sha256.Sum256(file.Inline)
+		if file.Name != "configuration/controller.json" || !json.Valid(file.Inline) || file.Path != "" || hex.EncodeToString(hash[:]) != file.SHA256 {
+			return ErrBackupUnavailable
+		}
+		return nil
+	}
 	current, err := FreezeBackupFile(file.Name, file.Path)
 	if err != nil || current.SHA256 != file.SHA256 {
 		return ErrBackupUnavailable
@@ -107,4 +115,12 @@ func syncRecoveryRoot(root *os.Root) error {
 		return ErrRecoveryRejected
 	}
 	return nil
+}
+
+func FreezeControllerConfiguration(raw []byte) (BackupFileSource, error) {
+	if len(raw) == 0 || len(raw) > 128<<10 || !json.Valid(raw) {
+		return BackupFileSource{}, ErrBackupUnavailable
+	}
+	hash := sha256.Sum256(raw)
+	return BackupFileSource{Name: "configuration/controller.json", Inline: append([]byte{}, raw...), SHA256: hex.EncodeToString(hash[:]), MaxBytes: 128 << 10}, nil
 }

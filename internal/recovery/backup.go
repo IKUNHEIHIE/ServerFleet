@@ -45,12 +45,14 @@ type BackupAuditSink interface {
 type BackupFileSource struct {
 	Name, Path, SHA256 string
 	MaxBytes           int64
+	Inline             []byte
 }
 type BackupDeploymentOptions struct {
 	DB                                                                            *storage.DB
 	Audit                                                                         BackupAuditSink
 	Directory, StageDir, Recipient, AuthorityID, RootSPKI, AgentEndpoint, Version string
 	TrustGeneration                                                               uint64
+	AutomaticConfigured                                                           bool
 	Cipher                                                                        *AgeCipher
 	Files                                                                         []BackupFileSource
 	Authorize                                                                     func(context.Context, string) error
@@ -102,13 +104,13 @@ type BackupManifest struct {
 
 func allowedBundleName(name string) bool {
 	switch name {
-	case "controller.db", "pki/root.pem", "pki/issuer.pem", "pki/issuer-key.pem", "pki/pki.json", "credentials/credential-keys.json", "tls/controller.pem", "tls/controller-key.pem":
+	case "configuration/controller.json", "configuration/file-deployment.json", "configuration/gateway-deployment.json", "configuration/update-deployment.json", "configuration/backup-deployment.json", "configuration/release-source.json", "configuration/release-root.pem", "controller.db", "pki/root.pem", "pki/issuer.pem", "pki/issuer-key.pem", "pki/pki.json", "credentials/credential-keys.json", "tls/controller.pem", "tls/controller-key.pem":
 		return true
 	}
 	return false
 }
 func NewBackupManager(o BackupDeploymentOptions) (*BackupManager, error) {
-	if os.Geteuid() == 0 || o.DB == nil || o.Audit == nil || o.Cipher == nil || !validAgeRecipient(o.Recipient) || !validReference(o.AuthorityID) || !validDigest(o.RootSPKI) || o.TrustGeneration == 0 || o.Authorize == nil || o.RuntimeCurrent == nil || o.TaskCurrent == nil || o.Capture == nil || o.ValidateConfiguration == nil || o.Directory == o.StageDir || len(o.Files) != 7 {
+	if os.Geteuid() == 0 || o.DB == nil || o.Audit == nil || o.Cipher == nil || !validAgeRecipient(o.Recipient) || !validReference(o.AuthorityID) || !validDigest(o.RootSPKI) || o.TrustGeneration == 0 || o.Authorize == nil || o.RuntimeCurrent == nil || o.TaskCurrent == nil || o.Capture == nil || o.ValidateConfiguration == nil || o.Directory == o.StageDir || len(o.Files) < 7 || len(o.Files) > 14 {
 		return nil, ErrBackupUnavailable
 	}
 	root, err := openRecoveryDirectory(o.Directory)
@@ -122,14 +124,24 @@ func NewBackupManager(o BackupDeploymentOptions) (*BackupManager, error) {
 	}
 	seen := map[string]bool{}
 	for _, file := range o.Files {
-		if file.Name == "controller.db" || !allowedBundleName(file.Name) || seen[file.Name] || !filepath.IsAbs(file.Path) || !validDigest(file.SHA256) || file.MaxBytes <= 0 || file.MaxBytes > 128<<10 {
+		if file.Name == "controller.db" || !allowedBundleName(file.Name) || seen[file.Name] || (len(file.Inline) == 0 && !filepath.IsAbs(file.Path) || len(file.Inline) > 0 && (file.Path != "" || file.Name != "configuration/controller.json" || !json.Valid(file.Inline))) || !validDigest(file.SHA256) || file.MaxBytes <= 0 || file.MaxBytes > 128<<10 {
 			root.Close()
 			stage.Close()
 			return nil, ErrBackupUnavailable
 		}
 		seen[file.Name] = true
 	}
+	for _, name := range []string{"pki/root.pem", "pki/issuer.pem", "pki/issuer-key.pem", "pki/pki.json", "credentials/credential-keys.json", "tls/controller.pem", "tls/controller-key.pem"} {
+		if !seen[name] {
+			root.Close()
+			stage.Close()
+			return nil, ErrBackupUnavailable
+		}
+	}
 	o.Files = append([]BackupFileSource(nil), o.Files...)
+	for i := range o.Files {
+		o.Files[i].Inline = bytes.Clone(o.Files[i].Inline)
+	}
 	sort.Slice(o.Files, func(i, j int) bool { return o.Files[i].Name < o.Files[j].Name })
 	manager := &BackupManager{o: o, root: root, stage: stage}
 	// An interrupted encryption/upload is not re-executed from a filename or
@@ -348,12 +360,18 @@ func (m *BackupManager) encryptBundle(ctx context.Context, t tasks.Task, id, wor
 		if err := m.gate(ctx, t); err != nil {
 			return "", err
 		}
-		root, err := openRecoveryDirectory(filepath.Dir(source.Path))
-		if err != nil {
-			return "", err
+		var raw []byte
+		var err error
+		if len(source.Inline) > 0 {
+			raw = bytes.Clone(source.Inline)
+		} else {
+			root, openErr := openRecoveryDirectory(filepath.Dir(source.Path))
+			if openErr != nil {
+				return "", openErr
+			}
+			raw, err = readRecoveryFile(root, filepath.Base(source.Path), source.MaxBytes)
+			root.Close()
 		}
-		raw, err := readRecoveryFile(root, filepath.Base(source.Path), source.MaxBytes)
-		root.Close()
 		if err != nil {
 			return "", err
 		}

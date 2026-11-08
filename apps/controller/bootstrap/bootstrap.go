@@ -5,6 +5,7 @@ package bootstrap
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -228,6 +229,17 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		backupDeployment.CredentialDirectory = options.CredentialKeyDir
 		backupDeployment.AgentEndpoint = authority
 		backupDeployment.ReleaseVersion = options.BuildVersion
+		backupDeployment.Configuration, _ = json.Marshal(struct {
+			Version                                                                                                                                                                                      int `json:"version"`
+			Origin, AgentAuthority, AgentServerName, AgentPKIDirectory, RootPin, CredentialDirectory, WebDirectory, FileDeployment, GatewayDeployment, UpdateDeployment, BackupDeployment, ReleaseSource string
+		}{1, options.Origin, authority, serverName, directory, material.RootSPKI, options.CredentialKeyDir, options.WebDirectory, options.FileDeployment, options.GatewayDeployment, options.UpdateDeployment, options.BackupDeployment, options.ReleaseSource})
+		backupDeployment.ConfigurationFiles = map[string]string{}
+		for name, path := range map[string]string{"configuration/file-deployment.json": options.FileDeployment, "configuration/gateway-deployment.json": options.GatewayDeployment, "configuration/update-deployment.json": options.UpdateDeployment, "configuration/backup-deployment.json": options.BackupDeployment, "configuration/release-source.json": options.ReleaseSource} {
+			if path != "" {
+				backupDeployment.ConfigurationFiles[name] = path
+			}
+		}
+
 	}
 	var releaseSource *server.ReleaseSourceDeployment
 	if options.ReleaseSource != "" {
@@ -235,6 +247,9 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		if err != nil {
 			return nil, nil, err
 		}
+	}
+	if backupDeployment != nil && releaseSource != nil && releaseSource.RootCertificate != "" {
+		backupDeployment.ConfigurationFiles["configuration/release-root.pem"] = releaseSource.RootCertificate
 	}
 	composed, err := server.New(ctx, server.Config{
 		ReleaseSource: releaseSource, ControllerAuthorityID: material.AuthorityID,

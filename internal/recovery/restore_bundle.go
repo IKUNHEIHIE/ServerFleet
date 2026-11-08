@@ -84,7 +84,7 @@ func StageEncryptedBackup(ctx context.Context, o RestoreBundleOptions) (StagedBu
 		return StagedBundle{}, err
 	}
 	defer latch.Close()
-	for _, dir := range []string{"pki", "credentials", "tls"} {
+	for _, dir := range []string{"pki", "credentials", "tls", "configuration"} {
 		if target.Mkdir(dir, 0700) != nil {
 			return StagedBundle{}, ErrRecoveryRejected
 		}
@@ -136,7 +136,7 @@ func extractRecoveryArchive(ctx context.Context, input io.Reader, target *os.Roo
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&manifest) != nil || decoder.Decode(&struct{}{}) != io.EOF || manifest.Format != 1 || manifest.Encryption != "age/X25519/v1" || !validReference(manifest.SnapshotID) || !validReference(manifest.AuthorityID) || !validDigest(manifest.RootSPKI) || manifest.CreatedAt.IsZero() || manifest.CreatedAt.After(time.Now().Add(5*time.Minute)) || len(manifest.Files) != 8 || len(manifest.SchemaVersions) == 0 || len(manifest.SchemaVersions) > 1024 || len(manifest.NodeIDs) > 20000 || len(manifest.Snapshot.Tasks) > 100000 {
+	if decoder.Decode(&manifest) != nil || decoder.Decode(&struct{}{}) != io.EOF || manifest.Format != 1 || manifest.Encryption != "age/X25519/v1" || !validReference(manifest.SnapshotID) || !validReference(manifest.AuthorityID) || !validDigest(manifest.RootSPKI) || manifest.CreatedAt.IsZero() || manifest.CreatedAt.After(time.Now().Add(5*time.Minute)) || (len(manifest.Files) < 8 || len(manifest.Files) > 15) || len(manifest.SchemaVersions) == 0 || len(manifest.SchemaVersions) > 1024 || len(manifest.NodeIDs) > 20000 || len(manifest.Snapshot.Tasks) > 100000 {
 		return manifest, nil, ErrRecoveryRejected
 	}
 	canonical, err := json.Marshal(manifest)
@@ -153,6 +153,11 @@ func extractRecoveryArchive(ctx context.Context, input io.Reader, target *os.Roo
 			return manifest, nil, ErrRecoveryRejected
 		}
 		expected[entry.Name] = entry
+	}
+	for _, name := range []string{"controller.db", "pki/root.pem", "pki/issuer.pem", "pki/issuer-key.pem", "pki/pki.json", "credentials/credential-keys.json", "tls/controller.pem", "tls/controller-key.pem"} {
+		if _, ok := expected[name]; !ok {
+			return manifest, nil, ErrRecoveryRejected
+		}
 	}
 	seen := map[string]bool{}
 	for {
@@ -220,7 +225,7 @@ func VerifyStagedFiles(ctx context.Context, directory string, manifest BackupMan
 		return err
 	}
 	defer root.Close()
-	if len(manifest.Files) != 8 {
+	if len(manifest.Files) < 8 || len(manifest.Files) > 15 {
 		return ErrRecoveryRejected
 	}
 	for _, entry := range manifest.Files {
