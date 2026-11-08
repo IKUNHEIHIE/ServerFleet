@@ -155,3 +155,14 @@ func TestTrustedUpdateAndCleanupFlagsRequireManagementConfiguration(t *testing.T
 		t.Fatal(err)
 	}
 }
+
+func TestConsoleAndVersionOptionsDoNotStartAnInsecureManagementHost(t *testing.T) {
+	options, err := ParseOptions([]string{"-web-dir", "/private/web"}, io.Discard)
+	if err != nil || options.WebDirectory != "/private/web" || options.Validate() == nil {
+		t.Fatalf("console allowed without TLS management: %+v %v", options, err)
+	}
+	options, err = ParseOptions([]string{"-version"}, io.Discard)
+	if err != nil || !options.ShowVersion {
+		t.Fatalf("version flags: %+v %v", options, err)
+	}
+}

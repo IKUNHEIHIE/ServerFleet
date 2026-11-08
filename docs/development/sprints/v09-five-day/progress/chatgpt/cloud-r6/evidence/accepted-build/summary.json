@@ -1,0 +1,19 @@
+{
+  "source": "0e57516df61f114e2cb244358c7d14452fbe394c",
+  "unsigned": true,
+  "acceptance": "UNVERIFIED",
+  "platforms": [
+    "linux/amd64",
+    "linux/arm64"
+  ],
+  "files": 12,
+  "positiveBuildReceipt": "PASS",
+  "sha256AndBytes": "PASS",
+  "privateModes": "PASS",
+  "allExecutableVCS": "PASS",
+  "controllerVersion": "0.9.0",
+  "canonicalAgentManifests": "PASS",
+  "armExecution": "NOT RUN",
+  "browserAcceptance": "USER MANUAL",
+  "installation": "NOT PERFORMED"
+}

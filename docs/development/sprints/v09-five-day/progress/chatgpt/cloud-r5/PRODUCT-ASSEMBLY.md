@@ -25,3 +25,6 @@ B03/B04/B05/B06、G2/D01—D07/P1-C10/发布准入、真实外部/物理双机/A
 
 
 第二批本地整包：policy/contracts/git PASS；security PASS（npm audit 0、govulncheck无已知漏洞），Go/Web FAIL。迁移计数/旧fixture排除表遗漏新ds/0043和三个Web精确URL断言未带v2参数已修复，保留原断言语义。Go另有6项Agent文件及1项恢复测试在本地UID0被生产普通用户门拒绝，未删除/改SKIP/放宽；实际Controller/Agent/Linux仍须原生普通用户CI。Web418PASS/3FAIL（新增三策略选择用例已通过）。该批在aea5f90加Web未提交改动运行，精确dirty树未捕获；最终证据只认最终head原生CI。原输出见evidence/local-batch。
+
+
+#15正式接收回执：最终head b4305fed7fb03fcbce6d3f87654a71e4e51be4a5，原生CI42485042788 foundation/dependencies success；Go983顶层/1301子项PASS、7SKIP、0FAIL，Web422PASS，真实三策略上传实际路径/字节、迁移与安全负向通过。审查COMMENT5818107752（同会话逐项复核，不是第二独立账号），expected-head合并main6031c1f9d9b2b840ef5a477520aa937799bb3ba5。原生foundation artifact13619865614已下载校验CRC及sha256:232d70b36fdf9634cf5fead327ac0db3fc28064a452d6e9ee402bb8621c53822，保存在evidence/accepted；原始FAIL/SKIP仍保留。该回执随后续装配PR归档，不为已通过的#15新增记录提交触发无意义重跑。

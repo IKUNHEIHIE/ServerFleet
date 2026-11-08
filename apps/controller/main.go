@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"flag"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -19,6 +20,9 @@ import (
 	"serverfleet.local/serverfleet/apps/controller/health"
 )
 
+// Set only by the controlled core release build.
+var controllerBuildVersion = "0.9.0-dev"
+
 func main() {
 	options, err := bootstrap.ParseOptions(os.Args[1:], os.Stderr)
 	if err != nil {
@@ -28,6 +32,10 @@ func main() {
 		os.Exit(2)
 	}
 
+	if options.ShowVersion {
+		fmt.Fprintln(os.Stdout, controllerBuildVersion)
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

@@ -6,17 +6,19 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 ## 已核验的产品基线
 
-截至2026-11-08（Asia/Shanghai），已接收main为[a8a093c](https://github.com/IKUNHEIHIE/ServerFleet/commit/a8a093ccfaecc35c1a58cadbef3a675b57fdf035)，[独立main CI42480445288](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/42480445288)成功。#12已接收#7/#8/#9及返修，#13暂存恢复/四ADR来源、#14正式Web重选文件与持久暂存续传已合入。#14精确候选CI Go973顶层PASS/7SKIP/0FAIL、Web412PASS；正式迁移28项，历史SQL/hash与旧25fixture保持。
+截至2026-11-08（Asia/Shanghai），已接收main为[6031c1f](https://github.com/IKUNHEIHIE/ServerFleet/commit/6031c1f9d9b2b840ef5a477520aa937799bb3ba5)。#15精确候选[CI42485042788](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/42485042788) foundation/dependencies均success，Go983顶层/1301子项PASS、7SKIP、0FAIL，Web422PASS；已按精确head审查接收，独立main CI42486235557在记录时运行中，最终状态见GitHub。正式29项迁移，原25fixture及历史SQL/hash保持。
 
-用户负责手动验证，ChatGPT单会话继续优先完成产品实现。本分支V09-CLOUD-PRODUCT-IMPLEMENT-01补用户上传三策略与真实路径/终态、原子checksum拒绝、cleanup默认服务和安全后台重试、可信本地签名Agent更新启动入口；R11候选与新增第29项迁移待本PR精确head接收，不能冒称已进入main。详见[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r5/PRODUCT-ASSEMBLY.md)、[启动装配](docs/development/PRODUCT-STARTUP.md)和[R11差异](docs/contracts/revisions/v09-r11-upload-policies.md)。
+#12已接收#7/#8/#9及返修，#13暂存恢复/四ADR来源，#14正式Web重选文件与持久暂存续传，#15用户上传三策略/真实路径回执/原子checksum拒绝/安全cleanup后台重试/可信本地Agent更新启动入口均已合入；不再列为尚未实现。来源与证据见[装配回执](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r5/PRODUCT-ASSEMBLY.md)。
+
+用户负责手动验证，ChatGPT单会话优先继续实现。本分支补正式Controller同源控制台（-web-dir）及仓库外双架构核心候选构建；只读有限构建资产，保留API和实时隔离门；真实四个程序/正式Web构建及版本/清单/源码一致性已核对，但仍为未签名/未认证候选。详见[启动/构建说明](docs/development/PRODUCT-STARTUP.md)与[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r6/DEPLOY-ASSEMBLY.md)。本部署增量待精确head原生CI与PR接收，不提前称main已提供。
 
 ## 当前能力与剩余边界
 
 | 领域 | 已接收的实现或检查点 | 仍待完成/验收 |
 |---|---|---|
 | 核心平台 | Controller/Agent、SQLite WAL、REST/SSE、WSS+mTLS、统一授权/任务/审批/审计；节点及管理台等业务模块已有实现 | 完整跨模块产品验收、正式规则实施核对与 G2 收口 |
-| 文件执行 | 双 Agent 多文件及 skip/overwrite/rename；用户上传统一任务/审批/当前权限复核/取消/终态对账/真实摘要；冻结多目标分发检查点已接收 | Controller暂存恢复/Web重选文件续传已接收；本分支补用户上传三策略，真实浏览器/进程重启组合及Agent执行续传仍待完整验收 |
-| 更新 | 实际 Agent 组件本地签名更新、健康检查和失败回滚，已有真实浏览器专项证据 | 本分支补可信本地Agent更新启动配置；在线发行/完整批次与Controller更新需求差异继续跟踪，B05仍开放 |
+| 文件执行 | 双 Agent 多文件及 skip/overwrite/rename；用户上传统一任务/审批/当前权限复核/取消/终态对账/真实摘要；冻结多目标分发检查点已接收 | Controller暂存恢复/Web重选文件续传与用户上传三策略/真实回执已接收，真实浏览器/进程重启组合及Agent执行续传仍待完整验收 |
+| 更新 | 实际 Agent 组件本地签名更新、健康检查和失败回滚，已有真实浏览器专项证据 | 可信本地Agent更新启动配置已接收；在线发行/完整批次与Controller更新需求差异继续跟踪，B05仍开放 |
 | 网关与发布 | 工件传输适配、独立子执行、冻结计划/逐帧授权、持久绑定、终态 CAS 与并发负向 | Standalone路由checker、完整实际安装/发布/补偿及ACME组合；B04仍开放（已有隔离Agent-WSS-Nginx/HTTP字节与补偿证据） |
 | 恢复 | 隔离基础、恢复运行门与异常任务对账，未知副作用不自动重放 | 实际灾备恢复、新权威建立、旧主控隔离/fence；B06 仍开放 |
 | Xray 可选插件 | 已有插件代码、候选与部分隔离证据 | 安全工件与 Runtime 准入、完整产品验收；B03 仍开放 |
