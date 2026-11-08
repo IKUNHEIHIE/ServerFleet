@@ -317,3 +317,19 @@ func (v *CredentialService) ServiceMetadata(ctx context.Context, owner, id strin
 	})
 	return out, err
 }
+
+// ValidateCredentialKeyDirectory only validates an already-restored keyring.
+// It neither creates keys nor starts services nor admits restored credentials.
+func ValidateCredentialKeyDirectory(directory string) error {
+	root, err := privateKeyRoot(directory)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
+	keys, err := readKeyring(root)
+	if err != nil {
+		return ErrIdentityUnavailable
+	}
+	keys.Clear()
+	return nil
+}

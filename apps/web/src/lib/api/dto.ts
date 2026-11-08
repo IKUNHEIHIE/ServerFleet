@@ -203,6 +203,8 @@ export type TaskState =
   | "expired";
 
 export interface TaskSummary {
+ readonly targetType?: "controller" | "node_ids" | "node_group" | "service_group";
+ readonly targetControllerId?: string;
   readonly taskId: string;
   readonly state: TaskState;
   readonly createdAt: string;
@@ -220,7 +222,8 @@ export interface TaskSummary {
 export interface TaskExecution {
   readonly executionId?: string;
   readonly taskId?: string;
-  readonly nodeId: string;
+  readonly nodeId?: string;
+ readonly controllerId?: string;
   readonly state: string;
   readonly startedAt?: string;
   readonly finishedAt?: string;
@@ -237,13 +240,14 @@ export interface BatchTaskPreview {
 }
 
 export interface BatchTaskJob {
+ readonly targetControllerId?: string;
   readonly jobId: string;
   readonly name?: string;
   readonly targetType: string;
   readonly targetResourceId?: string;
   readonly targetNodeIdsSnapshot: readonly string[];
   readonly state: string;
-  readonly results?: readonly { readonly nodeId: string; readonly state: string; readonly error?: string }[];
+  readonly results?: readonly { readonly nodeId?: string; readonly controllerId?: string; readonly state: string; readonly error?: string }[];
   readonly createdAt?: string;
 }
 

@@ -44,6 +44,8 @@ var ErrLocalPKI = errors.New("localpki: local agent CA is unavailable")
 // Material is the loaded local CA. The private key stays inside transport.
 type Material struct {
 	Provisioned     bool
+	IssuerSHA256    string
+	IssuerSPKI      string
 	TrustGeneration uint64
 	AuthorityID     string
 	Issuer          *transport.CertificateIssuer

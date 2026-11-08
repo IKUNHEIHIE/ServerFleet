@@ -1,0 +1,203 @@
+openapi: 3.1.0
+info:
+  title: Encrypted backups and explicit Controller task targets (PROPOSED)
+  version: 0.9.0-r12-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/backups:
+    get:
+      operationId: listEncryptedBackupsR12
+      summary: Read administrator-only durable ciphertext metadata
+      description: At most 1000 records. Current administrator and runtime quarantine gate apply. No plaintext, private key, path, claim, nonce or automatic replay is exposed. Missing deployment returns 503.
+      responses:
+        '200':
+          description: Ciphertext metadata and public recovery-recipient state
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [items, recipientFingerprint, recoveryKeyConfirmed]
+                properties:
+                  items: {type: array, maxItems: 1000, items: {$ref: '#/components/schemas/Backup'}}
+                  recipientFingerprint: {$ref: '#/components/schemas/Digest'}
+                  recoveryKeyConfirmed: {type: boolean}
+        '403': {$ref: '#/components/responses/Denied'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+    post:
+      operationId: createEncryptedBackupTaskR12
+      summary: Submit a real Controller-local task to the sole scheduler
+      description: Requires current administrator, Origin/CSRF and prior offline-key challenge proof. No fabricated node/Agent, SSH execution or alternate scheduler. Standard read-consistent backup, not arbitrary root Shell. Daily opt-in producer uses the same typed task entrypoint and explicit current administrator owner.
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Admission'}
+      responses:
+        '202': {$ref: '#/components/responses/Admitted'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/backups/key-challenges:
+    post:
+      operationId: createOfflineKeyChallengeTaskR12
+      summary: Encrypt a bounded random confirmation nonce through a unified task
+      description: Only encrypted output is downloadable. Decryption runs on the offline operator host; proof is a SHA-256 of the authenticated 32-byte nonce. Neither identity nor private Root enters HTTP or the online configuration.
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody: {$ref: '#/components/requestBodies/Admission'}
+      responses:
+        '202': {$ref: '#/components/responses/Admitted'}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/backups/key-confirmation:
+    post:
+      operationId: confirmOfflineRecoveryKeyR12
+      summary: Atomically confirm a recipient-bound proof and append audit
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [challengeId, proofSha256]
+              properties:
+                challengeId: {$ref: '#/components/schemas/Reference'}
+                proofSha256: {$ref: '#/components/schemas/Digest'}
+      responses:
+        '200':
+          description: Offline key proof confirmed
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [confirmed]
+                properties:
+                  confirmed: {const: true}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/backups/{backupId}/download:
+    parameters: [{$ref: '#/components/parameters/BackupId'}]
+    get:
+      operationId: downloadAuthenticatedCiphertextR12
+      summary: Download hash-verified ciphertext with current authorization per chunk
+      responses:
+        '200':
+          description: Bounded native age X25519 ciphertext; never a decrypted archive
+          headers:
+            X-Content-SHA256: {schema: {$ref: '#/components/schemas/Digest'}}
+            Content-Disposition: {schema: {type: string}}
+          content:
+            application/octet-stream:
+              schema: {type: string, format: binary}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+  /api/v1/backups/{backupId}/verify:
+    parameters: [{$ref: '#/components/parameters/BackupId'}]
+    post:
+      operationId: verifyEncryptedBackupReceiptR12
+      summary: Verify stored ciphertext bytes, without claiming restore or fencing
+      parameters: [{$ref: '#/components/parameters/CSRF'}]
+      responses:
+        '200':
+          description: Existing recovery-plan shape with ciphertext_integrity check and explicit restore-not-proven reason
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [backupId, verified, checks]
+                properties:
+                  backupId: {$ref: '#/components/schemas/Reference'}
+                  verified: {type: boolean}
+                  checks:
+                    type: array
+                    items:
+                      type: object
+                      required: [name, passed]
+                      properties:
+                        name: {const: ciphertext_integrity}
+                        passed: {type: boolean}
+                        reason: {const: ciphertext_sha256_verified_restore_not_proven}
+        '400': {$ref: '#/components/responses/Invalid'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  parameters:
+    CSRF: {in: header, name: X-CSRF-Token, required: true, schema: {type: string}}
+    BackupId: {in: path, name: backupId, required: true, schema: {$ref: '#/components/schemas/Reference'}}
+  requestBodies:
+    Admission:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [idempotencyKey]
+            properties:
+              idempotencyKey: {$ref: '#/components/schemas/Reference'}
+  responses:
+    Admitted:
+      description: Unified task admission; not encryption completion or restore success
+      content:
+        application/json:
+          schema: {$ref: '#/components/schemas/Admission'}
+    Invalid: {description: Invalid bounded request}
+    Denied: {description: Current administrator, HTTPS, Origin or CSRF denied}
+    Conflict: {description: Task/key proof/state rejected or ciphertext unavailable}
+    Unavailable: {description: Trusted deployment, fixed tool, private directory or runtime prerequisites unavailable}
+  schemas:
+    Reference: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_.-]+$'}
+    Digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+    Admission:
+      type: object
+      required: [taskId, status, controllerId, targetType, planHash, approvalRequired]
+      properties:
+        taskId: {$ref: '#/components/schemas/Reference'}
+        status: {type: string}
+        controllerId: {$ref: '#/components/schemas/Reference'}
+        targetType: {const: controller}
+        planHash: {$ref: '#/components/schemas/Digest'}
+        approvalRequired: {type: boolean}
+    Backup:
+      type: object
+      additionalProperties: false
+      required: [id, taskId, kind, status, bytes, createdAt, updatedAt, recipientFingerprint, remoteStatus]
+      properties:
+        id: {$ref: '#/components/schemas/Reference'}
+        taskId: {$ref: '#/components/schemas/Reference'}
+        kind: {enum: [full, key_challenge]}
+        status: {enum: [preparing, ready, unknown]}
+        sha256: {$ref: '#/components/schemas/Digest'}
+        bytes: {type: integer, format: int64, minimum: 0, maximum: 285212672}
+        createdAt: {type: string, format: date-time}
+        updatedAt: {type: string, format: date-time}
+        recipientFingerprint: {$ref: '#/components/schemas/Digest'}
+        remoteStatus: {type: string}
+        errorCode: {type: string}
+    ControllerTaskProjection:
+      description: Extension of task summary/job; original node shapes retained. Only typed program submission can select this target, never the general task-create HTTP body.
+      type: object
+      required: [targetType, targetControllerId, targetNodeIdsSnapshot]
+      properties:
+        targetType: {const: controller}
+        targetControllerId: {$ref: '#/components/schemas/Reference'}
+        targetNodeIdsSnapshot: {type: array, maxItems: 0, items: {type: string}}
+    ControllerExecution:
+      type: object
+      additionalProperties: false
+      required: [controllerId, state]
+      properties:
+        controllerId: {$ref: '#/components/schemas/Reference'}
+        state: {type: string}
+        error: {type: string}

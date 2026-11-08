@@ -94,7 +94,8 @@ export function normalizeTaskExecutions(
   payload: unknown,
   label: string,
 ): NormalizedListPage<{
-  readonly nodeId: string;
+  readonly nodeId?: string;
+ readonly controllerId?: string;
   readonly state: string;
   readonly error?: string;
   readonly executionId?: string;
@@ -107,10 +108,12 @@ export function normalizeTaskExecutions(
   return normalizeListPage(payload, item => {
     if (!isRecord(item)) throw invalid(`${label}: execution is not an object`);
     const nodeId = asString(item.nodeId);
+    const controllerId = asString(item.controllerId);
     const state = asString(item.state);
-    if (nodeId === null || state === null) throw invalid(`${label}: execution missing nodeId/state`);
+    if ((nodeId === null) === (controllerId === null) || state === null || nodeId === "" || controllerId === "") throw invalid(`${label}: execution requires exactly one nodeId/controllerId and state`);
     const normalized: {
-      nodeId: string;
+      nodeId?: string;
+      controllerId?: string;
       state: string;
       error?: string;
       executionId?: string;
@@ -119,7 +122,7 @@ export function normalizeTaskExecutions(
       finishedAt?: string;
       outputTruncated?: boolean;
       lastSequence?: number;
-    } = { nodeId, state };
+    } = { ...(nodeId !== null ? { nodeId } : { controllerId: controllerId! }), state };
     const error = asString(item.error);
     if (error !== null) normalized.error = error;
     const executionId = asString(item.executionId);

@@ -1,8 +1,10 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"math"
+	"serverfleet.local/serverfleet/internal/storage"
 	"time"
 )
 
@@ -53,7 +55,7 @@ func InvalidateRestoredIdentity(raw []byte, policy RestoredIdentityPolicy) ([]by
 	st.CredentialChanges = map[string]credentialChange{}
 	st.PolicyRevision++
 	st.ClockFloor = policy.At.UTC()
-	if appendIdentityAudit(st, policy.ActorID, "identity.recovery.invalidate", "succeeded", policy.At.UTC()) != nil {
+	if appendIdentityAudit(st, policy.ActorID, "auth.recovery.invalidate", "success", policy.At.UTC()) != nil {
 		return nil, ErrIdentityUnavailable
 	}
 	encoded, err := json.Marshal(st)
@@ -64,4 +66,31 @@ func InvalidateRestoredIdentity(raw []byte, policy RestoredIdentityPolicy) ([]by
 		return nil, err
 	}
 	return encoded, nil
+}
+
+// ApplyRestoredIdentityTx is an auth-owned write on an offline, quarantined
+// database transaction. The coordinator must supply verified fresh policy.
+func ApplyRestoredIdentityTx(ctx context.Context, tx storage.Tx, policy RestoredIdentityPolicy) error {
+	if ctx == nil || tx == nil {
+		return ErrIdentityUnavailable
+	}
+	var raw []byte
+	var initialized bool
+	if err := tx.QueryRow(ctx, readIdentitySQL).Scan(&raw, &initialized); err != nil || !initialized {
+		return ErrIdentityUnavailable
+	}
+	next, err := InvalidateRestoredIdentity(raw, policy)
+	if err != nil {
+		return err
+	}
+	defer clear(next)
+	result, err := tx.Exec(ctx, `UPDATE cx_auth_identity SET payload=? WHERE singleton=1 AND ever_initialized=1`, next)
+	if err != nil {
+		return err
+	}
+	n, err := result.RowsAffected()
+	if err != nil || n != 1 {
+		return ErrIdentityUnavailable
+	}
+	return nil
 }

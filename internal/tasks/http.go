@@ -349,6 +349,10 @@ func (api *httpAPI) executions(w http.ResponseWriter, r *http.Request) {
 	results := make([]executionResult, 0, len(task.Targets))
 	for _, target := range task.Targets {
 		item := executionResult{NodeID: target.NodeID, State: executionState(target.State)}
+		if task.TargetType == TargetTypeController {
+			item.NodeID = ""
+			item.ControllerID = task.TargetResourceID
+		}
 		if target.Message != "" && target.State.Terminal() {
 			item.Error = target.Message
 		}

@@ -32,7 +32,8 @@ func NewBackupHTTP(o BackupHTTPOptions) (*BackupHTTP, error) {
 	h.mux.HandleFunc("POST /api/v1/backups/{backupId}/verify", h.verify)
 	return h, nil
 }
-func (h *BackupHTTP) Patterns() []string {
+func (h *BackupHTTP) Patterns() []string { return BackupHTTPPatterns() }
+func BackupHTTPPatterns() []string {
 	return []string{"GET /api/v1/backups", "POST /api/v1/backups", "POST /api/v1/backups/key-challenges", "POST /api/v1/backups/key-confirmation", "GET /api/v1/backups/{backupId}/download", "POST /api/v1/backups/{backupId}/verify"}
 }
 func (h *BackupHTTP) principal(w http.ResponseWriter, r *http.Request) (Principal, bool) {

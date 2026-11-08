@@ -150,6 +150,9 @@ func (c *gatewayRouteChecker) current(ctx context.Context, p *gatewayRouteReceip
 }
 
 func (c *gatewayRouteChecker) CheckRoute(ctx context.Context, spec gateway.RouteSpec) (gateway.CheckResult, error) {
+	if ctx == nil || ctx.Err() != nil {
+		return gateway.CheckResult{}, gateway.ErrCheckerUnavailable
+	}
 	receipt, ok := ctx.Value(gatewayRouteReceiptKey{}).(*gatewayRouteReceipt)
 	if !ok || receipt == nil || receipt.GatewayID != spec.GatewayID || receipt.NodeID != spec.NodeID || receipt.Domain != spec.Domain || receipt.GroupID != spec.ServiceGroupID || receipt.GroupRevision != spec.ServiceGroupRevision || receipt.HTTPS != spec.HTTPS || spec.Upstream != "" {
 		return gateway.CheckResult{}, gateway.ErrCheckerUnavailable

@@ -233,7 +233,7 @@ func LoadProvisioned(directory, expectedRootPin string) (*Material, error) {
 		return nil, err
 	}
 	document, err := readProvisionedDocument(raw)
-	if err != nil || document.RootSPKI != pin || document.IssuerSHA256 != provisionedDigest(issuer.Raw) {
+	if err != nil || document.RootSPKI != pin || document.AuthorityID != issuer.Subject.CommonName || document.IssuerSHA256 != provisionedDigest(issuer.Raw) {
 		return nil, ErrLocalPKI
 	}
 	payload, _ := json.Marshal(document.provisionedPayload)
@@ -262,7 +262,7 @@ func LoadProvisioned(directory, expectedRootPin string) (*Material, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Material{Issuer: signer, Roots: roots, RootPEM: bytes.Clone(rootPEM), RootSPKI: pin, Directory: directory, CertificatePath: filepath.Join(directory, ProvisionedRootName), Provisioned: true, TrustGeneration: document.Generation, AuthorityID: document.AuthorityID}, nil
+	return &Material{Issuer: signer, Roots: roots, RootPEM: bytes.Clone(rootPEM), RootSPKI: pin, Directory: directory, CertificatePath: filepath.Join(directory, ProvisionedRootName), Provisioned: true, IssuerSHA256: provisionedDigest(issuer.Raw), IssuerSPKI: provisionedDigest(issuer.RawSubjectPublicKeyInfo), TrustGeneration: document.Generation, AuthorityID: document.AuthorityID}, nil
 }
 
 // CreateOfflineRoot is an explicit offline-only operator command. The root key
@@ -492,6 +492,9 @@ func InstallIntermediate(directory, bundleDirectory, rootPin string) (*Material,
 }
 
 func verifyPublicProvisionedBundle(rootRaw, issuerRaw, documentRaw []byte, pin string) error {
+	return verifyPublicProvisionedBundleAt(rootRaw, issuerRaw, documentRaw, pin, time.Now())
+}
+func verifyPublicProvisionedBundleAt(rootRaw, issuerRaw, documentRaw []byte, pin string, at time.Time) error {
 	root, err := oneCertificate(rootRaw)
 	if err != nil || root.CheckSignatureFrom(root) != nil || !root.IsCA || provisionedDigest(root.RawSubjectPublicKeyInfo) != pin {
 		return ErrLocalPKI
@@ -513,9 +516,64 @@ func verifyPublicProvisionedBundle(rootRaw, issuerRaw, documentRaw []byte, pin s
 	}
 	pool := x509.NewCertPool()
 	pool.AddCert(root)
-	_, err = issuer.Verify(x509.VerifyOptions{Roots: pool, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
+	_, err = issuer.Verify(x509.VerifyOptions{Roots: pool, CurrentTime: at, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
 	if err != nil {
 		return ErrLocalPKI
 	}
 	return nil
+}
+
+// ArchivedProvisioning is inert metadata. Verification at snapshot creation
+// time never creates an issuer capable of signing a new certificate today.
+type ArchivedProvisioning struct {
+	AuthorityID, IssuerSHA256 string
+	TrustGeneration           uint64
+}
+
+func VerifyArchivedProvisioning(directory, pin string, at time.Time) (ArchivedProvisioning, error) {
+	if at.IsZero() {
+		return ArchivedProvisioning{}, ErrLocalPKI
+	}
+	root, err := openPrivateDirectory(directory)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	defer root.Close()
+	anchorRaw, err := privatePKIRead(root, ProvisionedRootName)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	issuerRaw, err := privatePKIRead(root, ProvisionedIssuerName)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	documentRaw, err := privatePKIRead(root, ProvisionedManifestName)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	if verifyPublicProvisionedBundleAt(anchorRaw, issuerRaw, documentRaw, pin, at) != nil {
+		return ArchivedProvisioning{}, ErrLocalPKI
+	}
+	document, err := readProvisionedDocument(documentRaw)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	issuer, err := oneCertificate(issuerRaw)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	keyRaw, err := privatePKIRead(root, ProvisionedKeyName)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	defer clear(keyRaw)
+	key, err := p256Private(keyRaw)
+	if err != nil {
+		return ArchivedProvisioning{}, err
+	}
+	public, err := x509.MarshalPKIXPublicKey(key.Public())
+	if err != nil || !bytes.Equal(public, issuer.RawSubjectPublicKeyInfo) {
+		return ArchivedProvisioning{}, ErrLocalPKI
+	}
+	return ArchivedProvisioning{document.AuthorityID, document.IssuerSHA256, document.Generation}, nil
 }

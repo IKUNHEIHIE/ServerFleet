@@ -27,3 +27,36 @@ export const recoveryApi = {
   job: (jobId: string, signal?: AbortSignal) =>
     apiClient.request<AsyncOperation>(`/api/v1/disaster-recovery/jobs/${encodeURIComponent(jobId)}`, { signal }),
 };
+
+export interface EncryptedBackupRecord {
+  readonly id: string;
+  readonly taskId: string;
+  readonly kind: "full" | "key_challenge";
+  readonly status: "preparing" | "ready" | "unknown";
+  readonly sha256?: string;
+  readonly bytes: number;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+  readonly recipientFingerprint: string;
+  readonly remoteStatus: string;
+  readonly errorCode?: string;
+}
+export interface EncryptedBackupPage {
+  readonly items: readonly EncryptedBackupRecord[];
+  readonly recipientFingerprint: string;
+  readonly recoveryKeyConfirmed: boolean;
+}
+export interface BackupTaskAdmission {
+  readonly taskId: string;
+  readonly status: string;
+  readonly targetType: "controller";
+  readonly controllerId: string;
+  readonly planHash: string;
+  readonly approvalRequired: boolean;
+}
+export const encryptedBackupsApi = {
+  list: (signal?: AbortSignal) => apiClient.request<EncryptedBackupPage>("/api/v1/backups", { signal }),
+  create: (idempotencyKey: string) => apiClient.request<BackupTaskAdmission>("/api/v1/backups", { method: "POST", body: { idempotencyKey } }),
+  challenge: (idempotencyKey: string) => apiClient.request<BackupTaskAdmission>("/api/v1/backups/key-challenges", { method: "POST", body: { idempotencyKey } }),
+  confirm: (challengeId: string, proofSha256: string) => apiClient.request<{ confirmed: boolean }>("/api/v1/backups/key-confirmation", { method: "POST", body: { challengeId, proofSha256 } }),
+};

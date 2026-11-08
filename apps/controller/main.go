@@ -24,6 +24,13 @@ import (
 var controllerBuildVersion = "0.9.0-dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "recovery" {
+		if err := bootstrap.RunRecoveryCommand(context.Background(), os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			log.Print(err)
+			os.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "pki" {
 		if err := bootstrap.RunPKICommand(context.Background(), os.Args[2:], os.Stdout, os.Stderr); err != nil {
 			log.Print(err)

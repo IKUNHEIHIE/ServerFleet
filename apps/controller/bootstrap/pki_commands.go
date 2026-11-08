@@ -26,6 +26,8 @@ func RunPKICommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 	name := flags.String("name", "Server Fleet offline Root", "offline Root common name")
 	rootPin := flags.String("root-pin", "", "independently verified Root SPKI SHA-256")
 	generation := flags.Uint64("generation", 0, "explicit offline-authorized trust generation")
+	requestFile := flags.String("request-file", "", "private recovery authority request JSON")
+	outputFile := flags.String("output-file", "", "new signed public recovery authorization file")
 	offline := flags.Bool("offline-ack", false, "confirm this explicit signing operation is on the offline Root host")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
@@ -34,6 +36,14 @@ func RunPKICommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		return errors.New("pki: unexpected positional arguments")
 	}
 	switch args[0] {
+	case "sign-recovery":
+		if !*offline {
+			return errors.New("pki: offline Root operation requires -offline-ack")
+		}
+		if err := localpki.SignRecoveryAuthority(*rootDirectory, *requestFile, *outputFile); err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(map[string]any{"state": "recovery_authority_signed", "privateKeyExported": false, "fencingProven": false})
 	case "init-offline":
 		if !*offline {
 			return errors.New("pki: offline Root operation requires -offline-ack")

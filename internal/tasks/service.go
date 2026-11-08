@@ -733,6 +733,12 @@ func (s *Service) RecordResult(ctx context.Context, taskID, nodeID string, code 
 		return Task{}, ErrTaskTerminal
 	}
 	now := s.now().UTC()
+	logNodeID := nodeID
+	targetKey := "nodeId"
+	if task.TargetType == TargetTypeController {
+		logNodeID = ""
+		targetKey = "controllerId"
+	}
 	applied := false
 	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		var err error
@@ -744,12 +750,12 @@ func (s *Service) RecordResult(ctx context.Context, taskID, nodeID string, code 
 			return nil
 		}
 		if err := s.repo.AppendLog(txCtx, tx, LogEntry{
-			TaskID: taskID, NodeID: nodeID, Level: logLevelFor(code), Message: redacted, At: now,
+			TaskID: taskID, NodeID: logNodeID, Level: logLevelFor(code), Message: redacted, At: now,
 		}); err != nil {
 			return err
 		}
 		return s.repo.AppendEvent(txCtx, tx, taskID, "target_result", map[string]any{
-			"nodeId": nodeID, "code": string(code),
+			targetKey: nodeID, "code": string(code),
 		}, now)
 	})
 	if err != nil {

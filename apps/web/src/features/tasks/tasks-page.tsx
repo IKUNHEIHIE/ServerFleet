@@ -343,7 +343,7 @@ export function TasksPage() {
                   ),
                 },
                 { key: "state", header: "状态", render: task => TASK_STATE_LABEL[task.state] },
-                { key: "targets", header: "目标快照", align: "right", render: task => `${task.targetNodeIdsSnapshot.length} 台` },
+                { key: "targets", header: "目标快照", align: "right", render: task => task.targetType === "controller" ? `主控 ${task.targetControllerId ?? "身份未返回"}` : `${task.targetNodeIdsSnapshot.length} 台` },
                 { key: "created", header: "创建时间", render: task => formatDateTime(task.createdAt) ?? "—" },
                 { key: "expires", header: "到期", render: task => formatDateTime(task.expiresAt) ?? "—" },
                 { key: "by", header: "创建者", render: task => task.createdBy ?? "—" },

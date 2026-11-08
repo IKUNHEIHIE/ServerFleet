@@ -178,10 +178,10 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                 <p>到期：{formatDateTime(data.expiresAt) ?? "—"}</p>
                 <p className="lg:col-span-2">planDigest：<span className="break-all font-mono text-xs">{data.planDigest ?? planDigest ?? "（此端点未返回 planDigest；服务端任务列表中也没有该任务，审批保持禁用）"}</span></p>
                 <p>revision：{data.revision}</p>
-                <p>目标快照：{data.targetNodeIdsSnapshot.length} 台</p>
+                <p>目标快照：{data.targetType === "controller" ? "1 个主控" : `${data.targetNodeIdsSnapshot.length} 台`}</p>
               </div>
               <div className="border-t px-5 py-3 text-xs text-muted-foreground">
-                目标集合：{data.targetNodeIdsSnapshot.length > 0 ? data.targetNodeIdsSnapshot.join("、") : "空快照"}
+                目标集合：{data.targetType === "controller" ? `主控 ${data.targetControllerId ?? "身份未返回"}` : data.targetNodeIdsSnapshot.length > 0 ? data.targetNodeIdsSnapshot.join("、") : "空快照"}
               </div>
             </Panel>
 
@@ -229,9 +229,9 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                   <DataTable
                     caption="任务执行结果"
                     rows={page.items}
-                    rowKey={execution => execution.executionId ?? execution.nodeId}
+                    rowKey={(execution, index) => execution.executionId ?? execution.nodeId ?? execution.controllerId ?? `execution-${index}`}
                     columns={[
-                      { key: "node", header: "节点", render: execution => <span className="font-mono text-xs">{execution.nodeId}</span> },
+                      { key: "node", header: "执行目标", render: execution => <span className="font-mono text-xs">{execution.controllerId ? `主控 ${execution.controllerId}` : execution.nodeId}</span> },
                       { key: "state", header: "状态", render: execution => execution.state },
                       { key: "exit", header: "退出码", render: execution => (execution.exitCode === null || execution.exitCode === undefined ? "—" : execution.exitCode) },
                       { key: "start", header: "开始", render: execution => formatDateTime(execution.startedAt) ?? "—" },

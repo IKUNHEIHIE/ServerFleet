@@ -235,6 +235,8 @@ func Migrations() [][]storage.Migration {
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
 		recovery.Migrations(),
+		transport.RecoveryMigrations(),
+		recovery.ReconciliationMigrations(),
 		audit.Migrations(),
 	}
 }
@@ -253,6 +255,8 @@ func AuditActions() []string {
 		"auth.grant.revoke",
 		"auth.password.change",
 		"auth.http.denied",
+		"auth.recovery.invalidate",
+		"recovery.reconcile",
 		"auth.token.issue",
 		"auth.token.revoke",
 		"auth.approval.request",
@@ -467,7 +471,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if s != nil && s.ProductUpdates != nil {
 			_ = s.ProductUpdates.Close()
 		}
-		if s.Backups != nil {
+		if s != nil && s.Backups != nil {
 			_ = s.Backups.Close()
 		}
 		_ = db.Close()
@@ -1032,9 +1036,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if _, err := s.Files.RecoverTransfers(ctx); err != nil {
 			return cleanup(err)
 		}
-		if _, err := s.Tasks.Recover(ctx); err != nil {
-			return cleanup(err)
-		}
+	}
+	if _, err := s.Tasks.Recover(ctx); err != nil {
+		return cleanup(err)
 	}
 	s.DNS = dnsService
 	s.Notifications = notificationsService

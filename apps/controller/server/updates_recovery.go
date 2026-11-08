@@ -111,6 +111,24 @@ func (s *Server) registerUpdateRecoveryRoutes() {
 		for _, pattern := range s.BackupHTTP.Patterns() {
 			s.mux.Handle(pattern, s.BackupHTTP)
 		}
+	} else {
+		for _, pattern := range recovery.BackupHTTPPatterns() {
+			if pattern == "POST /api/v1/backups/{backupId}/verify" {
+				continue
+			}
+			s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.Header().Set("Cache-Control", "no-store")
+				p, _, err := s.authenticateIdentity(r)
+				if r.TLS == nil || err != nil || s.Identity.AuthorizeAdministrator(r.Context(), p.SubjectID) != nil {
+					w.WriteHeader(403)
+					_, _ = w.Write([]byte(`{"code":"NOT_AUTHORIZED","status":403}`))
+					return
+				}
+				w.WriteHeader(503)
+				_, _ = w.Write([]byte(`{"code":"BACKUP_DEPLOYMENT_UNAVAILABLE","status":503}`))
+			})
+		}
 	}
 	if s.UpdatesHTTP != nil {
 		for _, pattern := range s.UpdatesHTTP.Patterns() {

@@ -143,7 +143,7 @@ func (s *Server) setupEncryptedBackups(ctx context.Context, cfg Config, workers 
 			return recovery.ErrBackupUnavailable
 		}
 		hash := sha256.Sum256(leaf.RawSubjectPublicKeyInfo)
-		if hex.EncodeToString(hash[:]) == d.RootPin {
+		if hex.EncodeToString(hash[:]) == d.RootPin || hex.EncodeToString(hash[:]) == material.IssuerSPKI {
 			return recovery.ErrBackupUnavailable
 		}
 		return nil
@@ -209,7 +209,7 @@ func (s *Server) submitBackup(ctx context.Context, p recovery.Principal, kind, k
 	} else if kind != "full" {
 		return tasks.Task{}, tasks.ErrInvalidTask
 	}
-	return s.Tasks.SubmitController(ctx, tasks.SubmitRequest{SubjectID: p.SubjectID, RequestID: p.RequestID, Name: name, ActionID: action, OperationClass: tasks.OperationClassStandard, Params: map[string]string{"kind": kind, "recipientFingerprint": s.Backups.RecipientFingerprint()}, IdempotencyKey: "backup-" + kind + "-" + key, Source: source})
+	return s.Tasks.SubmitController(ctx, tasks.SubmitRequest{SubjectID: p.SubjectID, RequestID: p.RequestID, Name: name, ActionID: action, OperationClass: tasks.OperationClassStandard, Params: map[string]string{"kind": kind, "recipientFingerprint": s.Backups.RecipientFingerprint()}, IdempotencyKey: backupTaskKey(kind, key), Source: source})
 }
 
 // This loop only produces durable unified tasks. It cannot read plaintext,
@@ -233,4 +233,9 @@ func (s *Server) runBackupSchedule(ctx context.Context) {
 			_, _ = s.submitBackup(ctx, recovery.Principal{SubjectID: s.backupAutomaticOwner, RequestID: "backup-daily-" + day}, "full", "daily-"+day, audit.SourceSystem)
 		}
 	}
+}
+
+func backupTaskKey(kind, key string) string {
+	sum := sha256.Sum256([]byte(key))
+	return "backup-" + kind + "-" + hex.EncodeToString(sum[:])
 }
