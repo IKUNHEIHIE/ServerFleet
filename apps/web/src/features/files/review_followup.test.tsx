@@ -42,8 +42,8 @@ it("review: switching nodes during upload creation does not redirect later write
  const {calls}=await renderAuthenticated("/files",{...base,
  "POST /api/v1/nodes/n-1/files/uploads":()=>creating,
  });
- await screen.findByRole("table",{name:"左侧目录内容"});
  const input=document.querySelector<HTMLInputElement>('input[type="file"]')!;
+ await waitFor(()=>expect(input).not.toBeDisabled());
  fireEvent.change(input,{target:{files:[new File(["hello"],"scope.txt")]}});
  await waitFor(()=>expect(calls.some(c=>c.method==="POST"&&c.url==="/api/v1/nodes/n-1/files/uploads")).toBe(true));
  fireEvent.change(screen.getByLabelText("左侧节点"),{target:{value:"n-2"}});

@@ -199,8 +199,13 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 		t.Fatal(code, out)
 	}
 	permissions := []string{"nodes.read", "tasks.submit", "tasks.read", "tasks.approve", "tasks.cancel"}
+	permissionSeen := map[string]bool{}
+	for _, key := range permissions {
+		permissionSeen[key] = true
+	}
 	for _, p := range server.ExtraPermissions() {
-		if p.ResourceType == "node" {
+		if p.ResourceType == "node" && !permissionSeen[p.Key] {
+			permissionSeen[p.Key] = true
 			permissions = append(permissions, p.Key)
 		}
 	}
