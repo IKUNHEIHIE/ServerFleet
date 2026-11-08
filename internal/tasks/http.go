@@ -95,6 +95,8 @@ type previewResponse struct {
 }
 
 type taskSummary struct {
+	TargetType            string   `json:"targetType,omitempty"`
+	TargetControllerID    string   `json:"targetControllerId,omitempty"`
 	TaskID                string   `json:"taskId"`
 	State                 string   `json:"state"`
 	CreatedAt             string   `json:"createdAt"`
@@ -106,12 +108,14 @@ type taskSummary struct {
 }
 
 type executionResult struct {
-	NodeID string `json:"nodeId"`
-	State  string `json:"state"`
-	Error  string `json:"error,omitempty"`
+	NodeID       string `json:"nodeId,omitempty"`
+	ControllerID string `json:"controllerId,omitempty"`
+	State        string `json:"state"`
+	Error        string `json:"error,omitempty"`
 }
 
 type batchTaskJob struct {
+	TargetControllerID    string            `json:"targetControllerId,omitempty"`
 	JobID                 string            `json:"jobId"`
 	Name                  string            `json:"name,omitempty"`
 	TargetType            string            `json:"targetType"`
@@ -490,12 +494,18 @@ func pageParams(r *http.Request) (int, int, error) {
 }
 
 func summaryFromTask(task Task) taskSummary {
-	return taskSummary{
+	view := taskSummary{
 		TaskID: task.ID, State: apiState(task.Status), CreatedAt: formatTime(task.CreatedAt),
 		CreatedBy: task.SubmitterID, TargetNodeIDsSnapshot: snapshotIDs(task),
 		Revision: task.Revision, PlanDigest: task.PlanHash,
 		ExpiresAt: formatTime(task.UnstartedDeadline),
 	}
+	if task.TargetType == TargetTypeController {
+		view.TargetType = TargetTypeController
+		view.TargetControllerID = task.TargetResourceID
+		view.TargetNodeIDsSnapshot = []string{}
+	}
+	return view
 }
 
 func snapshotIDs(task Task) []string {
@@ -512,17 +522,26 @@ func jobFromTask(task Task) batchTaskJob {
 	results := make([]executionResult, 0, len(task.Targets))
 	for _, target := range task.Targets {
 		item := executionResult{NodeID: target.NodeID, State: executionState(target.State)}
+		if task.TargetType == TargetTypeController {
+			item.NodeID = ""
+			item.ControllerID = task.TargetResourceID
+		}
 		if target.Message != "" && target.State.Terminal() {
 			item.Error = target.Message
 		}
 		results = append(results, item)
 	}
-	return batchTaskJob{
+	view := batchTaskJob{
 		JobID: task.ID, Name: task.Name, TargetType: task.TargetType,
 		TargetResourceID: task.TargetResourceID, TargetNodeIDsSnapshot: snapshotIDs(task),
 		State: batchState(task.Status), Results: results, CreatedAt: formatTime(task.CreatedAt),
 		Revision: task.Revision, PlanDigest: task.PlanHash,
 	}
+	if task.TargetType == TargetTypeController {
+		view.TargetControllerID = task.TargetResourceID
+		view.TargetNodeIDsSnapshot = []string{}
+	}
+	return view
 }
 
 func apiState(status TaskStatus) string {

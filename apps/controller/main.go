@@ -46,6 +46,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	options.BuildVersion = controllerBuildVersion
 	composed, material, err := bootstrap.Compose(ctx, options)
 	if err != nil {
 		log.Fatalf("initialize controller: %v", err)

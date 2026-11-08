@@ -84,6 +84,7 @@ type Config struct {
 
 	// BackupDir defaults to a private directory beside the SQLite database.
 	BackupDir         string
+	BackupDeployment  *BackupDeployment
 	RecoveryLatch     *recovery.QuarantineLatch
 	UpdateProduct     *updates.ProductDeploymentOptions
 	UpdateExecution   *updates.TaskInstallWorkerOptions
@@ -157,8 +158,11 @@ type Server struct {
 	PluginHTTP       *plugins.ManagementHTTP
 	XrayHTTP         *plugins.XrayDeclarativeHTTP
 
-	UpdatesHTTP  *updates.HTTP
-	RecoveryHTTP *recovery.HTTP
+	UpdatesHTTP          *updates.HTTP
+	RecoveryHTTP         *recovery.HTTP
+	Backups              *recovery.BackupManager
+	BackupHTTP           *recovery.BackupHTTP
+	backupAutomaticOwner string
 
 	Workflows     *workflows.Engine
 	workflowState *workflowRuntime
@@ -230,6 +234,7 @@ func Migrations() [][]storage.Migration {
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
+		recovery.Migrations(),
 		audit.Migrations(),
 	}
 }
@@ -333,6 +338,7 @@ func AuditActions() []string {
 		certificates.ServiceActions(),
 		gateway.ServiceActions(),
 		publishing.ServiceActions(),
+		recovery.BackupAuditActions(),
 	} {
 		raw = append(raw, list...)
 	}
@@ -460,6 +466,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 		if s != nil && s.ProductUpdates != nil {
 			_ = s.ProductUpdates.Close()
+		}
+		if s.Backups != nil {
+			_ = s.Backups.Close()
 		}
 		_ = db.Close()
 		return nil, cause
@@ -787,16 +796,21 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return updates.ApplyResult{ID: t.ID, TaskID: t.ID, Status: string(t.Status), TargetVersion: p.Attempted.Version}, nil
 		}
 	}
+	controllerExecution, err := s.setupEncryptedBackups(ctx, cfg, workers)
+	if err != nil {
+		return cleanup(err)
+	}
 	tasksService, err := tasks.NewService(tasks.Options{
-		RuntimeGate: runtimeGate,
-		Workers:     workers,
-		DB:          db,
-		Repo:        tasksRepo,
-		Audit:       auditRecorder,
-		Authorizer:  authorizer,
-		Dispatcher:  dispatcher,
-		Nodes:       nodeLookup,
-		Now:         now,
+		ControllerExecution: controllerExecution,
+		RuntimeGate:         runtimeGate,
+		Workers:             workers,
+		DB:                  db,
+		Repo:                tasksRepo,
+		Audit:               auditRecorder,
+		Authorizer:          authorizer,
+		Dispatcher:          dispatcher,
+		Nodes:               nodeLookup,
+		Now:                 now,
 	})
 	if err != nil {
 		return cleanup(err)
@@ -1056,6 +1070,10 @@ func (s *Server) startTaskScheduler() {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()
 		}
+		if s.Backups != nil && s.backupAutomaticOwner != "" {
+			workers.Add(1)
+			go func() { defer workers.Done(); s.runBackupSchedule(ctx) }()
+		}
 		workers.Wait()
 	}()
 }
@@ -1094,6 +1112,10 @@ func (s *Server) Close() error {
 			return err
 		}
 		s.ProductUpdates = nil
+	}
+	if s.Backups != nil {
+		_ = s.Backups.Close()
+		s.Backups = nil
 	}
 	if s.DB == nil {
 		return nil
@@ -1492,6 +1514,9 @@ func (g *composedTaskReadGate) AuthorizeTaskRead(ctx context.Context, subjectID,
 	task, err := g.tasks.Get(ctx, taskID)
 	if err != nil {
 		return err
+	}
+	if task.TargetType == tasks.TargetTypeController {
+		return g.identity.AuthorizeAdministrator(ctx, subjectID)
 	}
 	if len(task.Targets) == 0 {
 		return nil

@@ -36,6 +36,8 @@ type Options struct {
 	FileDeployment        string
 	GatewayDeployment     string
 	UpdateDeployment      string
+	BackupDeployment      string
+	BuildVersion          string
 	CredentialKeyDir      string
 	DisableCleanupRetries bool
 }
@@ -61,6 +63,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
 	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
 	flags.StringVar(&options.UpdateDeployment, "update-deployment", "", "private signed local Agent update configuration (Linux; requires management TLS mode)")
+	flags.StringVar(&options.BackupDeployment, "backup-deployment", "", "private encrypted backup startup configuration (provisioned PKI only)")
 	flags.BoolVar(&options.DisableCleanupRetries, "disable-cleanup-retries", false, "disable automatic retries of owned ACME cleanup records")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
@@ -76,6 +79,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 
 // Validate enforces the management-mode prerequisites without opening storage.
 func (o Options) Validate() error {
+	if o.BackupDeployment != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: encrypted backups require provisioned PKI and management HTTPS")
+	}
 	if o.WebDirectory != "" && o.Scaffold() {
 		return errors.New("controller: -web-dir requires -db and direct HTTPS")
 	}
@@ -204,7 +210,22 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		}
 		serverName = host
 	}
+	var backupDeployment *server.BackupDeployment
+	if options.BackupDeployment != "" {
+		backupDeployment, err = server.LoadBackupDeployment(options.BackupDeployment)
+		if err != nil {
+			return nil, nil, err
+		}
+		backupDeployment.PKIDirectory = directory
+		backupDeployment.RootPin = material.RootSPKI
+		backupDeployment.TLSCertificate = options.TLSCert
+		backupDeployment.TLSKey = options.TLSKey
+		backupDeployment.CredentialDirectory = options.CredentialKeyDir
+		backupDeployment.AgentEndpoint = authority
+		backupDeployment.ReleaseVersion = options.BuildVersion
+	}
 	composed, err := server.New(ctx, server.Config{
+		BackupDeployment:      backupDeployment,
 		FileExecution:         fileConfig,
 		WebDirectory:          options.WebDirectory,
 		GatewayDeployment:     gatewayDeployment,
