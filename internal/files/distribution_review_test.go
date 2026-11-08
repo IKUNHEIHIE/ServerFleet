@@ -14,6 +14,7 @@ import (
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/storage"
+	"serverfleet.local/serverfleet/internal/tasks"
 )
 
 func TestReviewR2DistributionTerminalTargetCannotReopen(t *testing.T) {
@@ -186,5 +187,52 @@ func TestDistributionChecksumAuditFailureRollsBackAndKeepsStaging(t *testing.T) 
 	stored, err = f.repo.GetDistribution(ctx, d.ID)
 	if err != nil || stored.Status != files.DistributionFailed {
 		t.Fatalf("rejection not committed: %+v %v", stored, err)
+	}
+}
+
+// Finish the second target between the service's initial read and aggregation.
+// The response must pair the durable parent with its durable target evidence.
+type distributionInterleavingSubmitter struct {
+	*fakeSubmitter
+	read func(context.Context, string) (tasks.Task, error)
+}
+
+func (s *distributionInterleavingSubmitter) ReadTaskOutcome(ctx context.Context, id string) (tasks.Task, error) {
+	return s.read(ctx, id)
+}
+
+func TestDistributionReconcileReturnsConcurrentDurableTargetEvidence(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	d, err := f.service.CreateDistribution(ctx, "user-1", "snapshot-create", []string{"n-a", "n-b"}, "/srv/test.bin", nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = f.service.BindDistributionTask(ctx, d, "snapshot-task", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = f.repo.FinishDistributionTarget(ctx, f.db, d.ID, "n-a", files.TargetStateCompleted, 1, "", "", ""); err != nil {
+		t.Fatal(err)
+	}
+	queue := &distributionInterleavingSubmitter{fakeSubmitter: f.submitter}
+	queue.read = func(ctx context.Context, id string) (tasks.Task, error) {
+		if moved, err := f.repo.FinishDistributionTarget(ctx, f.db, d.ID, "n-b", files.TargetStateFailed, 0, "", "denied_now", "permission revoked"); err != nil || !moved {
+			t.Fatalf("concurrent target result: moved=%v err=%v", moved, err)
+		}
+		return tasks.Task{ID: id, Status: tasks.StatusRunning}, nil
+	}
+	service, err := files.NewService(files.Options{DB: f.db, Repo: f.repo, Audit: f.audit,
+		Authorizer: f.authorizer, Submitter: queue, Canceller: f.canceller, StagingDir: f.staging})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := service.GetDistribution(ctx, "user-1", "snapshot-read", d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != files.DistributionPartial || len(got.Targets) != 2 ||
+		got.Targets[0].Status != files.TargetStateCompleted || got.Targets[1].Status != files.TargetStateFailed ||
+		got.Targets[1].ErrorCode != "denied_now" {
+		t.Fatalf("mixed parent/target snapshots: %+v", got)
 	}
 }

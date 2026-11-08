@@ -33,3 +33,10 @@ IN PROGRESS：开始集中返修。G2与B03/B04/B05/B06及外部/ARM/硬1C1G/正
 - c7ad3e1 / PR#12 run42453507454：dependencies成功；Go全部运行用例通过（保留7 SKIP），Web380PASS；foundation最终因新测试gateway_cloud_r3_test.go:317的SA4006静态检查失败。生成/锁漂移与双架构构建后续步骤SKIPPED，不冒称该轮执行。
 - 新真实普通用户组合TestCloudR3GatewayActualAgentPublicationAndReverseCompensation通过：真实Agent构建/进程/WSS，独立审批（拒绝自批），持久子执行成功，实际Nginx -t/reload，HTTP364字节相符，独立移除审批及反序路由/证书阶段/DNS清理；test-only本地TLS供应商与显式nginx检查器边界如前，B04未整体关闭。
 - 最终集中补丁修SA4006（检查真实HTTP正文读取错误），补有效JSON但没有success判定及5xx内嵌鉴权码也必须UNKNOWN的DNS边界；DNS原包37顶层PASS/0SKIP/0FAIL。同步README/架构/进度/所有权及Xray作者扫描文档内过时文字，不改变安全门槛。最终接收仍待新head完整CI及代码复核。
+
+## 第二轮实际CI与收敛修复
+
+- 7457b41 / run42454487831：dependencies成功；Go966顶层PASS/7SKIP/2FAIL；Web380PASS。真实网关364字节与逆序补偿专项再次通过。未合并、不把已有失败删为SKIP。
+- 分发读取在初始目标快照之后遇到worker完成另一目标，聚合使用新持久目标写成partial，却返回旧目标列表，造成partial+dispatching的矛盾响应。移除忽略写结果后的乐观内存终态，聚合后重读持久父子记录；新增确定性交错回归。
+- 上传专项原先在上传终态写入之后立即要求统一任务已完成；实际任务worker在Execute返回后才持久化结果。专项增加有界10秒终态等待，仍严格要求Completed及实际文件摘要、重启UNKNOWN和无重放证据，不改生产生命周期或放宽终态。
+- 这两项有明确原因和修复，不通过无改动重跑碰绿灯；本批模块验证后再进行一次最终CI。

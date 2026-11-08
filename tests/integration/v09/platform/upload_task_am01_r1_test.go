@@ -297,9 +297,21 @@ func TestAM01R1UploadTaskConvergenceAndCrashRecovery(t *testing.T) {
 	plainUpload, plainTask := dispatch("plain.bin", plainPayload, false)
 	computed := sha256Hex(plainPayload)
 	uploadStatus(plainUpload)
-	task, e = composed.Tasks.Get(ctx, plainTask)
-	if e != nil || task.Status != tasks.StatusCompleted {
-		t.Fatalf("plain upload task = %v err=%v", task.Status, e)
+	// The file worker persists its upload result before returning the result
+	// to the unified task worker. Require both durable terminal records, while
+	// allowing the bounded asynchronous task-result handoff to complete.
+	for deadline := time.Now().Add(10 * time.Second); ; {
+		task, e = composed.Tasks.Get(ctx, plainTask)
+		if e != nil {
+			t.Fatalf("plain upload task read: %v", e)
+		}
+		if task.Status.Terminal() || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(30 * time.Millisecond)
+	}
+	if task.Status != tasks.StatusCompleted {
+		t.Fatalf("plain upload task = %v", task.Status)
 	}
 	upload, e := composed.Files.GetUpload(ctx, subject, fmt.Sprintf("am01r1-plain-%d", counter.Add(1)), plainUpload)
 	if e != nil || upload.SHA256Actual != computed || upload.Status != files.UploadCompleted {
