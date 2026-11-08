@@ -296,7 +296,10 @@ func uploadProgressDTO(upload Upload) map[string]any {
 	}
 	dto := map[string]any{
 		"uploadId": upload.ID, "status": status, "bytesReceived": upload.BytesReceived,
-		"expectedSize": expected,
+		"expectedSize": expected, "destinationPath": upload.DestinationPath,
+	}
+	if upload.SHA256Expected != "" {
+		dto["sha256Expected"] = upload.SHA256Expected
 	}
 	if upload.TaskID != "" {
 		dto["taskId"] = upload.TaskID

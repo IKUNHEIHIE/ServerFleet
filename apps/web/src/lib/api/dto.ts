@@ -379,6 +379,9 @@ export interface UploadCompletion {
 /** GET …/files/uploads/{uploadId} 的真实状态读回，用于刷新/断线后恢复。 */
 export interface UploadState {
   readonly uploadId: string;
+  /** R10 owner-authorized binding; absent on older Controllers disables resume. */
+  readonly destinationPath?: string;
+  readonly sha256Expected?: string;
   readonly status: "awaiting_data" | "dispatching" | "completed" | "failed" | "cancelled" | string;
   readonly bytesReceived: number;
   readonly expectedSize?: number | null;

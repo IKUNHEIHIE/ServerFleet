@@ -471,10 +471,11 @@ export const filesApi = {
       conflictPolicy?: ConflictPolicy;
       files: readonly { name: string; sizeBytes: number; sha256?: string }[];
     },
+    signal?: AbortSignal,
   ) =>
     apiClient.request<UploadSession>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads`, {
       method: "POST",
-      body,
+      body, signal,
     }),
   // GM-W5-01：真实字节通道。offset 必须与服务端已收字节数一致（否则 409）；
   // 服务端写入后回传 bytesReceived，最终由 complete 触发字节数与 SHA-256 校验。
@@ -483,16 +484,17 @@ export const filesApi = {
     uploadId: string,
     body: ArrayBuffer | Uint8Array | string,
     offset = 0,
+    signal?: AbortSignal,
   ) =>
     apiClient.requestRaw<UploadProgress>(
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}/content?offset=${offset}`,
       body,
-      { method: "PUT" },
+      { method: "PUT", signal },
     ),
-  completeUpload: (nodeId: string, uploadId: string) =>
+  completeUpload: (nodeId: string, uploadId: string, signal?: AbortSignal) =>
     apiClient.request<UploadCompletion>(
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}/complete`,
-      { method: "POST" },
+      { method: "POST", signal },
     ),
   // 刷新/断线恢复：读回服务端真实状态（含 dispatching 与 taskId），不依赖前端记忆。
   uploadStatus: (nodeId: string, uploadId: string, signal?: AbortSignal) =>

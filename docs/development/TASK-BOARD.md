@@ -1,5 +1,12 @@
 # 任务登记板
 
+## 当前集中实施：正式Web持久续传（2026-11-08）
+
+V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；feature/cloud-browser-resume-20261108 / ServerFleet-browser-resume；IN PROGRESS。起点main f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a及独立CI42458157478 success。#7/#8/#9由#12接收，#13暂存恢复/四ADR原文已接收；下方旧候选状态为历史提交前快照。
+
+主控单写apps/web文件页/API适配、internal/files/http.go只读绑定投影/专项、独立v09-r10候选/redocly注册、相应进度/产品差异/README。原始资料/历史候选/Proto/gen/锁/CI/迁移SQL不改。审查：主控逐项复核+实际CI/COMMENT，非第二位独立账号、不自我APPROVE。停止条件：账号/节点隔离的待核验元数据、重新选文件+摘要绑定、当前服务端目标/摘要/偏移读回、有界分块、已派发/UNKNOWN不重放、换节点/身份/撤权负向、集中检查与精确head PR接收。真实外部/ARM/硬1C1G及G2/发布关卡另行OPEN。不启动其他Agent。
+
+
 ## 当前集中实施：持久暂存续传（2026-11-08）
 
 任务V09-CLOUD-STAGING-RESUME-01；唯一会话chatgpt-takeover-01；分支feature/cloud-staging-resume-20261108；独立目录ServerFleet-resume。依赖#12精确候选3f2fc687a148306cdcc089c34ce7057e877a70e4及原文恢复8bd7140；未合并候选不冒称main已提供。当前IN PROGRESS，原三平台不再并发写入。
