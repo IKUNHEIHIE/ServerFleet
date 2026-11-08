@@ -266,12 +266,19 @@ func NewGatewayWSSChannel(client *transport.FileClient) (files.AgentFileChannel,
 }
 
 func NewGatewayChannelUploader(channel files.AgentFileChannel, roots map[string]string, db *storage.DB, stage GatewayArtifactStageChecker) (GatewayArtifactUploader, error) {
-	if channel == nil || db == nil || stage == nil {
-		return nil, ErrGatewayArtifactTransport
-	}
 	paths, err := NewGatewayChannelPaths(roots)
 	if err != nil {
 		return nil, err
+	}
+	return NewGatewayChannelUploaderWithMapper(channel, paths, db, stage)
+}
+
+// NewGatewayChannelUploaderWithMapper reuses the already loaded, owner-checked
+// file deployment mapper. Both site and artifact paths must stay inside the
+// mapped Agent root; an unmapped node keeps the channel closed.
+func NewGatewayChannelUploaderWithMapper(channel files.AgentFileChannel, paths files.PathMapper, db *storage.DB, stage GatewayArtifactStageChecker) (GatewayArtifactUploader, error) {
+	if channel == nil || paths == nil || db == nil || stage == nil {
+		return nil, ErrGatewayArtifactTransport
 	}
 	channelTransport, err := files.NewChannelTransport(files.ChannelTransportConfig{Channel: channel, Paths: paths})
 	if err != nil {

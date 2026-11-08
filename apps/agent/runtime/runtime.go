@@ -70,6 +70,8 @@ type ConnectRequest struct {
 	AgentVersion    string
 	Persistent      bool
 	FileRoot        string
+	GatewayPrefix   string
+	NginxBinary     string
 }
 
 // ConnectResult is the observed single-shot connection outcome.
@@ -110,6 +112,8 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	connectOnce := flags.Bool("connect-once", false, "open one controlled WSS+mTLS connection, sample once and exit")
 	serve := flags.Bool("serve", false, "maintain WSS+mTLS with bounded reconnect; stop with SIGTERM")
 	fileRoot := flags.String("file-root", "", "explicit private Linux file root (enables reviewed files.transfer.v1 profile)")
+	gatewayPrefix := flags.String("gateway-prefix", "", "explicit private Linux nginx prefix (enables reviewed gateway.nginx.* profile)")
+	nginxBinary := flags.String("nginx-binary", "", "nginx executable for the trusted gateway prefix (default: nginx on PATH)")
 	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
 	waitTaskMS := flags.Int("wait-task-ms", 0, "one-shot wait window for one TaskOffer after sampling (0..600000)")
 	agentVersion := flags.String("agent-version", DefaultVersion, "Agent version reported during enrollment and connection")
@@ -121,6 +125,15 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		return 2
 	}
 	if *fileRoot != "" && (!filepath.IsAbs(*fileRoot) || !(*serve || *connectOnce)) {
+		return 2
+	}
+	if *gatewayPrefix != "" && (!filepath.IsAbs(*gatewayPrefix) || !(*serve || *connectOnce)) {
+		return 2
+	}
+	if *gatewayPrefix != "" && !agentPathWithinRoot(*fileRoot, *gatewayPrefix) {
+		return 2
+	}
+	if *nginxBinary != "" && *gatewayPrefix == "" {
 		return 2
 	}
 
@@ -167,7 +180,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
 			return 1
 		}
-		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, FileRoot: *fileRoot}); err != nil {
+		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
 			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
 			return 1
 		}
@@ -239,6 +252,8 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			NodeName:        label,
 			WaitTaskMillis:  *waitTaskMS,
 			AgentVersion:    *agentVersion,
+			GatewayPrefix:   *gatewayPrefix,
+			NginxBinary:     *nginxBinary,
 		})
 		if err != nil {
 			fmt.Fprintln(stderr, "agent: one-shot connection failed; no automatic retry")
@@ -282,6 +297,20 @@ func validNodeName(name string) bool {
 func writeJSON(w io.Writer, value any) {
 	encoder := json.NewEncoder(w)
 	_ = encoder.Encode(value)
+}
+
+// agentPathWithinRoot keeps the operator-owned gateway prefix inside the same
+// explicit file root. The artifact upload and nginx site roots must not cross
+// that reviewed filesystem boundary.
+func agentPathWithinRoot(root, path string) bool {
+	if root == "" || path == "" || !filepath.IsAbs(root) || !filepath.IsAbs(path) {
+		return false
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }
 
 func validPin(pin string) bool {
