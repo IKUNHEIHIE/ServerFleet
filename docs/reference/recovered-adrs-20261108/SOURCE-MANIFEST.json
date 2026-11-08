@@ -1,0 +1,42 @@
+{
+  "task": "V09-CLOUD-RESTORE-ADR-01",
+  "session": "chatgpt-takeover-01",
+  "restoredAt": "2026-11-08",
+  "source": "User original approved ADR archive, current retrieved bytes",
+  "frozenOriginal69Unchanged": true,
+  "doesNotFreezeG2": true,
+  "files": [
+    {
+      "file": "04-ADR-WC-001-通配符证书托管策略-已批准.md",
+      "bytes": 11978,
+      "sha256": "82ab2539bec5795ddf3150779b689db3bb0dc964ba3cf0909f56538d8764cda8",
+      "libraryFileId": "libfile_bf66b647faac81918f5d322e7e54d3ac",
+      "approvalDate": "2026-10-26",
+      "sourceHeader": "Accepted / 已批准"
+    },
+    {
+      "file": "06-ADR-PRIV-001-Agent权限与远程执行安全模型-已批准.md",
+      "bytes": 11601,
+      "sha256": "1c1a2d249e3af73a235fcf204ee6112d5888bb644a6195b884aef61ed87b8570",
+      "libraryFileId": "libfile_47d6f4198b3c81919f990c2ba3fd8b6d",
+      "approvalDate": "2026-10-26",
+      "sourceHeader": "Accepted / 已批准"
+    },
+    {
+      "file": "10-ADR-UPDATE-001-Agent自动更新与版本管理-已批准.md",
+      "bytes": 13724,
+      "sha256": "dbef9f17cf97f5363379542f87e95ecfc14d755bbd2036aeef2baeec31ab102c",
+      "libraryFileId": "libfile_3fcae4e47cd8819190102e897c5436f2",
+      "approvalDate": "2026-10-26",
+      "sourceHeader": "Accepted / 已批准"
+    },
+    {
+      "file": "11-ADR-PKI-OPS-001-主控备份与灾难恢复-已批准.md",
+      "bytes": 15416,
+      "sha256": "6be0a3ab48d17c14be83143c3b507b74707ddf543d51c1bc1be5b700c10b48ff",
+      "libraryFileId": "libfile_1c4563f14264819185bb48cedcc02f2b",
+      "approvalDate": "2026-10-26",
+      "sourceHeader": "Accepted / 已批准"
+    }
+  ]
+}

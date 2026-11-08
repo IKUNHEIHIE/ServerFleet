@@ -2,8 +2,6 @@ package files
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
@@ -112,13 +110,9 @@ func (s *Service) AppendChunk(ctx context.Context, subjectID, requestID, uploadI
 	if next > s.maxUploadBytes || (upload.ExpectedSize != nil && next > *upload.ExpectedSize) {
 		return Upload{}, ErrUploadTooLarge
 	}
-	staging, err := s.stagingPath(upload.StagingName)
+	file, err := s.openStagingAppend(upload.StagingName, offset)
 	if err != nil {
 		return Upload{}, err
-	}
-	file, err := os.OpenFile(staging, os.O_WRONLY, 0o600)
-	if err != nil {
-		return Upload{}, fmt.Errorf("files: open staging file: %w", err)
 	}
 	if _, err := file.WriteAt(data, offset); err != nil {
 		_ = file.Close()
@@ -175,25 +169,8 @@ func (s *Service) WriteUploadContent(ctx context.Context, subjectID, requestID, 
 	if remaining < 0 {
 		return Upload{}, ErrUploadTooLarge
 	}
-	staging, err := s.stagingPath(upload.StagingName)
+	file, err := s.openStagingAppend(upload.StagingName, offset)
 	if err != nil {
-		return Upload{}, err
-	}
-	file, err := os.OpenFile(staging, os.O_WRONLY, 0o600)
-	if err != nil {
-		return Upload{}, fmt.Errorf("files: open staging file: %w", err)
-	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return Upload{}, err
-	}
-	if info.Size() != offset {
-		_ = file.Close()
-		return Upload{}, fmt.Errorf("files: staged bytes are inconsistent with the recorded offset")
-	}
-	if _, err := file.Seek(offset, io.SeekStart); err != nil {
-		_ = file.Close()
 		return Upload{}, err
 	}
 	written, copyErr := io.Copy(file, io.LimitReader(content, remaining+1))
@@ -267,7 +244,7 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 	if err != nil {
 		return Upload{}, err
 	}
-	digest, err := fileDigest(staging)
+	digest, err := s.stagingDigest(upload.StagingName, upload.BytesReceived)
 	if err != nil {
 		return Upload{}, err
 	}
@@ -438,17 +415,4 @@ func (s *Service) Download(ctx context.Context, subjectID, requestID, nodeID, re
 	}
 	_ = s.audit.Append(ctx, s.event(subjectID, ActionDownload, "success", requestID, []string{nodeID}, ""))
 	return written, nil
-}
-
-func fileDigest(path string) (string, error) {
-	file, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer file.Close()
-	hash := sha256.New()
-	if _, err := io.Copy(hash, file); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(hash.Sum(nil)), nil
 }

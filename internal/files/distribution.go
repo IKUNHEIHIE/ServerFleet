@@ -269,25 +269,8 @@ func (s *Service) WriteDistributionContent(ctx context.Context, subjectID, reque
 	if remaining < 0 {
 		return Distribution{}, ErrUploadTooLarge
 	}
-	staging, err := s.stagingPath(distribution.StagingName)
+	file, err := s.openStagingAppend(distribution.StagingName, offset)
 	if err != nil {
-		return Distribution{}, err
-	}
-	file, err := os.OpenFile(staging, os.O_WRONLY, 0o600)
-	if err != nil {
-		return Distribution{}, fmt.Errorf("files: open staging file: %w", err)
-	}
-	info, err := file.Stat()
-	if err != nil {
-		_ = file.Close()
-		return Distribution{}, err
-	}
-	if info.Size() != offset {
-		_ = file.Close()
-		return Distribution{}, fmt.Errorf("files: staged bytes are inconsistent with the recorded offset")
-	}
-	if _, err := file.Seek(offset, io.SeekStart); err != nil {
-		_ = file.Close()
 		return Distribution{}, err
 	}
 	written, copyErr := io.Copy(file, io.LimitReader(content, remaining+1))
@@ -363,7 +346,7 @@ func (s *Service) CompleteDistribution(ctx context.Context, subjectID, requestID
 	if err != nil {
 		return Distribution{}, err
 	}
-	digest, err := fileDigest(staging)
+	digest, err := s.stagingDigest(distribution.StagingName, distribution.BytesReceived)
 	if err != nil {
 		return Distribution{}, err
 	}

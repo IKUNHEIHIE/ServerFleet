@@ -1,5 +1,12 @@
 # 任务登记板
 
+## 当前集中实施：持久暂存续传（2026-11-08）
+
+任务V09-CLOUD-STAGING-RESUME-01；唯一会话chatgpt-takeover-01；分支feature/cloud-staging-resume-20261108；独立目录ServerFleet-resume。依赖#12精确候选3f2fc687a148306cdcc089c34ce7057e877a70e4及原文恢复8bd7140；未合并候选不冒称main已提供。当前IN PROGRESS，原三平台不再并发写入。
+
+写范围：internal/files的未派发上传/分发暂存写入与恢复、相应单元/程序组合专项，docs/reference/recovered-adrs-20261108原文字节清单/索引及当前进度。审查：主控逐项复核与真实CI/COMMENT，非独立账号自批。只修已授权开发环境，不访问生产/供应商/VPS。停止条件：证明崩溃后可从持久偏移继续、缺失已确认字节/撤权/已派发/非私有或符号链接均拒绝；完整浏览器续传、Agent执行恢复及发布关卡另记，不因本检查点关单。
+
+
 ## 2026-11-08 单会话接手（覆盖下方分工快照）
 
 用户授权ChatGPT直接返修#7/#8/#9并独立继续完整项目，不再向三平台派发。任务V09-CLOUD-TAKEOVER-01，唯一会话chatgpt-takeover-01，分支fix/cloud-r2-takeover-20261108，独立目录ServerFleet-takeover，状态IN PROGRESS。原AM/HW/WB历史保留；尚未完成项转本任务，不标完成。原中央窗口转交主控单写。
