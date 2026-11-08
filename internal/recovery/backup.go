@@ -108,7 +108,7 @@ func allowedBundleName(name string) bool {
 	return false
 }
 func NewBackupManager(o BackupDeploymentOptions) (*BackupManager, error) {
-	if o.DB == nil || o.Audit == nil || o.Cipher == nil || !validAgeRecipient(o.Recipient) || !validReference(o.AuthorityID) || !validDigest(o.RootSPKI) || o.TrustGeneration == 0 || o.Authorize == nil || o.RuntimeCurrent == nil || o.TaskCurrent == nil || o.Capture == nil || o.ValidateConfiguration == nil || o.Directory == o.StageDir || len(o.Files) != 7 {
+	if os.Geteuid() == 0 || o.DB == nil || o.Audit == nil || o.Cipher == nil || !validAgeRecipient(o.Recipient) || !validReference(o.AuthorityID) || !validDigest(o.RootSPKI) || o.TrustGeneration == 0 || o.Authorize == nil || o.RuntimeCurrent == nil || o.TaskCurrent == nil || o.Capture == nil || o.ValidateConfiguration == nil || o.Directory == o.StageDir || len(o.Files) != 7 {
 		return nil, ErrBackupUnavailable
 	}
 	root, err := openRecoveryDirectory(o.Directory)
@@ -242,6 +242,9 @@ func (m *BackupManager) Execute(ctx context.Context, t tasks.Task) (map[string]t
 		manifestSHA, err = m.encryptBundle(ctx, t, id, work, counter)
 	}
 	syncErr := output.Sync()
+	if syncErr == nil {
+		syncErr = syncRecoveryRoot(m.root)
+	}
 	closeErr := output.Close()
 	if err != nil || syncErr != nil || closeErr != nil || m.gate(ctx, t) != nil {
 		m.fail(t, id, "encryption_outcome_unknown")
@@ -371,20 +374,21 @@ func (m *BackupManager) encryptBundle(ctx context.Context, t tasks.Task, id, wor
 	done := make(chan error, 1)
 	go func() {
 		archive := tar.NewWriter(writer)
-		write := func(name string, size int64, input io.Reader) error {
+		write := func(name string, size int64, input io.Reader, expectedSHA string) error {
 			if err := m.gate(ctx, t); err != nil {
 				return err
 			}
 			if err := archive.WriteHeader(&tar.Header{Name: name, Mode: 0600, Size: size, Typeflag: tar.TypeReg, ModTime: manifest.CreatedAt}); err != nil {
 				return err
 			}
-			n, err := io.CopyN(archive, input, size)
-			if err != nil || n != size {
+			hash := sha256.New()
+			n, err := io.CopyN(archive, io.TeeReader(input, hash), size)
+			if err != nil || n != size || hex.EncodeToString(hash.Sum(nil)) != expectedSHA {
 				return ErrBackupUnavailable
 			}
 			return nil
 		}
-		err := write("manifest.json", int64(len(rawManifest)), bytes.NewReader(rawManifest))
+		err := write("manifest.json", int64(len(rawManifest)), bytes.NewReader(rawManifest), hex.EncodeToString(manifestHash[:]))
 		for _, entry := range manifest.Files {
 			if err != nil {
 				break
@@ -395,10 +399,10 @@ func (m *BackupManager) encryptBundle(ctx context.Context, t tasks.Task, id, wor
 					err = e
 					break
 				}
-				err = write(entry.Name, entry.Bytes, file)
+				err = write(entry.Name, entry.Bytes, file, entry.SHA256)
 				file.Close()
 			} else {
-				err = write(entry.Name, entry.Bytes, bytes.NewReader(contents[entry.Name]))
+				err = write(entry.Name, entry.Bytes, bytes.NewReader(contents[entry.Name]), entry.SHA256)
 			}
 		}
 		if err == nil {

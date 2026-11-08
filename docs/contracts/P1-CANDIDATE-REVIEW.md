@@ -75,3 +75,5 @@ Wave6-R2补记（2026-11-02）：正式组合统一文件worker、owner预算GET
 Wave6-R3补记（2026-11-02）：已接收文件可信CLI、skip/overwrite/rename和实际Agent产品UpdateProduct程序装配；策略沿用既有string参数，不改Proto/gen。ds/0063_cleanup_claim新增token/lease/unknown并重建保留旧数据，正式25项迁移，旧checksum不变；降级须备份恢复，不能把新库直接交旧状态机。R7 services候选更新实际502/unknown/409语义，原候选不改。queued取消已补原子终态与claim互斥。发布工件queued阶段与CheckExecution要求running仍需统一；预算界面/文件页面/本地签名Agent更新证据不等于完整产品发布、Controller升级或新权威灾备。原资料/兼容基线/r03不变，D01—D07/P1-C10/G2与正式资料缺项保持OPEN，见development/reviews/V09-WAVE6-R3-REVIEW.md。
 
 集中代码完成包R12候选（UNTESTED）：Controller本地统一任务/加密备份/离线隔离恢复、32项追加迁移与多网关结构回执差异见[审查登记](revisions/v09-r12-backups-controller-tasks.md)。主控单写，旧候选/Proto/gen/原始资料/已接收SQL/hash保持；未冻结、未获实际fence/Runtime/发布认证。
+
+集中代码包R13（UNTESTED）：可信HTTPS Agent工件拉取经Controller本地统一任务，独立获取/安装，追加第33项迁移，见[差异](revisions/v09-r13-release-source.md)。固定地址/签名/实际字节和UNKNOWN不重放有效；没有默认外部源/秘密/新Runtime或发布认证。

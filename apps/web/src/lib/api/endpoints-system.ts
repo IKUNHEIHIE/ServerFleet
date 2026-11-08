@@ -60,3 +60,14 @@ export const encryptedBackupsApi = {
   challenge: (idempotencyKey: string) => apiClient.request<BackupTaskAdmission>("/api/v1/backups/key-challenges", { method: "POST", body: { idempotencyKey } }),
   confirm: (challengeId: string, proofSha256: string) => apiClient.request<{ confirmed: boolean }>("/api/v1/backups/key-confirmation", { method: "POST", body: { challengeId, proofSha256 } }),
 };
+
+export interface TrustedReleaseSource {
+  readonly version: string;
+  readonly sourceSha256: string;
+  readonly host: string;
+  readonly acquisitionIsInstallation: false;
+}
+export const releaseSourceApi = {
+  get: (signal?: AbortSignal) => apiClient.request<TrustedReleaseSource>("/api/v1/system/updates/source", { signal }),
+  acquire: (idempotencyKey: string) => apiClient.request<BackupTaskAdmission>("/api/v1/system/updates/acquire", { method: "POST", body: { idempotencyKey } }),
+};

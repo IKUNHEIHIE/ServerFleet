@@ -61,7 +61,7 @@ func writeRecoveryFile(root *os.Root, name string, raw []byte) error {
 	if err != nil || closeErr != nil {
 		return ErrRecoveryRejected
 	}
-	return nil
+	return syncRecoveryRoot(root)
 }
 
 // ReadPrivateFile never follows a caller-selected archive path. It is used for
@@ -93,6 +93,18 @@ func CheckBackupFile(file BackupFileSource) error {
 	current, err := FreezeBackupFile(file.Name, file.Path)
 	if err != nil || current.SHA256 != file.SHA256 {
 		return ErrBackupUnavailable
+	}
+	return nil
+}
+
+func syncRecoveryRoot(root *os.Root) error {
+	directory, err := root.Open(".")
+	if err != nil {
+		return ErrRecoveryRejected
+	}
+	defer directory.Close()
+	if directory.Sync() != nil {
+		return ErrRecoveryRejected
 	}
 	return nil
 }

@@ -37,6 +37,7 @@ type Options struct {
 	GatewayDeployment     string
 	UpdateDeployment      string
 	BackupDeployment      string
+	ReleaseSource         string
 	BuildVersion          string
 	CredentialKeyDir      string
 	DisableCleanupRetries bool
@@ -64,6 +65,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
 	flags.StringVar(&options.UpdateDeployment, "update-deployment", "", "private signed local Agent update configuration (Linux; requires management TLS mode)")
 	flags.StringVar(&options.BackupDeployment, "backup-deployment", "", "private encrypted backup startup configuration (provisioned PKI only)")
+	flags.StringVar(&options.ReleaseSource, "release-source", "", "private fixed HTTPS signed Agent release feed (requires provisioned PKI and -update-deployment)")
 	flags.BoolVar(&options.DisableCleanupRetries, "disable-cleanup-retries", false, "disable automatic retries of owned ACME cleanup records")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
@@ -79,6 +81,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 
 // Validate enforces the management-mode prerequisites without opening storage.
 func (o Options) Validate() error {
+	if o.ReleaseSource != "" && (o.Scaffold() || o.UpdateDeployment == "" || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: release acquisition requires provisioned PKI and trusted Agent update deployment")
+	}
 	if o.BackupDeployment != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
 		return errors.New("controller: encrypted backups require provisioned PKI and management HTTPS")
 	}
@@ -224,7 +229,15 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		backupDeployment.AgentEndpoint = authority
 		backupDeployment.ReleaseVersion = options.BuildVersion
 	}
+	var releaseSource *server.ReleaseSourceDeployment
+	if options.ReleaseSource != "" {
+		releaseSource, err = server.LoadReleaseSourceDeployment(options.ReleaseSource)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	composed, err := server.New(ctx, server.Config{
+		ReleaseSource: releaseSource, ControllerAuthorityID: material.AuthorityID,
 		BackupDeployment:      backupDeployment,
 		FileExecution:         fileConfig,
 		WebDirectory:          options.WebDirectory,

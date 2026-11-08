@@ -38,3 +38,6 @@ apis:
 
   v09-r12-encrypted-backups:
     root: api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml
+
+  v09-r13-release-source:
+    root: api/openapi/revisions/v09-r13/release-source-candidate.yaml

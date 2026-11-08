@@ -83,25 +83,28 @@ type Config struct {
 	PluginTrustCapabilities map[string]bool
 
 	// BackupDir defaults to a private directory beside the SQLite database.
-	BackupDir         string
-	BackupDeployment  *BackupDeployment
-	RecoveryLatch     *recovery.QuarantineLatch
-	UpdateProduct     *updates.ProductDeploymentOptions
-	UpdateExecution   *updates.TaskInstallWorkerOptions
-	UpdateResolvePlan func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
-	UpdateJobs        func(context.Context, updates.Principal) (updates.JobPage, error)
-	UpdateJob         func(context.Context, updates.Principal, string) (updates.ApplyResult, error)
-	UpdateCheck       func(context.Context, string) (updates.CheckResult, error)
-	UpdatePlan        func(context.Context, string) (updates.Plan, error)
-	UpdateApply       func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
-	RecoveryExecute   func(context.Context, recovery.Plan) (string, error)
-	PluginRuntime     plugins.AdmittedRuntime
-	XrayTaskHost      *plugins.XrayTaskHost
+	BackupDir             string
+	BackupDeployment      *BackupDeployment
+	RecoveryLatch         *recovery.QuarantineLatch
+	UpdateProduct         *updates.ProductDeploymentOptions
+	ReleaseSource         *ReleaseSourceDeployment
+	ControllerAuthorityID string
+	UpdateExecution       *updates.TaskInstallWorkerOptions
+	UpdateResolvePlan     func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
+	UpdateJobs            func(context.Context, updates.Principal) (updates.JobPage, error)
+	UpdateJob             func(context.Context, updates.Principal, string) (updates.ApplyResult, error)
+	UpdateCheck           func(context.Context, string) (updates.CheckResult, error)
+	UpdatePlan            func(context.Context, string) (updates.Plan, error)
+	UpdateApply           func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
+	RecoveryExecute       func(context.Context, recovery.Plan) (string, error)
+	PluginRuntime         plugins.AdmittedRuntime
+	XrayTaskHost          *plugins.XrayTaskHost
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
 	ProductUpdates     updates.ProductDeployment
+	ReleaseAcquirer    *updates.ReleaseAcquirer
 	runtimeGate        func(context.Context) error
 	DB                 *storage.DB
 	Audit              *audit.SQLRecorder
@@ -237,6 +240,7 @@ func Migrations() [][]storage.Migration {
 		recovery.Migrations(),
 		transport.RecoveryMigrations(),
 		recovery.ReconciliationMigrations(),
+		updates.AcquisitionMigrations(),
 		audit.Migrations(),
 	}
 }
@@ -274,6 +278,7 @@ func AuditActions() []string {
 		"host.root",
 		"files.transfer",
 		updates.ActionInstall,
+		updates.ActionAcquireRelease,
 		"ai.budget.configure",
 		"ai.budget.reserve",
 		"gateway.provision",
@@ -470,6 +475,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 		if s != nil && s.ProductUpdates != nil {
 			_ = s.ProductUpdates.Close()
+		}
+		if s != nil && s.ReleaseAcquirer != nil {
+			_ = s.ReleaseAcquirer.Close()
 		}
 		if s != nil && s.Backups != nil {
 			_ = s.Backups.Close()
@@ -804,6 +812,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return cleanup(err)
 	}
+	releaseControllerExecution, err := s.setupReleaseSource(ctx, cfg, workers)
+	if err != nil {
+		return cleanup(err)
+	}
+	controllerExecution, err = mergeControllerExecutions(controllerExecution, releaseControllerExecution)
+	if err != nil {
+		return cleanup(err)
+	}
 	tasksService, err := tasks.NewService(tasks.Options{
 		ControllerExecution: controllerExecution,
 		RuntimeGate:         runtimeGate,
@@ -1117,6 +1133,10 @@ func (s *Server) Close() error {
 		}
 		s.ProductUpdates = nil
 	}
+	if s.ReleaseAcquirer != nil {
+		_ = s.ReleaseAcquirer.Close()
+		s.ReleaseAcquirer = nil
+	}
 	if s.Backups != nil {
 		_ = s.Backups.Close()
 		s.Backups = nil
@@ -1168,6 +1188,7 @@ func (s *Server) registerRoutes() error {
 	}
 	s.registerPluginRoutes()
 	s.registerUpdateRecoveryRoutes()
+	s.registerReleaseSourceRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {
