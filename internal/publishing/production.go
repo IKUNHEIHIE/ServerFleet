@@ -2,6 +2,7 @@ package publishing
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net"
@@ -241,8 +242,8 @@ func (p *productionGateway) Publish(ctx context.Context, request GatewayRequest)
 	if p == nil || p.config.Plans == nil || p.config.Upstreams == nil || p.config.Certificates == nil || p.config.Gateway == nil {
 		return StageResult{}, ErrProductionUnavailable
 	}
-	if len(request.GatewayIDs) != 1 {
-		return StageResult{}, fmt.Errorf("%w: exactly one gateway is supported for publication", ErrProductionTarget)
+	if len(request.GatewayIDs) == 0 || len(request.GatewayIDs) > 8 {
+		return StageResult{}, ErrProductionTarget
 	}
 	if request.TargetRevision == 0 || request.Domain == "" || request.ServiceGroupID == "" {
 		return StageResult{}, ErrProductionTarget
@@ -266,17 +267,22 @@ func (p *productionGateway) Publish(ctx context.Context, request GatewayRequest)
 		plan.ZoneID != request.ZoneID || plan.CertificateID != request.CertificateID || !sameIDs(plan.GatewayIDs, request.GatewayIDs) {
 		return StageResult{}, ErrProductionTarget
 	}
-	summary, err := p.config.Gateway.Apply(ctx, plan, request, upstreams, certificatePath, keyPath)
-	if err != nil {
+	summaries := make([]string, 0, len(request.GatewayIDs))
+	for _, id := range request.GatewayIDs {
+		one := request
+		one.GatewayIDs = []string{id}
+		summary, err := p.config.Gateway.Apply(ctx, plan, one, upstreams, certificatePath, keyPath)
 		if strings.TrimSpace(summary) != "" {
-			return StageResult{Summary: summary}, err
+			summaries = append(summaries, summary)
 		}
-		return StageResult{}, err
+		if err != nil {
+			return StageResult{Summary: gatewayBatchSummary(summaries)}, err
+		}
+		if strings.TrimSpace(summary) == "" {
+			return StageResult{Summary: gatewayBatchSummary(summaries)}, ErrProductionTarget
+		}
 	}
-	if strings.TrimSpace(summary) == "" {
-		return StageResult{}, ErrProductionTarget
-	}
-	return StageResult{Summary: summary}, nil
+	return StageResult{Summary: gatewayBatchSummary(summaries)}, nil
 }
 
 func (p *productionGateway) Rollback(ctx context.Context, planID string, result StageResult) error {
@@ -287,7 +293,16 @@ func (p *productionGateway) Rollback(ctx context.Context, planID string, result 
 	if err != nil {
 		return err
 	}
-	return p.config.Gateway.Rollback(ctx, plan, result.Summary)
+	summaries, err := parseGatewayBatchSummary(result.Summary)
+	if err != nil {
+		return err
+	}
+	for i := len(summaries) - 1; i >= 0; i-- {
+		if err := p.config.Gateway.Rollback(ctx, plan, summaries[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func sameIDs(left, right []string) bool {
@@ -368,4 +383,41 @@ func parseDNSCompensation(summary string) (string, []dnsCompensationRecord, erro
 		records = append(records, dnsCompensationRecord{id: id, created: flag == "1"})
 	}
 	return zone, records, nil
+}
+
+type gatewayBatchReceipt struct {
+	Version int      `json:"gatewayBatchVersion"`
+	Items   []string `json:"items"`
+}
+
+func gatewayBatchSummary(items []string) string {
+	if len(items) == 0 {
+		return ""
+	}
+	if len(items) == 1 {
+		return items[0]
+	}
+	raw, err := json.Marshal(gatewayBatchReceipt{1, items})
+	if err != nil || len(raw) > maxReceiptBytes {
+		return ""
+	}
+	return string(raw)
+}
+func parseGatewayBatchSummary(raw string) ([]string, error) {
+	if len(raw) == 0 || len(raw) > maxReceiptBytes {
+		return nil, ErrProductionTarget
+	}
+	var batch gatewayBatchReceipt
+	if json.Unmarshal([]byte(raw), &batch) == nil && batch.Version != 0 {
+		if batch.Version != 1 || len(batch.Items) == 0 || len(batch.Items) > 8 {
+			return nil, ErrProductionTarget
+		}
+		for _, item := range batch.Items {
+			if len(item) == 0 || len(item) > 4096 {
+				return nil, ErrProductionTarget
+			}
+		}
+		return batch.Items, nil
+	}
+	return []string{raw}, nil
 }

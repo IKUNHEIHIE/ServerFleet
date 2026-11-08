@@ -22,6 +22,7 @@ type gatewayDeploymentEntry struct {
 	ArtifactDir string `json:"artifactDir"`
 	HTTPListen  string `json:"httpListen"`
 	HTTPSListen string `json:"httpsListen"`
+	ProbeCAFile string `json:"probeCaFile,omitempty"`
 }
 
 type certificateDeploymentEntry struct {
@@ -122,9 +123,12 @@ func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {
 		if !validGatewayListen(entry.HTTPListen) || !validGatewayListen(entry.HTTPSListen) {
 			return nil, ErrGatewayDeployment
 		}
+		if entry.ProbeCAFile != "" && !validGatewayDeploymentPath(entry.ProbeCAFile) {
+			return nil, ErrGatewayDeployment
+		}
 		gateways[entry.GatewayID] = GatewayInstallPaths{
 			SiteDir: entry.SiteDir, ArtifactDir: entry.ArtifactDir,
-			HTTPListen: entry.HTTPListen, HTTPSListen: entry.HTTPSListen,
+			HTTPListen: entry.HTTPListen, HTTPSListen: entry.HTTPSListen, ProbeCAFile: entry.ProbeCAFile,
 		}
 	}
 	certificates := make(map[string]CertificateInstallPaths, len(document.Certificates))

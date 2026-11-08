@@ -154,7 +154,13 @@ func (a publicationPlanAuthority) Current(ctx context.Context, planID string, ta
 	if err != nil || !plan.TargetsPersisted || plan.TargetRevision != targetRevision {
 		return publishing.ErrProductionTarget
 	}
-	if len(plan.GatewayIDs) != 1 || plan.GatewayIDs[0] != gatewayID {
+	matches := 0
+	for _, id := range plan.GatewayIDs {
+		if id == gatewayID {
+			matches++
+		}
+	}
+	if matches != 1 {
 		return publishing.ErrProductionTarget
 	}
 	return nil
@@ -546,11 +552,12 @@ func (h *gatewayTaskHost) submit(ctx context.Context, plan publishing.Plan, requ
 	if request.ActionID == gateway.NginxActionRemove {
 		suffix = "-remove"
 	}
+	idempotency := gatewayTaskIdempotencyKey(plan.ID, request.ResourceID, suffix, len(plan.GatewayIDs) > 1)
 	task, err := h.tasks.Submit(ctx, tasks.SubmitRequest{
 		SubjectID: request.SubjectID, RequestID: request.RequestID, Name: name,
 		ActionID: request.ActionID, OperationClass: tasks.OperationClassModifying,
 		TargetType: "node_ids", TargetNodeIDs: request.NodeIDs,
-		Params: request.Params, IdempotencyKey: plan.ID + suffix,
+		Params: request.Params, IdempotencyKey: idempotency,
 		RequireApproval: true,
 	})
 	if err != nil {

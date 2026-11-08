@@ -411,7 +411,7 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 				return plan, ctx.Err()
 			}
 			return s.fail(ctx, subjectID, requestID, plan, stages, index, ErrorCodePublishError,
-				sanitizeMessage(result.Summary), nil, group.NodeIDs)
+				sanitizeReceipt(result.Summary), nil, group.NodeIDs)
 		}
 		summary, resultErr := normalizeStageResult(result)
 		if resultErr != nil {
@@ -591,7 +591,7 @@ func (s *Service) fail(ctx context.Context, subjectID, requestID string, plan Pl
 	now := s.now().UTC()
 	stage.Status = StageFailed
 	stage.ErrorCode = errorCode
-	stage.ResultSummary = sanitizeMessage(partialSummary)
+	stage.ResultSummary = sanitizeReceipt(partialSummary)
 	stage.FinishedAt = now
 	plan.Status = PlanPartialFailure
 	plan.CurrentStage = stage.Kind

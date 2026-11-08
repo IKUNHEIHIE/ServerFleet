@@ -113,7 +113,7 @@ func normalizeGroupRef(ref GroupRef, serviceGroupID string) (GroupRef, error) {
 }
 
 func normalizeStageResult(result StageResult) (string, error) {
-	summary := sanitizeMessage(result.Summary)
+	summary := sanitizeReceipt(result.Summary)
 	if summary == "" {
 		return "", ErrInvalidStageResult
 	}
@@ -257,4 +257,19 @@ func validToken(value string, max int) bool {
 
 func validID(value string) bool {
 	return validToken(value, 128) && !strings.ContainsAny(value, "*?[]/\\")
+}
+
+const maxReceiptBytes = 64 << 10
+
+func sanitizeReceipt(raw string) string {
+	if !utf8.ValidString(raw) || len(raw) > maxReceiptBytes {
+		return ""
+	}
+	// Managed JSON carries no credentials. Preserve exact path/ID/number
+	// bytes required by compensation; arbitrary human text keeps redaction.
+	trimmed := strings.TrimSpace(raw)
+	if canonical, ok := normalizeManagedReceipt(trimmed); ok {
+		return canonical
+	}
+	return sanitizeMessage(raw)
 }

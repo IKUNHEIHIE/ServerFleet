@@ -878,12 +878,19 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	sgLookup := &composedServiceGroupLookup{repo: serviceGroupsRepo}
+	routeChecker := cfg.GatewayChecker
+	if routeChecker == nil && gatewayChain != nil {
+		routeChecker, err = newGatewayRouteChecker(s, tasksService, publishingRepo, nodesRepo, serviceGroupsRepo, gatewayRepo, authorizer, gatewayChain.deployment.Gateways)
+		if err != nil {
+			return cleanup(err)
+		}
+	}
 	gatewayService, err := gateway.NewService(gateway.Options{
 		DB:            db,
 		Repo:          gatewayRepo,
 		Nodes:         nodeLookup,
 		ServiceGroups: sgLookup,
-		Checker:       cfg.GatewayChecker,
+		Checker:       routeChecker,
 		Tasks:         taskBridge,
 		Audit:         auditRecorder,
 		Authorizer:    authorizer,

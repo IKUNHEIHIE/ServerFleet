@@ -35,6 +35,7 @@ var (
 // NginxSiteRequest is the validated input for one managed site file. Certificate
 // and key values are absolute file paths; private key material is never accepted.
 type NginxSiteRequest struct {
+	ProbeToken           string
 	GatewayID            string
 	Domain               string
 	Upstream             string
@@ -55,6 +56,7 @@ type NginxSiteRequest struct {
 
 // NginxSite is the deterministic rendered file and its digest.
 type NginxSite struct {
+	ProbeToken   string
 	GatewayID    string
 	Domain       string
 	Path         string
@@ -67,6 +69,12 @@ type NginxSite struct {
 // to touch an existing site without both the takeover flag and an approval
 // reference, and it validates every value that could inject configuration.
 func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
+	if request.ProbeToken != "" {
+		decoded, err := hex.DecodeString(request.ProbeToken)
+		if err != nil || len(decoded) != 32 || hex.EncodeToString(decoded) != request.ProbeToken {
+			return NginxSite{}, ErrInvalidNginx
+		}
+	}
 	if !validID(request.GatewayID) {
 		return NginxSite{}, fmt.Errorf("%w: gateway id", ErrInvalidNginx)
 	}
@@ -163,7 +171,10 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 		config.WriteString("    ssl_session_cache shared:ServerFleet:10m;\n")
 		config.WriteString("    ssl_session_timeout 10m;\n")
 		config.WriteString("    add_header Strict-Transport-Security \"max-age=31536000\" always;\n")
-		config.WriteString(nginxProxyLocation(proxyTarget))
+		if request.ProbeToken != "" {
+			config.WriteString("    add_header X-ServerFleet-Route " + request.ProbeToken + " always;\n")
+		}
+		config.WriteString(nginxProxyLocation(proxyTarget, request.ProbeToken))
 		config.WriteString("}\n")
 	} else {
 		config.WriteString("server {\n")
@@ -172,7 +183,10 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 		config.WriteString("    location /.well-known/acme-challenge/ {\n")
 		config.WriteString("        root " + DefaultNginxACMERoot + ";\n")
 		config.WriteString("    }\n")
-		config.WriteString(nginxProxyLocation(proxyTarget))
+		if request.ProbeToken != "" {
+			config.WriteString("    add_header X-ServerFleet-Route " + request.ProbeToken + " always;\n")
+		}
+		config.WriteString(nginxProxyLocation(proxyTarget, request.ProbeToken))
 		config.WriteString("}\n")
 	}
 	if config.Len() > maxNginxConfigBytes {
@@ -182,7 +196,7 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 	digest := sha256.Sum256(payload)
 	digestHex := hex.EncodeToString(digest[:])
 	return NginxSite{
-		GatewayID: request.GatewayID, Domain: domain, Path: sitePath,
+		ProbeToken: request.ProbeToken, GatewayID: request.GatewayID, Domain: domain, Path: sitePath,
 		ArtifactPath: path.Join(artifactDir, digestHex+".conf"),
 		Config:       payload, Digest: digestHex,
 	}, nil
@@ -201,9 +215,12 @@ func validateNginxTaskParams(params map[string]string) error {
 	return nil
 }
 
-func nginxProxyLocation(upstream string) string {
+func nginxProxyLocation(upstream string, probeToken ...string) string {
 	var builder strings.Builder
 	builder.WriteString("    location / {\n")
+	if len(probeToken) > 0 && probeToken[0] != "" {
+		builder.WriteString("        proxy_hide_header X-ServerFleet-Route;\n")
+	}
 	builder.WriteString("        proxy_pass http://" + upstream + ";\n")
 	builder.WriteString("        proxy_http_version 1.1;\n")
 	builder.WriteString("        proxy_set_header Host $host;\n")

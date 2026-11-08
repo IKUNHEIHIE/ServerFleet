@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,7 @@ type GatewayInstallPaths struct {
 	ArtifactDir string
 	HTTPListen  string
 	HTTPSListen string
+	ProbeCAFile string
 }
 
 // ProductionPublishingConfig binds concrete DS owners to the production
@@ -266,18 +268,7 @@ func (u publicationServiceUpstreams) Upstreams(ctx context.Context, _ string, se
 	return upstreams, nil
 }
 
-type gatewayPublicationSummary struct {
-	RouteID            string `json:"routeId"`
-	GatewayID          string `json:"gatewayId"`
-	NodeID             string `json:"nodeId"`
-	SitePath           string `json:"sitePath"`
-	ConfigSHA256       string `json:"configSha256"`
-	TaskID             string `json:"taskId"`
-	RouteRevision      uint64 `json:"routeRevision"`
-	RouteCreated       bool   `json:"routeCreated"`
-	PlanID             string `json:"planId"`
-	PlanTargetRevision uint64 `json:"planTargetRevision"`
-}
+type gatewayPublicationSummary = publishing.GatewayReceipt
 
 type gatewayRouteService interface {
 	GetGateway(ctx context.Context, subjectID, gatewayID string) (gateway.GatewayNode, error)
@@ -321,29 +312,33 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		return "", err
 	}
 	routeID := plan.ID
+	if len(plan.GatewayIDs) > 1 {
+		h := sha256.Sum256([]byte(plan.ID + "\x00" + gatewayID))
+		routeID = "pub-route-" + hex.EncodeToString(h[:16])
+	}
 	route, err := a.gateways.GetRoute(ctx, request.SubjectID, routeID)
 	created := false
 	switch {
 	case errors.Is(err, gateway.ErrRouteNotFound):
 		route, err = a.gateways.CreateRoute(ctx, request.SubjectID, request.RequestID, gatewayID, gateway.CreateRouteInput{
 			ID: routeID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
-			HTTPS: request.HTTPS, Enabled: true,
+			HTTPS: request.HTTPS, Enabled: false,
 		})
 		created = true
 	case err != nil:
 		return "", err
 	case route.GatewayID != gatewayID || route.Domain != request.Domain ||
-		route.ServiceGroupID != request.ServiceGroupID || route.HTTPS != request.HTTPS || !route.Enabled:
+		route.ServiceGroupID != request.ServiceGroupID || route.HTTPS != request.HTTPS:
 		route, err = a.gateways.UpdateRoute(ctx, request.SubjectID, request.RequestID, gatewayID, routeID, route.Revision, gateway.UpdateRouteInput{
 			Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
-			HTTPS: request.HTTPS, Enabled: true,
+			HTTPS: request.HTTPS, Enabled: false,
 		})
 	}
 	if err != nil {
 		return "", err
 	}
 	site, err := gateway.RenderNginxSite(gateway.NginxSiteRequest{
-		GatewayID: gatewayID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
+		ProbeToken: gatewayPublicationProbeToken(plan.ID, plan.TargetRevision, gatewayID), GatewayID: gatewayID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
 		ServiceGroupRevision: request.ExpectedGroupRevision, UpstreamHosts: upstreams,
 		HTTPS: request.HTTPS, CertificatePath: certificatePath, PrivateKeyPath: keyPath,
 		SiteDir: sitePaths.SiteDir, ArtifactDir: sitePaths.ArtifactDir,
@@ -373,6 +368,19 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		return gatewayPublicationState(partial), err
 	}
 	partial.TaskID = taskID
+	partial.ProbeToken = site.ProbeToken
+	receipt := &gatewayRouteReceipt{SubjectID: request.SubjectID, RequestID: request.RequestID, TaskID: taskID, PlanID: plan.ID, TargetRevision: plan.TargetRevision, GatewayID: gatewayID, NodeID: record.NodeID, Domain: request.Domain, GroupID: request.ServiceGroupID, GroupRevision: request.ExpectedGroupRevision, HTTPS: request.HTTPS, Site: site}
+	checked := context.WithValue(ctx, gatewayRouteReceiptKey{}, receipt)
+	// The route becomes enabled only after the exact approved nginx task has
+	// completed AND the active site returns its frozen plan-bound probe token.
+	route, err = a.gateways.UpdateRoute(checked, request.SubjectID, request.RequestID, gatewayID, routeID, route.Revision, gateway.UpdateRouteInput{Domain: request.Domain, ServiceGroupID: request.ServiceGroupID, HTTPS: request.HTTPS, Enabled: true})
+	if err != nil {
+		return gatewayPublicationState(partial), err
+	}
+	partial.RouteRevision = route.Revision
+	partial.HTTPStatus = receipt.HTTPStatus
+	partial.ResponseSHA256 = receipt.ResponseSHA256
+	partial.ResponseBytes = receipt.ResponseBytes
 	return gatewayPublicationState(partial), nil
 }
 
@@ -429,7 +437,7 @@ func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishin
 		return publishing.ErrProductionUnavailable
 	}
 	var state gatewayPublicationSummary
-	if len(summary) == 0 || len(summary) > 2048 || json.Unmarshal([]byte(summary), &state) != nil {
+	if len(summary) == 0 || len(summary) > 4096 || json.Unmarshal([]byte(summary), &state) != nil {
 		return publishing.ErrProductionTarget
 	}
 	if state.PlanID != plan.ID || state.PlanTargetRevision != plan.TargetRevision ||
@@ -437,6 +445,15 @@ func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishin
 		(state.SitePath == "") != (state.ConfigSHA256 == "") ||
 		state.SitePath != "" && !validGatewayDigest(state.ConfigSHA256) ||
 		state.RouteCreated && (state.RouteID == "" || state.RouteRevision == 0) {
+		return publishing.ErrProductionTarget
+	}
+	member := false
+	for _, id := range plan.GatewayIDs {
+		if id == state.GatewayID {
+			member = true
+		}
+	}
+	if !member {
 		return publishing.ErrProductionTarget
 	}
 	if _, err := a.currentPlan(ctx, plan); err != nil {
