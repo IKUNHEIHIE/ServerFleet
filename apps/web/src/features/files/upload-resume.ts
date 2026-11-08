@@ -1,4 +1,4 @@
-import type { UploadCompletion, UploadProgress, UploadState } from "@/lib/api/dto";
+import type { ConflictPolicy, UploadCompletion, UploadProgress, UploadState } from "@/lib/api/dto";
 
 /** Local identities are hints, never cached progress, authorization or success. */
 export interface UploadDraft {
@@ -8,6 +8,7 @@ export interface UploadDraft {
   readonly name: string;
   readonly size: number;
   readonly sha256: string;
+  readonly conflictPolicy?: ConflictPolicy;
   readonly destinationPath: string;
   readonly createdAt: number;
 }
@@ -21,7 +22,7 @@ export class UploadCompleteError extends Error {
 }
 const key = (owner: string, node: string) => `sf.files.resume.v1.${encodeURIComponent(owner)}.${encodeURIComponent(node)}`;
 const metadata = (d: UploadDraft): UploadDraft => ({ uploadId: d.uploadId, ownerId: d.ownerId, nodeId: d.nodeId,
-  name: d.name, size: d.size, sha256: d.sha256, destinationPath: d.destinationPath, createdAt: d.createdAt });
+  name: d.name, size: d.size, sha256: d.sha256, conflictPolicy: d.conflictPolicy ?? "overwrite", destinationPath: d.destinationPath, createdAt: d.createdAt });
 
 function valid(value: unknown, owner: string, node: string, now: number): value is UploadDraft {
   if (!value || typeof value !== "object") return false;
@@ -29,7 +30,8 @@ function valid(value: unknown, owner: string, node: string, now: number): value 
   return d.ownerId === owner && d.nodeId === node && typeof d.uploadId === "string" && ID.test(d.uploadId) &&
     typeof d.name === "string" && d.name.length > 0 && d.name.length <= 255 && !/[\x00-\x1f\x7f/\\]/.test(d.name) &&
     d.name !== "." && d.name !== ".." && Number.isSafeInteger(d.size) && d.size >= 0 &&
-    typeof d.sha256 === "string" && HASH.test(d.sha256) && typeof d.destinationPath === "string" &&
+    typeof d.sha256 === "string" && HASH.test(d.sha256) &&
+    (d.conflictPolicy === undefined || ["skip", "overwrite", "rename"].includes(d.conflictPolicy)) && typeof d.destinationPath === "string" &&
     d.destinationPath.length <= 4096 && d.destinationPath.startsWith("/") && d.destinationPath.endsWith(`/${d.name}`) &&
     !d.destinationPath.includes("//") && !/[\x00-\x1f\x7f\\]/.test(d.destinationPath) &&
     !d.destinationPath.split("/").some(p => p === "." || p === "..") &&
@@ -71,7 +73,7 @@ function guard(scope: UploadScope): void {
 export async function readBoundUpload(d: UploadDraft, port: UploadResumePort, scope: UploadScope): Promise<UploadState> {
   guard(scope); const state = await port.read(scope.signal); guard(scope);
   if (!HASH.test(d.sha256) || state.uploadId !== d.uploadId || state.destinationPath !== d.destinationPath ||
-    state.sha256Expected !== d.sha256 || state.expectedSize !== d.size || !Number.isSafeInteger(state.bytesReceived) ||
+    state.sha256Expected !== d.sha256 || state.conflictPolicy !== (d.conflictPolicy ?? "overwrite") || state.expectedSize !== d.size || !Number.isSafeInteger(state.bytesReceived) ||
     state.bytesReceived < 0 || state.bytesReceived > d.size) {
     throw new UploadResumeError("服务端未确认原上传目标、摘要或有效偏移，未继续写入。");
   }

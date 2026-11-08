@@ -20,13 +20,25 @@ const (
 	// upload terminal state; nothing is claimed before the agent result.
 	UploadDispatching = "dispatching"
 	UploadCancelled   = "cancelled"
+	UploadSkipped     = "skipped"
 
 	maxChunkBytes = 8 << 20
 )
 
 // CreateUpload opens a resumable staging file. It does not contact the node; bytes
 // are streamed only on CompleteUpload through the transport port.
-func (s *Service) CreateUpload(ctx context.Context, subjectID, requestID, nodeID, destinationPath string, expectedSize *int64, sha256Expected string) (Upload, error) {
+func (s *Service) CreateUpload(ctx context.Context, subjectID, requestID, nodeID, destinationPath string, expectedSize *int64, sha256Expected string, policies ...ConflictPolicy) (Upload, error) {
+	policy := ConflictOverwrite
+	if len(policies) > 1 {
+		return Upload{}, ErrInvalidTransfer
+	}
+	if len(policies) == 1 && policies[0] != "" {
+		policy = policies[0]
+	}
+	if !policy.Valid() {
+		return Upload{}, ErrInvalidTransfer
+	}
+
 	if err := s.requireRequest(requestID); err != nil {
 		return Upload{}, err
 	}
@@ -52,7 +64,7 @@ func (s *Service) CreateUpload(ctx context.Context, subjectID, requestID, nodeID
 		return Upload{}, fmt.Errorf("files: create staging directory: %w", err)
 	}
 	upload := Upload{
-		ID: newID("up"), SubjectID: subjectID, NodeID: nodeID, DestinationPath: destinationPath,
+		ConflictPolicy: policy, ID: newID("up"), SubjectID: subjectID, NodeID: nodeID, DestinationPath: destinationPath,
 		Status: UploadOpen, ExpectedSize: expectedSize, SHA256Expected: sha256Expected,
 		StagingName: newID("stage") + ".part", CreatedAt: s.now(), UpdatedAt: s.now(),
 	}
@@ -231,7 +243,7 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_complete"); err != nil {
 		return Upload{}, err
 	}
-	if upload.Status == UploadCompleted {
+	if upload.Status == UploadCompleted || upload.Status == UploadSkipped {
 		return upload, nil
 	}
 	if upload.Status != UploadOpen {
@@ -249,11 +261,15 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 		return Upload{}, err
 	}
 	if upload.SHA256Expected != "" && digest != upload.SHA256Expected {
-		_ = os.Remove(staging)
-		if statusErr := s.repo.UpdateUploadStatus(ctx, s.db, upload.ID, UploadFailed, digest, "checksum_mismatch"); statusErr != nil {
-			return Upload{}, statusErr
+		if err := s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+			if err := s.repo.UpdateUploadStatus(txCtx, tx, upload.ID, UploadFailed, digest, "checksum_mismatch"); err != nil {
+				return err
+			}
+			return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionUploadComplete, "failure", requestID, []string{upload.NodeID}, "checksum_mismatch"))
+		}); err != nil {
+			return Upload{}, err
 		}
-		_ = s.audit.Append(ctx, s.event(subjectID, ActionUploadComplete, "failure", requestID, []string{upload.NodeID}, "checksum_mismatch"))
+		_ = os.Remove(staging)
 		return Upload{}, ErrChecksumMismatch
 	}
 	// Unified path: a trusted program assembly moves the verified upload
@@ -264,7 +280,7 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 	if submitter := s.uploadTaskSubmitter(); submitter != nil {
 		taskID, submitErr := submitter.SubmitUpload(ctx, UploadCommand{
 			SubjectID: subjectID, RequestID: requestID, UploadID: upload.ID,
-			NodeID: upload.NodeID, DestinationPath: upload.DestinationPath,
+			NodeID: upload.NodeID, DestinationPath: upload.DestinationPath, ConflictPolicy: upload.ConflictPolicy,
 			SHA256Expected: digest, Size: upload.BytesReceived,
 		})
 		if submitErr != nil {
@@ -296,6 +312,10 @@ func (s *Service) CompleteUpload(ctx context.Context, subjectID, requestID, uplo
 	if err := s.authorizeNode(ctx, subjectID, ActionWrite, requestID, upload.NodeID, "file_upload_complete"); err != nil {
 		_ = file.Close()
 		return Upload{}, err
+	}
+	if upload.ConflictPolicy != ConflictOverwrite {
+		_ = file.Close()
+		return Upload{}, ErrTransportAbsent
 	}
 	pushErr := s.uploads.PushFile(ctx, upload.NodeID, upload.DestinationPath, file, upload.BytesReceived, digest)
 	_ = file.Close()
@@ -371,7 +391,7 @@ func (s *Service) GetUpload(ctx context.Context, subjectID, requestID, uploadID 
 		// exactly-once; failures leave the upload untouched.
 		if reader := s.taskOutcomeReader(); reader != nil {
 			if task, err := reader.ReadTaskOutcome(ctx, upload.TaskID); err == nil && task.Status.Terminal() {
-				if status, errorCode, ok := uploadTerminalFromTask(task); ok {
+				if status, errorCode, ok := uploadTerminalForUpload(task, upload); ok {
 					if _, err := s.ApplyUploadTaskUpdate(ctx, upload.TaskID, UploadTaskUpdate{
 						Status: status, ErrorCode: errorCode, RequestID: task.RequestID,
 					}); err == nil {

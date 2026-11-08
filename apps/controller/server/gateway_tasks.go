@@ -614,7 +614,7 @@ func (c publicationCleanupCleaner) DeleteChallengeRecord(ctx context.Context, su
 	}
 	matches := 0
 	for _, record := range records {
-		if record.ID == recordID && record.Name == fqdn && record.Content == expectedValue {
+		if record.ID == recordID && record.Name == fqdn && record.Content == expectedValue && string(record.Type) == "TXT" {
 			matches++
 		}
 	}

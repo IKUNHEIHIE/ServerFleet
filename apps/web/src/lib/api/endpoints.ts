@@ -497,10 +497,10 @@ export const filesApi = {
       { method: "POST", signal },
     ),
   // 刷新/断线恢复：读回服务端真实状态（含 dispatching 与 taskId），不依赖前端记忆。
-  uploadStatus: (nodeId: string, uploadId: string, signal?: AbortSignal, resumeBinding = false) =>
+  uploadStatus: (nodeId: string, uploadId: string, signal?: AbortSignal, resumeBinding = false, bindingVersion?: 2) =>
     apiClient.request<UploadState>(
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}`,
-      { signal, ...(resumeBinding ? { query: { resumeBinding: true } } : {}) },
+      { signal, ...(resumeBinding ? { query: { resumeBinding: true, ...(bindingVersion ? { bindingVersion } : {}) } } : {}) },
     ),
 };
 

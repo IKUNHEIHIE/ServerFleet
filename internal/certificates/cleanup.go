@@ -161,7 +161,7 @@ func (j *CleanupJournal) RecordFailure(ctx context.Context, subjectID, requestID
 			}
 			saved = append(saved, stored)
 		}
-		return j.audit.AppendTx(txCtx, tx, j.event(subjectID, ActionCleanupRecord, "success", requestID, "cleanup_recorded"))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, subjectID, ActionCleanupRecord, "success", requestID, "cleanup_recorded"))
 	})
 	return saved, err
 }
@@ -290,7 +290,7 @@ func (j *CleanupJournal) Cancel(ctx context.Context, subjectID, requestID string
 			return nil
 		}
 		applied = true
-		return j.audit.AppendTx(txCtx, tx, j.event(subjectID, ActionCleanupCancel, "success", requestID, "cleanup_cancel_success"))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, subjectID, ActionCleanupCancel, "success", requestID, "cleanup_cancel_success"))
 	})
 	if err != nil {
 		return CleanupRecord{}, err
@@ -308,10 +308,16 @@ func (j *CleanupJournal) Cancel(ctx context.Context, subjectID, requestID string
 	return j.get(ctx, id)
 }
 
-// RetryDue runs at most limit due attempts using the dedicated cleanup service
-// subject. The composition must grant that subject certificates.cleanup.retry.
-// Expired claims are first moved to unknown, never replayed.
+// RetryDue runs at most limit due attempts on behalf of each original owner,
+// rechecking current cleanup/DNS authorization. No synthetic principal is granted
+// execution rights. Expired claims first become unknown and are never replayed.
+type cleanupBackgroundKey struct{}
+
 func (j *CleanupJournal) RetryDue(ctx context.Context, limit int) (int, error) {
+	if ctx == nil {
+		return 0, ErrCleanupUnavailable
+	}
+	ctx = context.WithValue(ctx, cleanupBackgroundKey{}, true)
 	if j == nil || j.cleaner == nil {
 		return 0, ErrCleanupUnavailable
 	}
@@ -344,13 +350,13 @@ func (j *CleanupJournal) RetryDue(ctx context.Context, limit int) (int, error) {
 	attempted := 0
 	for _, record := range records {
 		if record.Attempts >= j.maxAttempts {
-			_ = j.setFinal(ctx, "cleanup-service", "cleanup-service", record, CleanupFailed, "retry_budget_exhausted", ActionCleanupRetry)
+			_ = j.setFinal(ctx, record.SubjectID, fmt.Sprintf("cleanup-due-%d", record.ID), record, CleanupFailed, "retry_budget_exhausted", ActionCleanupRetry)
 			continue
 		}
-		if err := j.authorize(ctx, "cleanup-service", ActionCleanupRetry, "cleanup-service", "cleanup_due"); err != nil {
+		if err := j.authorize(ctx, record.SubjectID, ActionCleanupRetry, fmt.Sprintf("cleanup-due-%d", record.ID), "cleanup_due"); err != nil {
 			continue
 		}
-		if _, err := j.execute(ctx, "cleanup-service", "cleanup-service", record, true); err == nil {
+		if _, err := j.execute(ctx, record.SubjectID, fmt.Sprintf("cleanup-due-%d", record.ID), record, true); err == nil {
 			attempted++
 		}
 	}
@@ -361,15 +367,15 @@ func (j *CleanupJournal) RetryDue(ctx context.Context, limit int) (int, error) {
 // provider: a crashed process cannot prove whether its delete request reached
 // the provider, so replaying would risk deleting a re-created record.
 func (j *CleanupJournal) RecoverStaleClaims(ctx context.Context, limit int) (int, error) {
-	if j == nil {
+	if j == nil || ctx == nil {
 		return 0, ErrCleanupUnavailable
 	}
 	if limit <= 0 || limit > 50 {
 		limit = 10
 	}
-	if err := j.authorize(ctx, "cleanup-service", ActionCleanupRetry, "cleanup-recover", "cleanup_stale_recovery"); err != nil {
-		return 0, err
-	}
+	// Internal lease fencing performs no provider I/O and must still quarantine
+	// expired claims when the original owner has since lost permission.
+	ctx = context.WithValue(ctx, cleanupBackgroundKey{}, true)
 	now := j.now().UTC()
 	rows, err := j.db.Query(ctx, cleanupSelect+` WHERE claim_token <> ''
 		AND lease_until IS NOT NULL AND lease_until <= ? ORDER BY lease_until, id LIMIT ?`,
@@ -421,9 +427,6 @@ func (j *CleanupJournal) execute(ctx context.Context, subjectID, requestID strin
 		return CleanupRecord{}, ErrCleanupBusy
 	}
 	cleanerSubject, cleanerRequest := subjectID, requestID
-	if system {
-		cleanerSubject, cleanerRequest = "cleanup-service", "cleanup-service"
-	}
 	deleteErr := j.cleaner.DeleteChallengeRecord(ctx, cleanerSubject, cleanerRequest, record.FQDN, record.RecordID, record.RecordValue)
 	// The outcome is persisted even if authorization was revoked during I/O;
 	// the second check only records the revocation instead of hiding it.
@@ -498,7 +501,7 @@ func (j *CleanupJournal) claim(ctx context.Context, subjectID, requestID string,
 			return nil
 		}
 		applied = true
-		return j.audit.AppendTx(txCtx, tx, j.event(subjectID, ActionCleanupRetry, "success", requestID, "cleanup_claimed"))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, subjectID, ActionCleanupRetry, "success", requestID, "cleanup_claimed"))
 	})
 	if err != nil {
 		return cleanupAttempt{}, err
@@ -565,7 +568,7 @@ func (j *CleanupJournal) finishClaim(ctx context.Context, attempt cleanupAttempt
 			return nil
 		}
 		applied = true
-		return j.audit.AppendTx(txCtx, tx, j.event(attempt.subjectID, ActionCleanupRetry, result, attempt.requestID, string(state)))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, attempt.subjectID, ActionCleanupRetry, result, attempt.requestID, string(state)))
 	})
 	if err != nil {
 		return CleanupRecord{}, false, err
@@ -599,7 +602,7 @@ func (j *CleanupJournal) releaseClaim(ctx context.Context, attempt cleanupAttemp
 		if affected == 0 {
 			return nil
 		}
-		return j.audit.AppendTx(txCtx, tx, j.event(attempt.subjectID, ActionCleanupRetry, "failure", attempt.requestID, code))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, attempt.subjectID, ActionCleanupRetry, "failure", attempt.requestID, code))
 	})
 }
 
@@ -625,22 +628,16 @@ func (j *CleanupJournal) expireClaim(ctx context.Context, subjectID, requestID s
 			return nil
 		}
 		applied = true
-		return j.audit.AppendTx(txCtx, tx, j.event(subjectID, ActionCleanupRetry, "failure", requestID, code))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, subjectID, ActionCleanupRetry, "failure", requestID, code))
 	})
 	return applied, err
 }
 
 func (j *CleanupJournal) authorizeAttempt(ctx context.Context, subjectID, requestID string, system bool) error {
-	if system {
-		subjectID, requestID = "cleanup-service", "cleanup-service"
-	}
 	return j.authorize(ctx, subjectID, ActionCleanupRetry, requestID, "cleanup_current_authorization")
 }
 
 func (j *CleanupJournal) authorizeAfterIO(ctx context.Context, subjectID, requestID string, system bool) {
-	if system {
-		subjectID, requestID = "cleanup-service", "cleanup-service"
-	}
 	authCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
 	_ = j.authorize(authCtx, subjectID, ActionCleanupRetry, requestID, "cleanup_post_io")
@@ -665,7 +662,7 @@ func (j *CleanupJournal) setFinal(ctx context.Context, subjectID, requestID stri
 			return nil
 		}
 		applied = true
-		return j.audit.AppendTx(txCtx, tx, j.event(subjectID, action, "failure", requestID, code))
+		return j.audit.AppendTx(txCtx, tx, j.event(ctx, subjectID, action, "failure", requestID, code))
 	})
 	if err != nil {
 		return err
@@ -687,7 +684,7 @@ func (j *CleanupJournal) get(ctx context.Context, id int64) (CleanupRecord, erro
 func (j *CleanupJournal) auditDenied(ctx context.Context, subjectID, action, requestID, reason string) {
 	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 	defer cancel()
-	_ = j.audit.Append(auditCtx, j.event(subjectID, action, "denied", requestID, reason))
+	_ = j.audit.Append(auditCtx, j.event(ctx, subjectID, action, "denied", requestID, reason))
 }
 
 func (j *CleanupJournal) authorize(ctx context.Context, subjectID, action, requestID, reason string) error {
@@ -701,14 +698,18 @@ func (j *CleanupJournal) authorize(ctx context.Context, subjectID, action, reque
 	if isCleanupDenial(err) {
 		auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Second)
 		defer cancel()
-		_ = j.audit.Append(auditCtx, j.event(subjectID, action, "denied", requestID, reason))
+		_ = j.audit.Append(auditCtx, j.event(ctx, subjectID, action, "denied", requestID, reason))
 	}
 	return err
 }
 
-func (j *CleanupJournal) event(subjectID, action, result, requestID, reason string) audit.Event {
+func (j *CleanupJournal) event(ctx context.Context, subjectID, action, result, requestID, reason string) audit.Event {
+	source := audit.SourceWeb
+	if background, _ := ctx.Value(cleanupBackgroundKey{}).(bool); background {
+		source = audit.SourceSystem
+	}
 	return audit.Event{SubjectID: subjectID, Action: action, Result: result, RequestID: requestID,
-		Source: audit.SourceWeb, ReasonCode: reason, At: j.now()}
+		Source: source, ReasonCode: reason, At: j.now()}
 }
 
 const cleanupSelect = `SELECT id, subject_id, request_id, plan_id, domain, fqdn, record_id, record_value,

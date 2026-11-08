@@ -1,5 +1,14 @@
 # 任务登记板
 
+## 当前：优先完成产品实现（2026-11-08）
+
+用户最新要求自行手动验证，主控优先完成剩余功能，不新增浏览器验收作为开发主线。V09-CLOUD-PRODUCT-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-product-assembly-20261108 / ServerFleet-product；IN PROGRESS。统一起点main a8a093ccfaecc35c1a58cadbef3a675b57fdf035，独立CI42480445288 success。
+
+本连续包先实现用户上传三策略/真实路径与终态/原子校验拒绝，再接cleanup实际服务装配与可信更新启动配置，继续发布/恢复独立实现。允许相关internal/files/certificates/updates/recovery、Controller组合/Agent已授权typed入口、正式Web/API适配、独立契约/共享迁移和进度文档；主控单写公共接缝。预留ds/0043_upload_policies（29项）；历史SQL/hash、旧25fixture及原始资料/既有候选/Proto/gen/根锁/CI保持，不以旧迁移重建假旧库。新契约单列R11/兼容差异。审查主控逐项复核与自动检查/COMMENT，非另一独立身份/自我APPROVE。
+
+用户负责手动验收；整包完成后集中自动检查，不逐小改动全量测试，不造浏览器证据。停止条件为本包实现/必要负向检查及精确head PR接收；未完成项继续由主控处理，真实外部/物理/ARM/硬1C1G/G2/Runtime/发布需实际满足，不因CI或手动验证分工关单。无生产/VPS/awskr/真实供应商凭据/云API权限，不启动其他Agent。
+
+
 ## 当前集中实施：正式Web持久续传（2026-11-08）
 
 V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；feature/cloud-browser-resume-20261108 / ServerFleet-browser-resume；IN PROGRESS。起点main f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a及独立CI42458157478 success。#7/#8/#9由#12接收，#13暂存恢复/四ADR原文已接收；下方旧候选状态为历史提交前快照。

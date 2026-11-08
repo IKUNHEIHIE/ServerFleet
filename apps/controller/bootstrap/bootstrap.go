@@ -16,21 +16,24 @@ import (
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
 	"serverfleet.local/serverfleet/apps/controller/server"
+	"serverfleet.local/serverfleet/internal/updates"
 )
 
 // Options are the Controller CLI flags.
 type Options struct {
-	Listen            string
-	DBPath            string
-	Origin            string
-	TLSCert           string
-	TLSKey            string
-	AgentPKIDir       string
-	AgentAuthority    string
-	AgentServerName   string
-	FileDeployment    string
-	GatewayDeployment string
-	CredentialKeyDir  string
+	Listen                string
+	DBPath                string
+	Origin                string
+	TLSCert               string
+	TLSKey                string
+	AgentPKIDir           string
+	AgentAuthority        string
+	AgentServerName       string
+	FileDeployment        string
+	GatewayDeployment     string
+	UpdateDeployment      string
+	CredentialKeyDir      string
+	DisableCleanupRetries bool
 }
 
 // ParseOptions parses Controller flags. It returns flag.ErrHelp for -h.
@@ -49,6 +52,8 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.CredentialKeyDir, "credential-key-dir", "", "private credential key directory (default: credential-keys beside -db)")
 	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
 	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
+	flags.StringVar(&options.UpdateDeployment, "update-deployment", "", "private signed local Agent update configuration (Linux; requires management TLS mode)")
+	flags.BoolVar(&options.DisableCleanupRetries, "disable-cleanup-retries", false, "disable automatic retries of owned ACME cleanup records")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
 	}
@@ -63,6 +68,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 
 // Validate enforces the management-mode prerequisites without opening storage.
 func (o Options) Validate() error {
+	if o.UpdateDeployment != "" && o.Scaffold() {
+		return errors.New("controller: -update-deployment requires -db and direct HTTPS")
+	}
 	if o.FileDeployment != "" && o.Scaffold() {
 		return errors.New("controller: -file-deployment requires -db and direct HTTPS")
 	}
@@ -139,6 +147,14 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 			return nil, nil, err
 		}
 	}
+	var updateDeployment *updates.ProductDeploymentOptions
+	if options.UpdateDeployment != "" {
+		var err error
+		updateDeployment, err = server.LoadUpdateDeployment(options.UpdateDeployment)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	directory, err := options.LocalPKIDirectory()
 	if err != nil {
 		return nil, nil, err
@@ -163,14 +179,16 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		serverName = host
 	}
 	composed, err := server.New(ctx, server.Config{
-		FileExecution:     fileConfig,
-		GatewayDeployment: gatewayDeployment,
-		DBPath:            options.DBPath,
-		CredentialKeyDir:  options.CredentialKeyDir,
-		Origin:            options.Origin,
-		EnrollmentIssuer:  material.Issuer,
-		AgentAuthority:    authority,
-		AgentServerName:   serverName,
+		FileExecution:         fileConfig,
+		GatewayDeployment:     gatewayDeployment,
+		UpdateProduct:         updateDeployment,
+		DisableCleanupRetries: options.DisableCleanupRetries,
+		DBPath:                options.DBPath,
+		CredentialKeyDir:      options.CredentialKeyDir,
+		Origin:                options.Origin,
+		EnrollmentIssuer:      material.Issuer,
+		AgentAuthority:        authority,
+		AgentServerName:       serverName,
 	})
 	if err != nil {
 		return nil, nil, err

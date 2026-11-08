@@ -109,5 +109,12 @@ func Migrations() []storage.Migration {
 			`CREATE UNIQUE INDEX file_distribution_nodes ON file_distribution_targets (distribution_id, node_id)`,
 			`CREATE INDEX file_distributions_task ON file_distributions (task_id)`,
 		},
+	}, {
+		Version: "ds/0043_upload_policies",
+		Name:    "freeze upload conflict policy and persist actual destination",
+		Statements: []string{
+			`ALTER TABLE file_uploads ADD COLUMN conflict_policy TEXT NOT NULL DEFAULT 'overwrite'`,
+			`ALTER TABLE file_uploads ADD COLUMN actual_destination TEXT NOT NULL DEFAULT ''`,
+		},
 	}}
 }

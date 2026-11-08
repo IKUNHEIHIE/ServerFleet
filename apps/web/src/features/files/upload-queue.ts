@@ -20,14 +20,14 @@
  * 因此：202/dispatching 只代表“已受理进队列”，本模块禁止把它当成远端完成。
  */
 
-export type UploadStatus = "awaiting_data" | "dispatching" | "completed" | "failed" | "cancelled" | "unknown";
+export type UploadStatus = "awaiting_data" | "dispatching" | "completed" | "failed" | "cancelled" | "skipped" | "unknown";
 
 /**
  * 当前记录的证据来源。只有 verified 才是“当前服务端事实”，其余都必须显示未核验。
  */
 export type UploadEvidence = "unverified" | "verified" | "forbidden" | "not_found" | "unavailable";
 
-const TERMINAL: ReadonlySet<UploadStatus> = new Set<UploadStatus>(["completed", "failed", "cancelled"]);
+const TERMINAL: ReadonlySet<UploadStatus> = new Set<UploadStatus>(["completed", "failed", "cancelled", "skipped"]);
 
 export function normalizeUploadStatus(raw: unknown): UploadStatus {
   switch (raw) {
@@ -36,6 +36,7 @@ export function normalizeUploadStatus(raw: unknown): UploadStatus {
     case "completed":
     case "failed":
     case "cancelled":
+    case "skipped":
       return raw;
     default:
       // 未识别的状态不猜测语义，按 unknown 展示并保持“不可声称完成”。
@@ -101,6 +102,8 @@ export function describeUploadStatus(item: {
         detail: "字节与服务端校验已通过，已进入统一任务队列；推送、审批与终态由任务链负责，远端尚未落盘。",
         tone: "pending",
       };
+    case "skipped":
+      return { label: "已跳过", detail: "服务端确认跳过同名目标，原文件保留；不声称写入新字节。", tone: "muted" };
     case "completed":
       return { label: "已完成", detail: "服务端读回 completed，远端落盘完成。", tone: "success" };
     case "failed":
@@ -189,6 +192,7 @@ export interface PendingUpload {
   /** evidence 的机器可读原因（http_403 / http_500 / network / aborted）。 */
   readonly reason?: string;
   readonly bytesReceived?: number;
+  readonly actualDestination?: string;
   readonly observedAt?: string;
   /** 单调请求序号：旧序号的结果不回退新证据。 */
   readonly sequence: number;
@@ -203,6 +207,7 @@ export interface UploadObservation {
   readonly taskId?: string;
   readonly bytesReceived?: number;
   readonly expectedSize?: number | null;
+  readonly actualDestination?: string;
   readonly reason?: string;
   readonly sequence: number;
 }
@@ -343,6 +348,7 @@ export function mergeUploadState(previous: PendingUpload, observation: UploadObs
     ...(observation.taskId ?? previous.taskId ? { taskId: observation.taskId ?? previous.taskId } : {}),
     ...(observation.bytesReceived === undefined ? {} : { bytesReceived: observation.bytesReceived }),
     ...(observation.expectedSize === undefined ? {} : { expectedSize: observation.expectedSize }),
+    ...(observation.actualDestination === undefined ? {} : { actualDestination: observation.actualDestination }),
     sequence: observation.sequence,
     observedAt,
   };
