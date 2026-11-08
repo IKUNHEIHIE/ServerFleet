@@ -32,3 +32,6 @@ apis:
 
   v09-r10-file-resume:
     root: api/openapi/revisions/v09-r10/files-resume-candidate.yaml
+
+  v09-r11-upload-policies:
+    root: api/openapi/revisions/v09-r11/upload-policies-candidate.yaml

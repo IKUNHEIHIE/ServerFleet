@@ -138,7 +138,7 @@ func TestCleanupJournalRetryBoundedAndResolved(t *testing.T) {
 		t.Fatal(err)
 	}
 	id := records[0].ID
-	f.cleaner.err = errors.New("provider delete failed")
+	f.cleaner.err = certificates.ErrCleanupRetryable
 	if _, err := f.journal.Retry(context.Background(), "admin-1", "req-retry-1", id); err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestCleanupJournalExhaustsRetries(t *testing.T) {
 	f := newCleanupFixture(t, 2)
 	records, _ := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
 	id := records[0].ID
-	f.cleaner.err = errors.New("provider delete failed")
+	f.cleaner.err = certificates.ErrCleanupRetryable
 	if _, err := f.journal.Retry(context.Background(), "admin-1", "req-retry-1", id); err != nil {
 		t.Fatal(err)
 	}
@@ -210,7 +210,7 @@ func TestCleanupJournalCancelAndAuthorization(t *testing.T) {
 	}
 }
 
-func TestCleanupJournalRetryDueUsesServiceAuthorization(t *testing.T) {
+func TestCleanupJournalRetryDueUsesCurrentOriginalOwnerAuthorization(t *testing.T) {
 	f := newCleanupFixture(t, 3)
 	records, _ := f.journal.RecordFailure(context.Background(), "admin-1", "req-1", "plan-1", "app.example.com", testCleanupRecords()[:1])
 	if records[0].ID == 0 {
@@ -223,6 +223,19 @@ func TestCleanupJournalRetryDueUsesServiceAuthorization(t *testing.T) {
 	list, _ := f.journal.List(context.Background(), "admin-1")
 	if list[0].State != certificates.CleanupResolved {
 		t.Fatalf("due state = %+v", list[0])
+	}
+	calls := f.cleaner.snapshot()
+	if len(calls) != 1 || calls[0].subject != "admin-1" {
+		t.Fatalf("invented cleanup execution subject: %+v", calls)
+	}
+	page, err := f.recorder.Query(context.Background(), audit.Query{Action: certificates.ActionCleanupRetry})
+	if err != nil || len(page.Items) == 0 {
+		t.Fatal("missing automatic audit", err)
+	}
+	for _, e := range page.Items {
+		if e.SubjectID != "admin-1" || e.Source != audit.SourceSystem {
+			t.Fatalf("wrong delegation provenance: %+v", e)
+		}
 	}
 }
 
@@ -484,4 +497,45 @@ func TestCleanupHTTPRoutes(t *testing.T) {
 		t.Fatalf("cancel resolved response = %v, err = %v", cancel, err)
 	}
 	_ = cancel.Body.Close()
+}
+
+func TestCleanupBackgroundRevokedOwnerNeverCallsProvider(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	records, err := f.journal.RecordFailure(context.Background(), "admin-1", "create-due", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.authorizer.mu.Lock()
+	f.authorizer.deny = true
+	f.authorizer.mu.Unlock()
+	count, err := f.journal.RetryDue(context.Background(), 10)
+	if err != nil || count != 0 || len(f.cleaner.snapshot()) != 0 {
+		t.Fatalf("revoked owner executed: %d %v", count, err)
+	}
+	var state string
+	if err = f.db.QueryRow(context.Background(), `SELECT state FROM certificate_dns_cleanup WHERE id=?`, records[0].ID).Scan(&state); err != nil || state != "pending" {
+		t.Fatalf("denial changed state: %s %v", state, err)
+	}
+}
+
+func TestCleanupUnclassifiedProviderFailureBecomesUnknownAndNeverReplays(t *testing.T) {
+	f := newCleanupFixture(t, 3)
+	ctx := context.Background()
+	records, err := f.journal.RecordFailure(ctx, "admin-1", "create", "plan-1", "app.example.com", testCleanupRecords()[:1])
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.cleaner.err = errors.New("connection reset after request transmission")
+	record, err := f.journal.Retry(ctx, "admin-1", "delete", records[0].ID)
+	if err != nil || record.State != certificates.CleanupUnknown || !record.NextAttemptAt.IsZero() {
+		t.Fatalf("unsafe retry classified: %+v %v", record, err)
+	}
+	f.cleaner.err = nil
+	count, err := f.journal.RetryDue(ctx, 10)
+	if err != nil || count != 0 || len(f.cleaner.snapshot()) != 1 {
+		t.Fatalf("unknown effect replayed: %d %v", count, err)
+	}
+	if _, err = f.journal.Retry(ctx, "admin-1", "retry-unknown", record.ID); !errors.Is(err, certificates.ErrCleanupUnknown) {
+		t.Fatal(err)
+	}
 }

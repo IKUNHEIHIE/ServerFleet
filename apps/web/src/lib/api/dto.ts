@@ -371,7 +371,7 @@ export interface UploadSession {
  */
 export interface UploadCompletion {
   readonly uploadId: string;
-  readonly status: "completed" | "failed" | "dispatching";
+  readonly status: "completed" | "failed" | "dispatching" | "skipped";
   readonly taskId?: string;
   readonly files?: readonly FileEntry[];
 }
@@ -382,6 +382,8 @@ export interface UploadState {
   /** R10 owner-authorized binding; absent on older Controllers disables resume. */
   readonly destinationPath?: string;
   readonly sha256Expected?: string;
+  readonly conflictPolicy?: ConflictPolicy;
+  readonly actualDestination?: string;
   readonly status: "awaiting_data" | "dispatching" | "completed" | "failed" | "cancelled" | string;
   readonly bytesReceived: number;
   readonly expectedSize?: number | null;

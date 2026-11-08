@@ -1,15 +1,24 @@
 # 任务登记板
 
-## 当前集中实施：正式Web持久续传（2026-11-08）
+## 当前：优先完成产品实现（2026-11-08）
 
-V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；feature/cloud-browser-resume-20261108 / ServerFleet-browser-resume；IN PROGRESS。起点main f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a及独立CI42458157478 success。#7/#8/#9由#12接收，#13暂存恢复/四ADR原文已接收；下方旧候选状态为历史提交前快照。
+用户最新要求自行手动验证，主控优先完成剩余功能，不新增浏览器验收作为开发主线。V09-CLOUD-PRODUCT-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-product-assembly-20261108 / ServerFleet-product；IN PROGRESS。统一起点main a8a093ccfaecc35c1a58cadbef3a675b57fdf035，独立CI42480445288 success。
+
+本连续包先实现用户上传三策略/真实路径与终态/原子校验拒绝，再接cleanup实际服务装配与可信更新启动配置，继续发布/恢复独立实现。允许相关internal/files/certificates/updates/recovery、Controller组合/Agent已授权typed入口、正式Web/API适配、独立契约/共享迁移和进度文档；主控单写公共接缝。预留ds/0043_upload_policies（29项）；历史SQL/hash、旧25fixture及原始资料/既有候选/Proto/gen/根锁/CI保持，不以旧迁移重建假旧库。新契约单列R11/兼容差异。审查主控逐项复核与自动检查/COMMENT，非另一独立身份/自我APPROVE。
+
+用户负责手动验收；整包完成后集中自动检查，不逐小改动全量测试，不造浏览器证据。停止条件为本包实现/必要负向检查及精确head PR接收；未完成项继续由主控处理，真实外部/物理/ARM/硬1C1G/G2/Runtime/发布需实际满足，不因CI或手动验证分工关单。无生产/VPS/awskr/真实供应商凭据/云API权限，不启动其他Agent。
+
+
+## 已接收检查点：正式Web持久续传（2026-11-08）
+
+V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；feature/cloud-browser-resume-20261108 / ServerFleet-browser-resume；CHECKPOINT ACCEPTED（#14 / main a8a093c；CI42480445288）。起点main f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a及独立CI42458157478 success。#7/#8/#9由#12接收，#13暂存恢复/四ADR原文已接收；下方旧候选状态为历史提交前快照。
 
 主控单写apps/web文件页/API适配、internal/files/http.go只读绑定投影/专项、独立v09-r10候选/redocly注册、相应进度/产品差异/README。原始资料/历史候选/Proto/gen/锁/CI/迁移SQL不改。审查：主控逐项复核+实际CI/COMMENT，非第二位独立账号、不自我APPROVE。停止条件：账号/节点隔离的待核验元数据、重新选文件+摘要绑定、当前服务端目标/摘要/偏移读回、有界分块、已派发/UNKNOWN不重放、换节点/身份/撤权负向、集中检查与精确head PR接收。真实外部/ARM/硬1C1G及G2/发布关卡另行OPEN。不启动其他Agent。
 
 
-## 当前集中实施：持久暂存续传（2026-11-08）
+## 已接收检查点：持久暂存续传（2026-11-08）
 
-任务V09-CLOUD-STAGING-RESUME-01；唯一会话chatgpt-takeover-01；分支feature/cloud-staging-resume-20261108；独立目录ServerFleet-resume。依赖#12精确候选3f2fc687a148306cdcc089c34ce7057e877a70e4及原文恢复8bd7140；未合并候选不冒称main已提供。当前IN PROGRESS，原三平台不再并发写入。
+任务V09-CLOUD-STAGING-RESUME-01；唯一会话chatgpt-takeover-01；分支feature/cloud-staging-resume-20261108；独立目录ServerFleet-resume。依赖#12精确候选3f2fc687a148306cdcc089c34ce7057e877a70e4及原文恢复8bd7140；未合并候选不冒称main已提供。CHECKPOINT ACCEPTED（#13 / main f1d715b；CI42458157478），原三平台不再并发写入。
 
 写范围：internal/files的未派发上传/分发暂存写入与恢复、相应单元/程序组合专项，docs/reference/recovered-adrs-20261108原文字节清单/索引及当前进度。审查：主控逐项复核与真实CI/COMMENT，非独立账号自批。只修已授权开发环境，不访问生产/供应商/VPS。停止条件：证明崩溃后可从持久偏移继续、缺失已确认字节/撤权/已派发/非私有或符号链接均拒绝；完整浏览器续传、Agent执行恢复及发布关卡另记，不因本检查点关单。
 

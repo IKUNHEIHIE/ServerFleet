@@ -149,20 +149,22 @@ type CreateTransferInput struct {
 }
 
 type Upload struct {
-	ID              string
-	SubjectID       string
-	NodeID          string
-	DestinationPath string
-	Status          string
-	BytesReceived   int64
-	ExpectedSize    *int64
-	SHA256Expected  string
-	SHA256Actual    string
-	ErrorCode       string
-	StagingName     string
-	TaskID          string
-	CreatedAt       time.Time
-	UpdatedAt       time.Time
+	ConflictPolicy    ConflictPolicy
+	ActualDestination string
+	ID                string
+	SubjectID         string
+	NodeID            string
+	DestinationPath   string
+	Status            string
+	BytesReceived     int64
+	ExpectedSize      *int64
+	SHA256Expected    string
+	SHA256Actual      string
+	ErrorCode         string
+	StagingName       string
+	TaskID            string
+	CreatedAt         time.Time
+	UpdatedAt         time.Time
 }
 
 var sha256Pattern = regexp.MustCompile(`^[0-9a-f]{64}$`)

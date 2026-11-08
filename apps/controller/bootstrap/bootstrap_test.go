@@ -138,3 +138,20 @@ func TestComposeFailsClosedOnPartialLocalPKI(t *testing.T) {
 		t.Fatal("partial local PKI was accepted")
 	}
 }
+
+func TestTrustedUpdateAndCleanupFlagsRequireManagementConfiguration(t *testing.T) {
+	options, err := ParseOptions([]string{"-update-deployment", "/private/update.json", "-disable-cleanup-retries"}, io.Discard)
+	if err != nil || options.UpdateDeployment != "/private/update.json" || !options.DisableCleanupRetries {
+		t.Fatalf("flags: %+v %v", options, err)
+	}
+	if options.Validate() == nil {
+		t.Fatal("update deployment accepted in health scaffold")
+	}
+	options.DBPath = "test.db"
+	options.Origin = "https://localhost:8443"
+	options.TLSCert = "cert.pem"
+	options.TLSKey = "key.pem"
+	if err := options.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

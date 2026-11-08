@@ -1,5 +1,7 @@
 # P1 候选契约审查与冲突登记
 
+2026-11-08主控R11候选：用户上传三策略/真实回执以及显式bindingVersion=2；新增ds/0043（29项），旧28语义与历史SQL不改。详见[兼容差异](revisions/v09-r11-upload-policies.md)，尚不冻结G2、不关闭P1-C10/发布准入。
+
 2026-11-04主控增量：AM-02首审A4的独立新增候选位于`api/openapi/revisions/v09-r9/file-distributions-candidate.yaml`，覆盖5条冻结多目标分发路由、202/task绑定、逐目标投影、取消与400/404/409/422/503等错误语义。新候选由主控协调随#11返修提出，Redocly独立登记；现有3原候选、R8、Proto/gen及兼容基线不变。它不批准完整持久续传、不冻结G2，P1-C10/资料与发布缺口仍OPEN。
 
 日期：2026-10-29；状态：**G2-CANDIDATE-NOT-FROZEN**。本文件记录工程诊断，不替代产品/安全 ADR，不宣告 G2 Gate 通过。

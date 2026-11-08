@@ -160,7 +160,7 @@ describe("files page", () => {
     expect(calls.some(call => call.method === "POST" && call.url.includes("/files/uploads/up-1/complete"))).toBe(true);
 
     fireEvent.click(within(panel).getByRole("button", { name: "读回真实状态" }));
-    await waitFor(() => expect(calls.some(call => call.method === "GET" && call.url === "/api/v1/nodes/n-1/files/uploads/up-1")).toBe(true));
+    await waitFor(() => expect(calls.some(call => call.method === "GET" && call.url === "/api/v1/nodes/n-1/files/uploads/up-1?resumeBinding=true&bindingVersion=2")).toBe(true));
     expect(await within(panel).findByText("已完成")).toBeVisible();
     expect(within(panel).queryByText("已受理（排队）")).toBeNull();
   });

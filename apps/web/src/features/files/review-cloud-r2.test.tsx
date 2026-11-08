@@ -47,7 +47,7 @@ describe("review R2 W1: cached state must never impersonate current evidence", (
       "GET /api/v1/nodes/n-1/files/uploads/up-old": () =>
         jsonResponse({ error: { code: "forbidden", message: "revoked" } }, 403),
     });
-    await waitFor(() => expect(calls.some(call => call.url === "/api/v1/nodes/n-1/files/uploads/up-old")).toBe(true));
+    await waitFor(() => expect(calls.some(call => call.url === "/api/v1/nodes/n-1/files/uploads/up-old?resumeBinding=true&bindingVersion=2")).toBe(true));
     const panel = await screen.findByRole("region", { name: "待确认上传" });
     await waitFor(() => expect(within(panel).getByText("无权限读取（未核验）")).toBeVisible());
     expect(within(panel).queryByText("已完成")).toBeNull();
@@ -112,7 +112,7 @@ describe("review R2 W2: a stale node read-back must not overwrite the new panel"
       ...base,
       "GET /api/v1/nodes/n-1/files/uploads/up-old": () => pendingOld,
     });
-    await waitFor(() => expect(calls.some(call => call.url === "/api/v1/nodes/n-1/files/uploads/up-old")).toBe(true));
+    await waitFor(() => expect(calls.some(call => call.url === "/api/v1/nodes/n-1/files/uploads/up-old?resumeBinding=true&bindingVersion=2")).toBe(true));
     expect(await screen.findByText("alpha-only.txt")).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("左侧节点"), { target: { value: "n-2" } });

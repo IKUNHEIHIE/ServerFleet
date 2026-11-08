@@ -246,13 +246,20 @@ func scanTransfer(row interface{ Scan(...any) error }) (Transfer, error) {
 }
 
 func (r *Repo) CreateUpload(ctx context.Context, q storage.Queryer, upload Upload) error {
+	if upload.ConflictPolicy == "" {
+		upload.ConflictPolicy = ConflictOverwrite
+	}
+	if !upload.ConflictPolicy.Valid() {
+		return ErrInvalidTransfer
+	}
+
 	_, err := q.Exec(ctx, `INSERT INTO file_uploads
                 (id, subject_id, node_id, destination_path, status, bytes_received, expected_size,
-                 sha256_expected, sha256_actual, error_code, staging_name, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, 0, ?, ?, '', '', ?, ?, ?)`,
+                 sha256_expected, sha256_actual, error_code, staging_name, created_at, updated_at, conflict_policy)
+                VALUES (?, ?, ?, ?, ?, 0, ?, ?, '', '', ?, ?, ?, ?)`,
 		upload.ID, upload.SubjectID, upload.NodeID, upload.DestinationPath, upload.Status,
 		nullableInt(upload.ExpectedSize), upload.SHA256Expected, upload.StagingName,
-		encodeTime(upload.CreatedAt), encodeTime(upload.UpdatedAt))
+		encodeTime(upload.CreatedAt), encodeTime(upload.UpdatedAt), upload.ConflictPolicy)
 	return err
 }
 
@@ -263,11 +270,11 @@ func (r *Repo) GetUpload(ctx context.Context, id string) (Upload, error) {
 		created, updated string
 	)
 	err := r.db.QueryRow(ctx, `SELECT id, subject_id, node_id, destination_path, status, bytes_received,
-                expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at
+                expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at, conflict_policy, actual_destination
                 FROM file_uploads WHERE id = ?`, id).Scan(&upload.ID, &upload.SubjectID, &upload.NodeID,
 		&upload.DestinationPath, &upload.Status, &upload.BytesReceived, &expected,
 		&upload.SHA256Expected, &upload.SHA256Actual, &upload.ErrorCode, &upload.StagingName, &upload.TaskID,
-		&created, &updated)
+		&created, &updated, &upload.ConflictPolicy, &upload.ActualDestination)
 	if storage.IsNotFound(err) {
 		return Upload{}, ErrUploadNotFound
 	}
@@ -319,11 +326,11 @@ func (r *Repo) GetUploadByTask(ctx context.Context, taskID string) (Upload, erro
 		created, updated string
 	)
 	err := r.db.QueryRow(ctx, `SELECT id, subject_id, node_id, destination_path, status, bytes_received,
-                expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at
+                expected_size, sha256_expected, sha256_actual, error_code, staging_name, task_id, created_at, updated_at, conflict_policy, actual_destination
                 FROM file_uploads WHERE task_id = ?`, taskID).Scan(&upload.ID, &upload.SubjectID, &upload.NodeID,
 		&upload.DestinationPath, &upload.Status, &upload.BytesReceived, &expected,
 		&upload.SHA256Expected, &upload.SHA256Actual, &upload.ErrorCode, &upload.StagingName, &upload.TaskID,
-		&created, &updated)
+		&created, &updated, &upload.ConflictPolicy, &upload.ActualDestination)
 	if storage.IsNotFound(err) {
 		return Upload{}, ErrUploadNotFound
 	}
@@ -380,14 +387,21 @@ func (r *Repo) TaskBindingState(ctx context.Context, taskID string) (string, err
 // FinishUploadTask applies the trusted terminal task outcome exactly once. A
 // transition out of dispatching succeeds only for the first caller; later
 // calls with the same terminal state are idempotent no-ops.
-func (r *Repo) FinishUploadTask(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string) (bool, error) {
+func (r *Repo) FinishUploadTask(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string, destination ...string) (bool, error) {
+	actualPath := ""
+	if len(destination) > 1 {
+		return false, ErrInvalidTransfer
+	}
+	if len(destination) == 1 {
+		actualPath = destination[0]
+	}
 	switch status {
-	case UploadCompleted, UploadFailed, UploadCancelled, UploadAborted:
+	case UploadCompleted, UploadSkipped, UploadFailed, UploadCancelled, UploadAborted:
 	default:
 		return false, ErrInvalidTransfer
 	}
-	res, err := q.Exec(ctx, `UPDATE file_uploads SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?
-                WHERE id = ? AND status = ?`, status, actualSHA, errorCode, encodeTime(time.Now().UTC()), id, UploadDispatching)
+	res, err := q.Exec(ctx, `UPDATE file_uploads SET status = ?, sha256_actual = ?, error_code = ?, updated_at = ?, actual_destination = ?
+                WHERE id = ? AND status = ?`, status, actualSHA, errorCode, encodeTime(time.Now().UTC()), actualPath, id, UploadDispatching)
 	if err != nil {
 		return false, err
 	}

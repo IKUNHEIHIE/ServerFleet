@@ -18,7 +18,7 @@ function seed(content = "abcdefg") {
  const d = { uploadId:"up-resume",ownerId:"u-admin",nodeId:"n-1",name:"resume.bin",size:bytes.length,
   sha256,destinationPath:"/resume.bin",createdAt:Date.now() };
  expect(rememberUploadDraft(d)).toBe(true);
- return { d, bytes, state: { uploadId:d.uploadId,status:"awaiting_data",bytesReceived:2,expectedSize:d.size,destinationPath:d.destinationPath,sha256Expected:sha256 } };
+ return { d, bytes, state: { uploadId:d.uploadId,status:"awaiting_data",bytesReceived:2,expectedSize:d.size,destinationPath:d.destinationPath,conflictPolicy:"overwrite",sha256Expected:sha256 } };
 }
 const reselection = async () => screen.findByLabelText("继续上传 resume.bin");
 it("remounts after an interrupted upload and resumes from the server offset, preserving 202 semantics", async () => {
@@ -37,11 +37,11 @@ it("remounts after an interrupted upload and resumes from the server offset, pre
  expect(first.calls.filter(c=>c.method==="PUT")).toHaveLength(2);
  const creation = first.calls.find(c=>c.method==="POST"&&c.url.endsWith("/uploads"));
  expect(JSON.parse(String(creation?.init?.body)).conflictPolicy).toBe("overwrite");
- expect(screen.getAllByText("上传文件（覆盖同名）").length).toBeGreaterThan(0);
+ expect(screen.getAllByText("上传文件（按所选策略）").length).toBeGreaterThan(0);
  expect(loadUploadDrafts("u-admin","n-1")).toHaveLength(1);
  cleanup(); sessionStorage.clear(); window.location.hash="";
  const next = await renderAuthenticated("/files", { ...base,
-  "GET /api/v1/nodes/n-1/files/uploads/up-resume": () => jsonResponse({uploadId:"up-resume",status:"awaiting_data",bytesReceived:UPLOAD_CHUNK_BYTES,expectedSize:bytes.length,destinationPath:"/resume.bin",sha256Expected:sha256}),
+  "GET /api/v1/nodes/n-1/files/uploads/up-resume": () => jsonResponse({uploadId:"up-resume",status:"awaiting_data",bytesReceived:UPLOAD_CHUNK_BYTES,expectedSize:bytes.length,destinationPath:"/resume.bin",conflictPolicy:"overwrite",sha256Expected:sha256}),
   "PUT /api/v1/nodes/n-1/files/uploads/up-resume/content": (init,url) => jsonResponse({uploadId:"up-resume",status:"awaiting_data",bytesReceived:Number(url.searchParams.get("offset"))+(init?.body as Uint8Array).byteLength,expectedSize:bytes.length}),
   "POST /api/v1/nodes/n-1/files/uploads/up-resume/complete": () => jsonResponse({uploadId:"up-resume",status:"dispatching",taskId:"task-resume"},202),
  });
@@ -106,4 +106,20 @@ it("does not show another account's persisted upload names or identities",async(
  sessionStorage.setItem("sf.files.pendingUploads.n-1",JSON.stringify([{uploadId:"up-legacy",name:"legacy.txt"}]));
  await renderAuthenticated("/files",base,{...IDENTITY,userId:"another-user"});
  expect(screen.queryByRole("region",{name:"可恢复上传"})).toBeNull();expect(screen.queryByText(/resume.bin|private.txt|legacy.txt/)).toBeNull();
+});
+
+it.each(["skip","overwrite","rename"])("freezes selected user-upload policy %s in the request and durable draft",async policy=>{
+ const bytes=new TextEncoder().encode("policy data");
+ const {calls}=await renderAuthenticated("/files",{...base,
+  "POST /api/v1/nodes/n-1/files/uploads":()=>jsonResponse({uploadId:"up-policy",status:"awaiting_data"},201),
+  "PUT /api/v1/nodes/n-1/files/uploads/up-policy/content":()=>jsonResponse({uploadId:"up-policy",status:"awaiting_data",bytesReceived:bytes.length,expectedSize:bytes.length}),
+  "POST /api/v1/nodes/n-1/files/uploads/up-policy/complete":()=>jsonResponse({uploadId:"up-policy",status:"dispatching",taskId:"task-policy"},202),
+ });
+ await waitFor(()=>expect(document.querySelector('input[type="file"]')).not.toBeDisabled());
+ fireEvent.change(screen.getAllByRole("combobox",{name:/上传同名策略/})[0],{target:{value:policy}});
+ fireEvent.change(document.querySelector('input[type="file"]')!,{target:{files:[new File([bytes],"policy.bin")]}});
+ await screen.findByText(/已受理进入统一任务队列（任务 task-policy）/);
+ const request=calls.find(c=>c.method==="POST"&&c.url.endsWith("/uploads"));
+ expect(JSON.parse(String(request?.init?.body)).conflictPolicy).toBe(policy);
+ expect(loadUploadDrafts("u-admin","n-1")[0].conflictPolicy).toBe(policy);
 });

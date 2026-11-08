@@ -95,6 +95,7 @@ function FilePane({
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
   const [sizeResult, setSizeResult] = useState<string | null>(null);
   const [uploadOutcome, setUploadOutcome] = useState<string | null>(null);
+  const [uploadPolicy, setUploadPolicy] = useState<ConflictPolicy>("overwrite");
   const [uploadBusy, setUploadBusy] = useState(false);
   const uploadOperation = useRef<object | null>(null);
   const ownerId = session.identity?.userId ?? "";
@@ -275,13 +276,14 @@ function FilePane({
     for (const item of current) {
       const sequence = nextPendingSequence();
       try {
-        const result = await filesApi.uploadStatus(nodeId, item.uploadId, signal);
+        const result = await filesApi.uploadStatus(nodeId, item.uploadId, signal, true, 2);
         observations.set(item.uploadId, {
           kind: "verified",
           status: normalizeUploadStatus(result.data.status),
           ...(result.data.taskId ? { taskId: result.data.taskId } : {}),
           ...(result.data.bytesReceived === undefined ? {} : { bytesReceived: result.data.bytesReceived }),
           ...(result.data.expectedSize === undefined ? {} : { expectedSize: result.data.expectedSize }),
+          ...(result.data.actualDestination ? { actualDestination: result.data.actualDestination } : {}),
           sequence,
         });
       } catch (error) {
@@ -362,7 +364,7 @@ function FilePane({
   function draftPort(draft: UploadDraft): UploadResumePort {
     // Exact captured node/id, never use a later render's mutation callback.
     return {
-      read: async signal => (await filesApi.uploadStatus(draft.nodeId, draft.uploadId, signal, true)).data,
+      read: async signal => (await filesApi.uploadStatus(draft.nodeId, draft.uploadId, signal, true, 2)).data,
       write: async (bytes, offset, signal) => (await filesApi.uploadContent(draft.nodeId, draft.uploadId, bytes, offset, signal)).data,
       complete: async signal => (await filesApi.completeUpload(draft.nodeId, draft.uploadId, signal)).data,
     };
@@ -382,11 +384,12 @@ function FilePane({
     const observations = new Map<string, UploadObservation>([[draft.uploadId, {
       kind: "verified", status: normalizeUploadStatus(result.state.status), taskId: result.state.taskId,
       bytesReceived: result.bytesReceived, expectedSize: draft.size, sequence,
+      ...("actualDestination" in result.state && typeof result.state.actualDestination === "string" && result.state.actualDestination ? { actualDestination: result.state.actualDestination } : {}),
     }]]);
     const merged = mergeObservations(uploadBase(draft, scope), observations);
     publishPending(scope.nodeId, scope.epoch, scope.controller.signal, merged);
     const current = merged.find(item => item.uploadId === draft.uploadId);
-    if (current && claimsRemoteCompletion(current)) { forgetUploadDraft(draft); reloadDrafts(scope); }
+    if (current && (claimsRemoteCompletion(current) || current.evidence === "verified" && current.status === "skipped")) { forgetUploadDraft(draft); reloadDrafts(scope); }
     return current;
   }
   function invalidateUpload(draft: UploadDraft, error: unknown, scope: PaneScope, sequence: number) {
@@ -421,11 +424,11 @@ function FilePane({
           const sha256 = await sha256Hex(file);
           if (!uploadIsCurrent(scope)) return;
           if (!draft) {
-            const created = await filesApi.createUpload(scope.nodeId, { destinationDir: state.path, conflictPolicy: "overwrite",
+            const created = await filesApi.createUpload(scope.nodeId, { destinationDir: state.path, conflictPolicy: uploadPolicy,
               files: [{ name: file.name, sizeBytes: file.size, ...(sha256 ? { sha256 } : {}) }] }, scope.controller.signal);
             if (!uploadIsCurrent(scope)) return;
             draft = { uploadId: created.data.uploadId, ownerId, nodeId: scope.nodeId, name: file.name, size: file.size,
-              sha256: sha256 ?? "", destinationPath: `${state.path.replace(/\/$/, "")}/${file.name}`, createdAt: Date.now() };
+              sha256: sha256 ?? "", conflictPolicy: uploadPolicy, destinationPath: `${state.path.replace(/\/$/, "")}/${file.name}`, createdAt: Date.now() };
             if (!rememberUploadDraft(draft)) lines.push(`${file.name}：浏览器未保存续传记录；此次上传不承诺跨重启续传。`);
             reloadDrafts(scope);
           }
@@ -643,8 +646,14 @@ function FilePane({
           >
             新建文件夹
           </Button>
+          <Field label="上传同名策略">
+            {ids => <Select id={ids.inputId} aria-label={`${label}上传同名策略`} value={uploadPolicy} disabled={uploadBusy || !canWrite || session.writesLocked}
+              onChange={event => setUploadPolicy(event.target.value as ConflictPolicy)}>
+              <option value="skip">跳过同名</option><option value="overwrite">覆盖同名</option><option value="rename">自动改名</option>
+            </Select>}
+          </Field>
           <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
-            上传文件（覆盖同名）
+            上传文件（按所选策略）
             <input
               type="file"
               multiple
@@ -667,10 +676,10 @@ function FilePane({
         {uploadBusy ? <p role="status" className="text-xs text-muted-foreground">正在核验或上传；仅服务端确认的字节计入进度。</p> : null}
         {uploadDrafts.length > 0 ? (
           <div role="region" aria-label="可恢复上传" className="space-y-2 rounded-md border p-2 text-xs">
-            <p>用户上传会覆盖同名文件。本地仅保存待核验记录。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
+            <p>本地仅保存待核验记录；续传使用创建时冻结的同名策略。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
             {uploadDrafts.map(draft => (
               <div key={draft.uploadId} className="space-y-1 border-t pt-2">
-                <p>{draft.name} · {formatBytes(draft.size)} · 目标（待核验）：{draft.destinationPath}</p>
+                <p>{draft.name} · {formatBytes(draft.size)} · 目标（待核验）：{draft.destinationPath} · 策略：{draft.conflictPolicy ?? "overwrite"}</p>
                 <div className="flex flex-wrap items-center gap-2">
                   <label className="rounded border px-2 py-1">选择原文件继续
                     <input type="file" className="sr-only" aria-label={`继续上传 ${draft.name}`}
@@ -712,7 +721,7 @@ function FilePane({
             <ul className="mt-2 space-y-2">
               {visiblePendingUploads.map(item => {
                 const text = describeUploadStatus(item);
-                const verifiedTerminal = claimsRemoteCompletion(item) || (item.evidence === "verified" && ["failed", "cancelled"].includes(item.status));
+                const verifiedTerminal = claimsRemoteCompletion(item) || (item.evidence === "verified" && ["failed", "cancelled", "skipped"].includes(item.status));
                 return (
                   <li key={item.uploadId} className="rounded border p-2">
                     <div className="flex flex-wrap items-center gap-2">
@@ -730,6 +739,7 @@ function FilePane({
                       >
                         {text.label}
                       </span>
+                      {item.evidence === "verified" && item.actualDestination ? <p>实际目标：{item.actualDestination}</p> : null}
                       {item.taskId ? <span className="text-muted-foreground">任务 {item.taskId}</span> : null}
                       {item.bytesReceived !== undefined ? (
                         <span className="text-muted-foreground">

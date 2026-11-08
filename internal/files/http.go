@@ -192,11 +192,8 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusBadRequest, "unsupported_batch_upload", "one file per upload session is supported")
 		return
 	}
-	// The upload task plan currently binds overwrite only. Never accept a
-	// caller's skip/rename/unknown policy and silently execute overwrite.
-	// Transfers keep their separately implemented three-policy semantics.
-	if body.ConflictPolicy != "" && body.ConflictPolicy != ConflictOverwrite {
-		writeFixed(w, http.StatusBadRequest, "unsupported_upload_conflict_policy", "user uploads currently require overwrite policy")
+	if body.ConflictPolicy != "" && !body.ConflictPolicy.Valid() {
+		writeFixed(w, http.StatusBadRequest, "invalid_conflict_policy", "unknown upload conflict policy")
 		return
 	}
 	file := body.Files[0]
@@ -207,7 +204,7 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	size := file.SizeBytes
 	upload, err := api.service.CreateUpload(r.Context(), principal.SubjectID, principal.RequestID,
-		r.PathValue("nodeId"), destination, &size, file.SHA256)
+		r.PathValue("nodeId"), destination, &size, file.SHA256, body.ConflictPolicy)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -237,10 +234,21 @@ func (api *httpAPI) getUpload(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusBadRequest, "invalid_query", "resumeBinding must be one boolean")
 		return
 	}
+	version := r.URL.Query()["bindingVersion"]
+	if len(version) > 1 || (len(version) == 1 && (version[0] != "2" || len(binding) != 1 || binding[0] != "true")) {
+		writeFixed(w, http.StatusBadRequest, "invalid_query", "bindingVersion requires version 2 with resumeBinding=true")
+		return
+	}
 	if len(binding) == 1 && binding[0] == "true" {
 		projection["destinationPath"] = upload.DestinationPath
 		if upload.SHA256Expected != "" {
 			projection["sha256Expected"] = upload.SHA256Expected
+		}
+	}
+	if len(version) == 1 {
+		projection["conflictPolicy"] = upload.ConflictPolicy
+		if upload.ActualDestination != "" {
+			projection["actualDestination"] = upload.ActualDestination
 		}
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -343,11 +351,14 @@ func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	files := []map[string]any{{
-		"name": baseName(completed.DestinationPath), "path": completed.DestinationPath,
-		"type": "file", "sizeBytes": completed.BytesReceived,
-		"version": completed.SHA256Actual,
-	}}
+	destination := completed.DestinationPath
+	if completed.ActualDestination != "" {
+		destination = completed.ActualDestination
+	}
+	files := []map[string]any{}
+	if completed.Status != UploadSkipped {
+		files = append(files, map[string]any{"name": baseName(destination), "path": destination, "type": "file", "sizeBytes": completed.BytesReceived, "version": completed.SHA256Actual})
+	}
 	status := http.StatusOK
 	if completed.Status == UploadDispatching {
 		// The verified upload is accepted into the unified task queue. The

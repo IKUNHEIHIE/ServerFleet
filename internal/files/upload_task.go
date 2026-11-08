@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path"
 
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
@@ -13,6 +14,7 @@ import (
 // task queue. Staging bytes never enter the task parameters; the worker
 // streams them frame-by-frame through the controlled agent channel.
 type UploadCommand struct {
+	ConflictPolicy                                                          ConflictPolicy
 	SubjectID, RequestID, UploadID, NodeID, DestinationPath, SHA256Expected string
 	Size                                                                    int64
 }
@@ -29,6 +31,7 @@ type UploadTaskSubmitter interface {
 // worker. It is the only path out of UploadDispatching. RequestID carries the
 // frozen task's original request id for the terminal audit record.
 type UploadTaskUpdate struct {
+	ActualDestination    string
 	Status               string
 	ErrorCode, ErrorNote string
 	RequestID            string
@@ -103,6 +106,17 @@ func uploadTerminalFromTask(t tasks.Task) (status, errorCode string, ok bool) {
 	}
 }
 
+// A bare successful task cannot distinguish a skipped file or its chosen
+// rename sibling after a crash. Missing the persisted upload receipt stays
+// unknown rather than inventing a destination or replaying an execution.
+func uploadTerminalForUpload(t tasks.Task, u Upload) (string, string, bool) {
+	status, code, ok := uploadTerminalFromTask(t)
+	if ok && status == UploadCompleted && u.ConflictPolicy != ConflictOverwrite {
+		return UploadFailed, UploadErrorAgentUnknown, true
+	}
+	return status, code, ok
+}
+
 // ReconcileUploadTasks converges every dispatching upload whose unified task
 // already reached a terminal state without the worker applying an upload
 // outcome (controller crash, queued expiry, rejection, direct task-interface
@@ -129,7 +143,7 @@ func (s *Service) ReconcileUploadTasks(ctx context.Context) (int, error) {
 			// No positive terminal evidence: leave the upload dispatching.
 			continue
 		}
-		if status, errorCode, ok := uploadTerminalFromTask(task); ok {
+		if status, errorCode, ok := uploadTerminalForUpload(task, upload); ok {
 			if _, err := s.ApplyUploadTaskUpdate(ctx, upload.TaskID, UploadTaskUpdate{
 				Status: status, ErrorCode: errorCode, RequestID: task.RequestID,
 			}); err != nil {
@@ -157,9 +171,22 @@ func (s *Service) ApplyUploadTaskUpdate(ctx context.Context, taskID string, upda
 		}
 		return Upload{}, fmt.Errorf("%w: upload is %s", ErrUploadClosed, upload.Status)
 	}
+	actualDestination := update.ActualDestination
+	if update.Status == UploadCompleted || update.Status == UploadSkipped {
+		if actualDestination == "" && upload.ConflictPolicy != ConflictRename {
+			actualDestination = upload.DestinationPath
+		}
+		if ValidateRemotePath(actualDestination) != nil || path.Dir(actualDestination) != path.Dir(upload.DestinationPath) ||
+			(upload.ConflictPolicy != ConflictRename && actualDestination != upload.DestinationPath) ||
+			(update.Status == UploadSkipped && upload.ConflictPolicy != ConflictSkip) {
+			return Upload{}, ErrTransferIdentity
+		}
+	} else if actualDestination != "" {
+		return Upload{}, ErrTransferIdentity
+	}
 	var actual, errorCode string
 	switch update.Status {
-	case UploadCompleted:
+	case UploadCompleted, UploadSkipped:
 		// The verified staging digest was persisted at dispatch; the worker
 		// streams exactly those bytes and the agent-side session verifies the
 		// same digest before the write is accepted. It remains the upload's
@@ -174,7 +201,7 @@ func (s *Service) ApplyUploadTaskUpdate(ctx context.Context, taskID string, upda
 	}
 	finished := false
 	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
-		moved, err := s.repo.FinishUploadTask(txCtx, tx, upload.ID, update.Status, actual, errorCode)
+		moved, err := s.repo.FinishUploadTask(txCtx, tx, upload.ID, update.Status, actual, errorCode, actualDestination)
 		if err != nil {
 			return err
 		}
@@ -183,7 +210,7 @@ func (s *Service) ApplyUploadTaskUpdate(ctx context.Context, taskID string, upda
 			return nil
 		}
 		action, result, reason := ActionUploadComplete, "failure", update.ErrorCode
-		if update.Status == UploadCompleted {
+		if update.Status == UploadCompleted || update.Status == UploadSkipped {
 			result = "success"
 		} else if update.Status == UploadCancelled {
 			action, result = ActionUploadAbort, "success"
@@ -205,11 +232,12 @@ func (s *Service) ApplyUploadTaskUpdate(ctx context.Context, taskID string, upda
 		// Worker finalized concurrently with identical or different evidence.
 		return s.repo.GetUploadByTask(ctx, taskID)
 	}
-	if update.Status == UploadCompleted || update.Status == UploadCancelled {
+	if update.Status == UploadCompleted || update.Status == UploadSkipped || update.Status == UploadCancelled {
 		if staging, err := s.stagingPath(upload.StagingName); err == nil {
 			_ = os.Remove(staging)
 		}
 	}
+	upload.ActualDestination = actualDestination
 	upload.Status = update.Status
 	upload.SHA256Actual = actual
 	upload.ErrorCode = errorCode

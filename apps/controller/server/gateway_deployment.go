@@ -46,6 +46,14 @@ type GatewayDeployment struct {
 // LoadGatewayDeployment reads one private, owner-checked startup document. It is
 // never reloaded from an HTTP route and never grants a task or permission.
 func LoadGatewayDeployment(filename string) (*GatewayDeployment, error) {
+	raw, err := readPrivateDeployment(filename)
+	if err != nil {
+		return nil, err
+	}
+	return parseGatewayDeployment(raw)
+}
+
+func readPrivateDeployment(filename string) ([]byte, error) {
 	if !filepath.IsAbs(filename) {
 		return nil, ErrGatewayDeployment
 	}
@@ -81,7 +89,7 @@ func LoadGatewayDeployment(filename string) (*GatewayDeployment, error) {
 	if err != nil || len(raw) > 128<<10 {
 		return nil, ErrGatewayDeployment
 	}
-	return parseGatewayDeployment(raw)
+	return raw, nil
 }
 
 func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {

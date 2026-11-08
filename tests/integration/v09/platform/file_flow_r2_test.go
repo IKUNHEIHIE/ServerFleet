@@ -261,6 +261,111 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 			time.Sleep(20 * time.Millisecond)
 		}
 	}
+	// The same actual mTLS Agent runs user uploads through the unified worker.
+	// Existing destination bytes distinguish skip/overwrite/rename semantics.
+	for _, policy := range []string{"skip", "overwrite", "rename"} {
+		t.Run("user-upload-"+policy, func(t *testing.T) {
+			name := "upload-" + policy + ".bin"
+			old := []byte("existing destination")
+			payload := []byte("replacement user-upload bytes " + policy)
+			if err := os.WriteFile(filepath.Join(targetRoot, "out", name), old, 0600); err != nil {
+				t.Fatal(err)
+			}
+			base := "/api/v1/nodes/" + processes[1].node + "/files/uploads"
+			raw := must("POST", base, map[string]any{"destinationDir": "/target/out", "conflictPolicy": policy, "files": []map[string]any{{"name": name, "sizeBytes": len(payload), "sha256": sha256Hex(payload)}}}, 201)
+			var receipt struct {
+				ID string `json:"uploadId"`
+			}
+			if json.Unmarshal(raw, &receipt) != nil || receipt.ID == "" {
+				t.Fatal(string(raw))
+			}
+			route := base + "/" + receipt.ID
+			req, err := http.NewRequestWithContext(ctx, "PUT", origin+route+"/content?offset=0", bytes.NewReader(payload))
+			if err != nil {
+				t.Fatal(err)
+			}
+			req.Header.Set("Origin", origin)
+			req.Header.Set("Content-Type", "application/octet-stream")
+			req.Header.Set("X-CSRF-Token", csrf)
+			req.Header.Set("X-Requested-With", "ServerFleetWeb")
+			req.Header.Set("Idempotency-Key", fmt.Sprintf("upload-bytes-%06d", counter.Add(1)))
+			response, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			content, _ := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+			response.Body.Close()
+			if response.StatusCode != 200 {
+				t.Fatalf("PUT %d %s", response.StatusCode, content)
+			}
+			raw = must("POST", route+"/complete", nil, 202)
+			var accepted struct {
+				TaskID string `json:"taskId"`
+			}
+			if json.Unmarshal(raw, &accepted) != nil || accepted.TaskID == "" {
+				t.Fatal(string(raw))
+			}
+			deadline := time.Now().Add(15 * time.Second)
+			for {
+				task, err := composed.Tasks.Get(ctx, accepted.TaskID)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if task.Status.Terminal() {
+					if task.Status != tasks.StatusCompleted {
+						t.Fatalf("upload task: %+v", task)
+					}
+					break
+				}
+				if time.Now().After(deadline) {
+					t.Fatalf("upload did not finish: %+v", task)
+				}
+				time.Sleep(20 * time.Millisecond)
+			}
+			upload, err := composed.Files.GetUpload(ctx, login.Identity.ID, "upload-receipt", receipt.ID)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantState := files.UploadCompleted
+			if policy == "skip" {
+				wantState = files.UploadSkipped
+			}
+			if upload.Status != wantState || string(upload.ConflictPolicy) != policy || upload.ActualDestination == "" {
+				t.Fatalf("missing actual upload receipt: %+v", upload)
+			}
+			raw = must("GET", route+"?resumeBinding=true&bindingVersion=2", nil, 200)
+			var binding struct {
+				Policy string `json:"conflictPolicy"`
+				Actual string `json:"actualDestination"`
+			}
+			if json.Unmarshal(raw, &binding) != nil || binding.Policy != policy || binding.Actual != upload.ActualDestination {
+				t.Fatalf("HTTP binding %s", raw)
+			}
+			actualPath := filepath.Join(targetRoot, "out", filepath.Base(upload.ActualDestination))
+			got, err := os.ReadFile(actualPath)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if policy == "skip" {
+				if !bytes.Equal(got, old) {
+					t.Fatal("skip overwrote existing bytes")
+				}
+			} else if !bytes.Equal(got, payload) {
+				t.Fatal("actual upload bytes differ")
+			}
+			original, err := os.ReadFile(filepath.Join(targetRoot, "out", name))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if policy == "rename" && (upload.ActualDestination == "/target/out/"+name || !bytes.Equal(original, old)) {
+				t.Fatal("rename changed original")
+			}
+			if policy == "overwrite" && !bytes.Equal(original, payload) {
+				t.Fatal("overwrite did not replace bytes")
+			}
+			t.Logf("policy=%s state=%s actual=%s staged_sha256=%s", policy, upload.Status, upload.ActualDestination, upload.SHA256Actual)
+		})
+	}
 	body := func(paths []string) map[string]any {
 		return map[string]any{"sourceNodeId": processes[0].node, "destinationNodeId": processes[1].node, "sourcePaths": paths, "destinationDir": "/target/out", "conflictPolicy": "skip", "checksums": checksums}
 	}

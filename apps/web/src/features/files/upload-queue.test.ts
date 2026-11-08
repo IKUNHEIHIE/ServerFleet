@@ -276,3 +276,13 @@ it("keeps unavailable browser storage from breaking the pending panel", () => {
   try { expect(loadPendingUploads("n-1", EPOCH, "u-1")).toEqual([]); }
   finally { get.mockRestore(); }
 });
+
+it("a skipped receipt is terminal without claiming new remote content", () => {
+  const skipped = mergeUploadState(record(), { kind: "verified", status: "skipped", sequence: 2, actualDestination: "/srv/a.bin" });
+  expect(isTerminalStatus(skipped.status)).toBe(true);
+  expect(claimsRemoteCompletion(skipped)).toBe(false);
+  expect(describeUploadStatus(skipped).label).toBe("已跳过");
+  expect(skipped.actualDestination).toBe("/srv/a.bin");
+  expect(mergeUploadState(skipped, { kind: "forbidden", sequence: 3 }).actualDestination).toBeUndefined();
+  expect(mergeUploadState(skipped, { kind: "verified", status: "unknown", sequence: 3 }).actualDestination).toBeUndefined();
+});

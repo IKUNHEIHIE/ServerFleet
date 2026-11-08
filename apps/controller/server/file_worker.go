@@ -123,10 +123,16 @@ func (w *FileExecutionWorker) SubmitTransfer(ctx context.Context, c files.Transf
 }
 
 // uploadPlan freezes the controller staging push: exactly one destination
-// write inside the operator-mapped file root, overwrite policy only (rename
-// and skip have no upload semantics), size bounded by the controlled channel.
+// write inside the operator-mapped file root using the frozen conflict policy;
+// the controlled Agent channel owns skip/overwrite/rename semantics.
 func (w *FileExecutionWorker) uploadPlan(ctx context.Context, c files.UploadCommand) (fileTaskPlan, map[string]string, error) {
-	p := fileTaskPlan{Kind: "upload", TransferID: c.UploadID, DestinationNode: c.NodeID, ConflictPolicy: files.ConflictOverwrite, UploadSize: c.Size}
+	if c.ConflictPolicy == "" {
+		c.ConflictPolicy = files.ConflictOverwrite
+	}
+	p := fileTaskPlan{Kind: "upload", TransferID: c.UploadID, DestinationNode: c.NodeID, ConflictPolicy: c.ConflictPolicy, UploadSize: c.Size}
+	if !p.ConflictPolicy.Valid() {
+		return p, nil, files.ErrInvalidTransfer
+	}
 	if !transport.FileID(c.UploadID) || files.ValidateRemotePath(c.DestinationPath) != nil || c.Size < 0 || c.Size > int64(transport.FileMaxBytes) {
 		return p, nil, files.ErrInvalidTransfer
 	}
@@ -142,7 +148,7 @@ func (w *FileExecutionWorker) uploadPlan(ctx context.Context, c files.UploadComm
 		"kind": "upload", "upload_id": c.UploadID, "dest_node": c.NodeID,
 		"destination": c.DestinationPath, "write_path": writePath,
 		"sha256": c.SHA256Expected, "size": strconv.FormatInt(c.Size, 10),
-		"conflict_policy": string(files.ConflictOverwrite),
+		"conflict_policy": string(p.ConflictPolicy),
 	}
 	return p, params, nil
 }
@@ -175,7 +181,7 @@ func decodeUploadTask(t tasks.Task, params map[string]string) (fileTaskPlan, err
 		return p, files.ErrTransferIdentity
 	}
 	p = fileTaskPlan{Kind: "upload", TransferID: params["upload_id"], DestinationNode: params["dest_node"], ConflictPolicy: files.ConflictPolicy(params["conflict_policy"]), UploadSize: size}
-	if !transport.FileID(p.TransferID) || p.ConflictPolicy != files.ConflictOverwrite || files.ValidateRemotePath(params["destination"]) != nil || !transport.FilePath(params["write_path"]) || params["sha256"] != "" && !transport.FileDigest(params["sha256"]) || t.Targets[0].NodeID != p.DestinationNode {
+	if !transport.FileID(p.TransferID) || !p.ConflictPolicy.Valid() || files.ValidateRemotePath(params["destination"]) != nil || !transport.FilePath(params["write_path"]) || params["sha256"] != "" && !transport.FileDigest(params["sha256"]) || t.Targets[0].NodeID != p.DestinationNode {
 		return p, files.ErrTransferIdentity
 	}
 	p.Items = []filePlanItem{{Source: params["destination"], Destination: params["destination"], WritePath: params["write_path"], ExpectedSHA256: params["sha256"]}}
@@ -298,7 +304,7 @@ func (w *FileExecutionWorker) liveUpload(ctx context.Context, t tasks.Task, p fi
 		return err
 	}
 	upload, err := w.repo.GetUpload(ctx, p.TransferID)
-	if err != nil || upload.TaskID != t.ID || upload.SubjectID != t.SubmitterID || upload.Status != files.UploadDispatching || upload.NodeID != p.DestinationNode || upload.DestinationPath != p.Items[0].Destination || upload.BytesReceived != p.UploadSize {
+	if err != nil || upload.TaskID != t.ID || upload.SubjectID != t.SubmitterID || upload.Status != files.UploadDispatching || upload.NodeID != p.DestinationNode || upload.DestinationPath != p.Items[0].Destination || upload.BytesReceived != p.UploadSize || upload.ConflictPolicy != p.ConflictPolicy {
 		return files.ErrTransferIdentity
 	}
 	if upload.SHA256Actual != "" && upload.SHA256Actual != p.Items[0].ExpectedSHA256 {
@@ -787,8 +793,21 @@ func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p
 	if e == nil {
 		defer session.Close()
 		if opened.RelativePath != p.Items[0].WritePath {
-			// Overwrite plans publish exactly the planned path; no rename sibling.
-			e = files.ErrTransferIdentity
+			if p.ConflictPolicy != files.ConflictRename {
+				e = files.ErrTransferIdentity
+			}
+		}
+		if e == nil && opened.Skipped {
+			if p.ConflictPolicy != files.ConflictSkip {
+				e = files.ErrTransferIdentity
+			} else {
+				status = files.UploadSkipped
+				message = "file upload skipped; existing destination preserved"
+				e = w.waitDone(ctx, execution)
+				if e == nil {
+					e = w.liveUpload(ctx, t, p)
+				}
+			}
 		}
 	}
 	if e == nil && !opened.Skipped {
@@ -845,9 +864,17 @@ func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p
 			CancelRequested: cancelRequested, ChecksumRejected: e == files.ErrAgentChecksum, DeniedNow: denied,
 		})
 	}
+	actualDestination := ""
+	if e == nil && session != nil {
+		actualDestination, e = w.config.Paths.AbsolutePath(ctx, p.DestinationNode, opened.RelativePath)
+		if e != nil {
+			code, status, errorCode, message = tasks.NodeResultUnknown, files.UploadFailed, files.UploadErrorAgentUnknown, "destination mapping unknown"
+			actualDestination = ""
+		}
+	}
 	finishCtx, stop := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
 	defer stop()
-	_, err = w.server.Files.ApplyUploadTaskUpdate(finishCtx, t.ID, files.UploadTaskUpdate{Status: status, ErrorCode: errorCode, ErrorNote: message, RequestID: t.RequestID})
+	_, err = w.server.Files.ApplyUploadTaskUpdate(finishCtx, t.ID, files.UploadTaskUpdate{Status: status, ErrorCode: errorCode, ErrorNote: message, RequestID: t.RequestID, ActualDestination: actualDestination})
 	if err != nil {
 		return nil, err
 	}

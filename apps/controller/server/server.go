@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/ai"
@@ -54,6 +55,8 @@ type Config struct {
 	MonitoringAllowedHosts    []string
 	CertificateIssuer         certificates.Issuer
 	CertificateCleanupCleaner certificates.DNSRecordCleaner
+	DisableCleanupRetries     bool
+	CleanupRetryInterval      time.Duration
 	PublishingBridge          publishing.LocalBridgeConfig
 	UploadTransport           files.UploadTransport
 	DownloadTransport         files.DownloadTransport
@@ -124,6 +127,8 @@ type Server struct {
 	Quota              *quota.Service
 	Certificates       *certificates.Service
 	CertificateCleanup *certificates.CleanupJournal
+	cleanupEnabled     bool
+	cleanupInterval    time.Duration
 	Publishing         *publishing.Service
 
 	Enrollment           *transport.EnrollmentService
@@ -952,7 +957,22 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		agentBridge.gatewayChild = observer
 	}
 
-	s.CertificateCleanup, err = certificates.NewCleanupJournal(certificates.CleanupJournalOptions{DB: db, Audit: auditRecorder, Authorizer: authorizer, Cleaner: cfg.CertificateCleanupCleaner, Now: now})
+	cleaner := cfg.CertificateCleanupCleaner
+	if cleaner == nil {
+		cleaner, err = NewPublicationCleanupCleaner(dnsService)
+		if err != nil {
+			return cleanup(err)
+		}
+	}
+	s.cleanupEnabled = !cfg.DisableCleanupRetries
+	s.cleanupInterval = cfg.CleanupRetryInterval
+	if s.cleanupInterval == 0 {
+		s.cleanupInterval = 30 * time.Second
+	}
+	if s.cleanupInterval < time.Second || s.cleanupInterval > time.Hour {
+		return cleanup(errors.New("controller: cleanup retry interval must be between one second and one hour"))
+	}
+	s.CertificateCleanup, err = certificates.NewCleanupJournal(certificates.CleanupJournalOptions{DB: db, Audit: auditRecorder, Authorizer: authorizer, Cleaner: cleaner, Now: now})
 	if err != nil {
 		return cleanup(err)
 	}
@@ -1011,7 +1031,14 @@ func (s *Server) startTaskScheduler() {
 	s.runDone = make(chan struct{})
 	go func() {
 		defer close(s.runDone)
-		_ = s.Tasks.Run(ctx)
+		var workers sync.WaitGroup
+		workers.Add(1)
+		go func() { defer workers.Done(); _ = s.Tasks.Run(ctx) }()
+		if s.cleanupEnabled {
+			workers.Add(1)
+			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()
+		}
+		workers.Wait()
 	}()
 }
 
