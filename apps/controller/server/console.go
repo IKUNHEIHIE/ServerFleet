@@ -176,6 +176,6 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000")
 	}
 	// Files are immutable process-owned snapshots. Management API and Agent WSS
-	// use their existing more-specific mux routes and current authorization gates.
+	// use the unchanged API mux; explicit asset selection stays inside RuntimeHTTP.
 	http.ServeContent(w, r, path.Base(r.URL.Path), time.Time{}, bytes.NewReader(asset.bytes))
 }

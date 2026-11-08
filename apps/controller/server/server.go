@@ -165,6 +165,7 @@ type Server struct {
 
 	agentBridge *agentLinkBridge
 	mux         *http.ServeMux
+	console     http.Handler
 	now         func() time.Time
 	stagingDir  string
 	backupDir   string
@@ -1025,9 +1026,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
 	}
-	if console != nil {
-		s.mux.Handle("GET /", console)
-	}
+	s.console = console
 	if s.ProductUpdates != nil {
 		if err := s.ProductUpdates.Start(ctx); err != nil {
 			return cleanup(err)
@@ -1102,7 +1101,11 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqID := newRequestID()
 	w.Header().Set("X-Request-ID", reqID)
 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
-	recovery.RuntimeHTTP(s.mux, s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))
+	next := http.Handler(s.mux)
+	if s.console != nil && (r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/favicon.ico" || strings.HasPrefix(r.URL.Path, "/assets/")) {
+		next = s.console
+	}
+	recovery.RuntimeHTTP(next, s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))
 }
 
 func (s *Server) registerRoutes() error {

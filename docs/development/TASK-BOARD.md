@@ -2,14 +2,14 @@
 
 ## 当前：正式Web与可移植构建装配（2026-11-08）
 
-V09-CLOUD-DEPLOY-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-deploy-assembly-20261108 / ServerFleet-deploy；IN PROGRESS。依赖候选#15 b4305fed7fb03fcbce6d3f87654a71e4e51be4a5（起点main a8a093c，尚未合并前不冒称main已提供）。原#15源码冻结等待CI，不并发修改其分支。
+V09-CLOUD-DEPLOY-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-deploy-assembly-20261108 / ServerFleet-deploy；IN PROGRESS。依赖#15 b4305fed7fb03fcbce6d3f87654a71e4e51be4a5已接收为main6031c1f9d9b2b840ef5a477520aa937799bb3ba5，CI42485042788 success，当前已正常合并该共享基线。原#15源码冻结等待CI，不并发修改其分支。
 
 允许apps/controller正式Web静态装配/启动选项、apps/agent/runtime的已签名构建版本默认值注入、scripts可移植发布构建、相关专项与docs当前进度；主控单写，无其他Agent。目标为同源HTTPS正式控制台而非测试fixturehost、受限构建资产/保留API/隔离门、固定工具与独立输出目录的核心发行包/字节清单；可选Xray不编入核心，不添加依赖/秘密/部署行为。集中一个功能包后检查，用户手动验收。停止条件为实现与必要路径/方法/权限/启动负向及精确head检查/PR接收；完整发布/更新/恢复与G2仍OPEN，无生产/VPS/外部供应商/云API授权。
 
 
-## 当前：优先完成产品实现（2026-11-08）
+## 已接收检查点：产品上传/清理/更新启动装配（2026-11-08）
 
-用户最新要求自行手动验证，主控优先完成剩余功能，不新增浏览器验收作为开发主线。V09-CLOUD-PRODUCT-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-product-assembly-20261108 / ServerFleet-product；IN PROGRESS。统一起点main a8a093ccfaecc35c1a58cadbef3a675b57fdf035，独立CI42480445288 success。
+用户最新要求自行手动验证，主控优先完成剩余功能，不新增浏览器验收作为开发主线。V09-CLOUD-PRODUCT-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-product-assembly-20261108 / ServerFleet-product；CHECKPOINT ACCEPTED（#15 / main6031c1f / CI42485042788）。统一起点main a8a093ccfaecc35c1a58cadbef3a675b57fdf035，独立CI42480445288 success。
 
 本连续包先实现用户上传三策略/真实路径与终态/原子校验拒绝，再接cleanup实际服务装配与可信更新启动配置，继续发布/恢复独立实现。允许相关internal/files/certificates/updates/recovery、Controller组合/Agent已授权typed入口、正式Web/API适配、独立契约/共享迁移和进度文档；主控单写公共接缝。预留ds/0043_upload_policies（29项）；历史SQL/hash、旧25fixture及原始资料/既有候选/Proto/gen/根锁/CI保持，不以旧迁移重建假旧库。新契约单列R11/兼容差异。审查主控逐项复核与自动检查/COMMENT，非另一独立身份/自我APPROVE。
 

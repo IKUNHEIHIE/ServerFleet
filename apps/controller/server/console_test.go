@@ -124,6 +124,11 @@ func TestFormalConsolePreservesAPIAndLiveQuarantineGate(t *testing.T) {
 	if missing.Code != 404 {
 		t.Fatal("unknown API became SPA", missing.Code)
 	}
+	method := httptest.NewRecorder()
+	s.ServeHTTP(method, httptest.NewRequest("POST", "/healthz", nil))
+	if method.Code != 405 {
+		t.Fatal("changed existing method semantics", method.Code)
+	}
 	s.runtimeGate = func(context.Context) error { return recovery.ErrQuarantined }
 	denied := httptest.NewRecorder()
 	s.ServeHTTP(denied, httptest.NewRequest("GET", "/", nil))
