@@ -1,3 +1,4 @@
+telemetry: off
 # Validate the candidate as OpenAPI, without imposing new product style rules.
 extends:
   - spec
@@ -28,3 +29,6 @@ apis:
 
   v09-r9-file-distributions:
     root: api/openapi/revisions/v09-r9/file-distributions-candidate.yaml
+
+  v09-r10-file-resume:
+    root: api/openapi/revisions/v09-r10/files-resume-candidate.yaml

@@ -10,7 +10,7 @@ const base:FetchRoutes={
  "GET /api/v1/nodes/n-2/files":()=>jsonResponse({nodeId:"n-2",path:"/",entries:[],nextCursor:null}),
  "GET /api/v1/transfers":()=>jsonResponse({items:[]}),
 };
-function seed(){sessionStorage.setItem("sf.files.pendingUploads.n-1",JSON.stringify([{uploadId:"up-r",name:"review.txt",taskId:"task-r"}]));}
+function seed(){sessionStorage.setItem("sf.files.pendingUploads.v2.u-admin.n-1",JSON.stringify([{uploadId:"up-r",name:"review.txt",taskId:"task-r"}]));}
 it("review: old same-scope response cannot overwrite newer forbidden evidence",async()=>{
  seed();let resolveOld!:(r:Response)=>void;let reads=0;
  const old=new Promise<Response>(r=>{resolveOld=r;});

@@ -192,6 +192,13 @@ func (api *httpAPI) createUpload(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusBadRequest, "unsupported_batch_upload", "one file per upload session is supported")
 		return
 	}
+	// The upload task plan currently binds overwrite only. Never accept a
+	// caller's skip/rename/unknown policy and silently execute overwrite.
+	// Transfers keep their separately implemented three-policy semantics.
+	if body.ConflictPolicy != "" && body.ConflictPolicy != ConflictOverwrite {
+		writeFixed(w, http.StatusBadRequest, "unsupported_upload_conflict_policy", "user uploads currently require overwrite policy")
+		return
+	}
 	file := body.Files[0]
 	destination, err := JoinRemotePath(body.DestinationDir, file.Name)
 	if err != nil {
@@ -224,7 +231,20 @@ func (api *httpAPI) getUpload(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusNotFound, "not_found", "upload was not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, uploadProgressDTO(upload))
+	projection := uploadProgressDTO(upload)
+	binding := r.URL.Query()["resumeBinding"]
+	if len(binding) > 1 || (len(binding) == 1 && binding[0] != "true" && binding[0] != "false") {
+		writeFixed(w, http.StatusBadRequest, "invalid_query", "resumeBinding must be one boolean")
+		return
+	}
+	if len(binding) == 1 && binding[0] == "true" {
+		projection["destinationPath"] = upload.DestinationPath
+		if upload.SHA256Expected != "" {
+			projection["sha256Expected"] = upload.SHA256Expected
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, projection)
 }
 
 func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {

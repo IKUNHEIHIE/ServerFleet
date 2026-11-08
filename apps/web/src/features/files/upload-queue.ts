@@ -208,7 +208,9 @@ export interface UploadObservation {
 }
 
 const MAX_PENDING = 20;
-const storageKey = (nodeId: string) => `sf.files.pendingUploads.${nodeId}`;
+const storageKey = (nodeId: string, ownerId?: string) => ownerId === undefined
+  ? `sf.files.pendingUploads.${nodeId}` // Legacy fixture/API compatibility only.
+  : `sf.files.pendingUploads.v2.${encodeURIComponent(ownerId)}.${encodeURIComponent(nodeId)}`;
 
 function storage(): Storage | null {
   try {
@@ -222,12 +224,12 @@ function storage(): Storage | null {
  * 读回本地记录：**只恢复身份元数据**，状态一律为“未核验”。
  * 缓存里的 status/bytes/observedAt 被有意丢弃——它们不能冒充当前事实。
  */
-export function loadPendingUploads(nodeId: string, epoch: string): readonly PendingUpload[] {
+export function loadPendingUploads(nodeId: string, epoch: string, ownerId?: string): readonly PendingUpload[] {
   const store = storage();
   if (!store || nodeId === "") return [];
-  const raw = store.getItem(storageKey(nodeId));
-  if (!raw) return [];
   try {
+    const raw = store.getItem(storageKey(nodeId, ownerId));
+    if (!raw) return [];
     const parsed: unknown = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     const items: PendingUpload[] = [];
@@ -257,12 +259,12 @@ export function loadPendingUploads(nodeId: string, epoch: string): readonly Pend
 }
 
 /** 只持久化身份元数据；status/evidence 绝不落盘。 */
-export function savePendingUploads(nodeId: string, items: readonly PendingUpload[]): void {
+export function savePendingUploads(nodeId: string, items: readonly PendingUpload[], ownerId?: string): void {
   const store = storage();
   if (!store || nodeId === "") return;
   try {
     if (items.length === 0) {
-      store.removeItem(storageKey(nodeId));
+      store.removeItem(storageKey(nodeId, ownerId));
       return;
     }
     const records = items.slice(0, MAX_PENDING).map(item => ({
@@ -271,7 +273,7 @@ export function savePendingUploads(nodeId: string, items: readonly PendingUpload
       ...(item.taskId ? { taskId: item.taskId } : {}),
       ...(item.expectedSize === undefined ? {} : { expectedSize: item.expectedSize }),
     }));
-    store.setItem(storageKey(nodeId), JSON.stringify(records));
+    store.setItem(storageKey(nodeId, ownerId), JSON.stringify(records));
   } catch {
     // 存储不可用时只影响刷新读回，不影响本次会话内的真实状态展示。
   }

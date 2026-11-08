@@ -16,7 +16,6 @@ import {
   claimsRemoteCompletion,
   classifyReadFailure,
   createPendingUpload,
-  describeUploadFailure,
   describeUploadStatus,
   isCurrentScope,
   loadPendingUploads,
@@ -27,6 +26,8 @@ import {
   type PendingUpload,
   type UploadObservation,
 } from "./upload-queue";
+import { continueUpload, readBoundUpload, loadUploadDrafts, rememberUploadDraft, forgetUploadDraft,
+  UploadResumeError, UploadCompleteError, type UploadDraft, type UploadResumePort, type UploadRunResult } from "./upload-resume";
 import { formatBytes, formatDateTime } from "@/lib/format";
 
 const TRANSFER_STATUS_TEXT: Record<TransferStatus, string> = {
@@ -94,7 +95,14 @@ function FilePane({
   const [deleteTarget, setDeleteTarget] = useState<FileEntry | null>(null);
   const [sizeResult, setSizeResult] = useState<string | null>(null);
   const [uploadOutcome, setUploadOutcome] = useState<string | null>(null);
+  const [uploadBusy, setUploadBusy] = useState(false);
+  const uploadOperation = useRef<object | null>(null);
+  const ownerId = session.identity?.userId ?? "";
+  const draftViewKey = JSON.stringify([ownerId, state.nodeId, session.viewEpoch]);
+  const [draftView, setDraftView] = useState<{ key: string; items: readonly UploadDraft[] }>({ key: "", items: [] });
+  const uploadDrafts = draftView.key === draftViewKey ? draftView.items : [];
   const [pendingUploads, setPendingUploads] = useState<readonly PendingUpload[]>([]);
+  const visiblePendingUploads = pendingUploads.filter(item => isCurrentScope(item, state.nodeId, session.viewEpoch));
   const [pendingBusy, setPendingBusy] = useState<string | null>(null);
   const [pendingNotice, setPendingNotice] = useState<string | null>(null);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -199,9 +207,6 @@ function FilePane({
   const rename = useAction((body: { path: string; newName: string; expectedVersion?: string }) => filesApi.rename(state.nodeId ?? "", body));
   const remove = useAction((path: string, recursive: boolean) => filesApi.remove(state.nodeId ?? "", path, recursive));
   const size = useAction((path: string) => filesApi.size(state.nodeId ?? "", path));
-  const upload = useAction((body: Parameters<typeof filesApi.createUpload>[1]) => filesApi.createUpload(state.nodeId ?? "", body));
-  const uploadBytes = useAction((uploadId: string, bytes: ArrayBuffer) => filesApi.uploadContent(state.nodeId ?? "", uploadId, bytes, 0));
-  const complete = useAction((uploadId: string) => filesApi.completeUpload(state.nodeId ?? "", uploadId));
   const transfer = useAction((body: Parameters<typeof transfersApi.create>[0], key: string) => transfersApi.create(body, key));
 
   // 刷新/断线恢复：缓存只提供待核验的身份元数据，状态一律以当前作用域的 GET 读回为准。
@@ -211,9 +216,8 @@ function FilePane({
   // must survive concurrent reads in memory, including reads that finish late.
   const pendingItems = useRef<readonly PendingUpload[]>([]);
   const pendingAccess = useRef({ nodeId: state.nodeId, epoch: session.viewEpoch, writable: canWrite && !session.writesLocked });
-  useEffect(() => {
-    pendingAccess.current = { nodeId: state.nodeId, epoch: session.viewEpoch, writable: canWrite && !session.writesLocked };
-  }, [state.nodeId, session.viewEpoch, canWrite, session.writesLocked]);
+  // Async mutations see the latest rendered scope/permission immediately.
+  pendingAccess.current = { nodeId: state.nodeId, epoch: session.viewEpoch, writable: canWrite && !session.writesLocked };
   const pendingScope = useRef<{
     readonly nodeId: string;
     readonly epoch: string;
@@ -224,6 +228,9 @@ function FilePane({
     pendingScope.current?.controller.abort();
     pendingScope.current = null;
     pendingItems.current = [];
+    uploadOperation.current = null;
+    setUploadBusy(false);
+    setDraftView({ key: draftViewKey, items: state.nodeId && ownerId ? loadUploadDrafts(ownerId, state.nodeId) : [] });
     setPendingBusy(null);
     if (!state.nodeId) {
       setPendingUploads([]);
@@ -233,7 +240,7 @@ function FilePane({
     const epoch = session.viewEpoch;
     const controller = new AbortController();
     pendingScope.current = { nodeId: state.nodeId, epoch, controller };
-    const restored = loadPendingUploads(state.nodeId, epoch);
+    const restored = loadPendingUploads(state.nodeId, epoch, ownerId);
     pendingItems.current = restored;
     setPendingUploads(restored);
     setPendingNotice(null);
@@ -256,7 +263,7 @@ function FilePane({
   function publishPending(nodeId: string, epoch: string, signal: AbortSignal, items: readonly PendingUpload[]) {
     if (!scopeIsCurrent(nodeId, epoch, signal)) return;
     pendingItems.current = items;
-    savePendingUploads(nodeId, items);
+    savePendingUploads(nodeId, items, ownerId);
     setPendingUploads(items);
   }
 
@@ -347,84 +354,125 @@ function FilePane({
     }
   }
 
-  // GM-W5-01b：单文件上传会话 → PUT 字节流（offset=0）→ POST complete 触发服务端
-  // 字节数与 SHA-256 校验。传输通道未注入时服务端返回 503 unavailable，此时字节已
-  // 落地暂存并通过校验，界面如实区分“校验通过”与“未送达远端节点”。
-  async function handleFiles(event: ChangeEvent<HTMLInputElement>) {
-    const files = Array.from(event.target.files ?? []);
-    event.target.value = "";
-    if (files.length === 0 || !state.nodeId) return;
+  type PaneScope = NonNullable<typeof pendingScope.current>;
+  function uploadIsCurrent(scope: PaneScope): boolean {
+    return scopeIsCurrent(scope.nodeId, scope.epoch, scope.controller.signal) &&
+      pendingAccess.current.nodeId === scope.nodeId && pendingAccess.current.epoch === scope.epoch && pendingAccess.current.writable;
+  }
+  function draftPort(draft: UploadDraft): UploadResumePort {
+    // Exact captured node/id, never use a later render's mutation callback.
+    return {
+      read: async signal => (await filesApi.uploadStatus(draft.nodeId, draft.uploadId, signal, true)).data,
+      write: async (bytes, offset, signal) => (await filesApi.uploadContent(draft.nodeId, draft.uploadId, bytes, offset, signal)).data,
+      complete: async signal => (await filesApi.completeUpload(draft.nodeId, draft.uploadId, signal)).data,
+    };
+  }
+  function reloadDrafts(scope: PaneScope) {
+    if (scopeIsCurrent(scope.nodeId, scope.epoch, scope.controller.signal)) {
+      setDraftView({ key: draftViewKey, items: loadUploadDrafts(ownerId, scope.nodeId) });
+    }
+  }
+  function uploadBase(draft: UploadDraft, scope: PaneScope): readonly PendingUpload[] {
+    if (pendingItems.current.some(item => item.uploadId === draft.uploadId)) return pendingItems.current;
+    return [createPendingUpload({ uploadId: draft.uploadId, nodeId: draft.nodeId, name: draft.name,
+      expectedSize: draft.size, epoch: scope.epoch, sequence: 0 }), ...pendingItems.current];
+  }
+  function observeUpload(draft: UploadDraft, result: UploadRunResult, scope: PaneScope, sequence: number) {
+    if (!uploadIsCurrent(scope)) return;
+    const observations = new Map<string, UploadObservation>([[draft.uploadId, {
+      kind: "verified", status: normalizeUploadStatus(result.state.status), taskId: result.state.taskId,
+      bytesReceived: result.bytesReceived, expectedSize: draft.size, sequence,
+    }]]);
+    const merged = mergeObservations(uploadBase(draft, scope), observations);
+    publishPending(scope.nodeId, scope.epoch, scope.controller.signal, merged);
+    const current = merged.find(item => item.uploadId === draft.uploadId);
+    if (current && claimsRemoteCompletion(current)) { forgetUploadDraft(draft); reloadDrafts(scope); }
+    return current;
+  }
+  function invalidateUpload(draft: UploadDraft, error: unknown, scope: PaneScope, sequence: number) {
+    if (!uploadIsCurrent(scope)) return;
+    const actualError = error instanceof UploadCompleteError ? error.cause : error;
+    const apiError = actualError instanceof ApiError ? actualError : null;
+    const observations = new Map<string, UploadObservation>([[draft.uploadId, {
+      kind: classifyReadFailure(apiError?.status), sequence, reason: apiError ? `http_${apiError.status}` : "unconfirmed",
+    }]]);
+    publishPending(scope.nodeId, scope.epoch, scope.controller.signal,
+      mergeObservations(uploadBase(draft, scope), observations));
+  }
+  function uploadFailure(error: unknown): string {
+    if (error instanceof UploadResumeError) return error.message;
+    const actualError = error instanceof UploadCompleteError ? error.cause : error;
+    if (error instanceof UploadCompleteError && actualError instanceof ApiError && actualError.status === 503 && actualError.code === "unavailable") {
+      return `文件字节流（${error.received} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）。`;
+    }
+    return `${describeApiError(actualError)} 字节与任务状态未确认；请读回真实状态，不会自动重复提交。`;
+  }
+  async function handleFiles(event: ChangeEvent<HTMLInputElement>, resumed?: UploadDraft) {
+    const selectedFiles = Array.from(event.target.files ?? []); event.target.value = "";
     const scope = pendingScope.current;
-    if (!scope) return;
-    const canContinue = () => scopeIsCurrent(scope.nodeId, scope.epoch, scope.controller.signal) &&
-      pendingAccess.current.writable;
-    setUploadOutcome(null);
+    if (!selectedFiles.length || !scope || !uploadIsCurrent(scope) || uploadOperation.current) return;
+    if (resumed && (resumed.ownerId !== ownerId || resumed.nodeId !== scope.nodeId)) return;
+    const operation = {}; uploadOperation.current = operation; setUploadBusy(true); setUploadOutcome(null);
     const lines: string[] = [];
-    for (const file of files) {
-      const sha256 = await sha256Hex(file);
-      if (!canContinue()) return;
-      const created = await upload.run({
-        destinationDir: state.path,
-        conflictPolicy: "skip",
-        files: [{ name: file.name, sizeBytes: file.size, ...(sha256 ? { sha256 } : {}) }],
-      });
-      if (!canContinue()) return;
-      if (!created.ok || !created.data) {
-        lines.push(`${file.name}：上传会话创建失败。`);
-        continue;
-      }
-      const uploadId = created.data.data.uploadId;
-      const bytes = await file.arrayBuffer();
-      if (!canContinue()) return;
-      const content = await uploadBytes.run(uploadId, bytes);
-      if (!canContinue()) return;
-      if (!content.ok || !content.data) {
-        lines.push(`${file.name}：字节流上传失败（uploadId ${uploadId}）。`);
-        continue;
-      }
-      const received = content.data.data.bytesReceived;
-      const completed = await complete.run(uploadId);
-      if (!canContinue()) return;
-      if (completed.ok && completed.data) {
-        const status = normalizeUploadStatus(completed.data.data.status);
-        if (status === "completed") {
-          lines.push(`${file.name}：上传完成，服务端校验通过（${received} B）。`);
-        } else if (status === "dispatching") {
-          // 202：只代表已受理进统一任务队列，远端尚未落盘。
-          const taskId = completed.data.data.taskId;
-          lines.push(
-            `${file.name}：已受理进入统一任务队列${taskId ? `（任务 ${taskId}）` : ""}，尚未完成；在“待确认上传”中按真实任务状态读回。`,
-          );
-          if (taskId && state.nodeId) {
-            // 202 是服务端证据（dispatching），不是完成；身份与序号绑定当前作用域。
-            const record = createPendingUpload({
-              uploadId,
-              nodeId: state.nodeId,
-              name: file.name,
-              taskId,
-              bytesReceived: received,
-              expectedSize: file.size,
-              epoch: session.viewEpoch,
-              sequence: nextPendingSequence(),
-            });
-            publishPending(state.nodeId, session.viewEpoch, scope.controller.signal,
-              [record, ...pendingItems.current.filter(item => item.uploadId !== record.uploadId)]);
+    try {
+      for (const file of resumed ? selectedFiles.slice(0, 1) : selectedFiles) {
+        let draft = resumed; let sequence = 0;
+        try {
+          const sha256 = await sha256Hex(file);
+          if (!uploadIsCurrent(scope)) return;
+          if (!draft) {
+            const created = await filesApi.createUpload(scope.nodeId, { destinationDir: state.path, conflictPolicy: "overwrite",
+              files: [{ name: file.name, sizeBytes: file.size, ...(sha256 ? { sha256 } : {}) }] }, scope.controller.signal);
+            if (!uploadIsCurrent(scope)) return;
+            draft = { uploadId: created.data.uploadId, ownerId, nodeId: scope.nodeId, name: file.name, size: file.size,
+              sha256: sha256 ?? "", destinationPath: `${state.path.replace(/\/$/, "")}/${file.name}`, createdAt: Date.now() };
+            if (!rememberUploadDraft(draft)) lines.push(`${file.name}：浏览器未保存续传记录；此次上传不承诺跨重启续传。`);
+            reloadDrafts(scope);
           }
-        } else {
-          lines.push(`${file.name}：服务端返回 status=${completed.data.data.status}；不声称完成。`);
+          sequence = nextPendingSequence();
+          const result = await continueUpload(file, draft, sha256, draftPort(draft), {
+            signal: scope.controller.signal, current: () => uploadIsCurrent(scope),
+          }, !resumed);
+          if (!uploadIsCurrent(scope)) return;
+          const observed = observeUpload(draft, result, scope, sequence);
+          if (observed) {
+            const detail = claimsRemoteCompletion(observed)
+              ? `上传完成，服务端校验通过（${result.bytesReceived} B）。`
+              : observed.evidence === "verified" && observed.status === "dispatching"
+                ? `已受理进入统一任务队列${observed.taskId ? `（任务 ${observed.taskId}）` : ""}，尚未完成；请读回真实状态。`
+                : describeUploadStatus(observed).detail;
+            lines.push(`${file.name}：${detail}`);
+          }
+        } catch (error) {
+          if (!uploadIsCurrent(scope)) return;
+          if (draft && sequence) invalidateUpload(draft, error, scope, sequence);
+          lines.push(`${file.name}：${uploadFailure(error)}`);
         }
-      } else if (completed.error && completed.error.status === 503) {
-        lines.push(
-          `文件字节流（${received} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）。`,
-        );
-      } else if (completed.error) {
-        const failure = describeUploadFailure(completed.error.status, completed.error.code);
-        lines.push(`${file.name}：${failure.text}`);
+      }
+      if (uploadIsCurrent(scope)) { setUploadOutcome(lines.join(" ")); list.reload(); }
+    } finally {
+      if (uploadOperation.current === operation) {
+        uploadOperation.current = null;
+        if (scopeIsCurrent(scope.nodeId, scope.epoch, scope.controller.signal)) setUploadBusy(false);
       }
     }
-    if (scopeIsCurrent(scope.nodeId, scope.epoch, scope.controller.signal)) {
-      setUploadOutcome(lines.join(" "));
-      list.reload();
+  }
+  async function inspectDraft(draft: UploadDraft) {
+    const scope = pendingScope.current;
+    if (!scope || !uploadIsCurrent(scope) || uploadOperation.current || draft.ownerId !== ownerId || draft.nodeId !== scope.nodeId) return;
+    const operation = {}; uploadOperation.current = operation; setUploadBusy(true);
+    const sequence = nextPendingSequence();
+    try {
+      const current = await readBoundUpload(draft, draftPort(draft), { signal: scope.controller.signal, current: () => uploadIsCurrent(scope) });
+      const observed = observeUpload(draft, { state: current, bytesReceived: current.bytesReceived }, scope, sequence);
+      if (observed) setUploadOutcome(`${draft.name}：${describeUploadStatus(observed).detail}`);
+    } catch (error) {
+      if (uploadIsCurrent(scope)) { invalidateUpload(draft, error, scope, sequence); setUploadOutcome(`${draft.name}：${uploadFailure(error)}`); }
+    } finally {
+      if (uploadOperation.current === operation) {
+        uploadOperation.current = null;
+        if (scopeIsCurrent(scope.nodeId, scope.epoch, scope.controller.signal)) setUploadBusy(false);
+      }
     }
   }
 
@@ -596,13 +644,13 @@ function FilePane({
             新建文件夹
           </Button>
           <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
-            上传文件
+            上传文件（覆盖同名）
             <input
               type="file"
               multiple
               className="sr-only"
-              disabled={!state.nodeId || !node?.online || !canWrite || session.writesLocked}
-              onChange={handleFiles}
+              disabled={!state.nodeId || !node?.online || !canWrite || session.writesLocked || uploadBusy}
+              onChange={event => void handleFiles(event)}
             />
           </label>
           <Button type="button" size="sm" onClick={() => setTransferOpen(true)} disabled={sendDisabled}>
@@ -616,11 +664,38 @@ function FilePane({
           </Notice>
         ) : null}
         {sizeResult ? <p role="status" className="text-xs text-muted-foreground">{sizeResult}</p> : null}
-        {pendingUploads.length > 0 ? (
+        {uploadBusy ? <p role="status" className="text-xs text-muted-foreground">正在核验或上传；仅服务端确认的字节计入进度。</p> : null}
+        {uploadDrafts.length > 0 ? (
+          <div role="region" aria-label="可恢复上传" className="space-y-2 rounded-md border p-2 text-xs">
+            <p>用户上传会覆盖同名文件。本地仅保存待核验记录。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
+            {uploadDrafts.map(draft => (
+              <div key={draft.uploadId} className="space-y-1 border-t pt-2">
+                <p>{draft.name} · {formatBytes(draft.size)} · 目标（待核验）：{draft.destinationPath}</p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="rounded border px-2 py-1">选择原文件继续
+                    <input type="file" className="sr-only" aria-label={`继续上传 ${draft.name}`}
+                      disabled={uploadBusy || !canWrite || session.writesLocked} onChange={event => void handleFiles(event, draft)} />
+                  </label>
+                  <Button type="button" size="sm" disabled={uploadBusy || !canWrite || session.writesLocked}
+                    onClick={() => void inspectDraft(draft)}>读回状态 {draft.name}</Button>
+                  <Button type="button" size="sm" disabled={uploadBusy} onClick={() => {
+                    const scope = pendingScope.current;
+                    if (scope && draft.ownerId === ownerId && draft.nodeId === scope.nodeId) {
+                      if (!forgetUploadDraft(draft)) setUploadOutcome("浏览器未能移除本地记录。");
+                      reloadDrafts(scope);
+                    }
+                  }}>移除本地记录 {draft.name}</Button>
+                </div>
+                <p className="text-muted-foreground">移除本地记录不会取消服务端任务；取消仍使用统一任务入口。</p>
+              </div>
+            ))}
+          </div>
+        ) : null}
+        {visiblePendingUploads.length > 0 ? (
           <div className="rounded-md border p-2 text-xs" role="region" aria-label="待确认上传">
             <div className="flex items-center justify-between">
               <span className="font-medium">
-                待确认上传（{activePendingUploads(pendingUploads).length} 项未到终态 / 共 {pendingUploads.length} 项）
+                待确认上传（{activePendingUploads(visiblePendingUploads).length} 项未到终态 / 共 {visiblePendingUploads.length} 项）
               </span>
               <Button
                 type="button"
@@ -635,7 +710,7 @@ function FilePane({
               </Button>
             </div>
             <ul className="mt-2 space-y-2">
-              {pendingUploads.map(item => {
+              {visiblePendingUploads.map(item => {
                 const text = describeUploadStatus(item);
                 const verifiedTerminal = claimsRemoteCompletion(item) || (item.evidence === "verified" && ["failed", "cancelled"].includes(item.status));
                 return (

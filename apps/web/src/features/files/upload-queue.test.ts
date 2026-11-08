@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   activePendingUploads,
   classifyReadFailure,
@@ -258,4 +258,21 @@ describe("createPendingUpload", () => {
     expect(claimsRemoteCompletion(created)).toBe(false);
     expect(created.observedAt).toBe("2026-11-03T00:00:00Z");
   });
+});
+
+
+it("isolates pending identities by account and never imports unowned legacy cache", () => {
+  sessionStorage.clear();
+  savePendingUploads("n-1", [record({name:"private.txt"})], "u-1");
+  expect(loadPendingUploads("n-1", EPOCH, "u-1").map(v=>v.name)).toEqual(["private.txt"]);
+  expect(loadPendingUploads("n-1", EPOCH, "u-2")).toEqual([]);
+  savePendingUploads("n-1", [record({name:"legacy.txt"})]);
+  expect(loadPendingUploads("n-1", EPOCH, "u-2")).toEqual([]);
+});
+
+
+it("keeps unavailable browser storage from breaking the pending panel", () => {
+  const get = vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => { throw new Error("blocked storage"); });
+  try { expect(loadPendingUploads("n-1", EPOCH, "u-1")).toEqual([]); }
+  finally { get.mockRestore(); }
 });
