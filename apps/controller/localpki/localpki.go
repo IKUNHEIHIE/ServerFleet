@@ -43,6 +43,9 @@ var ErrLocalPKI = errors.New("localpki: local agent CA is unavailable")
 
 // Material is the loaded local CA. The private key stays inside transport.
 type Material struct {
+	Provisioned     bool
+	TrustGeneration uint64
+	AuthorityID     string
 	Issuer          *transport.CertificateIssuer
 	Roots           *x509.CertPool
 	RootPEM         []byte
@@ -140,6 +143,7 @@ func build(directory, certPath string, cert *x509.Certificate, key *ecdsa.Privat
 	}
 	return &Material{
 		Issuer:          issuer,
+		TrustGeneration: Generation,
 		Roots:           roots,
 		RootPEM:         pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw}),
 		RootSPKI:        rootSPKI,

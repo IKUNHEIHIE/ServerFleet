@@ -29,6 +29,8 @@ type Options struct {
 	TLSCert               string
 	TLSKey                string
 	AgentPKIDir           string
+	AgentPKIMode          string
+	AgentRootPin          string
 	AgentAuthority        string
 	AgentServerName       string
 	FileDeployment        string
@@ -49,6 +51,8 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.Origin, "origin", "", "trusted https:// browser Origin (required with -db)")
 	flags.StringVar(&options.TLSCert, "tls-cert", "", "TLS server certificate path (required with -db)")
 	flags.StringVar(&options.TLSKey, "tls-key", "", "TLS server private key path (required with -db)")
+	flags.StringVar(&options.AgentPKIMode, "agent-pki-mode", "provisioned", "provisioned offline-Root/online-Intermediate PKI, or explicit local-development")
+	flags.StringVar(&options.AgentRootPin, "agent-root-pin", "", "offline-approved Agent Root SPKI SHA-256 (required in provisioned mode)")
 	flags.StringVar(&options.AgentPKIDir, "agent-pki-dir", "", "local Agent CA directory (default: pki beside -db)")
 	flags.StringVar(&options.AgentAuthority, "agent-authority", "", "Agent-facing authority host:port (default: derived from -listen)")
 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
@@ -86,6 +90,16 @@ func (o Options) Validate() error {
 	}
 	if o.Scaffold() {
 		return nil
+	}
+	mode := o.AgentPKIMode
+	if mode == "" {
+		mode = "provisioned"
+	}
+	if mode != "provisioned" && mode != "local-development" {
+		return errors.New("controller: unsupported Agent PKI mode")
+	}
+	if mode == "provisioned" && len(o.AgentRootPin) != 64 {
+		return errors.New("controller: provisioned PKI requires an independently verified -agent-root-pin; local development must be explicit")
 	}
 	if o.Origin == "" || o.TLSCert == "" || o.TLSKey == "" {
 		return errors.New("controller: -db requires -origin, -tls-cert and -tls-key (direct HTTPS is mandatory)")
@@ -166,7 +180,12 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 	if err != nil {
 		return nil, nil, err
 	}
-	material, err := localpki.Ensure(directory)
+	var material *localpki.Material
+	if options.AgentPKIMode == "local-development" {
+		material, err = localpki.Ensure(directory)
+	} else {
+		material, err = localpki.LoadProvisioned(directory, options.AgentRootPin)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
