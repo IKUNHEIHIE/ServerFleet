@@ -98,6 +98,9 @@ it("keeps current 403 unverified and offers no cached success fallback", async (
  expect(calls.some(c=>c.method==="PUT"||c.url.endsWith("/complete"))).toBe(false);
 });
 it("does not show another account's persisted upload names or identities",async()=>{
- seed();await renderAuthenticated("/files",base,{...IDENTITY,userId:"another-user"});
- expect(screen.queryByRole("region",{name:"可恢复上传"})).toBeNull();expect(screen.queryByText(/resume.bin/)).toBeNull();
+ seed();
+ sessionStorage.setItem("sf.files.pendingUploads.v2.u-admin.n-1",JSON.stringify([{uploadId:"up-private",name:"private.txt"}]));
+ sessionStorage.setItem("sf.files.pendingUploads.n-1",JSON.stringify([{uploadId:"up-legacy",name:"legacy.txt"}]));
+ await renderAuthenticated("/files",base,{...IDENTITY,userId:"another-user"});
+ expect(screen.queryByRole("region",{name:"可恢复上传"})).toBeNull();expect(screen.queryByText(/resume.bin|private.txt|legacy.txt/)).toBeNull();
 });

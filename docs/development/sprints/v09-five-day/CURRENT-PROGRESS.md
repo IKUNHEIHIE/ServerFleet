@@ -2,11 +2,11 @@
 
 ## 最新接手状态（2026-11-08，Asia/Shanghai）
 
-已接收main1cde2c3c6db55b445703ebc2948063302e4c6d11，独立CI41698553639成功，正式27项迁移。#11多目标分发检查点已接收（精确head c0f06c3：Go911PASS/7SKIP/0FAIL、Web348及真实双Agent撤权/取消）；完整续传仍未完成。
+已接收main f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a；独立CI42458157478成功。#7/#8/#9已由#12集中返修/保留作者历史后合入，#13补暂存崩溃后持久偏移恢复和四份缺失ADR原文。最新接收候选完整CI42456874996：Go971顶层PASS/7SKIP/0FAIL、Web380PASS，安全/构建通过；套件有重叠，不折算完成率。正式28项迁移，原25项fixture/SQL/hash不改。
 
-#7 head209014c、#8 head5b0aa01、#9 head1c9a8e0原CI成功，但复审发现迁移冲突/实际上传EOF、组件乱序读回/旧取消及DNS成功缺ID的未知分类遗漏。用户授权ChatGPT直接返修并独立继续完整项目，不再派发其他Agent。协调候选[PR#12](https://github.com/IKUNHEIHIE/ServerFleet/pull/12)，任务V09-CLOUD-TAKEOVER-01、会话chatgpt-takeover-01；候选组合含cx/0010共28项，待最终head的检查/审查/合并，不提前称main已接收。详细命令、失败与限制见[接手记录](progress/chatgpt/cloud-r3/TAKEOVER.md)。
+当前V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01，正式Web持久续传及只读绑定投影R10进入实现/集中验证；候选最终接收以PR精确head/CI/合并回执为准。持久元数据不是成功证据，旧匿名待确认缓存不自动归属新账号；已派发/未知结果不重放。见[本轮记录](progress/chatgpt/cloud-r4/BROWSER-RESUME.md)。
 
-B03/B04/B05/B06、G2/D01—D07/P1-C10/发布准入与外部/物理双机/ARM/硬1C1G/正式资料仍OPEN。Agent组件本地签名更新专项已完成，不等于Controller可信升级/在线装配。Xray上游当前元数据仍为v26.10.31，既有作者扫描FAIL、签名/Runtime缺口不关闭。当前仅授权开发环境和GitHub协作，不包含生产/VPS/awskr/真实供应商或云API。
+B03/B04/B05/B06、G2/D01—D07/P1-C10/发布准入及外部/物理双机/ARM/硬1C1G仍OPEN。四份正式原文已找回不再误称缺失，但权限运行形态/更新/灾备等实施差异仍需证明。Standalone GatewayChecker、可信发行/Controller更新、实际新权威/fence等不得因CI绿灯关单。不含生产/VPS/awskr/真实供应商/云API授权。
 
 ## 以下为2026-11-03接收与分工历史
 

@@ -8,3 +8,15 @@ V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；基于已接收main f1d715b�
 - 首批类型检查及文件Web模块66PASS。HTTP模块首轮79顶层PASS/1FAIL/1SKIP：新专项误把已有owner mismatch的409当403；实际无数据泄露。修正断言遵守原语义，撤权仍严格403，并新增缺省响应不变、重复/无效参数拒绝。未删用例/改既有错误分类。
 - 会话续接曾使本地回到旧快照，尚未提交改动需恢复；已改为尽早推送工作分支检查点。检查点不触发每处修改的产品全套，集中模块复验后仅最终head完整CI。
 - 本地只有UID0、没有Chrome/Chromium可执行程序；DOM夹具不是实际浏览器/独立Agent证明。普通用户实际产品组合交原生CI；真实浏览器/跨Controller重启组合及远端执行续传仍须后续证据，不因此关闭G2/B03—B06/外部/ARM/硬1C1G等关卡。
+
+兼容性审查发现R8的additionalProperties=false：改为显式query opt-in返回绑定，默认/false/PUT响应保持旧形状；新增无效/重复参数和默认不增字段的HTTP验证。待确认任务缓存也按账号隔离，旧匿名缓存不自动迁移；原403/乱序/旧节点测试仅更新夹具账号键，原触发和断言不削弱。
+
+一次合同检查的工具回收被自动审批拒绝，原因是Redocly遥测可能向未信任第三方发送私有项目元数据；不绕过拦截。已核对仓库TOOLCHAIN及固定安装版本的官方CLI代码，REDOCLY_TELEMETRY=off与resolvedConfig.telemetry=off均关闭遥测；以环境开关重跑同一校验，并在现有redocly.yaml设telemetry: off保证后续CI也不发送。没有关闭lint规则、改CI或降低门槛。
+
+## 最终本地集中验证
+
+- 固定Go1.27.3、Node24.22.1、npm11.9.0；npm ci/tools:install完成，无新增依赖/锁漂移。
+- npm run check:web：44文件/411PASS，类型检查与Vite生产构建成功（已有体积警告保留，不调大阈值隐藏）。新增模块/DOM覆盖重新挂载后的断线恢复、精确1MiB偏移、错文件/绑定/摘要、403/网络/409、重复选择、旧节点/账号隔离和已受理不重放；DOM不冒称真实浏览器。
+- Go go test ./internal/files -json -count=1：80顶层PASS/1既有SKIP/0FAIL；真实HTTP绑定、撤权403、owner mismatch409、不泄露、缺省/false旧投影及重复/无效参数均验证；staticcheck ./internal/files退出0。
+- check:policy、REDOCLY_TELEMETRY=off check:contracts、check:security、R10独立Redocly lint均退出0；npm audit0、govulncheck无已知漏洞；原69文件与3字节候选校验通过，git diff --check干净。自动审批遥测拒绝记录保留，关闭遥测后同一校验成功，不绕过门槛。
+- 最终head的完整普通用户CI与逐项代码复核待PR进行，未提前标合入/全量发布通过。README/架构/进度已同步上一轮#12/#13接收与本轮实现边界，不因文档更新关闭发布缺口。

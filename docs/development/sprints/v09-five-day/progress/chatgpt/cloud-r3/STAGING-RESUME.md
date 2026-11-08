@@ -18,3 +18,7 @@ V09-CLOUD-STAGING-RESUME-01 / chatgpt-takeover-01。IN PROGRESS；模块检查�
 - 首轮Go61顶层PASS/17FAIL/1SKIP（新恢复目录前提误扩展）；中间77PASS/1FAIL/1SKIP（新专项对分发暂存的错误假设）；最终79顶层PASS/1SKIP/0FAIL，含所有子项124PASS。实际SQLite关闭重开，确定性构造write+Sync到进度提交之间的崩溃状态；不声称已执行进程kill/真实双机。命令：Go1.27.3 go test ./internal/files -count=1 -json；staticcheck ./internal/files退出0。
 - 新的normal/negative合计34个恢复子场景；链接/硬链/公开目录或文件/错误offset/缺失字节/撤权/已派发拒绝与最终摘要均保留。一个SKIP是既有普通用户要求，本机UID0不冒充该证据。
 - 全量检查、普通用户产品组合及最终接收仍待候选PR的完整CI；浏览器跨重启重新选择文件、Agent续传/执行未知和其余发布关卡继续OPEN。
+
+## 接收回执
+
+已由PR#13合入main f1d715b；精确head81ea92b，CI42456874996为Go971PASS/7SKIP/0FAIL、Web380PASS，独立main CI42458157478也success。上方候选/首轮失败是历史过程，不删除。Web重新选文件续传转V09-CLOUD-BROWSER-RESUME-01，远端Agent执行恢复仍未因此完成。

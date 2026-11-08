@@ -240,7 +240,7 @@ function FilePane({
     const epoch = session.viewEpoch;
     const controller = new AbortController();
     pendingScope.current = { nodeId: state.nodeId, epoch, controller };
-    const restored = loadPendingUploads(state.nodeId, epoch);
+    const restored = loadPendingUploads(state.nodeId, epoch, ownerId);
     pendingItems.current = restored;
     setPendingUploads(restored);
     setPendingNotice(null);
@@ -263,7 +263,7 @@ function FilePane({
   function publishPending(nodeId: string, epoch: string, signal: AbortSignal, items: readonly PendingUpload[]) {
     if (!scopeIsCurrent(nodeId, epoch, signal)) return;
     pendingItems.current = items;
-    savePendingUploads(nodeId, items);
+    savePendingUploads(nodeId, items, ownerId);
     setPendingUploads(items);
   }
 

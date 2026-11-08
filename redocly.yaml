@@ -1,3 +1,4 @@
+telemetry: off
 # Validate the candidate as OpenAPI, without imposing new product style rules.
 extends:
   - spec

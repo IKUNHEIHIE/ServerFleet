@@ -259,3 +259,13 @@ describe("createPendingUpload", () => {
     expect(created.observedAt).toBe("2026-11-03T00:00:00Z");
   });
 });
+
+
+it("isolates pending identities by account and never imports unowned legacy cache", () => {
+  sessionStorage.clear();
+  savePendingUploads("n-1", [record({name:"private.txt"})], "u-1");
+  expect(loadPendingUploads("n-1", EPOCH, "u-1").map(v=>v.name)).toEqual(["private.txt"]);
+  expect(loadPendingUploads("n-1", EPOCH, "u-2")).toEqual([]);
+  savePendingUploads("n-1", [record({name:"legacy.txt"})]);
+  expect(loadPendingUploads("n-1", EPOCH, "u-2")).toEqual([]);
+});

@@ -31,7 +31,7 @@ const base: FetchRoutes = {
   "GET /api/v1/transfers": () => jsonResponse({ items: [] }),
 };
 
-const PENDING_KEY = "sf.files.pendingUploads.n-1";
+const PENDING_KEY = "sf.files.pendingUploads.v2.u-admin.n-1";
 
 function seed(records: readonly unknown[]) {
   sessionStorage.setItem(PENDING_KEY, JSON.stringify(records));
@@ -131,7 +131,7 @@ describe("review R2 W2: a stale node read-back must not overwrite the new panel"
       { uploadId: "up-old", nodeId: "n-1", name: "alpha-only.txt", status: "completed", taskId: "task-alpha" },
     ]);
     sessionStorage.setItem(
-      "sf.files.pendingUploads.n-2",
+      "sf.files.pendingUploads.v2.u-admin.n-2",
       JSON.stringify([{ uploadId: "up-b", nodeId: "n-2", name: "beta.txt", status: "completed", taskId: "task-beta" }]),
     );
     await renderAuthenticated("/files", {
