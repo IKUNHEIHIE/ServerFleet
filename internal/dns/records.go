@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/storage"
@@ -43,6 +44,9 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 	}
 	providerID, err := provider.CreateRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, input)
 	if err != nil {
+		if providerOutcomeUnknown(err) {
+			return Record{}, fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
+		}
 		return Record{}, ErrProviderFailed
 	}
 	if !validProviderID(providerID) {
@@ -96,6 +100,9 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 		return Record{}, err
 	}
 	if err := provider.UpdateRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, current.ID, input); err != nil {
+		if providerOutcomeUnknown(err) {
+			return Record{}, fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
+		}
 		return Record{}, ErrProviderFailed
 	}
 	updated := Record{
@@ -144,6 +151,9 @@ func (s *Service) DeleteRecord(ctx context.Context, subjectID, requestID, record
 	providerAbsent := false
 	if err := provider.DeleteRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, current.ID); err != nil {
 		if !errors.Is(err, ErrProviderNotFound) {
+			if providerOutcomeUnknown(err) {
+				return fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
+			}
 			return ErrProviderFailed
 		}
 		providerAbsent = true
@@ -170,4 +180,19 @@ func recordInputFrom(record Record) RecordInput {
 		input.Priority = &priority
 	}
 	return input
+}
+
+// providerOutcomeUnknown classifies a provider failure whose remote effect is not
+// proven. Transport errors, timeouts and cancellation may have reached the
+// provider, so a delete/create must not be replayed automatically.
+func providerOutcomeUnknown(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, ErrProviderOutcomeUnknown) || errors.Is(err, context.Canceled) ||
+		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrCloudflareTransport) {
+		return true
+	}
+	var netErr net.Error
+	return errors.As(err, &netErr)
 }
