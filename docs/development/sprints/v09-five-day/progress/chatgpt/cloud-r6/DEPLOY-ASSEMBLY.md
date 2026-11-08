@@ -5,3 +5,8 @@ V09-CLOUD-DEPLOY-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-deploy-assem
 现有正式Controller仅提供API/Agent路由，不能把测试fixturehost当正式Web宿主。本包增加-web-dir私有构建资产装配，保留同源TLS、API与实时quarantine门；只读不可变有限资产，拒绝源树/秘密文件/链接/目录枚举/未知API回退。另补仓库外核心候选构建脚本，固定工具、干净源码、双架构实际构建、版本一致/规范待签manifest/字节清单；无密钥/签名/可选插件/部署行为，构建失败保留INCOMPLETE。详见PRODUCT-STARTUP。
 
 本包集中后检查，不逐小改动重测；真实普通用户用原生CI，手动浏览器交用户。编译包不是验收/签名发行，ARM交叉编译不是实际运行。B03—B06/完整发布checker/ACME与本地CSR/可信更新批次/加密灾备与fence/G2/发布准入/外部/物理/硬1C1G仍OPEN；无生产/VPS/awskr/真实外部账号/云API授权。
+
+
+#15已接收：main6031c1f9d9b2b840ef5a477520aa937799bb3ba5，精确head b4305fed，CI42485042788 foundation/dependencies success；Go983顶层/1301子项PASS、7SKIP、0FAIL，Web422PASS。实际三策略上传/真实路径/字节、29迁移与安全负向已核验；COMMENT5818107752并expected-head合并。当前分支已正常merge共享main，未强推/直接推main。
+
+首批模块编译发现新测试多余net/http import，已删除。首次候选构建与主线同步启动顺序未等待，造成manifest源SHA与后三个程序VCS记录不一致；该包明确补INCOMPLETE拒绝接收，原始输出保留。构建器增加每个程序前后与最终源head/dirty检查，并核对每个真实程序go version -m的vcs.revision/modified，杜绝漂移伪称同一发行源。没有通过改manifest/SHA或忽略失败来接收旧包；后续使用独立新输出目录集中复验。

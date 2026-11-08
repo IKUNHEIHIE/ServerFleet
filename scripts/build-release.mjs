@@ -30,6 +30,10 @@ if (!npmVersion.startsWith("11.")) throw new Error("npm 11 required");
 if (execute("git", ["status", "--porcelain", "--untracked-files=normal"]).trim()) throw new Error("Tracked source must be committed and checkout clean before building a reproducible candidate");
 const commit = execute("git", ["rev-parse", "HEAD"]).trim();
 const committedAt = execute("git", ["show", "-s", "--format=%cI", "HEAD"]).trim();
+function assertSource() {
+  if (execute("git", ["rev-parse", "HEAD"]).trim() !== commit || execute("git", ["status", "--porcelain", "--untracked-files=normal"]).trim()) throw new Error("Source changed during candidate assembly; partial output is not a coherent release");
+}
+
 mkdirSync(output, { mode: 0o700 });
 const incomplete = path.join(output, "INCOMPLETE");
 writeFileSync(incomplete, "Candidate build incomplete; do not install or sign.\n", { mode: 0o600, flag: "wx" });
@@ -60,7 +64,11 @@ try {
     for (const component of ["controller", "agent"]) {
       const destination = path.join(directory, component);
       const symbol = component === "agent" ? `-X main.agentBuildVersion=${values.version} -X serverfleet.local/serverfleet/apps/agent/runtime.DefaultVersion=${values.version}` : `-X main.controllerBuildVersion=${values.version}`;
+      assertSource();
       execute(go, ["build", "-trimpath", "-buildvcs=true", "-ldflags", symbol, "-o", destination, `./apps/${component}`], { GOOS: "linux", GOARCH: arch, CGO_ENABLED: "0" });
+      assertSource();
+      const buildInfo = execute(go, ["version", "-m", destination]);
+      if (!buildInfo.includes(`vcs.revision=${commit}\n`) || !buildInfo.includes("vcs.modified=false")) throw new Error("Executable provenance differs from the captured source commit");
       chmodSync(destination, 0o700); record(path.relative(output, destination));
       if (component === "agent") {
         const artifact = manifest.files.at(-1);
@@ -72,6 +80,7 @@ try {
     }
     copyWeb(path.join(root, "apps/web/dist"), path.join(directory, "web"));
   }
+  assertSource();
   manifest.files.sort((a, b) => a.path.localeCompare(b.path));
   writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", { mode: 0o600, flag: "wx" });
   unlinkSync(incomplete);

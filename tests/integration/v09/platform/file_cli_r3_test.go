@@ -158,6 +158,16 @@ func TestR3TrustedFileDeploymentActualControllerAndTwoAgentCLI(t *testing.T) {
 	l.Close()
 	origin := "https://localhost:" + port
 	options := bootstrapOptions(dir, port, origin)
+	web := filepath.Join(dir, "web")
+	if err := os.MkdirAll(filepath.Join(web, "assets"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for name, content := range map[string]string{"index.html": `<!doctype html><div id="root"></div><script type="module" src="/assets/console-real.js"></script>`, "assets/console-real.js": `document.title="Actual Controller Console";`} {
+		if err := os.WriteFile(filepath.Join(web, name), []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	options.WebDirectory = web
 	// Trusted local installer fixture prepares the initial identity and local CA;
 	// all enrollment/grants/transfers below use the standalone CLI's HTTPS API.
 	seed, material, err := composeController(ctx, options)
@@ -175,9 +185,23 @@ func TestR3TrustedFileDeploymentActualControllerAndTwoAgentCLI(t *testing.T) {
 	seed.Close()
 	jar, _ := cookiejar.New(nil)
 	client := &r3Client{t: t, ctx: ctx, http: localCAHTTPClient(material.Roots, "127.0.0.1:"+port, jar), origin: origin}
-	args := []string{"-listen", options.Listen, "-db", options.DBPath, "-origin", origin, "-tls-cert", options.TLSCert, "-tls-key", options.TLSKey}
+	args := []string{"-listen", options.Listen, "-db", options.DBPath, "-origin", origin, "-tls-cert", options.TLSCert, "-tls-key", options.TLSKey, "-web-dir", web}
 	p := startR3Process(t, controller, args...)
 	client.waitHealthy(p)
+	for _, route := range []string{"/", "/assets/console-real.js"} {
+		response, err := client.http.Get(origin + route)
+		if err != nil {
+			t.Fatal(err)
+		}
+		content, err := io.ReadAll(io.LimitReader(response.Body, 1<<20))
+		response.Body.Close()
+		if err != nil || response.StatusCode != 200 || len(content) == 0 || response.Header.Get("Content-Security-Policy") == "" {
+			t.Fatalf("actual HTTPS console %s: %d %v", route, response.StatusCode, err)
+		}
+	}
+	client.must("GET", "/api/v1/nodes", nil, 401)
+	client.must("GET", "/api/v1/missing-console-route", nil, 404)
+	t.Log("actual standalone Controller serves built console over same-origin TLS; API stays protected")
 	raw := client.must("POST", "/api/v1/auth/login", map[string]string{"username": "admin", "password": "r3-synthetic-cli-password"}, 200)
 	var login struct {
 		CSRF     string `json:"csrfToken"`
