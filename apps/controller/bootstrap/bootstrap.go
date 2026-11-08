@@ -20,16 +20,17 @@ import (
 
 // Options are the Controller CLI flags.
 type Options struct {
-	Listen           string
-	DBPath           string
-	Origin           string
-	TLSCert          string
-	TLSKey           string
-	AgentPKIDir      string
-	AgentAuthority   string
-	AgentServerName  string
-	FileDeployment   string
-	CredentialKeyDir string
+	Listen            string
+	DBPath            string
+	Origin            string
+	TLSCert           string
+	TLSKey            string
+	AgentPKIDir       string
+	AgentAuthority    string
+	AgentServerName   string
+	FileDeployment    string
+	GatewayDeployment string
+	CredentialKeyDir  string
 }
 
 // ParseOptions parses Controller flags. It returns flag.ErrHelp for -h.
@@ -47,6 +48,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
 	flags.StringVar(&options.CredentialKeyDir, "credential-key-dir", "", "private credential key directory (default: credential-keys beside -db)")
 	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
+	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
 	}
@@ -63,6 +65,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 func (o Options) Validate() error {
 	if o.FileDeployment != "" && o.Scaffold() {
 		return errors.New("controller: -file-deployment requires -db and direct HTTPS")
+	}
+	if o.GatewayDeployment != "" && o.FileDeployment == "" {
+		return errors.New("controller: -gateway-deployment requires -file-deployment")
 	}
 	if o.Scaffold() {
 		return nil
@@ -126,6 +131,14 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 			return nil, nil, err
 		}
 	}
+	var gatewayDeployment *server.GatewayDeployment
+	if options.GatewayDeployment != "" {
+		var err error
+		gatewayDeployment, err = server.LoadGatewayDeployment(options.GatewayDeployment)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	directory, err := options.LocalPKIDirectory()
 	if err != nil {
 		return nil, nil, err
@@ -150,13 +163,14 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		serverName = host
 	}
 	composed, err := server.New(ctx, server.Config{
-		FileExecution:    fileConfig,
-		DBPath:           options.DBPath,
-		CredentialKeyDir: options.CredentialKeyDir,
-		Origin:           options.Origin,
-		EnrollmentIssuer: material.Issuer,
-		AgentAuthority:   authority,
-		AgentServerName:  serverName,
+		FileExecution:     fileConfig,
+		GatewayDeployment: gatewayDeployment,
+		DBPath:            options.DBPath,
+		CredentialKeyDir:  options.CredentialKeyDir,
+		Origin:            options.Origin,
+		EnrollmentIssuer:  material.Issuer,
+		AgentAuthority:    authority,
+		AgentServerName:   serverName,
 	})
 	if err != nil {
 		return nil, nil, err

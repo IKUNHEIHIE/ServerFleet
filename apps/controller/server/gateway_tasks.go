@@ -44,22 +44,29 @@ type CertificateInstallPaths struct {
 type GatewayInstallPaths struct {
 	SiteDir     string
 	ArtifactDir string
+	HTTPListen  string
+	HTTPSListen string
 }
 
 // ProductionPublishingConfig binds concrete DS owners to the production
 // publishing bridge. Missing dependencies keep that stage closed.
 type ProductionPublishingConfig struct {
-	Plans           *publishing.Repo
-	DNS             *dns.Service
-	Certificates    *certificates.Service
-	Gateways        *gateway.Service
-	Nodes           *nodes.Repo
-	ServiceGroups   *servicegroups.Repo
-	Tasks           *tasks.Service
-	TasksRepo       *tasks.Repo
-	DB              *storage.DB
-	Artifacts       GatewayArtifactUploader
-	NextDispatcher  tasks.Dispatcher
+	Plans          *publishing.Repo
+	DNS            *dns.Service
+	Certificates   *certificates.Service
+	Gateways       *gateway.Service
+	Nodes          *nodes.Repo
+	ServiceGroups  *servicegroups.Repo
+	Tasks          *tasks.Service
+	TasksRepo      *tasks.Repo
+	DB             *storage.DB
+	Artifacts      GatewayArtifactUploader
+	NextDispatcher tasks.Dispatcher
+	// Dispatcher and Registry reuse the exact gateway dispatcher the task
+	// service is already constructed with. When both are supplied the bridge
+	// never creates a second dispatcher or a second artifact registry.
+	Dispatcher      tasks.Dispatcher
+	Registry        *gatewayArtifactRegistry
 	Authorizer      auth.Authorizer
 	CertificatePath map[string]CertificateInstallPaths
 	GatewayPaths    map[string]GatewayInstallPaths
@@ -83,15 +90,29 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 		len(config.GatewayPaths) == 0 {
 		return publishing.LocalBridge{}, nil, publishing.ErrProductionUnavailable
 	}
-	registry := newGatewayArtifactRegistry()
+	var registry *gatewayArtifactRegistry
 	authority := publicationPlanAuthority{repo: config.Plans}
-	dispatcher, err := newGatewayTaskDispatcher(gatewayExecutionConfig{
-		Repo: config.TasksRepo, DB: config.DB, Plans: config.Plans,
-		Artifacts: config.Artifacts, Next: config.NextDispatcher, Authorizer: config.Authorizer,
-		Nodes: config.Nodes, Registry: registry, Now: config.Now, ApprovalTTL: config.ApprovalTTL,
-	})
-	if err != nil {
-		return publishing.LocalBridge{}, nil, err
+	var dispatcher tasks.Dispatcher
+	if config.Dispatcher != nil {
+		if config.Registry == nil {
+			return publishing.LocalBridge{}, nil, publishing.ErrProductionUnavailable
+		}
+		if _, ok := config.Dispatcher.(*gatewayTaskDispatcher); !ok {
+			return publishing.LocalBridge{}, nil, publishing.ErrProductionUnavailable
+		}
+		registry = config.Registry
+		dispatcher = config.Dispatcher
+	} else {
+		registry = newGatewayArtifactRegistry()
+		created, err := newGatewayTaskDispatcher(gatewayExecutionConfig{
+			Repo: config.TasksRepo, DB: config.DB, Plans: config.Plans,
+			Artifacts: config.Artifacts, Next: config.NextDispatcher, Authorizer: config.Authorizer,
+			Nodes: config.Nodes, Registry: registry, Now: config.Now, ApprovalTTL: config.ApprovalTTL,
+		})
+		if err != nil {
+			return publishing.LocalBridge{}, nil, err
+		}
+		dispatcher = created
 	}
 	host, err := newGatewayTaskHost(config.Tasks, gatewayHostConfig{
 		Registry: registry, Authority: authority, Poll: config.Poll,
@@ -326,6 +347,7 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		ServiceGroupRevision: request.ExpectedGroupRevision, UpstreamHosts: upstreams,
 		HTTPS: request.HTTPS, CertificatePath: certificatePath, PrivateKeyPath: keyPath,
 		SiteDir: sitePaths.SiteDir, ArtifactDir: sitePaths.ArtifactDir,
+		HTTPListen: sitePaths.HTTPListen, HTTPSListen: sitePaths.HTTPSListen,
 	})
 	if err != nil {
 		return gatewayPublicationState(gatewayPublicationSummary{

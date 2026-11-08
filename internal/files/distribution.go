@@ -625,54 +625,25 @@ func (s *Service) reconcileDistribution(ctx context.Context, distribution Distri
 		switch result.Code {
 		case tasks.NodeResultSucceeded:
 			_, _ = s.repo.FinishDistributionTarget(ctx, s.db, distribution.ID, target.NodeID, TargetStateCompleted, 0, distribution.SHA256Actual, "", "")
-			target.Status = TargetStateCompleted
 		case tasks.NodeResultFailed:
 			_, _ = s.repo.FinishDistributionTarget(ctx, s.db, distribution.ID, target.NodeID, TargetStateFailed, 0, "", "task_failed", result.Message)
-			target.Status = TargetStateFailed
 		case tasks.NodeResultCanceled:
 			_, _ = s.repo.FinishDistributionTarget(ctx, s.db, distribution.ID, target.NodeID, TargetStateCancelled, 0, "", "task_cancelled", result.Message)
-			target.Status = TargetStateCancelled
 		case tasks.NodeResultTimedOut:
 			_, _ = s.repo.FinishDistributionTarget(ctx, s.db, distribution.ID, target.NodeID, TargetStateFailed, 0, "", "task_expired", result.Message)
-			target.Status = TargetStateFailed
 		default:
 			// Unknown/empty stays honest and non-terminal; no replay.
 		}
 	}
-	if aggregated, err := s.aggregateDistribution(ctx, distribution); err == nil && aggregated {
-		distribution.Status = aggregatedStatus(distribution.Targets)
+	// Aggregate from durable target rows. A worker may finish another target
+	// after this call's initial snapshot, so never combine a new parent status
+	// with that older target list or report an ignored target write as success.
+	_, _ = s.aggregateDistribution(ctx, distribution)
+	if current, err := s.repo.GetDistribution(ctx, distribution.ID); err == nil {
+		return current
 	}
+	// A read failure leaves the original conservative snapshot unchanged.
 	return distribution
-}
-
-func aggregatedStatus(targets []DistributionTarget) string {
-	succeeded, failed, cancelled, unknown := 0, 0, 0, 0
-	for _, target := range targets {
-		switch target.Status {
-		case TargetStateCompleted:
-			succeeded++
-		case TargetStateFailed:
-			failed++
-		case TargetStateCancelled:
-			cancelled++
-		case TargetStateUnknown:
-			unknown++
-		}
-	}
-	switch {
-	case succeeded > 0 && succeeded == len(targets):
-		return DistributionCompleted
-	case succeeded > 0:
-		return DistributionPartial
-	case cancelled == len(targets):
-		return DistributionCancelled
-	case unknown > 0:
-		return DistributionDispatching
-	case cancelled > 0:
-		return DistributionPartial
-	default:
-		return DistributionFailed
-	}
 }
 
 func distributionTargetNodes(distribution Distribution) []string {

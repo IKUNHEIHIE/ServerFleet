@@ -51,6 +51,7 @@ type fakeGatewayChannel struct {
 	mu     sync.Mutex
 	opened []files.FileBinding
 	data   []byte
+	finish func(files.FileBinding) error
 }
 
 func (c *fakeGatewayChannel) OpenFileChannel(ctx context.Context, binding files.FileBinding) (files.AgentFileSession, files.FileOpenResult, error) {
@@ -101,6 +102,11 @@ func (s *fakeGatewayChannelSession) WriteChunk(_ context.Context, op files.FileC
 	s.channel.data = append([]byte(nil), s.buffer...)
 	s.channel.mu.Unlock()
 	next := op.Offset + uint64(len(op.Data))
+	if op.Finish && s.channel.finish != nil {
+		if err := s.channel.finish(s.binding); err != nil {
+			return files.FileChunkResult{}, err
+		}
+	}
 	return files.FileChunkResult{
 		TaskID: s.binding.TaskID, ExecutionID: s.binding.ExecutionID, TransferID: s.binding.TransferID,
 		Offset: op.Offset, NextOffset: next,
@@ -132,6 +138,18 @@ func newGatewayWSSFixture(t *testing.T) *gatewayWSSFixture {
 	}
 	stage := &fakeGatewayStage{}
 	channel := &fakeGatewayChannel{}
+	observer, err := NewGatewayArtifactObserver(db, stage)
+	if err != nil {
+		t.Fatal(err)
+	}
+	channel.finish = func(b files.FileBinding) error {
+		observation := transport.LinkObservation{Identity: transport.AgentIdentity{NodeID: b.NodeID}}
+		if _, err := observer.Observe(ctx, observation, gatewayChildStarted(b.TaskID, b.ExecutionID)); err != nil {
+			return err
+		}
+		_, err := observer.Observe(ctx, observation, gatewayChildFinished(b.TaskID, b.ExecutionID, agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED))
+		return err
+	}
 	root := "/srv/gateway"
 	uploader, err := NewGatewayChannelUploader(channel, map[string]string{"node-1": root}, db, stage)
 	if err != nil {

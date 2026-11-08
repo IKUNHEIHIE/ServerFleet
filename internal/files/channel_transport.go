@@ -404,7 +404,14 @@ func (t *ChannelTransport) pullOnce(ctx context.Context, scope channelScope, aut
 func (t *ChannelTransport) open(ctx context.Context, binding FileBinding) (AgentFileSession, FileOpenResult, error) {
 	callCtx, cancel := context.WithTimeout(ctx, t.frameTimeout)
 	defer cancel()
-	session, opened, err := t.channel.OpenFileChannel(callCtx, binding)
+	var session AgentFileSession
+	var opened FileOpenResult
+	var err error
+	if channel, ok := t.channel.(TransferFileChannel); ok {
+		session, opened, err = channel.OpenFileChannelForTransfer(ctx, callCtx, binding)
+	} else {
+		session, opened, err = t.channel.OpenFileChannel(callCtx, binding)
+	}
 	if err != nil {
 		return nil, FileOpenResult{}, t.sessionError(ctx, err)
 	}

@@ -26,7 +26,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 		filtered := []storage.Migration{}
 		for _, migration := range group {
 			total++
-			if migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" && migration.Version != "ds/0042_file_distribution" {
+			if migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" && migration.Version != "ds/0042_file_distribution" && migration.Version != "cx/0010_gateway_artifact_bindings" {
 				filtered = append(filtered, migration)
 			}
 		}
@@ -34,7 +34,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 			old = append(old, filtered)
 		}
 	}
-	if total != 27 {
+	if total != 28 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)

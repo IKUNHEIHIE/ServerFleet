@@ -278,8 +278,11 @@ func (p *CloudflareProvider) CreateRecord(ctx context.Context, credential Creden
 	if err != nil {
 		return "", err
 	}
-	if envelope.Result.ID == "" {
-		return "", ErrCloudflareResponse
+	if !validProviderID(envelope.Result.ID) {
+		// A successful remote mutation without a usable identity cannot be
+		// reconciled or safely retried. This is different from local validation
+		// rejecting an input before the request was sent.
+		return "", cloudflareOutcomeUnknown(ErrCloudflareResponse)
 	}
 	return envelope.Result.ID, nil
 }
@@ -366,6 +369,14 @@ func (p *CloudflareProvider) newRequest(ctx context.Context, method, path, token
 	return request, nil
 }
 
+// cloudflareOutcomeUnknown marks a failure whose remote effect cannot be
+// proven. The protocol-level error identity is preserved for diagnostics while
+// errors.Is(err, ErrProviderOutcomeUnknown) tells the service and cleanup state
+// machine to refuse an automatic replay.
+func cloudflareOutcomeUnknown(err error) error {
+	return fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
+}
+
 // rawRequest performs one HTTP call inside a borrow callback. The token is never
 // stored outside the callback.
 func (p *CloudflareProvider) rawRequest(ctx context.Context, method, path, token string, body io.Reader, operation string) (int, http.Header, []byte, error) {
@@ -378,12 +389,14 @@ func (p *CloudflareProvider) rawRequest(ctx context.Context, method, path, token
 		if ctx.Err() != nil {
 			return 0, nil, nil, ctx.Err()
 		}
-		return 0, nil, nil, fmt.Errorf("%w: %s: %w", ErrCloudflareTransport, operation, err)
+		return 0, nil, nil, fmt.Errorf("%w: %w: %s: %w", ErrProviderOutcomeUnknown, ErrCloudflareTransport, operation, err)
 	}
 	defer response.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(response.Body, maxCloudflareBodyBytes+1))
 	if err != nil || len(payload) > maxCloudflareBodyBytes {
-		return 0, nil, nil, fmt.Errorf("%w: %s body", ErrCloudflareResponse, operation)
+		// The request reached the provider but the response could not be
+		// confirmed, so a create/delete must not be replayed automatically.
+		return 0, nil, nil, cloudflareOutcomeUnknown(fmt.Errorf("%w: %s body", ErrCloudflareResponse, operation))
 	}
 	return response.StatusCode, response.Header, payload, nil
 }
@@ -399,7 +412,10 @@ func (p *CloudflareProvider) do(ctx context.Context, method, path string, creden
 		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
 		}
-		if status < 200 || status > 299 || decodeErr != nil || !envelope.Success {
+		if status >= 500 || decodeErr != nil {
+			return cloudflareOutcomeUnknown(&cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)})
+		}
+		if status < 200 || status > 299 || !envelope.Success {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
 		}
 		return nil
@@ -418,7 +434,10 @@ func (p *CloudflareProvider) doZones(ctx context.Context, method, path string, c
 		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
 		}
-		if status < 200 || status > 299 || decodeErr != nil || !envelope.Success {
+		if status >= 500 || decodeErr != nil {
+			return cloudflareOutcomeUnknown(&cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)})
+		}
+		if status < 200 || status > 299 || !envelope.Success {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
 		}
 		return nil
@@ -439,18 +458,30 @@ func (p *CloudflareProvider) doRecord(ctx context.Context, method, path string, 
 			return err
 		}
 		decodeErr := json.Unmarshal(payload, &envelope)
+		// Only a complete provider verdict can establish a definite rejection.
+		// The bool zero value also represents a missing/null success field, and
+		// an auth-looking error embedded in a 5xx is not proof of no effect.
+		if status >= 500 {
+			return cloudflareOutcomeUnknown(&cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)})
+		}
+		var verdict struct {
+			Success *bool `json:"success"`
+		}
+		if decodeErr != nil || json.Unmarshal(payload, &verdict) != nil || verdict.Success == nil {
+			return cloudflareOutcomeUnknown(ErrCloudflareResponse)
+		}
 		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
 		}
 		if status == http.StatusNotFound {
 			return ErrProviderNotFound
 		}
-		if status < 200 || status > 299 || decodeErr != nil || !envelope.Success {
+		if status < 200 || status > 299 || !envelope.Success {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
 		}
 		if len(envelope.Result) > 0 {
 			if err := json.Unmarshal(envelope.Result, &record.Result); err != nil {
-				return ErrCloudflareResponse
+				return cloudflareOutcomeUnknown(fmt.Errorf("%w: %s result", ErrCloudflareResponse, operation))
 			}
 		}
 		return nil

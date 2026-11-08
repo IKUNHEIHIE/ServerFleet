@@ -1,5 +1,11 @@
 # 任务登记板
 
+## 2026-11-08 单会话接手（覆盖下方分工快照）
+
+用户授权ChatGPT直接返修#7/#8/#9并独立继续完整项目，不再向三平台派发。任务V09-CLOUD-TAKEOVER-01，唯一会话chatgpt-takeover-01，分支fix/cloud-r2-takeover-20261108，独立目录ServerFleet-takeover，状态IN PROGRESS。原AM/HW/WB历史保留；尚未完成项转本任务，不标完成。原中央窗口转交主控单写。
+
+已接收main为1cde2c3c6db55b445703ebc2948063302e4c6d11（#11检查点，27迁移）；#7/#8/#9及返修仅在候选组合，未合入前不冒称main已提供。当前组合含cx/0010共28迁移，旧25fixture和历史SQL/hash不变。详情及后续验收见[接手记录](sprints/v09-five-day/progress/chatgpt/cloud-r3/TAKEOVER.md)。集中修改后批量模块/集成验证；不按每个小修改反复全量测试。G2、B03/B04/B05/B06和外部/物理双机/ARM/硬1C1G/正式资料继续OPEN。
+
 ## 当前云端分工（2026-11-03，优先于下方历史快照）
 
 总控/审查ChatGPT（chatgpt-review-02）。已接收产品代码基线 `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立CI run41615351426 success：Go顶层902 PASS/7 SKIP/0 FAIL、Web348 PASS，正式迁移26项。上一轮只接收可运行检查点，完整v0.9/G2/D01-D07/P1-C10/发布准入未完成。

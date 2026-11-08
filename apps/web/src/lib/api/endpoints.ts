@@ -39,6 +39,7 @@ import type {
   UploadCompletion,
   UploadProgress,
   UploadSession,
+  UploadState,
   User,
 } from "./dto";
 
@@ -492,6 +493,12 @@ export const filesApi = {
     apiClient.request<UploadCompletion>(
       `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}/complete`,
       { method: "POST" },
+    ),
+  // 刷新/断线恢复：读回服务端真实状态（含 dispatching 与 taskId），不依赖前端记忆。
+  uploadStatus: (nodeId: string, uploadId: string, signal?: AbortSignal) =>
+    apiClient.request<UploadState>(
+      `/api/v1/nodes/${encodeURIComponent(nodeId)}/files/uploads/${encodeURIComponent(uploadId)}`,
+      { signal },
     ),
 };
 

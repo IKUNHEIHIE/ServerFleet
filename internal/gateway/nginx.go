@@ -183,7 +183,7 @@ func RenderNginxSite(request NginxSiteRequest) (NginxSite, error) {
 	digestHex := hex.EncodeToString(digest[:])
 	return NginxSite{
 		GatewayID: request.GatewayID, Domain: domain, Path: sitePath,
-		ArtifactPath: path.Join(artifactDir, request.GatewayID, digestHex+".conf"),
+		ArtifactPath: path.Join(artifactDir, digestHex+".conf"),
 		Config:       payload, Digest: digestHex,
 	}, nil
 }
@@ -258,6 +258,15 @@ func nginxUpstreamHosts(request NginxSiteRequest) ([]string, error) {
 	}
 	sort.Strings(hosts)
 	return hosts, nil
+}
+
+// ValidateNginxListen reports whether an operator-supplied listen value uses
+// the same accepted syntax and port range as rendered sites. It accepts a bare
+// port or an explicit host:port, including loopback addresses, while rejecting
+// injection characters and out-of-range ports.
+func ValidateNginxListen(value string) error {
+	_, err := normalizeNginxListen(value, DefaultNginxHTTPListen)
+	return err
 }
 
 func normalizeNginxListen(value, fallback string) (string, error) {

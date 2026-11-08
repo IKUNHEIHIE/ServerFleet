@@ -153,11 +153,19 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		if ctx.Err() != nil {
 			return errAgentSession
 		}
-		if offer != nil && offer.ActionId == transport.FileCapability && request.FileRoot != "" {
+		if offer == nil {
+			return errExecutionRejected
+		}
+		if offer.ActionId == transport.FileCapability && request.FileRoot != "" {
 			_, err := transport.FileOffer(offer)
 			return err
 		}
-		return admitControlledOffer(offer)
+		action, ok := executor.actions[offer.ActionId]
+		if !ok || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL ||
+			offer.PluginId != "" || offer.ActionSchemaVersion != semantic.AllowedActions[offer.ActionId] {
+			return errExecutionRejected
+		}
+		return action.Validate(offer.CanonicalParametersJson)
 	}
 	if request.FileRoot != "" {
 		files, err = newAgentFileSessions(request.FileRoot, facts.NodeID, func(ctx context.Context, o *agentv1.TaskOffer) error {
@@ -174,6 +182,21 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		semantic.AllowedActions[transport.FileCapability] = "1"
 		semantic.AllowFileFrames = true
 		minor = 1
+	}
+	if request.GatewayPrefix != "" {
+		if !agentPathWithinRoot(request.FileRoot, request.GatewayPrefix) {
+			return errAgentConnect
+		}
+		actions, err := newGatewayRegistration(gatewayRegistrationConfig{
+			Prefix: request.GatewayPrefix, NginxBinary: request.NginxBinary,
+		})
+		if err != nil {
+			return err
+		}
+		for id, action := range actions {
+			executor.actions[id] = action
+			semantic.AllowedActions[id] = gatewayActionSchemaVersion
+		}
 	}
 	established := make(chan struct{})
 	executed := make(chan struct{}, 4)
@@ -413,4 +436,15 @@ func readAgentFile(path string, limit int64) ([]byte, error) {
 		return nil, errAgentConnect
 	}
 	return raw, nil
+}
+
+func agentPathWithinRoot(root, path string) bool {
+	if root == "" || path == "" || !filepath.IsAbs(root) || !filepath.IsAbs(path) {
+		return false
+	}
+	relative, err := filepath.Rel(root, path)
+	if err != nil || filepath.IsAbs(relative) {
+		return false
+	}
+	return relative == "." || relative != ".." && !strings.HasPrefix(relative, ".."+string(filepath.Separator))
 }

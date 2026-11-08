@@ -104,6 +104,14 @@ type AgentFileChannel interface {
 	OpenFileChannel(ctx context.Context, binding FileBinding) (AgentFileSession, FileOpenResult, error)
 }
 
+// TransferFileChannel distinguishes the whole authorized transfer lifetime from
+// the bounded open handshake. Canceling the open call after a successful reply
+// must not cancel the returned session; canceling the transfer must still do so.
+// Existing channels that do not retain the open context remain compatible.
+type TransferFileChannel interface {
+	OpenFileChannelForTransfer(transferCtx, openCtx context.Context, binding FileBinding) (AgentFileSession, FileOpenResult, error)
+}
+
 // PathMapper is the explicit absolute-to-relative mapping. A missing mapper makes
 // every channel operation fail closed; there is no silent slash stripping.
 type PathMapper interface {

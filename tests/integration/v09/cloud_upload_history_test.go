@@ -31,7 +31,7 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 	var old []storage.Migration
 	for _, set := range server.Migrations() {
 		for _, m := range set {
-			if m.Version == "ds/0041_file_upload_task" || m.Version == "ds/0042_file_distribution" {
+			if m.Version == "ds/0041_file_upload_task" || m.Version == "ds/0042_file_distribution" || m.Version == "cx/0010_gateway_artifact_bindings" {
 				continue
 			}
 			if m.Version == fixture.Migration.Version {
@@ -78,7 +78,7 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 		t.Fatalf("old upload changed: task=%q status=%q", taskID, status)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 27 {
+	if err != nil || len(versions) != 28 {
 		t.Fatal("new migration count", versions, err)
 	}
 }

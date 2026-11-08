@@ -252,3 +252,62 @@ func TestRunEnrollPendingIssuedAndDenied(t *testing.T) {
 		t.Fatalf("denied note missing: %s", stderr.String())
 	}
 }
+
+func TestRunGatewayFlagsStayClosedWithoutExplicitTrustedPaths(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, _ := runtimeCA(t)
+	deps := &fakeDeps{}
+	var stdout, stderr bytes.Buffer
+	cases := []struct {
+		name string
+		args []string
+	}{
+		{"relative gateway prefix", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert, "-gateway-prefix", "gateway"}},
+		{"binary without prefix", []string{"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert, "-nginx-binary", "/usr/bin/nginx"}},
+		{"status with gateway prefix", []string{"-status", "-state-dir", dir, "-root-cert", rootCert, "-gateway-prefix", "/srv/fleet/nginx"}},
+	}
+	for _, tc := range cases {
+		if code := Run(context.Background(), tc.args, deps.deps(), &stdout, &stderr); code != 2 {
+			t.Fatalf("%s: code = %d, stderr = %s", tc.name, code, stderr.String())
+		}
+	}
+	if deps.connectCalls != 0 {
+		t.Fatal("connection was attempted with an unsafe gateway configuration")
+	}
+}
+
+func TestRunConnectOnceCarriesTrustedGatewayConfiguration(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, _ := runtimeCA(t)
+	deps := &fakeDeps{connect: ConnectResult{NodeID: "node-1", ConnectionID: "connection-1", HeartbeatSent: true, MetricsSent: true}}
+	var stdout, stderr bytes.Buffer
+	gatewayPrefix := filepath.Join(dir, "nginx")
+	code := Run(context.Background(), []string{
+		"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local",
+		"-root-cert", rootCert, "-file-root", dir, "-gateway-prefix", gatewayPrefix,
+		"-nginx-binary", "/usr/bin/nginx",
+	}, deps.deps(), &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("code = %d: %s", code, stderr.String())
+	}
+	if deps.lastConnect.GatewayPrefix != gatewayPrefix || deps.lastConnect.NginxBinary != "/usr/bin/nginx" {
+		t.Fatalf("gateway configuration not carried: %+v", deps.lastConnect)
+	}
+}
+
+func TestRunGatewayPrefixMustStayInsideTrustedFileRoot(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, _ := runtimeCA(t)
+	outside := t.TempDir()
+	deps := &fakeDeps{}
+	var stdout, stderr bytes.Buffer
+	if code := Run(context.Background(), []string{
+		"-connect-once", "-state-dir", dir, "-controller-url", "https://controller.local",
+		"-root-cert", rootCert, "-file-root", dir, "-gateway-prefix", outside,
+	}, deps.deps(), &stdout, &stderr); code != 2 {
+		t.Fatalf("outside prefix code = %d: %s", code, stderr.String())
+	}
+	if deps.connectCalls != 0 {
+		t.Fatal("connection was attempted with a gateway prefix outside the file root")
+	}
+}

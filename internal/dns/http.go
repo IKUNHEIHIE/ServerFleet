@@ -452,6 +452,10 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrCredentialNotConfigured),
 		errors.Is(err, ErrCredentialUnverified):
 		writeFixed(w, http.StatusServiceUnavailable, "dns_unavailable", "DNS provider is not available")
+	case errors.Is(err, ErrProviderOutcomeUnknown):
+		// The provider may already have applied the change. Expose a distinct,
+		// redacted contract so clients do not blindly retry a create or delete.
+		writeFixed(w, http.StatusBadGateway, "provider_outcome_unknown", "provider outcome is unknown; do not retry automatically")
 	case errors.Is(err, ErrProviderFailed), errors.Is(err, ErrZoneNotInProvider), errors.Is(err, ErrInvalidProviderResponse):
 		writeFixed(w, http.StatusBadGateway, "provider_failed", "DNS provider request failed")
 	case errors.Is(err, ErrInvalidInput), errors.Is(err, ErrInvalidCredentialRef), errors.Is(err, ErrRequestIDRequired):
