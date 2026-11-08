@@ -14,8 +14,14 @@ paths:
     get:
       operationId: getOwnedUploadR10
       summary: Read owner-bound upload staging and task state
-      description: Requires the authenticated upload owner and current files.write authorization on the bound node. Additive R10 destinationPath and optional sha256Expected expose the original owner-authorized binding. Older clients ignore them; resumable clients reject missing binding instead of guessing from cache. The Controller supplies a request correlation ID; this read does not require Idempotency-Key. Open staging maps to awaiting_data. dispatching is not remote success. A trusted terminal task can reconcile the persisted upload on read; unavailable evidence leaves dispatching unchanged. An unknown task outcome maps to failed with retained staging internally; this DTO does not expose the reason or authorize replay. Querying a different node yields 404 after owner and authorization checks.
+      parameters:
+        - in: query
+          name: resumeBinding
+          schema: {type: boolean, default: false}
+          description: Explicit opt-in to R10 destination/digest binding. Omitted or false preserves the closed R8 projection. Duplicate or invalid values reject after authorization.
+      description: Requires the authenticated upload owner and current files.write authorization on the bound node. Only with resumeBinding=true, additive R10 destinationPath and optional sha256Expected expose the original owner-authorized binding. Default responses preserve R8, including additionalProperties=false; resumable clients reject missing binding instead of guessing from cache. The Controller supplies a request correlation ID; this read does not require Idempotency-Key. Open staging maps to awaiting_data. dispatching is not remote success. A trusted terminal task can reconcile the persisted upload on read; unavailable evidence leaves dispatching unchanged. An unknown task outcome maps to failed with retained staging internally; this DTO does not expose the reason or authorize replay. Querying a different node yields 404 after owner and authorization checks.
       responses:
+        '400': {$ref: '#/components/responses/InvalidRequest'}
         '200':
           description: Current owner-bound upload projection
           content:

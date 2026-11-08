@@ -16,6 +16,9 @@ const ID = /^[a-zA-Z0-9_-]{1,128}$/;
 const MAX_AGE = 7 * 24 * 60 * 60 * 1000;
 export const UPLOAD_CHUNK_BYTES = 1024 * 1024;
 export class UploadResumeError extends Error {}
+export class UploadCompleteError extends Error {
+  constructor(readonly received: number, readonly cause: unknown) { super("Upload completion was not confirmed"); }
+}
 const key = (owner: string, node: string) => `sf.files.resume.v1.${encodeURIComponent(owner)}.${encodeURIComponent(node)}`;
 const metadata = (d: UploadDraft): UploadDraft => ({ uploadId: d.uploadId, ownerId: d.ownerId, nodeId: d.nodeId,
   name: d.name, size: d.size, sha256: d.sha256, destinationPath: d.destinationPath, createdAt: d.createdAt });
@@ -98,7 +101,11 @@ export async function continueUpload(file: File, d: UploadDraft, selectedSHA: st
     }
     offset = end;
   }
-  guard(scope); const completed = await port.complete(scope.signal); guard(scope);
+  guard(scope);
+  let completed: UploadCompletion;
+  try { completed = await port.complete(scope.signal); }
+  catch (error) { throw new UploadCompleteError(offset, error); }
+  guard(scope);
   if (completed.uploadId !== d.uploadId) throw new UploadResumeError("服务端上传回执不一致，未声称完成。");
   return { state: completed, bytesReceived: offset };
 }

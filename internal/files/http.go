@@ -224,7 +224,20 @@ func (api *httpAPI) getUpload(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusNotFound, "not_found", "upload was not found")
 		return
 	}
-	writeJSON(w, http.StatusOK, uploadProgressDTO(upload))
+	projection := uploadProgressDTO(upload)
+	binding := r.URL.Query()["resumeBinding"]
+	if len(binding) > 1 || (len(binding) == 1 && binding[0] != "true" && binding[0] != "false") {
+		writeFixed(w, http.StatusBadRequest, "invalid_query", "resumeBinding must be one boolean")
+		return
+	}
+	if len(binding) == 1 && binding[0] == "true" {
+		projection["destinationPath"] = upload.DestinationPath
+		if upload.SHA256Expected != "" {
+			projection["sha256Expected"] = upload.SHA256Expected
+		}
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, projection)
 }
 
 func (api *httpAPI) uploadContent(w http.ResponseWriter, r *http.Request) {
@@ -296,10 +309,7 @@ func uploadProgressDTO(upload Upload) map[string]any {
 	}
 	dto := map[string]any{
 		"uploadId": upload.ID, "status": status, "bytesReceived": upload.BytesReceived,
-		"expectedSize": expected, "destinationPath": upload.DestinationPath,
-	}
-	if upload.SHA256Expected != "" {
-		dto["sha256Expected"] = upload.SHA256Expected
+		"expectedSize": expected,
 	}
 	if upload.TaskID != "" {
 		dto["taskId"] = upload.TaskID

@@ -4,13 +4,13 @@ V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；起点main f1d715b。主控�
 
 ## 产品行为
 
-创建上传后只为可计算完整SHA-256的文件保存待核验记录；账号+节点隔离，七天/最多32项，不保存字节、密钥/CSRF、偏移、任务状态或成功。存储失败准确提示。用户重新选择原文件，名称/大小/完整摘要先匹配，再GET核对服务端目标、原摘要、大小和整数偏移。最多1MiB分块，精确核对每个字节回执；异常/409/网络错误不自动重试。
+创建上传后只为可计算完整SHA-256的文件保存待核验记录；账号+节点隔离，七天内有效/最多32项，不保存字节、密钥/CSRF、偏移、任务状态或成功。存储失败准确提示。用户重新选择原文件，名称/大小/完整摘要先匹配，再GET核对服务端目标、原摘要、大小和整数偏移。最多1MiB分块，精确核对每个字节回执；异常/409/网络错误不自动重试。
 
 已dispatching/completed/failed/cancelled/未知的任务只读回，不重复complete或另造任务。所有请求仍走Controller当前授权、Origin/CSRF、统一任务/审批/审计。每个await后和写入前复核当前scope/权限；旧节点/身份响应不得写新作用域。支持只读回状态；移除本地记录不会取消任务。
 
 ## API及兼容性
 
-独立files-resume-candidate.yaml基于R8语义另立。GET上传投影增加只读destinationPath和可省略sha256Expected；PUT同一投影也可返回它们。均来自持久绑定，只在owner/当前files.write通过后返回，无新执行权限/DB/Proto变化。旧客户端可忽略；新客户端遇旧Controller或没有原摘要则拒绝续传，不从缓存推测目标。原创建/offset/complete/202与三冲突策略语义不改。
+独立files-resume-candidate.yaml基于R8语义另立。GET显式resumeBinding=true才增加只读destinationPath和可省略sha256Expected；缺省/false及PUT保留原投影，兼容R8的additionalProperties=false。重复/无效布尔参数在身份/授权后返回400。均来自持久绑定，只在owner/当前files.write通过后返回，无新执行权限/DB/Proto变化。旧客户端默认响应不变；新客户端遇旧Controller或没有原摘要则拒绝续传，不从缓存推测目标。原创建/offset/complete/202与三冲突策略语义不改。
 
 ## 验收及回退
 

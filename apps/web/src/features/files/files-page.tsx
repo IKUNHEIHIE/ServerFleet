@@ -27,7 +27,7 @@ import {
   type UploadObservation,
 } from "./upload-queue";
 import { continueUpload, readBoundUpload, loadUploadDrafts, rememberUploadDraft, forgetUploadDraft,
-  UploadResumeError, type UploadDraft, type UploadResumePort, type UploadRunResult } from "./upload-resume";
+  UploadResumeError, UploadCompleteError, type UploadDraft, type UploadResumePort, type UploadRunResult } from "./upload-resume";
 import { formatBytes, formatDateTime } from "@/lib/format";
 
 const TRANSFER_STATUS_TEXT: Record<TransferStatus, string> = {
@@ -362,7 +362,7 @@ function FilePane({
   function draftPort(draft: UploadDraft): UploadResumePort {
     // Exact captured node/id, never use a later render's mutation callback.
     return {
-      read: async signal => (await filesApi.uploadStatus(draft.nodeId, draft.uploadId, signal)).data,
+      read: async signal => (await filesApi.uploadStatus(draft.nodeId, draft.uploadId, signal, true)).data,
       write: async (bytes, offset, signal) => (await filesApi.uploadContent(draft.nodeId, draft.uploadId, bytes, offset, signal)).data,
       complete: async signal => (await filesApi.completeUpload(draft.nodeId, draft.uploadId, signal)).data,
     };
@@ -391,7 +391,8 @@ function FilePane({
   }
   function invalidateUpload(draft: UploadDraft, error: unknown, scope: PaneScope, sequence: number) {
     if (!uploadIsCurrent(scope)) return;
-    const apiError = error instanceof ApiError ? error : null;
+    const actualError = error instanceof UploadCompleteError ? error.cause : error;
+    const apiError = actualError instanceof ApiError ? actualError : null;
     const observations = new Map<string, UploadObservation>([[draft.uploadId, {
       kind: classifyReadFailure(apiError?.status), sequence, reason: apiError ? `http_${apiError.status}` : "unconfirmed",
     }]]);
@@ -400,7 +401,11 @@ function FilePane({
   }
   function uploadFailure(error: unknown): string {
     if (error instanceof UploadResumeError) return error.message;
-    return `${describeApiError(error)} 字节与任务状态未确认；请读回真实状态，不会自动重复提交。`;
+    const actualError = error instanceof UploadCompleteError ? error.cause : error;
+    if (error instanceof UploadCompleteError && actualError instanceof ApiError && actualError.status === 503 && actualError.code === "unavailable") {
+      return `文件字节流（${error.received} B）已上传并通过服务端 SHA-256 校验；当前节点文件传输通道未注入（503 unavailable）。`;
+    }
+    return `${describeApiError(actualError)} 字节与任务状态未确认；请读回真实状态，不会自动重复提交。`;
   }
   async function handleFiles(event: ChangeEvent<HTMLInputElement>, resumed?: UploadDraft) {
     const selectedFiles = Array.from(event.target.files ?? []); event.target.value = "";
@@ -430,7 +435,14 @@ function FilePane({
           }, !resumed);
           if (!uploadIsCurrent(scope)) return;
           const observed = observeUpload(draft, result, scope, sequence);
-          if (observed) lines.push(`${file.name}：${describeUploadStatus(observed).detail}`);
+          if (observed) {
+            const detail = claimsRemoteCompletion(observed)
+              ? `上传完成，服务端校验通过（${result.bytesReceived} B）。`
+              : observed.evidence === "verified" && observed.status === "dispatching"
+                ? `已受理进入统一任务队列${observed.taskId ? `（任务 ${observed.taskId}）` : ""}，尚未完成；请读回真实状态。`
+                : describeUploadStatus(observed).detail;
+            lines.push(`${file.name}：${detail}`);
+          }
         } catch (error) {
           if (!uploadIsCurrent(scope)) return;
           if (draft && sequence) invalidateUpload(draft, error, scope, sequence);
@@ -655,7 +667,7 @@ function FilePane({
         {uploadBusy ? <p role="status" className="text-xs text-muted-foreground">正在核验或上传；仅服务端确认的字节计入进度。</p> : null}
         {uploadDrafts.length > 0 ? (
           <div role="region" aria-label="可恢复上传" className="space-y-2 rounded-md border p-2 text-xs">
-            <p>本地仅保存待核验记录。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。记录保留七天，最多32项。</p>
+            <p>本地仅保存待核验记录。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
             {uploadDrafts.map(draft => (
               <div key={draft.uploadId} className="space-y-1 border-t pt-2">
                 <p>{draft.name} · {formatBytes(draft.size)} · 目标（待核验）：{draft.destinationPath}</p>
