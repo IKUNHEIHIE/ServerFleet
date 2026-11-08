@@ -50,7 +50,7 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 		return Record{}, ErrProviderFailed
 	}
 	if !validProviderID(providerID) {
-		return Record{}, ErrInvalidProviderResponse
+		return Record{}, fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, ErrInvalidProviderResponse)
 	}
 	record := Record{
 		ID: providerID, ZoneID: zoneID, Type: input.Type, Name: input.Name,

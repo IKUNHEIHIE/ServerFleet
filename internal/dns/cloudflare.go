@@ -278,8 +278,11 @@ func (p *CloudflareProvider) CreateRecord(ctx context.Context, credential Creden
 	if err != nil {
 		return "", err
 	}
-	if envelope.Result.ID == "" {
-		return "", ErrCloudflareResponse
+	if !validProviderID(envelope.Result.ID) {
+		// A successful remote mutation without a usable identity cannot be
+		// reconciled or safely retried. This is different from local validation
+		// rejecting an input before the request was sent.
+		return "", cloudflareOutcomeUnknown(ErrCloudflareResponse)
 	}
 	return envelope.Result.ID, nil
 }

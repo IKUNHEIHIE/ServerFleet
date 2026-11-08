@@ -125,6 +125,10 @@ type gatewayWSSChannel struct {
 }
 
 func (c *gatewayWSSChannel) OpenFileChannel(ctx context.Context, binding files.FileBinding) (files.AgentFileSession, files.FileOpenResult, error) {
+	return c.OpenFileChannelForTransfer(ctx, ctx, binding)
+}
+
+func (c *gatewayWSSChannel) OpenFileChannelForTransfer(transferCtx, openCtx context.Context, binding files.FileBinding) (files.AgentFileSession, files.FileOpenResult, error) {
 	if c == nil || c.client == nil {
 		return nil, files.FileOpenResult{}, files.ErrChannelUnavailable
 	}
@@ -139,11 +143,13 @@ func (c *gatewayWSSChannel) OpenFileChannel(ctx context.Context, binding files.F
 	if _, err := transport.FileOffer(offer); err != nil {
 		return nil, files.FileOpenResult{}, files.ErrChannelProtocol
 	}
-	session, err := c.client.NewSession(ctx, binding.NodeID, offer)
+	// ChannelTransport releases its frame timeout as soon as Open returns.
+	// The session instead belongs to the original unified transfer context.
+	session, err := c.client.NewSession(transferCtx, binding.NodeID, offer)
 	if err != nil {
 		return nil, files.FileOpenResult{}, err
 	}
-	reply, err := session.Open(ctx)
+	reply, err := session.Open(openCtx)
 	if err != nil {
 		_ = session.Close()
 		return nil, files.FileOpenResult{}, err
@@ -321,7 +327,41 @@ func (u *gatewayChannelUploader) UploadBound(ctx context.Context, binding Gatewa
 		}
 		return errors.Join(ErrGatewayArtifactTransport, err)
 	}
-	return nil
+	// A final byte reply is not the child's durable terminal event. In
+	// particular the resident Agent has one modifying slot: dispatching nginx
+	// before the file execution finishes can race that slot and lose its result.
+	return u.waitChild(ctx, binding)
+}
+
+func (u *gatewayChannelUploader) waitChild(ctx context.Context, binding GatewayArtifactBinding) error {
+	bounded, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		if err := u.stage.CheckArtifactChild(bounded, binding.TaskID, binding.NodeID, binding.PlanID, binding.TargetRevision,
+			binding.GatewayID, binding.PlanDigest, binding.AbsolutePath, binding.SitePath, binding.SHA256); err != nil {
+			return err
+		}
+		child, err := loadGatewayArtifactBinding(bounded, u.db, binding.ExecutionID)
+		if err != nil {
+			return err
+		}
+		if child.State == "finished" {
+			if child.Result == agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED.String() {
+				return nil
+			}
+			return files.ErrAgentUnknown
+		}
+		if child.State == "rejected" {
+			return files.ErrAgentUnknown
+		}
+		select {
+		case <-bounded.Done():
+			return errors.Join(files.ErrAgentUnknown, bounded.Err())
+		case <-ticker.C:
+		}
+	}
 }
 
 type gatewayStageAuthorizer struct {
