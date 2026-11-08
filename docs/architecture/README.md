@@ -26,3 +26,6 @@ G1 的 PLUGIN v0.3 替代旧编译期内置业务插件条款；DEPLOY v0.3 扩�
 多目标/完整续传、网关中央装配及完整发布/补偿、Controller可信更新/在线发行装配、实际灾备新权威/旧主控隔离等仍未完成。1 vCPU / 1 GB RAM、物理双机、ARM实际运行和真实外部供应商仍待验收；WASM/Eino未获Runtime准入。Xray当前全范围由WorkBuddy承担，所有权变更不代表准入获批，可选插件仍不能编入核心Release。
 
 最新状态见[任务板](../development/TASK-BOARD.md)、[当前进度](../development/sprints/v09-five-day/CURRENT-PROGRESS.md)、[云端首轮接收报告](../development/reviews/V09-CLOUD-R1-REVIEW.md)与[Cloud R2任务](../development/sprints/v09-five-day/cloud-r2/PLAN.md)。默认缺可信配置仍拒绝，编译/CI不能代替完整运行时安全与产品验收。
+
+
+2026-11-08当前基线更新：main a8a093c及独立CI42480445288 success，#14持久浏览器暂存续传已接收（28项迁移）。本分支候选R11/第29项追加上传策略迁移、当前owner cleanup后台执行与可信Agent更新启动配置，详见[产品启动](../development/PRODUCT-STARTUP.md)。统一任务/审批/逐帧授权与UNKNOWN不重放不变；没有新增SSH、Web/插件直连或常驻updater，完整发布/恢复及G2继续OPEN。

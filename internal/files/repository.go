@@ -644,7 +644,7 @@ func (r *Repo) BindDistributionTask(ctx context.Context, q storage.Queryer, id, 
 // FinishDistributionTarget persists one per-target terminal outcome exactly
 // once. Non-terminal pending/dispatching rows converge; terminal rows are
 // idempotent no-ops so replays cannot overwrite another honest result.
-func (r *Repo) FinishDistribution(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string) (bool, error) {
+func (r *Repo) FinishDistributionTarget(ctx context.Context, q storage.Queryer, id, nodeID, status string, bytes int64, sha, errorCode, errorMessage string) (bool, error) {
 	switch status {
 	case TargetStateCompleted, TargetStateFailed, TargetStateCancelled, TargetStateUnknown:
 	default:
@@ -693,14 +693,7 @@ func (r *Repo) FailOpenDistribution(ctx context.Context, q storage.Queryer, id, 
 
 // FinishDistribution atomically converges the distribution terminal state
 // from dispatching. The first caller wins; later calls are no-ops.
-func (r *Repo) FinishDistribution(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string, destination ...string) (bool, error) {
-	actualPath := ""
-	if len(destination) > 1 {
-		return false, ErrInvalidTransfer
-	}
-	if len(destination) == 1 {
-		actualPath = destination[0]
-	}
+func (r *Repo) FinishDistribution(ctx context.Context, q storage.Queryer, id, status, actualSHA, errorCode string) (bool, error) {
 	switch status {
 	case DistributionCompleted, DistributionPartial, DistributionFailed, DistributionCancelled, DistributionAborted:
 	default:

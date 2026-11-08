@@ -647,10 +647,10 @@ function FilePane({
             新建文件夹
           </Button>
           <Field label="上传同名策略">
-            <Select aria-label={`${label}上传同名策略`} value={uploadPolicy} disabled={uploadBusy || !canWrite || session.writesLocked}
+            {ids => <Select id={ids.inputId} aria-label={`${label}上传同名策略`} value={uploadPolicy} disabled={uploadBusy || !canWrite || session.writesLocked}
               onChange={event => setUploadPolicy(event.target.value as ConflictPolicy)}>
               <option value="skip">跳过同名</option><option value="overwrite">覆盖同名</option><option value="rename">自动改名</option>
-            </Select>
+            </Select>}
           </Field>
           <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
             上传文件（按所选策略）

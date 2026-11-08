@@ -68,7 +68,7 @@ func TestHTTPResumeProjectionRequiresCurrentOwnerAndNodeBinding(t *testing.T) {
 			t.Fatalf("legacy response changed: %d %s", status, body)
 		}
 	}
-	for _, query := range []string{"?resumeBinding=bad", "?resumeBinding=true&resumeBinding=false"} {
+	for _, query := range []string{"?resumeBinding=bad", "?resumeBinding=true&resumeBinding=false", "?bindingVersion=2", "?resumeBinding=true&bindingVersion=3", "?resumeBinding=true&bindingVersion=2&bindingVersion=2"} {
 		status, body = doRaw(t, "GET", server.URL+"/api/v1/nodes/n-dst/files/uploads/"+id+query, nil)
 		if status != 400 || strings.Contains(string(body), digest) {
 			t.Fatalf("ambiguous binding query: %d %s", status, body)
@@ -82,7 +82,7 @@ func TestHTTPResumeProjectionRequiresCurrentOwnerAndNodeBinding(t *testing.T) {
 }
 
 func TestHTTPUserUploadNeverSilentlyChangesRequestedConflictPolicy(t *testing.T) {
-	_, server := newHTTPFixture(t)
+	f, server := newHTTPFixture(t)
 	defer server.Close()
 	for _, policy := range []string{"skip", "rename", "unknown", "overwrite", ""} {
 		t.Run("policy="+policy, func(t *testing.T) {
@@ -93,12 +93,49 @@ func TestHTTPUserUploadNeverSilentlyChangesRequestedConflictPolicy(t *testing.T)
 			}
 			defer response.Body.Close()
 			expected := 400
-			if policy == "overwrite" || policy == "" {
+			if policy != "unknown" {
 				expected = 201
 			}
 			if response.StatusCode != expected {
 				t.Fatalf("policy %q accepted with different semantics: %d", policy, response.StatusCode)
 			}
+			if expected == 201 {
+				var receipt struct {
+					ID string `json:"uploadId"`
+				}
+				if err := json.NewDecoder(response.Body).Decode(&receipt); err != nil {
+					t.Fatal(err)
+				}
+				stored, err := f.repo.GetUpload(context.Background(), receipt.ID)
+				want := policy
+				if want == "" {
+					want = "overwrite"
+				}
+				if err != nil || string(stored.ConflictPolicy) != want {
+					t.Fatalf("policy not frozen: %+v %v", stored, err)
+				}
+			}
 		})
+	}
+}
+
+func TestHTTPUploadBindingV2DoesNotAlterLegacyProjection(t *testing.T) {
+	_, host := newHTTPFixture(t)
+	defer host.Close()
+	id := createUploadSession(t, host.URL, "bound.bin", 7, strings.Repeat("a", 64))
+	base := host.URL + "/api/v1/nodes/n-dst/files/uploads/" + id
+	for _, query := range []string{"", "?resumeBinding=true", "?resumeBinding=false"} {
+		status, body := doRaw(t, "GET", base+query, nil)
+		if status != 200 || bytes.Contains(body, []byte("conflictPolicy")) || bytes.Contains(body, []byte("actualDestination")) {
+			t.Fatalf("legacy changed: %d %s", status, body)
+		}
+	}
+	status, body := doRaw(t, "GET", base+"?resumeBinding=true&bindingVersion=2", nil)
+	var projection map[string]any
+	if json.Unmarshal(body, &projection) != nil || status != 200 || projection["conflictPolicy"] != "overwrite" {
+		t.Fatalf("v2 binding: %d %s", status, body)
+	}
+	if _, ok := projection["actualDestination"]; ok {
+		t.Fatalf("invented remote path: %s", body)
 	}
 }

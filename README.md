@@ -6,17 +6,17 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 ## 已核验的产品基线
 
-截至2026-11-08（Asia/Shanghai），最近已核验的main基线为[f1d715b](https://github.com/IKUNHEIHIE/ServerFleet/commit/f1d715b532f063cc9c7e21264eaa0f7ea4d4c73a)，[独立main CI42458157478](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/42458157478)成功。#7/#8/#9已通过协调#12返修接收；#13补齐Controller暂存崩溃恢复及四份正式ADR原文。#13精确候选CI为Go971顶层PASS/7SKIP/0FAIL、Web380PASS，安全与构建通过；合并树与候选一致。正式迁移28项，原25项旧库fixture及历史SQL/checksum保持。
+截至2026-11-08（Asia/Shanghai），已接收main为[a8a093c](https://github.com/IKUNHEIHIE/ServerFleet/commit/a8a093ccfaecc35c1a58cadbef3a675b57fdf035)，[独立main CI42480445288](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/42480445288)成功。#12已接收#7/#8/#9及返修，#13暂存恢复/四ADR来源、#14正式Web重选文件与持久暂存续传已合入。#14精确候选CI Go973顶层PASS/7SKIP/0FAIL、Web412PASS；正式迁移28项，历史SQL/hash与旧25fixture保持。
 
-本分支继续V09-CLOUD-BROWSER-RESUME-01：正式文件页保存账号/节点隔离的待核验记录，用户重新选择原文件并核对完整摘要，再从Controller确认的偏移按1MiB分块继续。R10通过显式resumeBinding=true读取绑定，默认保留R8响应；已派发/终态/未知任务不重复提交。用户上传现有worker仅实现覆盖同名，本分支明确标注并拒绝未实现策略，避免把skip静默变成overwrite；已验收的文件互传三策略保持。实现、接口和产品差异同步，最终验收以精确head的PR/CI记录为准，不提前当作完整发布认证。见[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r4/BROWSER-RESUME.md)和[R10差异](docs/contracts/revisions/v09-r10-file-resume.md)。
+用户负责手动验证，ChatGPT单会话继续优先完成产品实现。本分支V09-CLOUD-PRODUCT-IMPLEMENT-01补用户上传三策略与真实路径/终态、原子checksum拒绝、cleanup默认服务和安全后台重试、可信本地签名Agent更新启动入口；R11候选与新增第29项迁移待本PR精确head接收，不能冒称已进入main。详见[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r5/PRODUCT-ASSEMBLY.md)、[启动装配](docs/development/PRODUCT-STARTUP.md)和[R11差异](docs/contracts/revisions/v09-r11-upload-policies.md)。
 
 ## 当前能力与剩余边界
 
 | 领域 | 已接收的实现或检查点 | 仍待完成/验收 |
 |---|---|---|
 | 核心平台 | Controller/Agent、SQLite WAL、REST/SSE、WSS+mTLS、统一授权/任务/审批/审计；节点及管理台等业务模块已有实现 | 完整跨模块产品验收、正式规则实施核对与 G2 收口 |
-| 文件执行 | 双 Agent 多文件及 skip/overwrite/rename；用户上传统一任务/审批/当前权限复核/取消/终态对账/真实摘要；冻结多目标分发检查点已接收 | Controller暂存恢复已接收；本分支补Web重选文件续传，真实浏览器/进程重启组合及Agent执行续传仍待完整验收 |
-| 更新 | 实际 Agent 组件本地签名更新、健康检查和失败回滚，已有真实浏览器专项证据 | Controller 组件升级、可信在线发行与可部署装配；B05 仍开放 |
+| 文件执行 | 双 Agent 多文件及 skip/overwrite/rename；用户上传统一任务/审批/当前权限复核/取消/终态对账/真实摘要；冻结多目标分发检查点已接收 | Controller暂存恢复/Web重选文件续传已接收；本分支补用户上传三策略，真实浏览器/进程重启组合及Agent执行续传仍待完整验收 |
+| 更新 | 实际 Agent 组件本地签名更新、健康检查和失败回滚，已有真实浏览器专项证据 | 本分支补可信本地Agent更新启动配置；在线发行/完整批次与Controller更新需求差异继续跟踪，B05仍开放 |
 | 网关与发布 | 工件传输适配、独立子执行、冻结计划/逐帧授权、持久绑定、终态 CAS 与并发负向 | Standalone路由checker、完整实际安装/发布/补偿及ACME组合；B04仍开放（已有隔离Agent-WSS-Nginx/HTTP字节与补偿证据） |
 | 恢复 | 隔离基础、恢复运行门与异常任务对账，未知副作用不自动重放 | 实际灾备恢复、新权威建立、旧主控隔离/fence；B06 仍开放 |
 | Xray 可选插件 | 已有插件代码、候选与部分隔离证据 | 安全工件与 Runtime 准入、完整产品验收；B03 仍开放 |

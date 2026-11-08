@@ -3,7 +3,7 @@ import { continueUpload, readBoundUpload, rememberUploadDraft, forgetUploadDraft
   UploadCompleteError, type UploadDraft, type UploadResumePort, UPLOAD_CHUNK_BYTES } from "./upload-resume";
 const hash = "a".repeat(64);
 const draft = (size = 7): UploadDraft => ({ uploadId: "up-1", ownerId: "u-1", nodeId: "n-1", name: "f.bin",
-  size, sha256: hash, destinationPath: "/srv/f.bin", createdAt: Date.now() });
+  size, sha256: hash, conflictPolicy: "overwrite", destinationPath: "/srv/f.bin", createdAt: Date.now() });
 const scope = () => ({ signal: new AbortController().signal, current: () => true });
 function file(size: number): File {
   const bytes = new Uint8Array(size); bytes.forEach((_, i) => { bytes[i] = i % 251; });
@@ -11,7 +11,7 @@ function file(size: number): File {
 }
 function ports(d = draft(), start = 2) {
   const read = vi.fn(async () => ({ uploadId: d.uploadId, status: "awaiting_data", bytesReceived: start,
-    expectedSize: d.size, destinationPath: d.destinationPath, sha256Expected: d.sha256 }));
+    expectedSize: d.size, conflictPolicy: d.conflictPolicy ?? "overwrite", destinationPath: d.destinationPath, sha256Expected: d.sha256 }));
   const write = vi.fn(async (bytes: ArrayBuffer, offset: number) => ({ uploadId: d.uploadId, status: "awaiting_data" as const,
     bytesReceived: offset + bytes.byteLength, expectedSize: d.size }));
   const complete = vi.fn(async () => ({ uploadId: d.uploadId, status: "dispatching" as const, taskId: "task-1" }));
@@ -41,14 +41,14 @@ it("resumes only confirmed bytes with bounded chunks then submits exactly once",
   expect(new Uint8Array(p.write.mock.calls[0][0])[0]).toBe(17);
   expect(p.complete).toHaveBeenCalledTimes(1); expect(result.state.status).toBe("dispatching");
 });
-it.each(["dispatching", "completed", "failed", "cancelled", "unknown", "unexpected"])("reads %s without replaying any write or complete", async status => {
+it.each(["dispatching", "completed", "skipped", "failed", "cancelled", "unknown", "unexpected"])("reads %s without replaying any write or complete", async status => {
   const d = draft(); const p = ports(d); p.read.mockResolvedValue({ ...(await p.read()), status }); p.read.mockClear();
   const result = await continueUpload(file(d.size), d, hash, p, scope());
   expect(result.state.status).toBe(status); expect(p.write).not.toHaveBeenCalled(); expect(p.complete).not.toHaveBeenCalled();
 });
 it.each([
   { destinationPath: "/other/f.bin" }, { sha256Expected: "b".repeat(64) }, { sha256Expected: undefined },
-  { expectedSize: 8 }, { bytesReceived: -1 }, { bytesReceived: 8 }, { bytesReceived: 1.5 }, { uploadId: "other" },
+  { conflictPolicy: "skip" }, { conflictPolicy: undefined }, { expectedSize: 8 }, { bytesReceived: -1 }, { bytesReceived: 8 }, { bytesReceived: 1.5 }, { uploadId: "other" },
 ])("refuses an unverified or inconsistent server binding %j", async changed => {
   const d = draft(); const p = ports(d); const state = await p.read(); p.read.mockResolvedValue({ ...state, ...changed } as typeof state);
   await expect(continueUpload(file(d.size), d, hash, p, scope())).rejects.toThrow("服务端未确认");
@@ -90,4 +90,10 @@ it("supports zero-byte fresh files without sending an empty PUT", async () => {
 it("a failed current read never falls back to local cached progress", async () => {
   const p = ports(); p.read.mockRejectedValue(new Error("403"));
   await expect(readBoundUpload(draft(), p as UploadResumePort, scope())).rejects.toThrow("403"); expect(p.write).not.toHaveBeenCalled();
+});
+
+it.each(["skip", "overwrite", "rename"] as const)("resumes only the frozen %s policy", async policy => {
+  const d = {...draft(), conflictPolicy:policy}; const p=ports(d);
+  expect(rememberUploadDraft(d)).toBe(true); expect(loadUploadDrafts(d.ownerId,d.nodeId)[0].conflictPolicy).toBe(policy);
+  await continueUpload(file(d.size),d,hash,p,scope()); expect(p.complete).toHaveBeenCalledTimes(1);
 });

@@ -606,11 +606,12 @@ func NewPublicationCleanupCleaner(service *dns.Service) (certificates.DNSRecordC
 
 func (c publicationCleanupCleaner) DeleteChallengeRecord(ctx context.Context, subjectID, requestID, fqdn, recordID, expectedValue string) error {
 	if c.dns == nil || fqdn == "" || recordID == "" || expectedValue == "" {
-		return certificates.ErrCleanupUnavailable
+		return errors.Join(certificates.ErrCleanupRetryable, certificates.ErrCleanupUnavailable)
 	}
 	records, err := c.dns.ListRecords(ctx, subjectID, "")
 	if err != nil {
-		return err
+		// Read-only failure occurred before any delete could be issued.
+		return errors.Join(certificates.ErrCleanupRetryable, err)
 	}
 	matches := 0
 	for _, record := range records {
@@ -621,5 +622,18 @@ func (c publicationCleanupCleaner) DeleteChallengeRecord(ctx context.Context, su
 	if matches != 1 {
 		return certificates.ErrCleanupNotFound
 	}
-	return c.dns.DeleteRecord(ctx, subjectID, requestID, recordID)
+	err = c.dns.DeleteRecord(ctx, subjectID, requestID, recordID)
+	if err == nil {
+		return nil
+	}
+	// Only the DNS service's explicit definite failure is safe to retry. A
+	// timeout, transport uncertainty or local commit failure after remote I/O
+	// remains unknown; no automatic deletion of a re-created TXT record.
+	if errors.Is(err, dns.ErrProviderOutcomeUnknown) {
+		return errors.Join(certificates.ErrCleanupUnknown, err)
+	}
+	if errors.Is(err, dns.ErrProviderFailed) {
+		return errors.Join(certificates.ErrCleanupRetryable, err)
+	}
+	return errors.Join(certificates.ErrCleanupUnknown, err)
 }

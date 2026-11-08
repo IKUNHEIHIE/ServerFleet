@@ -18,7 +18,7 @@ function seed(content = "abcdefg") {
  const d = { uploadId:"up-resume",ownerId:"u-admin",nodeId:"n-1",name:"resume.bin",size:bytes.length,
   sha256,destinationPath:"/resume.bin",createdAt:Date.now() };
  expect(rememberUploadDraft(d)).toBe(true);
- return { d, bytes, state: { uploadId:d.uploadId,status:"awaiting_data",bytesReceived:2,expectedSize:d.size,destinationPath:d.destinationPath,sha256Expected:sha256 } };
+ return { d, bytes, state: { uploadId:d.uploadId,status:"awaiting_data",bytesReceived:2,expectedSize:d.size,destinationPath:d.destinationPath,conflictPolicy:"overwrite",sha256Expected:sha256 } };
 }
 const reselection = async () => screen.findByLabelText("继续上传 resume.bin");
 it("remounts after an interrupted upload and resumes from the server offset, preserving 202 semantics", async () => {
@@ -37,11 +37,11 @@ it("remounts after an interrupted upload and resumes from the server offset, pre
  expect(first.calls.filter(c=>c.method==="PUT")).toHaveLength(2);
  const creation = first.calls.find(c=>c.method==="POST"&&c.url.endsWith("/uploads"));
  expect(JSON.parse(String(creation?.init?.body)).conflictPolicy).toBe("overwrite");
- expect(screen.getAllByText("上传文件（覆盖同名）").length).toBeGreaterThan(0);
+ expect(screen.getAllByText("上传文件（按所选策略）").length).toBeGreaterThan(0);
  expect(loadUploadDrafts("u-admin","n-1")).toHaveLength(1);
  cleanup(); sessionStorage.clear(); window.location.hash="";
  const next = await renderAuthenticated("/files", { ...base,
-  "GET /api/v1/nodes/n-1/files/uploads/up-resume": () => jsonResponse({uploadId:"up-resume",status:"awaiting_data",bytesReceived:UPLOAD_CHUNK_BYTES,expectedSize:bytes.length,destinationPath:"/resume.bin",sha256Expected:sha256}),
+  "GET /api/v1/nodes/n-1/files/uploads/up-resume": () => jsonResponse({uploadId:"up-resume",status:"awaiting_data",bytesReceived:UPLOAD_CHUNK_BYTES,expectedSize:bytes.length,destinationPath:"/resume.bin",conflictPolicy:"overwrite",sha256Expected:sha256}),
   "PUT /api/v1/nodes/n-1/files/uploads/up-resume/content": (init,url) => jsonResponse({uploadId:"up-resume",status:"awaiting_data",bytesReceived:Number(url.searchParams.get("offset"))+(init?.body as Uint8Array).byteLength,expectedSize:bytes.length}),
   "POST /api/v1/nodes/n-1/files/uploads/up-resume/complete": () => jsonResponse({uploadId:"up-resume",status:"dispatching",taskId:"task-resume"},202),
  });

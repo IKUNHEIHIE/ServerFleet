@@ -351,11 +351,14 @@ func (api *httpAPI) completeUpload(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	files := []map[string]any{{
-		"name": baseName(completed.DestinationPath), "path": completed.DestinationPath,
-		"type": "file", "sizeBytes": completed.BytesReceived,
-		"version": completed.SHA256Actual,
-	}}
+	destination := completed.DestinationPath
+	if completed.ActualDestination != "" {
+		destination = completed.ActualDestination
+	}
+	files := []map[string]any{}
+	if completed.Status != UploadSkipped {
+		files = append(files, map[string]any{"name": baseName(destination), "path": destination, "type": "file", "sizeBytes": completed.BytesReceived, "version": completed.SHA256Actual})
+	}
 	status := http.StatusOK
 	if completed.Status == UploadDispatching {
 		// The verified upload is accepted into the unified task queue. The

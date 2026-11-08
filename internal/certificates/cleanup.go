@@ -19,6 +19,7 @@ var (
 	ErrCleanupExhausted   = errors.New("certificates: cleanup retry budget exhausted")
 	ErrCleanupUnavailable = errors.New("certificates: cleanup executor is not configured")
 	ErrCleanupBusy        = errors.New("certificates: cleanup attempt is already running")
+	ErrCleanupRetryable   = errors.New("certificates: delete is proven unapplied and may be retried")
 	ErrCleanupUnknown     = errors.New("certificates: cleanup outcome is unknown and needs reconciliation")
 )
 
@@ -451,6 +452,12 @@ func (j *CleanupJournal) cleanupOutcome(attempt cleanupAttempt, deleteErr, ctxEr
 		return CleanupResolved, "resolved", time.Time{}, "success"
 	}
 	if ctxErr != nil || errors.Is(deleteErr, context.Canceled) || errors.Is(deleteErr, context.DeadlineExceeded) {
+		return CleanupUnknown, "provider_outcome_unknown", time.Time{}, "failure"
+	}
+	if errors.Is(deleteErr, ErrCleanupNotFound) {
+		return CleanupFailed, "record_identity_mismatch", time.Time{}, "failure"
+	}
+	if !errors.Is(deleteErr, ErrCleanupRetryable) {
 		return CleanupUnknown, "provider_outcome_unknown", time.Time{}, "failure"
 	}
 	if attempt.attempts >= j.maxAttempts {
