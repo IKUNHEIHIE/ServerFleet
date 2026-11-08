@@ -1,0 +1,178 @@
+openapi: 3.1.0
+info:
+  title: Owner-bound persistent staging resume projection (PROPOSED)
+  version: 0.9.0-r10-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/nodes/{nodeId}/files/uploads/{uploadId}:
+    parameters:
+      - {$ref: '#/components/parameters/NodeId'}
+      - {$ref: '#/components/parameters/UploadId'}
+    get:
+      operationId: getOwnedUploadR10
+      summary: Read owner-bound upload staging and task state
+      description: Requires the authenticated upload owner and current files.write authorization on the bound node. Additive R10 destinationPath and optional sha256Expected expose the original owner-authorized binding. Older clients ignore them; resumable clients reject missing binding instead of guessing from cache. The Controller supplies a request correlation ID; this read does not require Idempotency-Key. Open staging maps to awaiting_data. dispatching is not remote success. A trusted terminal task can reconcile the persisted upload on read; unavailable evidence leaves dispatching unchanged. An unknown task outcome maps to failed with retained staging internally; this DTO does not expose the reason or authorize replay. Querying a different node yields 404 after owner and authorization checks.
+      responses:
+        '200':
+          description: Current owner-bound upload projection
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UploadProgress'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content:
+    parameters:
+      - {$ref: '#/components/parameters/NodeId'}
+      - {$ref: '#/components/parameters/UploadId'}
+    put:
+      operationId: appendOwnedUploadContentR10
+      summary: Append bytes at the exact persisted staging offset
+      description: Requires the authenticated owner, current files.write, Origin and CSRF protection. A query offset takes precedence over X-Upload-Offset; an omitted offset is zero. Reject a different offset or closed upload. A successful staging append proves no remote write. Controller staging resume uses the persisted offset and existing private Linux tail recovery. Browser resume requires explicit file re-selection and matching name, size and full SHA-256 plus a current GET matching destinationPath, sha256Expected and offset. Errors never authorize automatic write retries or replay of an accepted or unknown Agent task. Agent execution and multi-target resume are not claimed.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+        - in: query
+          name: offset
+          schema: {type: integer, format: int64, minimum: 0}
+        - in: header
+          name: X-Upload-Offset
+          schema: {type: integer, format: int64, minimum: 0}
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema: {type: string, format: binary}
+      responses:
+        '200':
+          description: Bytes accepted into local staging
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/UploadProgress'}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/Interrupted'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '413': {$ref: '#/components/responses/TooLarge'}
+        '500': {$ref: '#/components/responses/InternalError'}
+  /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete:
+    parameters:
+      - {$ref: '#/components/parameters/NodeId'}
+      - {$ref: '#/components/parameters/UploadId'}
+    post:
+      operationId: submitOwnedUploadTaskR10
+      summary: Verify staging and submit the bound unified upload task
+      description: Requires the authenticated owner, current files.write, Origin and CSRF protection. In the unified worker composition a verified upload returns 202 with taskId and dispatching before approval and actual execution. Clients must handle 202 and observe the unified task and upload; acceptance and the staged file digest prove no remote installation. The existing synchronous adapter can return 200 only for completed transport, and already completed uploads remain 200. Missing trusted adapters reject; this candidate does not authorize a production bypass. An outcome-unknown error is not permission to replay. No cancellation route is introduced here; task cancellation uses the existing unified task interface.
+      parameters:
+        - {$ref: '#/components/parameters/CSRF'}
+      responses:
+        '202':
+          description: Bound unified task accepted; actual execution remains pending
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/UploadCompletion'}
+                  - type: object
+                    required: [taskId]
+                    properties:
+                      status: {const: dispatching}
+        '200':
+          description: Completed upload only
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - {$ref: '#/components/schemas/UploadCompletion'}
+                  - type: object
+                    properties:
+                      status: {const: completed}
+        '400': {$ref: '#/components/responses/InvalidRequest'}
+        '401': {$ref: '#/components/responses/Unauthenticated'}
+        '403': {$ref: '#/components/responses/Denied'}
+        '404': {$ref: '#/components/responses/NotFound'}
+        '408': {$ref: '#/components/responses/Interrupted'}
+        '409': {$ref: '#/components/responses/Conflict'}
+        '422': {$ref: '#/components/responses/ChecksumMismatch'}
+        '500': {$ref: '#/components/responses/InternalError'}
+        '502': {$ref: '#/components/responses/TransportFailure'}
+        '503': {$ref: '#/components/responses/Unavailable'}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: __Host-sf_session}
+  parameters:
+    NodeId: {in: path, name: nodeId, required: true, schema: {type: string, minLength: 1}}
+    UploadId: {in: path, name: uploadId, required: true, schema: {type: string, minLength: 1}}
+    CSRF: {in: header, name: X-CSRF-Token, required: true, schema: {type: string, minLength: 1}}
+  schemas:
+    UploadProgress:
+      type: object
+      additionalProperties: false
+      required: [uploadId, status, bytesReceived, expectedSize]
+      properties:
+        uploadId: {type: string}
+        destinationPath:
+          type: string
+          readOnly: true
+          description: Current bound absolute destination, visible only to the authorized upload owner.
+        sha256Expected:
+          type: string
+          pattern: '^[a-f0-9]{64}$'
+          readOnly: true
+          description: Original client SHA-256, omitted if absent; missing binding disables browser persistent resume.
+        taskId: {type: string, minLength: 1}
+        status: {type: string, enum: [awaiting_data, dispatching, completed, failed, cancelled, aborted]}
+        bytesReceived: {type: integer, format: int64, minimum: 0}
+        expectedSize: {type: [integer, 'null'], format: int64, minimum: 0}
+    UploadCompletion:
+      type: object
+      additionalProperties: false
+      required: [uploadId, status, files]
+      properties:
+        uploadId: {type: string}
+        taskId: {type: string, minLength: 1}
+        status: {type: string, enum: [dispatching, completed]}
+        files:
+          type: array
+          minItems: 1
+          maxItems: 1
+          items:
+            type: object
+            additionalProperties: false
+            required: [name, path, type, sizeBytes, version]
+            properties:
+              name: {type: string}
+              path: {type: string}
+              type: {type: string, const: file}
+              sizeBytes: {type: integer, format: int64, minimum: 0}
+              version: {type: string, description: Verified staging SHA-256 at dispatch; remote success requires a completed actual task and Agent receipt}
+    Error:
+      type: object
+      additionalProperties: false
+      required: [error]
+      properties:
+        error:
+          type: object
+          additionalProperties: false
+          required: [code, message]
+          properties:
+            code: {type: string}
+            message: {type: string}
+  responses:
+    InvalidRequest: {description: invalid_request or missing_request_id, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unauthenticated: {description: unauthorized, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Denied: {description: forbidden, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    NotFound: {description: not_found, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Interrupted: {description: request_timeout, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Conflict: {description: conflict including a different owner or closed upload, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    TooLarge: {description: upload_too_large, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    ChecksumMismatch: {description: checksum_mismatch, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    InternalError: {description: internal_error, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    TransportFailure: {description: transport_failure with side effect evidence requiring reconciliation, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    Unavailable: {description: unavailable trusted transport or task adapter, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
