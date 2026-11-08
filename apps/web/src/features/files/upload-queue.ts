@@ -332,6 +332,7 @@ export function mergeUploadState(previous: PendingUpload, observation: UploadObs
     return {
       ...previous,
       status: "unknown",
+      actualDestination: undefined,
       evidence: observation.kind,
       ...(observation.reason ? { reason: observation.reason } : {}),
       ...(observation.taskId ? { taskId: observation.taskId } : {}),
@@ -348,7 +349,7 @@ export function mergeUploadState(previous: PendingUpload, observation: UploadObs
     ...(observation.taskId ?? previous.taskId ? { taskId: observation.taskId ?? previous.taskId } : {}),
     ...(observation.bytesReceived === undefined ? {} : { bytesReceived: observation.bytesReceived }),
     ...(observation.expectedSize === undefined ? {} : { expectedSize: observation.expectedSize }),
-    ...(observation.actualDestination === undefined ? {} : { actualDestination: observation.actualDestination }),
+    actualDestination: observation.actualDestination,
     sequence: observation.sequence,
     observedAt,
   };

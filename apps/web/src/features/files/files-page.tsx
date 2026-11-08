@@ -721,7 +721,7 @@ function FilePane({
             <ul className="mt-2 space-y-2">
               {visiblePendingUploads.map(item => {
                 const text = describeUploadStatus(item);
-                const verifiedTerminal = claimsRemoteCompletion(item) || (item.evidence === "verified" && ["failed", "cancelled"].includes(item.status));
+                const verifiedTerminal = claimsRemoteCompletion(item) || (item.evidence === "verified" && ["failed", "cancelled", "skipped"].includes(item.status));
                 return (
                   <li key={item.uploadId} className="rounded border p-2">
                     <div className="flex flex-wrap items-center gap-2">

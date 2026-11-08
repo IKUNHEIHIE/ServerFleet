@@ -22,3 +22,6 @@ npm ci、tools:install已执行成功；Go1.27.3/Node24.22.1/npm11.9.0（项目�
 Standalone发布checker/完整部署、node-local CSR/ACME、更新固定可信发行与canary批次、加密一致备份/一次性恢复CLI/新权威fence、普通任务真实降UID/GID/清附加组、Xray安全工件与Runtime仍未全部完成。恢复的四ADR原文已在#13接收，不再误称缺失，但实施差异继续OPEN。
 
 B03/B04/B05/B06、G2/D01—D07/P1-C10/发布准入、真实外部/物理双机/ARM运行/硬1C1G/ENV-W6-01不因换平台/CI/手动验收安排关单。不访问生产/VPS/awskr/真实供应商/云API，不启动其他Agent，不承诺原定交付时间或完成百分比。
+
+
+第二批本地整包：policy/contracts/git PASS；security PASS（npm audit 0、govulncheck无已知漏洞），Go/Web FAIL。迁移计数/旧fixture排除表遗漏新ds/0043和三个Web精确URL断言未带v2参数已修复，保留原断言语义。Go另有6项Agent文件及1项恢复测试在本地UID0被生产普通用户门拒绝，未删除/改SKIP/放宽；实际Controller/Agent/Linux仍须原生普通用户CI。Web418PASS/3FAIL（新增三策略选择用例已通过）。该批在aea5f90加Web未提交改动运行，精确dirty树未捕获；最终证据只认最终head原生CI。原输出见evidence/local-batch。
