@@ -26,3 +26,7 @@ V09-CLOUD-BROWSER-RESUME-01 / chatgpt-takeover-01；基于已接收main f1d715b�
 最终候选4fcf163的CI已经启动后，逐项复核发现既有用户上传的conflictPolicy被解析却忽略，worker实际上固定overwrite，旧Web却发skip。本轮合入前修正UI明确覆盖、后台拒绝本入口尚未实现的skip/rename/未知策略；独立传输的三策略保持。这是实际数据安全问题，不为旧head碰绿灯或删用例；新head须重审并复验。旧默认请求不改，新HTTP/DOM回归证明不静默改策略。同步R10/产品差异，完整上传三策略仍登记缺口。另修sessionStorage.getItem故障返回未核验空列表而非令页面崩溃，增加故障专项。
 
 复核补丁集中复验：全Web412PASS/44文件，类型/生产构建成功；Go文件模块81顶层PASS/1SKIP/0FAIL；R10独立lint、staticcheck及diff检查通过。新策略HTTP专项包含skip/rename/unknown明确拒绝、overwrite/省略默认仍创建，DOM核对实际请求overwrite及覆盖文案。原Full-CI候选4fcf163不是最终接收依据；此次追加修复有实际安全依据，新head再进行完整CI，所有旧运行/取消状态保留。
+
+## 完整CI实际失败与最小修正
+
+b03b737 / run42477852601：dependencies success；Go973顶层PASS/7SKIP/0FAIL、Web412PASS；foundation因新增R10的InvalidRequest内联description含逗号却未引号，YAML将其解析成额外属性，Redocly struct规则报2错。该新增契约格式错误已修为带引号字符串；不改规则/产品代码，不删除失败。后续生成/锁漂移检查和交叉构建因前步失败跳过，不冒称已执行。只针对变更补完整契约检查，本地已通过Go/Web不重复；新head完整CI仍须通过后才能接收。

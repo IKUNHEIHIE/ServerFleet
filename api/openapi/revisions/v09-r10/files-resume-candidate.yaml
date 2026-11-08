@@ -218,7 +218,7 @@ components:
             code: {type: string}
             message: {type: string}
   responses:
-    InvalidRequest: {description: invalid_request, unsupported_upload_conflict_policy, invalid_query or missing_request_id, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
+    InvalidRequest: {description: 'invalid_request, unsupported_upload_conflict_policy, invalid_query or missing_request_id', content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Unauthenticated: {description: unauthorized, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     Denied: {description: forbidden, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
     NotFound: {description: not_found, content: {application/json: {schema: {$ref: '#/components/schemas/Error'}}}}
