@@ -1,0 +1,77 @@
+{
+  "format": 1,
+  "kind": "serverfleet-core-unsigned-candidate",
+  "version": "0.9.0",
+  "sequence": 1,
+  "commit": "0e57516df61f114e2cb244358c7d14452fbe394c",
+  "committedAt": "2026-11-08T22:53:32+09:00",
+  "acceptance": "UNVERIFIED",
+  "tools": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "24.22.1",
+    "npm": "11.9.0"
+  },
+  "optionalPlugins": [],
+  "files": [
+    {
+      "path": "linux-amd64/agent",
+      "bytes": 14004080,
+      "sha256": "88767f920688bf033c26e2775066ec3aac2669ee404de2e5c2f15f2e64c1131f"
+    },
+    {
+      "path": "linux-amd64/agent.manifest.json",
+      "bytes": 192,
+      "sha256": "9bdeea52feb2e2c46ab361d5cdfe72e0c4bfb4e9d8d740f2244eff9e8c525c79"
+    },
+    {
+      "path": "linux-amd64/controller",
+      "bytes": 26525691,
+      "sha256": "d2978e34dd0454f2ac9f264fddef10fb0f0bec08301143a5cca1d80d0b0beccf"
+    },
+    {
+      "path": "linux-amd64/web/assets/index-01RQ1S_R.css",
+      "bytes": 32166,
+      "sha256": "7c94b158f904988414f2061aead747bfb298ab0d9063a44182bcbe4445090bc5"
+    },
+    {
+      "path": "linux-amd64/web/assets/index-DaRf_byJ.js",
+      "bytes": 701666,
+      "sha256": "16f2faab12772361ef033497f8c75cae8b60210da09d6678591e15fc9cb60377"
+    },
+    {
+      "path": "linux-amd64/web/index.html",
+      "bytes": 473,
+      "sha256": "80a436ae8628a8ba58dcb770c17b25a0db63fe01be9b3c77f51126df708f2bca"
+    },
+    {
+      "path": "linux-arm64/agent",
+      "bytes": 13051855,
+      "sha256": "1bd7f0f65d3232575f82617cff33fc97f433925627e21d979bfa00e1ff3c4938"
+    },
+    {
+      "path": "linux-arm64/agent.manifest.json",
+      "bytes": 192,
+      "sha256": "4ee36d9ef6c5d50c6ee635f4618f47dba366ea7a09cb90d539d9de76c12adff5"
+    },
+    {
+      "path": "linux-arm64/controller",
+      "bytes": 24766993,
+      "sha256": "6a4e221457e7e69b3bdee2b4a3df39bac45a262cd0a426ed51a7b9f0ea0e0951"
+    },
+    {
+      "path": "linux-arm64/web/assets/index-01RQ1S_R.css",
+      "bytes": 32166,
+      "sha256": "7c94b158f904988414f2061aead747bfb298ab0d9063a44182bcbe4445090bc5"
+    },
+    {
+      "path": "linux-arm64/web/assets/index-DaRf_byJ.js",
+      "bytes": 701666,
+      "sha256": "16f2faab12772361ef033497f8c75cae8b60210da09d6678591e15fc9cb60377"
+    },
+    {
+      "path": "linux-arm64/web/index.html",
+      "bytes": 473,
+      "sha256": "80a436ae8628a8ba58dcb770c17b25a0db63fe01be9b3c77f51126df708f2bca"
+    }
+  ]
+}

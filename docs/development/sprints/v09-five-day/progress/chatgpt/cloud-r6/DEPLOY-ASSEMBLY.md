@@ -16,3 +16,6 @@ V09-CLOUD-DEPLOY-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-deploy-assem
 
 
 第三批模块PASS，源931702f的双架构程序/Web已实际构建，但跨命令检查仍观察到INCOMPLETE负面标记，未靠忽略标记宣布包可用。构建器改为始终保存build-status.json，只有真实完成后写入BUILT_UNSIGNED_UNVERIFIED正向回执，并绑定源SHA和manifest摘要；不以“某文件不存在”作为成功证据。最终新目录复验后再记录候选。
+
+
+最终本地构建检查：源0e57516（后续只归档证据/文档，程序代码相同）双架构四个程序和正式Web已真实构建；所有SHA-256/字节/0700-0600权限、程序VCS源/dirty位、正向完成回执/manifest摘要、Controller -version=0.9.0与Agent规范待签manifest逐项核对PASS。Controller server/bootstrap、Agent runtime模块已集中PASS，policy PASS。summary/manifest/状态与输出见evidence/accepted-build。候选仍UNSIGNED/UNVERIFIED，没有ARM执行/手动浏览器/安装/部署结论。未重跑未修改Web的422用例和本地注定被UID0门拒绝的全套，精确最终head完整检查由原生CI承担。
