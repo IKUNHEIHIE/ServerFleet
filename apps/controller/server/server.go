@@ -42,6 +42,7 @@ import (
 
 // Config configures the composed Controller management runtime.
 type Config struct {
+	WebDirectory              string
 	DBPath                    string
 	CredentialKeyDir          string
 	AIGenerationQuota         ai.GenerationQuota
@@ -422,6 +423,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	if strings.TrimSpace(cfg.Origin) == "" {
 		return nil, errors.New("controller: browser origin is required")
+	}
+	var console http.Handler
+	if cfg.WebDirectory != "" {
+		var err error
+		console, err = LoadConsole(cfg.WebDirectory)
+		if err != nil {
+			return nil, err
+		}
 	}
 	now := cfg.Now
 	if now == nil {
@@ -1015,6 +1024,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.mux = http.NewServeMux()
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
+	}
+	if console != nil {
+		s.mux.Handle("GET /", console)
 	}
 	if s.ProductUpdates != nil {
 		if err := s.ProductUpdates.Start(ctx); err != nil {

@@ -21,6 +21,8 @@ import (
 
 // Options are the Controller CLI flags.
 type Options struct {
+	ShowVersion           bool
+	WebDirectory          string
 	Listen                string
 	DBPath                string
 	Origin                string
@@ -41,6 +43,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags := flag.NewFlagSet("controller", flag.ContinueOnError)
 	flags.SetOutput(output)
 	var options Options
+	flags.BoolVar(&options.ShowVersion, "version", false, "print the build version and exit")
 	flags.StringVar(&options.Listen, "listen", "127.0.0.1:8080", "local listen address")
 	flags.StringVar(&options.DBPath, "db", "", "SQLite WAL database path (enables management API)")
 	flags.StringVar(&options.Origin, "origin", "", "trusted https:// browser Origin (required with -db)")
@@ -50,6 +53,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.AgentAuthority, "agent-authority", "", "Agent-facing authority host:port (default: derived from -listen)")
 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
 	flags.StringVar(&options.CredentialKeyDir, "credential-key-dir", "", "private credential key directory (default: credential-keys beside -db)")
+	flags.StringVar(&options.WebDirectory, "web-dir", "", "private built console directory (requires management HTTPS mode)")
 	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
 	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
 	flags.StringVar(&options.UpdateDeployment, "update-deployment", "", "private signed local Agent update configuration (Linux; requires management TLS mode)")
@@ -68,6 +72,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 
 // Validate enforces the management-mode prerequisites without opening storage.
 func (o Options) Validate() error {
+	if o.WebDirectory != "" && o.Scaffold() {
+		return errors.New("controller: -web-dir requires -db and direct HTTPS")
+	}
 	if o.UpdateDeployment != "" && o.Scaffold() {
 		return errors.New("controller: -update-deployment requires -db and direct HTTPS")
 	}
@@ -180,6 +187,7 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 	}
 	composed, err := server.New(ctx, server.Config{
 		FileExecution:         fileConfig,
+		WebDirectory:          options.WebDirectory,
 		GatewayDeployment:     gatewayDeployment,
 		UpdateProduct:         updateDeployment,
 		DisableCleanupRetries: options.DisableCleanupRetries,

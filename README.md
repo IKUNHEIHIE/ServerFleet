@@ -10,6 +10,8 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 用户负责手动验证，ChatGPT单会话继续优先完成产品实现。本分支V09-CLOUD-PRODUCT-IMPLEMENT-01补用户上传三策略与真实路径/终态、原子checksum拒绝、cleanup默认服务和安全后台重试、可信本地签名Agent更新启动入口；R11候选与新增第29项迁移待本PR精确head接收，不能冒称已进入main。详见[本轮记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r5/PRODUCT-ASSEMBLY.md)、[启动装配](docs/development/PRODUCT-STARTUP.md)和[R11差异](docs/contracts/revisions/v09-r11-upload-policies.md)。
 
+本分支另补正式Controller同源控制台宿主（-web-dir）与仓库外双架构核心候选构建，消除对测试fixturehost/开发服务器的部署依赖；只导出受限构建资产和程序，不生成签名或部署。详见[启动/构建说明](docs/development/PRODUCT-STARTUP.md)与[装配记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r6/DEPLOY-ASSEMBLY.md)。候选依赖#15的状态以PR记录为准。
+
 ## 当前能力与剩余边界
 
 | 领域 | 已接收的实现或检查点 | 仍待完成/验收 |
