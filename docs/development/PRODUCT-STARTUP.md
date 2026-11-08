@@ -36,4 +36,4 @@ node scripts/build-release.mjs --version=0.9.0 --sequence=1 --output=/absolute/p
 
 output必须是仓库外的新目录，父目录已存在且不能通过别名/符号链接绕回仓库。不复用旧打包副本、不打入.tools/cache/reports/数据库/私钥/Token/Xray可执行文件。输出linux-amd64和linux-arm64各自的controller、agent、web，以及包含源SHA/实际工具版本/全部文件字节数与SHA-256的manifest.json；仅交叉构建，不等于ARM实际运行或硬1C1G验收。
 
-`agent.manifest.json`是待离线签名的规范ReleaseManifest，签名消息仍为`serverfleet.release.v1\0`+原始JSON字节；不自动生成信任键/签名、不自动灌入inbox。Agent健康版本与默认入网版本、Controller `-version`均写入同一明确构建版本。失败保留INCOMPLETE标记及部分输出，不能安装/签名；成功也明确UNSIGNED/UNVERIFIED，不代表发布认证或可信在线发行。没有自动安装/systemd启用/网络部署步骤。正式生产访问与云资源不在当前授权中。
+`agent.manifest.json`是待离线签名的规范ReleaseManifest，签名消息仍为`serverfleet.release.v1\0`+原始JSON字节；不自动生成信任键/签名、不自动灌入inbox。Agent健康版本与默认入网版本、Controller `-version`均写入同一明确构建版本。失败保留build-status.json的INCOMPLETE状态及部分输出；成功必须有绑定源SHA与manifest摘要的BUILT_UNSIGNED_UNVERIFIED正向回执，不能安装/签名；成功也明确UNSIGNED/UNVERIFIED，不代表发布认证或可信在线发行。没有自动安装/systemd启用/网络部署步骤。正式生产访问与云资源不在当前授权中。

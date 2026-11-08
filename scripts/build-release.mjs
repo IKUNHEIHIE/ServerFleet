@@ -2,7 +2,7 @@
 // generate signing keys or bundle optional plugin executables / runtime state.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, unlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { root, go } from "./lib.mjs";
 
@@ -35,8 +35,8 @@ function assertSource() {
 }
 
 mkdirSync(output, { mode: 0o700 });
-const incomplete = path.join(output, "INCOMPLETE");
-writeFileSync(incomplete, "Candidate build incomplete; do not install or sign.\n", { mode: 0o600, flag: "wx" });
+const statusFile = path.join(output, "build-status.json");
+writeFileSync(statusFile, JSON.stringify({ status: "INCOMPLETE", source: commit }) + "\n", { mode: 0o600, flag: "wx" });
 const manifest = { format: 1, kind: "serverfleet-core-unsigned-candidate", version: values.version, sequence: Number(values.sequence), commit, committedAt, acceptance: "UNVERIFIED", tools: { go: goVersion, node: process.versions.node, npm: npmVersion }, optionalPlugins: [], files: [] };
 const record = name => {
   const filename = path.join(output, name), bytes = readFileSync(filename);
@@ -82,10 +82,11 @@ try {
   }
   assertSource();
   manifest.files.sort((a, b) => a.path.localeCompare(b.path));
-  writeFileSync(path.join(output, "manifest.json"), JSON.stringify(manifest, null, 2) + "\n", { mode: 0o600, flag: "wx" });
-  unlinkSync(incomplete);
+  const manifestBytes = JSON.stringify(manifest, null, 2) + "\n";
+  writeFileSync(path.join(output, "manifest.json"), manifestBytes, { mode: 0o600, flag: "wx" });
+  writeFileSync(statusFile, JSON.stringify({ status: "BUILT_UNSIGNED_UNVERIFIED", source: commit, manifestSHA256: createHash("sha256").update(manifestBytes).digest("hex") }) + "\n", { mode: 0o600 });
   process.stdout.write(`Unsigned candidate built: ${output}\nSource: ${commit}\nNo signing, installation, deployment or release acceptance performed.\n`);
 } catch (error) {
-  process.stderr.write(`Candidate build failed; partial output retained with INCOMPLETE: ${output}\n`);
+  process.stderr.write(`Candidate build failed; partial output retained with build-status=INCOMPLETE: ${output}\n`);
   throw error;
 }
