@@ -458,14 +458,23 @@ func (p *CloudflareProvider) doRecord(ctx context.Context, method, path string, 
 			return err
 		}
 		decodeErr := json.Unmarshal(payload, &envelope)
+		// Only a complete provider verdict can establish a definite rejection.
+		// The bool zero value also represents a missing/null success field, and
+		// an auth-looking error embedded in a 5xx is not proof of no effect.
+		if status >= 500 {
+			return cloudflareOutcomeUnknown(&cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)})
+		}
+		var verdict struct {
+			Success *bool `json:"success"`
+		}
+		if decodeErr != nil || json.Unmarshal(payload, &verdict) != nil || verdict.Success == nil {
+			return cloudflareOutcomeUnknown(ErrCloudflareResponse)
+		}
 		if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
 		}
 		if status == http.StatusNotFound {
 			return ErrProviderNotFound
-		}
-		if status >= 500 || decodeErr != nil {
-			return cloudflareOutcomeUnknown(&cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)})
 		}
 		if status < 200 || status > 299 || !envelope.Success {
 			return &cloudflareAPIError{Operation: operation, StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}

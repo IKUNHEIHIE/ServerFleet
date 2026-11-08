@@ -314,9 +314,9 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 	for {
 		resp, err := http.DefaultClient.Do(request)
 		if err == nil {
-			received, e = io.ReadAll(resp.Body)
+			received, err = io.ReadAll(resp.Body)
 			resp.Body.Close()
-			if resp.StatusCode == 200 && bytes.Equal(received, upstreamBytes) {
+			if err == nil && resp.StatusCode == 200 && bytes.Equal(received, upstreamBytes) {
 				break
 			}
 		}

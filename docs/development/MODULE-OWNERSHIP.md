@@ -55,3 +55,7 @@
 | chatgpt-review-02 / 总控 | 公共接口/编号/生成/锁/CI/独立审查/顺序合并/任务板 | 不与HW候选窗口同时修改同批中央文件；窗口以明确接收或释放结束。其余两家中央请求排队成精确patch，不能形成隐藏overlay |
 
 Xray所有工作由WorkBuddy承担；这不是Runtime批准。可选插件不编入核心Release/被核心直接导入，WASM/Eino未准入。预留网关候选cx/0010_gateway_artifact_bindings仅作唯一编号预约，当前正式迁移仍26，必须主控审查与升级验证后才登记，禁止改旧SQL/hash。
+
+## 2026-11-08 单会话接手（覆盖上方平台写权限）
+
+用户授权ChatGPT直接返修#7/#8/#9并独立继续完整项目。V09-CLOUD-TAKEOVER-01/chatgpt-takeover-01取得三包剩余模块及主控协调范围；原三平台/Windows作者不自动复活，原中央窗口转交本会话单写。历史交付/分支/进度保留，不把转交标完成。源资料/ADR不可改写，公共接口/迁移/生成/锁/CI仍须协调审查；统一任务/审批/审计、未知不重放、可选Runtime未准入等条件不变。见TASK-BOARD与progress/chatgpt/cloud-r3/TAKEOVER.md。

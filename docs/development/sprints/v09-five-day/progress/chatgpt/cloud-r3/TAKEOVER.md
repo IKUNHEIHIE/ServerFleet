@@ -27,3 +27,9 @@ IN PROGRESS：开始集中返修。G2与B03/B04/B05/B06及外部/ARM/硬1C1G/正
 - 全量/真实组合CI尚待运行；候选不等于main，不等于完整v0.9验收。
 
 新真实组合用例使用本地TLS Cloudflare协议endpoint、显式注入的真实nginx -t预检、内存内Controller装配和正式Agent进程；覆盖独立用户审批/拒绝自批/工件/子终态/nginx实际HTTP字节及逆序补偿。它不替代外部供应商验收，Standalone Controller的GatewayChecker默认nil仍是待补正式装配缺口。当前没有把它改成默认放行。Context7连接器未提供；当前改动为内部业务/上下文和测试组合，无新增第三方库/SDK/CLI版本。
+
+## 首轮实际CI（保留失败，不冒称通过）
+
+- c7ad3e1 / PR#12 run42453507454：dependencies成功；Go全部运行用例通过（保留7 SKIP），Web380PASS；foundation最终因新测试gateway_cloud_r3_test.go:317的SA4006静态检查失败。生成/锁漂移与双架构构建后续步骤SKIPPED，不冒称该轮执行。
+- 新真实普通用户组合TestCloudR3GatewayActualAgentPublicationAndReverseCompensation通过：真实Agent构建/进程/WSS，独立审批（拒绝自批），持久子执行成功，实际Nginx -t/reload，HTTP364字节相符，独立移除审批及反序路由/证书阶段/DNS清理；test-only本地TLS供应商与显式nginx检查器边界如前，B04未整体关闭。
+- 最终集中补丁修SA4006（检查真实HTTP正文读取错误），补有效JSON但没有success判定及5xx内嵌鉴权码也必须UNKNOWN的DNS边界；DNS原包37顶层PASS/0SKIP/0FAIL。同步README/架构/进度/所有权及Xray作者扫描文档内过时文字，不改变安全门槛。最终接收仍待新head完整CI及代码复核。

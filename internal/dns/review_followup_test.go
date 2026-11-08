@@ -11,7 +11,7 @@ import (
 )
 
 func TestReviewFollowupCreateSuccessWithoutIdentityUnknown(t *testing.T) {
-	for _, body := range []string{`{"success":true}`, `{"success":true,"result":null}`, `{"success":true,"result":{}}`, `{"success":true,"result":{"id":"\u0000bad"}}`} {
+	for _, body := range []string{`{}`, `null`, `{"success":null}`, `{"success":true}`, `{"success":true,"result":null}`, `{"success":true,"result":{}}`, `{"success":true,"result":{"id":"\u0000bad"}}`} {
 		t.Run(body, func(t *testing.T) {
 			s := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(body)) }))
 			defer s.Close()
@@ -25,7 +25,7 @@ func TestReviewFollowupCreateSuccessWithoutIdentityUnknown(t *testing.T) {
 }
 
 func TestReviewFollowupMissingCreateIDThroughServiceAndHTTP(t *testing.T) {
-	for _, body := range []string{`{"success":true}`, `{"success":true,"result":null}`, `{"success":true,"result":{}}`, `{"success":true,"result":{"id":"\u0000bad"}}`} {
+	for _, body := range []string{`{}`, `null`, `{"success":null}`, `{"success":true}`, `{"success":true,"result":null}`, `{"success":true,"result":{}}`, `{"success":true,"result":{"id":"\u0000bad"}}`} {
 		t.Run(body, func(t *testing.T) {
 			h := &reviewR2Handler{createID: "unused"}
 			ts := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -66,5 +66,17 @@ func TestReviewFollowupMissingCreateIDThroughServiceAndHTTP(t *testing.T) {
 				t.Errorf("HTTP lost unknown result: %d %s", rr.Code, rr.Body.String())
 			}
 		})
+	}
+}
+
+func TestReviewFollowupServerFailureCannotMasqueradeAsCredentialVerdict(t *testing.T) {
+	server := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(500)
+		w.Write([]byte(`{"success":false,"errors":[{"code":1000,"message":"ambiguous upstream failure"}]}`))
+	}))
+	defer server.Close()
+	provider := cloudflareServerProvider(t, server)
+	if err := provider.DeleteRecord(context.Background(), "secret/cf-1", "pz-1", "rec-1"); !errors.Is(err, dns.ErrProviderOutcomeUnknown) {
+		t.Fatalf("5xx was treated as no-effect credential rejection: %v", err)
 	}
 }
