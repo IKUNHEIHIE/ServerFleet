@@ -55,3 +55,8 @@ Controller 自更新由独立父进程执行，关闭/替换/重启自己拥有�
 核心构建现在同时产生 Controller/Agent 待离线签名 manifest。Controller 替换期间业务和任务保持维护拒绝，只有实际 parent 的随机 nonce 可读基础权威保护的 readiness；真实已退出进程可归类 unhealthy，其他未知不冒充可回滚。Agent 普通结束消息不能抢先把 mailbox 更新判成安装结果；监督进程实际健康提交才记逐节点结果。历史 Controller 内拥有本地 Agent slot 的部署与新独立监督部署明确分开，不创建两套进程所有权。
 
 五项均已有产品源码与入口：R20普通/Root受控执行、R21节点确认前缀恢复、R22 Controller/远程Agent灰度更新、R23实际拥有进程的灾备隔离与新信任激活。**代码写入不是验收完成**；整包正常/负向/重启、真实构建/浏览器/普通UID/提权授权及实际双机仍须验证；没有执行 sudo、生产/VPS/外部账号或物理隔离。其他较低优先级与完整G2/发布缺口继续OPEN。下一阶段按用户要求只进行一次集中验收并集中修复发现的问题，不逐处反复跑全套。
+
+
+## 集中检查已执行（2026-11-09）
+
+源码5c57b11完成本包集中检查及必要受影响部分复验：依赖/工具、policy、契约、Controller/Agent构建、Web422/typecheck/build、安全扫描、go vet/staticcheck、DNS/恢复定向验证及真实双架构未签名候选已取得对应输出；原失败/Root前提失败/SKIP保留，完整验收未通过，不将分散head拼成全量绿灯。详见[检查记录与证据](CORE-ACCEPTANCE.md)。当前沙箱不能切到普通UID，后续Draft PR原生CI和实际新功能正常/负向/重启/浏览器/提权与完整灾备证据仍需补查；状态IN PROGRESS，B03—B06/G2/发布仍OPEN。
