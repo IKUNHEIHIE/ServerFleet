@@ -27,14 +27,15 @@ const actionPublicCertificateIssue = "certificates.public.issue"
 
 type certificateExecutionKey struct{}
 type publicCertificateScope struct {
-	manager   *publicCertificateExecution
-	task      tasks.Task
-	zoneID    string
-	cleanup   bool
-	cleanupID int64
-	requestID string
-	mu        sync.Mutex
-	leases    map[string]auth.CredentialOperation
+	manager       *publicCertificateExecution
+	dnsBatchIndex int
+	task          tasks.Task
+	zoneID        string
+	cleanup       bool
+	cleanupID     int64
+	requestID     string
+	mu            sync.Mutex
+	leases        map[string]auth.CredentialOperation
 }
 
 func (m *publicCertificateExecution) scope(ctx context.Context, scope *publicCertificateScope) context.Context {
@@ -68,11 +69,15 @@ func (m *publicCertificateExecution) current(ctx context.Context, scope *publicC
 		}
 	} else {
 		current, err := m.s.Tasks.CheckExecution(ctx, scope.task.ID, scope.task.PlanHash)
-		if err != nil || current.Params != scope.task.Params || !m.validExecutionTask(current) {
+		if err != nil || current.Params != scope.task.Params || !m.validExecutionTask(ctx, current) {
 			return certificates.ErrACMEConfig
 		}
 	}
-	if scope.task.ActionID == actionDNSProviderInspect {
+	if scope.task.ActionID == actionPublicationDNSApply || scope.task.ActionID == actionPublicationDNSRollback {
+		if m.batchCurrent(ctx, scope) != nil {
+			return auth.ErrDenied
+		}
+	} else if scope.task.ActionID == actionDNSProviderInspect {
 		p, e := m.inspectionParams(scope.task)
 		if e != nil {
 			return auth.ErrDenied
@@ -119,6 +124,11 @@ func (m *publicCertificateExecution) borrowDNS(ctx context.Context, use dns.Secr
 	scope, ok := ctx.Value(certificateExecutionKey{}).(*publicCertificateScope)
 	if !ok || scope == nil || scope.manager != m || use.Ref != m.o.DNSCredentialID || use.SubjectID != scope.task.SubmitterID || use.RequestID != scope.requestID || use.PlanDigest != scope.task.PlanHash || use.Module != "dns" || use.Purpose != "dns-provider" || consume == nil || m.current(ctx, scope) != nil {
 		return auth.ErrDenied
+	}
+	if scope.task.ActionID == actionPublicationDNSApply || scope.task.ActionID == actionPublicationDNSRollback {
+		if err := m.checkBatchOperation(ctx, scope, use.Operation); err != nil {
+			return err
+		}
 	}
 	var nonce [16]byte
 	if _, err := rand.Read(nonce[:]); err != nil {

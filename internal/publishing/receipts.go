@@ -72,7 +72,21 @@ func managedGatewayReceipt(raw string) (string, bool) {
 	encoded, err := json.Marshal(r)
 	return string(encoded), err == nil
 }
+
+// DNSReceipt contains no provider credentials and never authorizes a deletion;
+// the owner batch and exact task/plan evidence must still be reloaded.
+type DNSReceipt struct {
+	DNSBatchID string `json:"dnsBatchId"`
+	TaskID     string `json:"taskId"`
+}
+
 func normalizeManagedReceipt(raw string) (string, bool) {
+	var dnsReceipt DNSReceipt
+	if strictReceiptDecode(raw, &dnsReceipt) && receiptDigest(dnsReceipt.DNSBatchID) && validID(dnsReceipt.TaskID) {
+		encoded, err := json.Marshal(dnsReceipt)
+		return string(encoded), err == nil
+	}
+
 	if canonical, ok := managedGatewayReceipt(raw); ok {
 		return canonical, true
 	}

@@ -1,3 +1,4 @@
+import { PublicationDNSPanel } from "./publication-dns-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -63,6 +64,7 @@ export function PublishingPage() {
   const previewAction = useAction((body: Parameters<typeof publicationsApi.preview>[0]) => publicationsApi.preview(body));
   const createAction = useAction((body: Parameters<typeof publicationsApi.create>[0]) => publicationsApi.create(body));
   const runAction = useAction((publicationId: string) => publicationsApi.run(publicationId));
+  const rollbackAllAction=useAction((id:string)=>publicationsApi.rollbackAll(id));
   const rollbackAction = useAction((publicationId: string, stage: string) => publicationsApi.rollback(publicationId, stage));
 
   /** 执行/回滚失败时服务端仍返回更新后的计划与阶段（如 502 stage_failed/rollback_failed）；
@@ -104,6 +106,12 @@ export function PublishingPage() {
       );
       await refreshDetail(publicationId);
     }
+  }
+
+  async function rollbackAll(publicationId:string){
+   const result=await rollbackAllAction.run(publicationId);
+   if(result.ok&&result.data){setDetail(result.data.data);setOutcome(`逆序补偿已受理：${result.data.data.status}；需审批的 DNS 补偿请在任务列表处理。`);publications.reload();}
+   else if(result.error){setOutcome(describeApiError(result.error));await refreshDetail(publicationId);}
   }
 
   function draft() {
@@ -305,7 +313,7 @@ export function PublishingPage() {
                         onClick={() => void runPublication(operation.id)}
                         loading={runAction.pending}
                       >
-                        执行发布
+                        继续发布
                       </Button>
                     </div>
                   ),
@@ -333,10 +341,13 @@ export function PublishingPage() {
                 onClick={() => void runPublication(detail.id)}
                 loading={runAction.pending}
               >
-                执行发布
+                继续发布
               </Button>
+              <Button size="sm" variant="danger" onClick={()=>void rollbackAll(detail.id)} disabled={!canManage||session.writesLocked||rollbackAllAction.pending} loading={rollbackAllAction.pending}>逆序补偿已执行阶段</Button>
+              {rollbackAllAction.error?<span className="text-xs text-red-700">{describeApiError(rollbackAllAction.error)}</span>:null}
               {rollbackAction.error ? <span className="text-xs text-red-700">{describeApiError(rollbackAction.error)}</span> : null}
             </div>
+            <PublicationDNSPanel key={`${session.viewEpoch}:${detail.id}`} publicationId={detail.id} />
             {detail.stages?.length ? (
               <ol className="space-y-1">
                 {detail.stages.map((stage, index) => (

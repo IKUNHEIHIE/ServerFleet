@@ -17,12 +17,14 @@ import (
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/certificates"
 	"serverfleet.local/serverfleet/internal/dns"
+	"serverfleet.local/serverfleet/internal/publishing"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
 )
 
 type publicCertificateExecution struct {
+	publicationDNSLocks                 [64]sync.Mutex
 	s                                   *Server
 	authorityID                         string
 	o                                   ACMEDeployment
@@ -87,7 +89,11 @@ func (s *Server) newPublicCertificateExecution(ctx context.Context, o ACMEDeploy
 		m.Close()
 		return nil, err
 	}
-	if err = certificates.RecoverPublicOrders(ctx, s.DB); err != nil {
+	if err = publishing.RecoverDNSBatches(ctx, s.DB, s.Audit); err != nil {
+		m.Close()
+		return nil, err
+	}
+	if err = certificates.RecoverPublicOrders(ctx, s.DB, s.Audit); err != nil {
 		m.Close()
 		return nil, err
 	}

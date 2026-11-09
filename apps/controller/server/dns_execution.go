@@ -23,18 +23,23 @@ func (m *publicCertificateExecution) inspectionExecution(authority string, worke
 	m.authorityID = authority
 	workers[actionDNSProviderInspect] = dnsInspectionWorker{manager: m}
 	workers[actionDNSRecordApply] = dnsMutationWorker{manager: m}
-	return &tasks.ControllerExecution{AuthorityID: authority, Actions: map[string]tasks.ControllerAction{actionDNSProviderInspect: {}, actionDNSRecordApply: {RequireApproval: true}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
-		if action != actionDNSProviderInspect && action != actionDNSRecordApply {
+	workers[actionPublicationDNSApply] = publicationDNSWorker{manager: m}
+	workers[actionPublicationDNSRollback] = publicationDNSWorker{manager: m}
+	return &tasks.ControllerExecution{AuthorityID: authority, Actions: map[string]tasks.ControllerAction{actionDNSProviderInspect: {}, actionDNSRecordApply: {RequireApproval: true}, actionPublicationDNSApply: {RequireApproval: true}, actionPublicationDNSRollback: {RequireApproval: true}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
+		if action != actionDNSProviderInspect && action != actionDNSRecordApply && action != actionPublicationDNSApply && action != actionPublicationDNSRollback {
 			return auth.ErrDenied
 		}
 		return m.s.Identity.AuthorizeAdministrator(ctx, subject)
 	}}, nil
 }
-func (m *publicCertificateExecution) validExecutionTask(t tasks.Task) bool {
+func (m *publicCertificateExecution) validExecutionTask(ctx context.Context, t tasks.Task) bool {
 	if t.Source != "web" || t.ScopeRevision != 0 || t.PluginID != "" {
 		return false
 	}
 	switch t.ActionID {
+	case actionPublicationDNSApply, actionPublicationDNSRollback:
+		_, _, err := m.parseBatchTask(ctx, t)
+		return err == nil
 	case actionDNSRecordApply:
 		_, _, err := m.mutationParams(t)
 		return err == nil

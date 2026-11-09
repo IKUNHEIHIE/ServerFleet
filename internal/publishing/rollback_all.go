@@ -89,7 +89,10 @@ func (s *Service) RollbackAll(ctx context.Context, subjectID, requestID, planID 
 			return plan, authErr
 		}
 		group = currentGroup
-		if err := s.rollback(ctx, plan, stage.Kind, StageResult{Summary: stage.ResultSummary}); err != nil {
+		if err := s.rollback(context.WithValue(ctx, rollbackActorKey{}, rollbackActor{subjectID, requestID}), plan, stage.Kind, StageResult{Summary: stage.ResultSummary}); err != nil {
+			if errors.Is(err, ErrStageAwaitingTask) {
+				return plan, err
+			}
 			plan.Status = PlanPartialFailure
 			plan.CurrentStage = stage.Kind
 			plan.UpdatedAt = s.now().UTC()

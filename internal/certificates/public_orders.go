@@ -2,7 +2,10 @@ package certificates
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/storage"
 	"time"
 )
@@ -74,7 +77,10 @@ func FinishPublicOrderTx(ctx context.Context, tx storage.Tx, order PublicOrder) 
 
 // RecoverPublicOrders never replays a CA/DNS call on restart. All public
 // evidence remains queryable; a prior running order is durably UNKNOWN.
-func RecoverPublicOrders(ctx context.Context, db *storage.DB) error {
+func RecoverPublicOrders(ctx context.Context, db *storage.DB, sink AuditSink) error {
+	if sink == nil {
+		return ErrACMEConfig
+	}
 	rows, err := db.Query(ctx, `SELECT task_id,payload FROM cx_public_certificate_orders`)
 	if err != nil {
 		return err
@@ -103,7 +109,12 @@ func RecoverPublicOrders(ctx context.Context, db *storage.DB) error {
 	}
 	rows.Close()
 	for _, order := range pending {
-		if err = db.InTx(ctx, func(ctx context.Context, tx storage.Tx) error { return FinishPublicOrderTx(ctx, tx, order) }); err != nil {
+		if err = db.InTx(ctx, func(ctx context.Context, tx storage.Tx) error {
+			if err := FinishPublicOrderTx(ctx, tx, order); err != nil {
+				return err
+			}
+			return sink.AppendTx(ctx, tx, audit.Event{SubjectID: "controller-recovery", Action: "certificates.public.issue", Result: "failure", RequestID: publicOrderRecoveryID(order.TaskID), TaskID: order.TaskID, Source: audit.SourceSystem, ReasonCode: "restarted_public_order_unknown", At: order.UpdatedAt})
+		}); err != nil {
 			return err
 		}
 	}
@@ -131,4 +142,9 @@ func ObservePublicOrderChallengesTx(ctx context.Context, tx storage.Tx, taskID, 
 	}
 	_, err = tx.Exec(ctx, `UPDATE cx_public_certificate_orders SET payload=? WHERE task_id=?`, raw, taskID)
 	return err
+}
+
+func publicOrderRecoveryID(taskID string) string {
+	sum := sha256.Sum256([]byte(taskID))
+	return "recover-public-" + hex.EncodeToString(sum[:])
 }

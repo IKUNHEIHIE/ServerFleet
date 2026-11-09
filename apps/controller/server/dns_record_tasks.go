@@ -55,6 +55,7 @@ func parseDNSTaskRecord(raw []byte) (dnsTaskRecord, error) {
 	return record, nil
 }
 func dnsRecordSnapshot(record dns.Record) string {
+	record.ModifiedAt = record.ModifiedAt.UTC()
 	raw, _ := json.Marshal(record)
 	sum := sha256.Sum256(raw)
 	return hex.EncodeToString(sum[:])

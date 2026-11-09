@@ -240,6 +240,7 @@ func Migrations() [][]storage.Migration {
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
+		publishing.DNSBatchMigrations(),
 		recovery.Migrations(),
 		transport.RecoveryMigrations(),
 		transport.CertificateCSRMigrations(),
@@ -294,6 +295,7 @@ func AuditActions() []string {
 		actionPublicCertificateIssue,
 		actionDNSProviderInspect,
 		actionDNSRecordApply,
+		actionPublicationDNSApply, actionPublicationDNSRollback,
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",
@@ -1046,6 +1048,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if e != nil {
 			return cleanup(e)
 		}
+		if publicCertificates != nil {
+			composed.DNS = publicationDNSStage{manager: publicCertificates}
+		}
 		productionBridge = composed
 		observer, e := NewGatewayArtifactObserver(db, gatewayChain.dispatcher)
 		if e != nil {
@@ -1246,6 +1251,7 @@ func (s *Server) registerRoutes() error {
 	s.registerCertificateInstallRoutes()
 	s.registerCertificateSetRoutes()
 	s.registerPublicCertificateRoutes()
+	s.registerPublicationDNSRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {

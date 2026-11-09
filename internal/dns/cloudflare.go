@@ -184,7 +184,12 @@ type cloudflareRecordEnvelope struct {
 }
 
 type cloudflareRecord struct {
-	ID string `json:"id"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Content  string `json:"content"`
+	Proxied  *bool  `json:"proxied"`
+	Priority *int   `json:"priority"`
 }
 
 type cloudflareTokenVerify struct {

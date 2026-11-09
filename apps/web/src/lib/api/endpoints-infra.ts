@@ -223,6 +223,9 @@ export const publicationsApi = {
     apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/run`, {
       method: "POST",
     }),
+  rollbackAll: (publicationId:string)=>apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/rollback-all`,{method:"POST"}),
+  dnsTasks: (publicationId:string,signal?:AbortSignal)=>apiClient.request<PublicationDNSBatch>(`/api/v1/publications/${encodeURIComponent(publicationId)}/dns-tasks`,{signal}),
+
   rollback: (publicationId: string, stage: string) =>
     apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/rollback`, {
       method: "POST",
@@ -327,3 +330,14 @@ export const dnsRecordTasksApi = {
  remove: (zoneId:string,recordId:string,idempotencyKey:string)=>
   apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"delete",zoneId,recordId,idempotencyKey}}),
 };
+
+
+export interface PublicationDNSBatch {
+ readonly id:string;
+ readonly state:string;
+ readonly applyTaskId?:string;
+ readonly rollbackTaskId?:string;
+ readonly updatedAt:string;
+ readonly descriptor:{readonly planId:string;readonly planSha256:string;readonly zoneId:string;readonly records:readonly {readonly type:string;readonly name:string;readonly content:string;readonly existingId?:string}[]};
+ readonly observations:readonly {readonly state:string;readonly recordId?:string;readonly recordSha256?:string}[];
+}
