@@ -31,3 +31,11 @@ age为可选操作员预置CLI，固定v1.3.2并校验实际二进制SHA/版本/
 R19 源码收口同时补入 CA/DNS 重启 UNKNOWN 与审计同事务、固定分片并发锁、公开记录摘要时间统一 UTC，以及凭据使用后提交不明到 DNS UNKNOWN 的保真分类；未把此类异常降成可自动重试的 provider 拒绝。仍未执行编译或测试。
 
 用户将五项核心能力设为本包优先目标；已开始补受控执行：普通用户按节点绑定的私有 profile 校验固定程序 SHA/工作目录/参数与超时；Root 只经显式 root-owned helper、固定 sudo/helper 字节与只读祖先目录、真人管理员当前审批、独立 mTLS 每次准入及持续复核、Root 私有执行 ledger，其他 capability 默认 NORMAL 不放宽。原自检保持。此处仅进行中的源码，尚未补齐全部界面/候选或运行验证，五项均不得标 DONE；继续传输恢复、更新与实际 fence 装配。未执行 sudo、任何命令 profile 或实际外部连接。
+
+## R21：Agent 执行端续传（UNTESTED）
+
+新增 files.resume / files.resume.v1；原 UNKNOWN/canceled 执行不重跑。Controller 在打开目标前保留有界、完整摘要校验的私有源缓存；执行账本保存已确认偏移。用户在正式文件页选择历史任务，创建新的修改类人工审批任务。每帧复核当前任务、审批、目标写权限和原源读权限；重新映射目标，不借恢复取得额外权限。
+
+Agent 从旧私有暂存目录核对 task/execution/transfer/plan、长度和已确认前缀摘要；独占锁及一次 adoption 标记后复制到新执行。最终发布 intent 已存在、完整成功或结果不明均拒绝接续，保留原历史；skip/overwrite/rename 保持。正常成功并观察 Agent 终态后才释放源缓存；UNKNOWN 保留，有界配额不足拒绝新缓存。无 Proto/gen/迁移改写。
+
+待整包统一验收：实际进程重启、前缀破坏、最终发布未知、并发 adoption、当前撤权/取消、三策略和多目标源缓存；本段不表示已测试或 main 接收。

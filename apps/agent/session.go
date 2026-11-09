@@ -390,7 +390,7 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 						return errAgentSession
 					}
 					if stage == "accepted" {
-						if offer.ActionId == transport.FileCapability {
+						if transport.IsFileAction(offer.ActionId) {
 							if cfg.Files == nil || accepted.SelectedProtocolMinor < 1 || cfg.Files.Accept(workCtx, offer, seen) != nil {
 								return errAgentSession
 							}

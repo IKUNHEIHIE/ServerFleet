@@ -49,6 +49,7 @@ type fileTaskPlan struct {
 	// kind is the classic node-to-node copy; "upload" is a controller staging
 	// push with a single destination write and no source node read.
 	Kind            string
+	ResumeFrom      string
 	TransferID      string
 	SourceNode      string
 	DestinationNode string
@@ -237,6 +238,9 @@ func (w *FileExecutionWorker) live(ctx context.Context, t tasks.Task, p fileTask
 	return w.liveForNode(ctx, t, p, "")
 }
 func (w *FileExecutionWorker) liveForNode(ctx context.Context, t tasks.Task, p fileTaskPlan, frameNode string) error {
+	if p.Kind == "resume" {
+		return w.liveResume(ctx, t, p)
+	}
 	// Multi-target frames authorize on their OWN node's current permission so
 	// revoking one sibling target never breaks another target's in-flight
 	// frames; single-target plans keep the whole-task check.
@@ -344,7 +348,7 @@ func (w *FileExecutionWorker) Gate(ctx context.Context, o transport.LinkObservat
 	if err != nil {
 		return err
 	}
-	p, err := decodeFileTask(t)
+	p, err := w.executionPlan(ctx, t)
 	if err != nil || w.liveForNode(ctx, t, p, b.NodeID) != nil || b.ParentPlan != t.PlanHash || b.TransferID != p.TransferID {
 		return files.ErrTransferExecution
 	}
@@ -374,12 +378,15 @@ func (w *FileExecutionWorker) Gate(ctx context.Context, o transport.LinkObservat
 			if b.State != "accepted" {
 				return files.ErrTransferExecution
 			}
-			if r.RelativePath != parameters.RelativePath || r.Direction != parameters.Direction || r.PlanDigestSha256 != offer.PlanDigestSha256 || r.Size != parameters.Size || r.Sha256 != parameters.SHA256 || r.ResumeOffset != 0 || r.CreateParents || r.ConflictPolicy != string(p.ConflictPolicy) {
+			if r.RelativePath != parameters.RelativePath || r.Direction != parameters.Direction || r.PlanDigestSha256 != offer.PlanDigestSha256 || r.Size != parameters.Size || r.Sha256 != parameters.SHA256 || r.ResumeOffset != transport.FileResumeOffset(parameters) || r.CreateParents || r.ConflictPolicy != string(p.ConflictPolicy) {
 				return files.ErrTransferIdentity
 			}
 			return nil
 		}
 		if r := e.GetFileOpenReply(); r != nil {
+			if r.ResumeOffset != transport.FileResumeOffset(parameters) {
+				return files.ErrTransferIdentity
+			}
 			if b.State != "accepted" && b.State != "opened" && b.State != "done" {
 				return files.ErrTransferExecution
 			}
@@ -398,6 +405,7 @@ func (w *FileExecutionWorker) Gate(ctx context.Context, o transport.LinkObservat
 			if b.State != "accepted" && (b.Size != r.Size || b.SHA256 != r.Sha256) {
 				return files.ErrTransferIdentity
 			}
+			b.Offset = r.ResumeOffset
 			b.Size = r.Size
 			b.SHA256 = r.Sha256
 			b.Complete = r.Complete
@@ -460,7 +468,7 @@ func (w *FileExecutionWorker) Observe(ctx context.Context, o transport.LinkObser
 		return false, nil
 	}
 	t, err := w.server.TasksRepo.Get(ctx, task)
-	if err != nil || t.ActionID != files.ActionTransfer {
+	if err != nil || t.ActionID != files.ActionTransfer && t.ActionID != files.ActionResume {
 		return false, nil
 	}
 	b, err := w.repo.Execution(ctx, execution)
@@ -474,7 +482,7 @@ func (w *FileExecutionWorker) Observe(ctx context.Context, o transport.LinkObser
 	if e.GetTaskAck() != nil {
 		return true, w.Gate(ctx, o, offer, e)
 	}
-	p, err := decodeFileTask(t)
+	p, err := w.executionPlan(ctx, t)
 	if err != nil || w.liveForNode(ctx, t, p, o.Identity.NodeID) != nil {
 		return true, files.ErrTransferExecution
 	}
@@ -596,6 +604,9 @@ func (w *FileExecutionWorker) copyItem(ctx context.Context, t tasks.Task, p file
 	if _, err = spool.Seek(0, io.SeekStart); err != nil {
 		return 0, false, err
 	}
+	if err = w.cacheSource(ctx, t, p, i, spool, meta.Size, meta.Sha256); err != nil {
+		return 0, false, err
+	}
 	destination, opened, err := w.open(ctx, t, p, i, true, meta.Size, meta.Sha256)
 	if err != nil {
 		return 0, false, err
@@ -640,10 +651,14 @@ func (w *FileExecutionWorker) copyItem(ctx context.Context, t tasks.Task, p file
 	if err = w.live(ctx, t, p); err != nil {
 		return 0, false, err
 	}
+	w.releaseSourceCache(ctx, t, childExecutionID(t, p.DestinationNode, i))
 	return int64(meta.Size), opened.Skipped, nil
 }
 func (w *FileExecutionWorker) Execute(ctx context.Context, t tasks.Task) (map[string]tasks.WorkerResult, error) {
-	p, err := decodeFileTask(t)
+	if t.ActionID == files.ActionResume {
+		return w.executeResume(ctx, t)
+	}
+	p, err := w.executionPlan(ctx, t)
 	if err != nil {
 		return nil, err
 	}
@@ -789,6 +804,9 @@ func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p
 		errorCode = ""
 		message   = "file upload completed"
 	)
+	if err = w.cacheSource(ctx, t, p, 0, staging, uint64(p.UploadSize), digest); err != nil {
+		return nil, err
+	}
 	session, opened, e := w.open(ctx, t, p, 0, true, uint64(p.UploadSize), digest)
 	if e == nil {
 		defer session.Close()
@@ -877,6 +895,9 @@ func (w *FileExecutionWorker) executeUpload(ctx context.Context, t tasks.Task, p
 	_, err = w.server.Files.ApplyUploadTaskUpdate(finishCtx, t.ID, files.UploadTaskUpdate{Status: status, ErrorCode: errorCode, ErrorNote: message, RequestID: t.RequestID, ActualDestination: actualDestination})
 	if err != nil {
 		return nil, err
+	}
+	if code == tasks.NodeResultSucceeded {
+		w.releaseSourceCache(finishCtx, t, execution)
 	}
 	result := tasks.WorkerResult{Code: code, Message: message}
 	return map[string]tasks.WorkerResult{p.DestinationNode: result}, nil

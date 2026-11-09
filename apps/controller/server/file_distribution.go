@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"os"
 	"strconv"
 	"time"
 
@@ -354,6 +355,16 @@ func (w *FileExecutionWorker) distributeTarget(ctx context.Context, t tasks.Task
 		return
 	}
 	if e == nil {
+		file, ok := staging.(*os.File)
+		if !ok {
+			e = files.ErrSpoolUnavailable
+		} else {
+			cachePlan := p
+			cachePlan.DestinationNode = item.Node
+			e = w.cacheSource(ctx, t, cachePlan, i, file, uint64(p.UploadSize), digest)
+		}
+	}
+	if e == nil {
 		session, opened, e = w.openDistributionSession(ctx, t, p, item, i, execution, digest)
 	}
 	if e == nil && opened.RelativePath != item.WritePath {
@@ -405,6 +416,9 @@ func (w *FileExecutionWorker) distributeTarget(ctx context.Context, t tasks.Task
 		case errors.Is(e, files.ErrAgentChecksum) && beforeWrite:
 			code, targetStatus, errorCode, message = tasks.NodeResultFailed, files.TargetStateFailed, "denied_before_write", "checksum rejected before destination write"
 		}
+	}
+	if code == tasks.NodeResultSucceeded {
+		w.releaseSourceCache(ctx, t, execution)
 	}
 	return
 }

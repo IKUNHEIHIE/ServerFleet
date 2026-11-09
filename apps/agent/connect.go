@@ -156,7 +156,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		if offer == nil {
 			return errExecutionRejected
 		}
-		if offer.ActionId == transport.FileCapability && request.FileRoot != "" {
+		if transport.IsFileAction(offer.ActionId) && request.FileRoot != "" {
 			_, err := transport.FileOffer(offer)
 			return err
 		}
@@ -195,7 +195,9 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		}
 		defer files.Close()
 		executor.actions[transport.FileCapability] = files.Action()
+		executor.actions[transport.FileResumeCapability] = files.Action()
 		semantic.AllowedActions[transport.FileCapability] = "1"
+		semantic.AllowedActions[transport.FileResumeCapability] = "1"
 		semantic.AllowFileFrames = true
 		minor = 1
 	}

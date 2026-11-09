@@ -25,6 +25,7 @@ var fileIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 // An empty read digest permits stat of this authorized path at open; the observed
 // size/hash are frozen in the session before the first byte is released.
 type FileParameters struct {
+	ResumeFrom     string `json:"resumeFrom,omitempty"`
 	TransferID     string `json:"transferId"`
 	RelativePath   string `json:"relativePath"`
 	Direction      string `json:"direction"`
@@ -37,7 +38,7 @@ type FileParameters struct {
 // The sole task service currently persists map[string]string parameters. Keep
 // that exact shared port; numbers and booleans have strict canonical spellings.
 func (p FileParameters) MarshalJSON() ([]byte, error) {
-	return json.Marshal(map[string]string{"transferId": p.TransferID, "relativePath": p.RelativePath, "direction": p.Direction, "size": strconv.FormatUint(p.Size, 10), "sha256": p.SHA256, "conflictPolicy": p.ConflictPolicy, "createParents": strconv.FormatBool(p.CreateParents)})
+	return json.Marshal(FileParameterMap(p))
 }
 
 func FileID(id string) bool { return fileIDPattern.MatchString(id) }
@@ -112,8 +113,11 @@ func ParseFileParameters(raw []byte) (FileParameters, error) {
 	return p, nil
 }
 func FileOffer(o *agentv1.TaskOffer) (FileParameters, error) {
-	if o == nil || !FileID(o.TaskId) || !FileID(o.ExecutionId) || !FileDigest(o.PlanDigestSha256) || o.ActionId != FileCapability || o.ActionSchemaVersion != "1" || o.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || o.PluginId != "" {
+	if o == nil || !FileID(o.TaskId) || !FileID(o.ExecutionId) || !FileDigest(o.PlanDigestSha256) || !IsFileAction(o.ActionId) || o.ActionSchemaVersion != "1" || o.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || o.PluginId != "" {
 		return FileParameters{}, ErrLinkRejected
+	}
+	if o.ActionId == FileResumeCapability {
+		return ParseResumedFileParameters(o.CanonicalParametersJson)
 	}
 	return ParseFileParameters(o.CanonicalParametersJson)
 }

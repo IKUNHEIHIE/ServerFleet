@@ -1,3 +1,4 @@
+import { AgentResumePanel } from "./agent-resume-panel";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -986,6 +987,7 @@ export function FilesPage() {
 
   return (
     <div className="space-y-5">
+      <AgentResumePanel key={session.viewEpoch} />
       <PageHeader
         title="文件互传"
         description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；上传走真实字节通道（POST uploads → PUT content → POST complete 校验）。"

@@ -27,6 +27,7 @@ func agentAllowedActions() map[string]string {
 		transport.CertificateCSRAction:     "1",
 		transport.CertificateInstallAction: "1",
 		transport.FileCapability:           "1",
+		transport.FileResumeCapability:     "1",
 		"host.patch":                       "1",
 		"host.root":                        "1",
 	}
@@ -110,7 +111,7 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	allowed := b.allowedActions()
 	granted := make([]string, 0, len(hello.CapabilityIds))
 	for _, capability := range hello.CapabilityIds {
-		if allowed[capability] != "" && (capability != transport.FileCapability || b.files != nil) {
+		if allowed[capability] != "" && (!transport.IsFileAction(capability) || b.files != nil) {
 			granted = append(granted, capability)
 		}
 	}
@@ -122,7 +123,7 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 }
 
 func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkObservation, envelope *agentv1.Envelope) error {
-	if transport.FileEnvelope(envelope) || envelope.GetTaskOffer() != nil && envelope.GetTaskOffer().ActionId == transport.FileCapability {
+	if transport.FileEnvelope(envelope) || envelope.GetTaskOffer() != nil && transport.IsFileAction(envelope.GetTaskOffer().ActionId) {
 		if b.files == nil {
 			return transport.ErrLinkRejected
 		}

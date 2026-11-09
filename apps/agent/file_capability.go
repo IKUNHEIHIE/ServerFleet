@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"hash"
 	"io"
 	"io/fs"
 	"os"
@@ -24,16 +25,18 @@ const agentFileChunkBytes = 32 << 10
 // binding in its sole task plan; source-read and destination-write have distinct
 // gates. A browser cannot register a gate or choose the local root directory.
 type agentFileBinding struct {
+	PlanSHA256                                                               string
 	TaskID, ExecutionID, TransferID, NodeID, RelativePath, SHA256, Direction string
 	ConflictPolicy                                                           string
 	Size                                                                     int64
 }
 type agentFileGate func(context.Context, agentFileBinding, string) error
 type agentFileCapability struct {
-	mu        sync.Mutex
-	root      *os.Root
-	gate      agentFileGate
-	snapshots map[string]*os.File
+	writeHashes map[string]hash.Hash
+	mu          sync.Mutex
+	root        *os.Root
+	gate        agentFileGate
+	snapshots   map[string]*os.File
 }
 
 func openAgentFileCapability(directory string, gate agentFileGate) (*agentFileCapability, error) {
@@ -48,7 +51,7 @@ func openAgentFileCapability(directory string, gate agentFileGate) (*agentFileCa
 	if err != nil {
 		return nil, errFileCapability
 	}
-	return &agentFileCapability{root: r, gate: gate, snapshots: map[string]*os.File{}}, nil
+	return &agentFileCapability{root: r, gate: gate, snapshots: map[string]*os.File{}, writeHashes: map[string]hash.Hash{}}, nil
 }
 func (f *agentFileCapability) Close() error {
 	f.mu.Lock()
@@ -238,6 +241,16 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	if err != nil && !os.IsExist(err) {
 		return errFileCapability
 	}
+	unlock, lockErr := agentResumeLock(f.root, dir)
+	if lockErr != nil {
+		return lockErr
+	}
+	defer unlock()
+	for _, marker := range []string{"adopted.json", "commit-intent.json"} {
+		if _, e := f.root.Lstat(dir + "/" + marker); !os.IsNotExist(e) {
+			return errFileCapability
+		}
+	}
 	encoded, _ := json.Marshal(b)
 	if err == nil {
 		file, e := agentFileOpen(f.root, dir+"/binding.json", os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
@@ -279,11 +292,17 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	if f.check(ctx, b, "write-complete") != nil {
 		return errFileCapability
 	}
+	if err = f.checkpointPrefix(ctx, b, file, uint64(offset), chunk); err != nil {
+		return err
+	}
 	if !finish {
 		return nil
 	}
 	if offset+int64(len(chunk)) != b.Size || hashAgentFile(file, b.Size, b.SHA256) != nil || f.check(ctx, b, "commit") != nil {
 		return errFileCapability
+	}
+	if err = writeAgentResumeRecord(f.root, dir+"/commit-intent.json", b); err != nil {
+		return err
 	}
 	// No automatic retry after this point: a lost acknowledgement is UNKNOWN.
 	publish := agentFilePublishNoReplace

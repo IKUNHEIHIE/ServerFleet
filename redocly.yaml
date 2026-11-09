@@ -62,3 +62,6 @@ apis:
 
   v09-r20-command-profiles:
     root: api/openapi/revisions/v09-r20/command-profiles-candidate.yaml
+
+  v09-r21-file-execution-resume:
+    root: api/openapi/revisions/v09-r21/file-execution-resume-candidate.yaml

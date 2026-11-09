@@ -285,6 +285,7 @@ func AuditActions() []string {
 		"host.patch",
 		"host.root",
 		"files.transfer",
+		files.ActionResume,
 		updates.ActionInstall,
 		updates.ActionAcquireRelease,
 		"ai.budget.configure",
@@ -405,6 +406,7 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: "host.root", Description: "Execute root-level host changes on granted nodes", ResourceType: "node", AdminOnly: true},
 		{Key: files.ActionRead, Description: "Read files on granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: files.ActionWrite, Description: "Write files on granted nodes", ResourceType: "node"},
+		{Key: files.ActionResume, Description: "Resume verified unpublished file prefixes with approval", ResourceType: "node"},
 		{Key: files.ActionTransfer, Description: "Transfer files across granted nodes", ResourceType: "node"},
 		{Key: monitoring.ActionRead, Description: "Read availability monitors and traffic risks", ResourceType: "node", ReadOnly: true},
 		{Key: monitoring.ActionWrite, Description: "Create and update availability monitors", ResourceType: "node"},
@@ -793,6 +795,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	if s.FileWorker != nil {
 		workers[files.ActionTransfer] = s.FileWorker
+		workers[files.ActionResume] = s.FileWorker
 		agentBridge.fileWorker = s.FileWorker
 	}
 	if cfg.UpdateProduct != nil {
@@ -1254,6 +1257,7 @@ func (s *Server) registerRoutes() error {
 	s.registerCertificateSetRoutes()
 	s.registerPublicCertificateRoutes()
 	s.registerCommandRoutes()
+	s.registerFileResumeRoutes()
 	s.registerPublicationDNSRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)

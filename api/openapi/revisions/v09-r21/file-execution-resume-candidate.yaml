@@ -1,0 +1,49 @@
+openapi: 3.0.3
+info:
+  title: Server Fleet R21 file execution resume candidate
+  version: 0.9.0-r21
+  description: New approved execution adopts a proven unpublished prefix; never replays an unknown final publish.
+servers:
+  - url: https://controller.example.invalid
+security:
+  - session: []
+paths:
+  /api/v1/files/resume-candidates/{taskId}:
+    get:
+      operationId: fileResumeCandidates
+      summary: Read original-owner terminal task partials with retained source metadata
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Metadata candidates only; Agent prefix proof remains mandatory}
+        '403': {description: Current task read permission or original owner denied}
+        '409': {description: Resume metadata unavailable}
+  /api/v1/files/resume-tasks:
+    post:
+      operationId: createFileResumeTask
+      summary: Submit a new modifying task requiring human approval
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [executionId, idempotencyKey]
+              properties:
+                executionId: {type: string}
+                idempotencyKey: {type: string}
+      responses:
+        '202': {description: New task accepted for approval; no effect or successful resume implied}
+        '400': {description: Invalid request}
+        '403': {description: Current authorization denied}
+        '409': {description: Missing confirmed partial or retained source; task rejected}
+components:
+  securitySchemes:
+    session:
+      type: apiKey
+      in: cookie
+      name: sf_session
