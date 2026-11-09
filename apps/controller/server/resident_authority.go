@@ -2,11 +2,10 @@ package server
 
 import (
 	"context"
-	"errors"
-	"os"
 	"path/filepath"
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
@@ -17,14 +16,18 @@ import (
 // Outside the child lifecycle, but using domain-owned repositories and live
 // identity reads. It opens no HTTP server, scheduler or execution fallback.
 func ControllerSupervisorHooks(ctx context.Context, c updates.ResidentSupervisorConfig) (updates.ResidentSupervisorHooks, func() error, error) {
+	return ControllerSupervisorHooksWithRecovery(ctx, c, nil)
+}
+func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.ResidentSupervisorConfig, latch *recovery.QuarantineLatch) (updates.ResidentSupervisorHooks, func() error, error) {
 	var empty updates.ResidentSupervisorHooks
 	if c.Component != "controller" || !transport.FileDigest(c.SchemaSHA256) || !filepath.IsAbs(c.Database) {
 		return empty, nil, updates.ErrArtifactRejected
 	}
 	// Restored authorities require the live restore verifier, not this ordinary
 	// profile. Never use a supervisor to bypass a restoration quarantine.
-	if _, e := os.Lstat(filepath.Join(filepath.Dir(c.Database), "hold.json")); !errors.Is(e, os.ErrNotExist) {
-		return empty, nil, updates.ErrArtifactRejected
+	runtimeGate, e := recovery.RuntimeGuard(ctx, c.Database, latch)
+	if e != nil {
+		return empty, nil, e
 	}
 	db, e := storage.Open(ctx, storage.Config{Path: c.Database})
 	if e != nil {
@@ -63,7 +66,12 @@ func ControllerSupervisorHooks(ctx context.Context, c updates.ResidentSupervisor
 		if !i.Valid(time.Now()) || i.NodeID != c.NodeID || schema(ctx) != nil {
 			return updates.ErrApplyUnknown
 		}
-		if _, e := os.Lstat(filepath.Join(filepath.Dir(c.Database), "hold.json")); !errors.Is(e, os.ErrNotExist) {
+		if runtimeGate(ctx) != nil {
+			return updates.ErrApplyUnknown
+		}
+		binding, e := recovery.ReadResidentAuthority(ctx, db)
+		expected := recovery.ResidentAuthority{AuthorityID: c.NodeID, PolicySHA256: updates.ResidentPolicySHA(c), Directory: c.Directory, Mode: "owned"}
+		if e != nil || binding == nil || *binding != expected {
 			return updates.ErrApplyUnknown
 		}
 		t, e := repo.Get(ctx, i.TaskID)

@@ -99,3 +99,7 @@ New files.resume permission/task and files.resume.v1 capability are explicit, We
 ### R22 — supervised Controller/Agent update (candidate / UNTESTED)
 
 Typed Agent apply is explicitly enabled by node-owned mailbox configuration and remains WSS-dispatched. Read-only/current mTLS admission and commit are Controller-owned, not a new inbound execution endpoint on an Agent. Existing unified modifying task batches supply ordered canary then five, independent current human administrator approval, stop on failure/UNKNOWN, and per-node results. Controller handoff uses the external owned supervisor and separate historical install receipt; original interrupted tasks remain UNKNOWN. New updates→transport edge consumes only the typed message. No generated protocol or historical schema changes. Standalone Linux supervisor, actual signed builds, independent health/storage and restart/negative evidence await consolidated verification.
+
+### R23 — owned-process fence and explicit recovered authority (candidate / UNTESTED)
+
+[差异](revisions/v09-r23-recovery-authority.md)。新 cx/0019（预计 39 项）记录不可省略的 supervisor 权威绑定、恢复激活与历史；Root 签名 + 独立 mTLS parent 实际 stop/wait + 当前 nonce 观察后才能释放 hold。每个 runtime gate 持续复核，未知锁/不可用保持隔离；不等于物理 fence/双机认证。Controller 替换维护门与私有 parent readiness 分离；远程 Agent 终态只接受实际 supervisor 提交。代码阶段仍 UNTESTED，原始材料/旧迁移与生成保持，B03—B06/G2/发布未关闭。

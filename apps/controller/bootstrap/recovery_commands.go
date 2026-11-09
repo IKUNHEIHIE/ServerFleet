@@ -18,10 +18,11 @@ import (
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
+	"serverfleet.local/serverfleet/internal/updates"
 )
 
-// RunRecoveryCommand is a local offline-only entrypoint. Even a fully verified
-// bundle stays quarantined: this entrypoint has no Release or online adapter.
+// Stage/reconcile are offline. Explicit activate requires fresh Root authority
+// plus the independently provisioned live owned-process fence adapter.
 func RunRecoveryCommand(ctx context.Context, args []string, stdout, stderr io.Writer) error {
 	if ctx == nil || len(args) == 0 {
 		return recovery.ErrRecoveryRejected
@@ -40,12 +41,33 @@ func RunRecoveryCommand(ctx context.Context, args []string, stdout, stderr io.Wr
 	revocation := flags.Uint64("minimum-revocation-sequence", 0, "fresh independently obtained revocation high-water mark")
 	authorization := flags.String("authorization", "", "fresh offline-Root-signed recovery authorization")
 	newPKI := flags.String("new-pki-directory", "", "new separately provisioned Intermediate/key directory")
+	runtimeFile := flags.String("runtime", "", "private restored authority and independent fence client configuration")
+	supervisorFile := flags.String("resident-supervisor", "", "private new Controller supervisor configuration")
 	offline := flags.Bool("offline-ack", false, "confirm explicit offline recovery host, no live Controller or private Root in target")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || !*offline {
 		return errors.New("recovery: explicit offline acknowledgement required")
+	}
+	if args[0] == "status" {
+		c, e := updates.LoadResidentSupervisor(*supervisorFile)
+		if e != nil {
+			return e
+		}
+		latch, e := openActivatedRecovery(ctx, *runtimeFile, c)
+		if e != nil {
+			return e
+		}
+		defer latch.Close()
+		return json.NewEncoder(stdout).Encode(map[string]any{"state": "live_fence_verified", "released": true, "holdId": latch.Hold().ID, "newAuthorityId": c.NodeID, "agentReenrollmentRequired": true})
+	}
+	if args[0] == "activate" {
+		receipt, e := activateRecoveredController(ctx, *runtimeFile, *supervisorFile)
+		if e != nil {
+			return e
+		}
+		return json.NewEncoder(stdout).Encode(map[string]any{"state": "released_with_continuous_owned_process_fence", "receipt": receipt, "released": true, "agentReenrollmentRequired": true})
 	}
 	if args[0] == "reconcile" {
 		receipt, err := reconcileStagedBackup(ctx, *destination, *authorization, *newPKI, *rootPin)

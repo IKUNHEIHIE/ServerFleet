@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -86,6 +87,7 @@ type Config struct {
 	// BackupDir defaults to a private directory beside the SQLite database.
 	BackupDir             string
 	BackupDeployment      *BackupDeployment
+	RecoveryCleanup       func() error
 	RecoveryLatch         *recovery.QuarantineLatch
 	ResidentSupervisor    *updates.ResidentSupervisorConfig
 	BuildVersion          string
@@ -106,6 +108,8 @@ type Config struct {
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
+	residentHealthGate func(context.Context) error
+	recoveryCleanup    func() error
 	residentSupervisor *updates.ResidentSupervisorConfig
 	buildVersion       string
 	dbPath             string
@@ -252,6 +256,7 @@ func Migrations() [][]storage.Migration {
 		transport.CertificateChainMigrations(),
 		transport.CertificateSetMigrations(),
 		recovery.ReconciliationMigrations(),
+		recovery.ResidentAuthorityMigrations(),
 		updates.AcquisitionMigrations(),
 		audit.Migrations(),
 	}
@@ -273,6 +278,7 @@ func AuditActions() []string {
 		"auth.http.denied",
 		"auth.recovery.invalidate",
 		"recovery.reconcile",
+		"recovery.activate",
 		"auth.token.issue",
 		"auth.token.revoke",
 		"auth.approval.request",
@@ -406,7 +412,7 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: tasks.ActionCancel, Description: "Cancel tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionResume, Description: "Resume unstarted queued tasks on granted nodes", ResourceType: "node"},
-		{Key: transport.ResidentUpdateAction, ResourceTypes: []string{"node", "node_group", "service_group"}},
+		{Key: transport.ResidentUpdateAction, Description: "Install approved signed remote Agent releases", ResourceType: "node", AdminOnly: true},
 		{Key: transport.CommandCapability, Description: "Execute approved node executable profiles", ResourceType: "node"},
 		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
 		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
@@ -525,6 +531,30 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	var expectedResident *recovery.ResidentAuthority
+	if cfg.ResidentSupervisor != nil {
+		c := cfg.ResidentSupervisor
+		expectedResident = &recovery.ResidentAuthority{AuthorityID: cfg.ControllerAuthorityID, PolicySHA256: updates.ResidentPolicySHA(*c), Directory: c.Directory, Mode: "owned"}
+		if os.Getenv("SF_RESIDENT_SUPERVISOR_POLICY") != expectedResident.PolicySHA256 {
+			return cleanup(recovery.ErrQuarantined)
+		}
+		if err := db.InTx(ctx, func(txctx context.Context, tx storage.Tx) error {
+			return recovery.BindResidentAuthorityTx(txctx, tx, *expectedResident, false)
+		}); err != nil {
+			return cleanup(err)
+		}
+	}
+	runtimeGate = recovery.ResidentAuthorityGate(db, expectedResident, os.Getenv("SF_RESIDENT_SUPERVISOR_POLICY"), runtimeGate)
+	if runtimeGate(ctx) != nil {
+		return cleanup(recovery.ErrQuarantined)
+	}
+	authorityGate := runtimeGate
+	if cfg.ResidentSupervisor != nil {
+		if cfg.UpdateProduct != nil {
+			return cleanup(errors.New("controller: use independent Agent supervisors with Controller self supervision; legacy Controller-owned Agent update slot is a separate deployment mode"))
+		}
+		runtimeGate = recovery.ResidentMaintenanceGate(cfg.ResidentSupervisor.Directory, runtimeGate)
+	}
 	limits := audit.DefaultLimits()
 	limits.RequireSource = true
 	validator, err := audit.NewValidator(AuditActions(), limits)
@@ -669,7 +699,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	s = &Server{
-		buildVersion: cfg.BuildVersion, dbPath: cfg.DBPath,
+		residentHealthGate: authorityGate,
+		recoveryCleanup:    cfg.RecoveryCleanup,
+		buildVersion:       cfg.BuildVersion, dbPath: cfg.DBPath,
 		runtimeGate:       runtimeGate,
 		DB:                db,
 		Audit:             auditRecorder,
@@ -1223,7 +1255,14 @@ func (s *Server) Close() error {
 	if s.DB == nil {
 		return nil
 	}
-	return s.DB.Close()
+	err := s.DB.Close()
+	if s.recoveryCleanup != nil {
+		if e := s.recoveryCleanup(); err == nil {
+			err = e
+		}
+		s.recoveryCleanup = nil
+	}
+	return err
 }
 
 // ServeHTTP sets security headers and a request ID before dispatching to the composed mux.
@@ -1233,6 +1272,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqID := newRequestID()
 	w.Header().Set("X-Request-ID", reqID)
 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
+	// Private read-only readiness for the actual owning parent. Business APIs,
+	// workers and browser access keep the maintenance gate during replacement.
+	if r.Method == "GET" && r.URL.Path == "/internal/resident-ready" && r.URL.RawQuery == "" && s.residentSupervisor != nil {
+		nonce := os.Getenv("SF_SUPERVISOR_NONCE")
+		if len(nonce) == 32 && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-SF-Resident-Nonce")), []byte(nonce)) == 1 {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]string{"state": "owned_process_ready"})
+			})
+			recovery.RuntimeHTTP(handler, s.residentHealthGate).ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+	}
 	next := http.Handler(s.mux)
 	if s.console != nil && (r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/favicon.ico" || strings.HasPrefix(r.URL.Path, "/assets/")) {
 		next = s.console
@@ -1274,6 +1326,7 @@ func (s *Server) registerRoutes() error {
 	s.registerPublicCertificateRoutes()
 	s.registerCommandRoutes()
 	s.registerResidentUpdateRoutes()
+	s.registerRecoveryAuthorityRoutes()
 	s.registerFileResumeRoutes()
 	s.registerPublicationDNSRoutes()
 	if s.AgentLinkHTTP != nil {

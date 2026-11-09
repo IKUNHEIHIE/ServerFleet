@@ -172,6 +172,12 @@ func SignRecoveryAuthority(rootDirectory, requestPath, outputPath string) error 
 	return privatePKIWrite(output, filepath.Base(outputPath), document)
 }
 func VerifyRecoveryAuthority(rootCertificatePath, documentPath, expectedRootPin string) (*VerifiedRecoveryAuthority, error) {
+	return VerifyRecoveryAuthorityAt(rootCertificatePath, documentPath, expectedRootPin, time.Now())
+}
+
+// At is for rechecking an already audited activation, using its immutable
+// activation time. Initial emergency authority must always use current time.
+func VerifyRecoveryAuthorityAt(rootCertificatePath, documentPath, expectedRootPin string, at time.Time) (*VerifiedRecoveryAuthority, error) {
 	root, err := openPrivateDirectory(filepath.Dir(rootCertificatePath))
 	if err != nil {
 		return nil, err
@@ -182,7 +188,7 @@ func VerifyRecoveryAuthority(rootCertificatePath, documentPath, expectedRootPin 
 		return nil, err
 	}
 	anchor, err := oneCertificate(raw)
-	if err != nil || !anchor.IsCA || anchor.CheckSignatureFrom(anchor) != nil || provisionedDigest(anchor.RawSubjectPublicKeyInfo) != expectedRootPin || time.Now().Before(anchor.NotBefore) || !time.Now().Before(anchor.NotAfter) {
+	if err != nil || !anchor.IsCA || anchor.CheckSignatureFrom(anchor) != nil || provisionedDigest(anchor.RawSubjectPublicKeyInfo) != expectedRootPin || at.Before(anchor.NotBefore) || !at.Before(anchor.NotAfter) {
 		return nil, ErrLocalPKI
 	}
 	dir, err := openPrivateDirectory(filepath.Dir(documentPath))
@@ -195,7 +201,7 @@ func VerifyRecoveryAuthority(rootCertificatePath, documentPath, expectedRootPin 
 		return nil, err
 	}
 	d, err := decodeRecoveryAuthority(raw)
-	if err != nil || d.Payload.RootSPKI != expectedRootPin || !validRecoveryAuthority(d.Payload, time.Now()) {
+	if err != nil || d.Payload.RootSPKI != expectedRootPin || !validRecoveryAuthority(d.Payload, at) {
 		return nil, ErrLocalPKI
 	}
 	pub, ok := anchor.PublicKey.(*ecdsa.PublicKey)

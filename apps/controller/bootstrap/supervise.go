@@ -42,12 +42,25 @@ func RunSuperviseCommand(ctx context.Context, args []string, stdout, stderr io.W
 	var latest *transport.ResidentUpdateIntent
 	var connection string
 	if c.Component == "controller" {
-		hooks, closeHook, e = server.ControllerSupervisorHooks(ctx, c)
+		var latch *recovery.QuarantineLatch
+		if c.RecoveryRuntime != "" {
+			latch, e = openActivatedRecovery(ctx, c.RecoveryRuntime, c)
+			if e != nil {
+				return e
+			}
+			defer latch.Close()
+		}
+		hooks, closeHook, e = server.ControllerSupervisorHooksWithRecovery(ctx, c, latch)
 		if e != nil {
 			return e
 		}
 		defer closeHook()
 		hooks.Ready = controllerResidentReady(c)
+		if c.FenceConfiguration != "" {
+			hooks.ServeFence = func(ctx context.Context, control updates.ResidentFenceControl) (func() error, error) {
+				return serveRecoveryFence(ctx, c, control)
+			}
+		}
 	} else if c.Component == "agent" {
 		call := func(ctx context.Context, i transport.ResidentUpdateIntent, phase string, receipt *updates.InstallReceipt) (string, error) {
 			cert, e := supervisorNodeCertificate(c)
@@ -272,10 +285,11 @@ func controllerResidentReady(c updates.ResidentSupervisorConfig) func(context.Co
 				if report.Version != m.Version || report.SchemaSHA256 != c.SchemaSHA256 {
 					return updates.ErrHealthUnhealthy
 				}
-				req, e := http.NewRequestWithContext(ctx, "GET", strings.TrimSuffix(c.ControllerOrigin, "/")+"/healthz", nil)
+				req, e := http.NewRequestWithContext(ctx, "GET", strings.TrimSuffix(c.ControllerOrigin, "/")+"/internal/resident-ready", nil)
 				if e != nil {
 					return e
 				}
+				req.Header.Set("X-SF-Resident-Nonce", p.Nonce)
 				response, e := client.Do(req)
 				if e == nil {
 					_, re := io.Copy(io.Discard, io.LimitReader(response.Body, 8192))

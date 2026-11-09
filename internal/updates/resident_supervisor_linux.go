@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"serverfleet.local/serverfleet/internal/transport"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -31,7 +32,27 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 		return e
 	}
 	defer root.Close()
-	for _, name := range []string{"update-lock.json", "supervisor-reservation.json", "fenced.json"} {
+	var operationMu sync.Mutex
+	if _, e := root.Lstat("fenced.json"); e == nil {
+		if h.ServeFence == nil || c.Component != "controller" {
+			return ErrUpdateBusy
+		}
+		// A completed fence may serve fresh observations after parent restart, but
+		// must never start its former child. Incomplete fences stay blocked.
+		for _, name := range []string{"supervisor-reservation.json", "update-lock.json"} {
+			if _, e := root.Lstat(name); !errors.Is(e, os.ErrNotExist) {
+				return ErrUpdateBusy
+			}
+		}
+		closeFence, e := h.ServeFence(ctx, newResidentFenceControl(root, c, nil, &operationMu))
+		if e != nil {
+			return e
+		}
+		defer closeFence()
+		<-ctx.Done()
+		return ctx.Err()
+	}
+	for _, name := range []string{"update-lock.json", "supervisor-reservation.json", "fenced-intent.json"} {
 		if _, e = root.Lstat(name); !errors.Is(e, os.ErrNotExist) {
 			return ErrUpdateBusy
 		}
@@ -76,7 +97,7 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 		if closing {
 			return nil
 		} // only OS signal shutdown of this exact owned child
-		if _, e := root.Lstat("fenced.json"); !errors.Is(e, os.ErrNotExist) {
+		if _, e := root.Lstat("fenced-intent.json"); !errors.Is(e, os.ErrNotExist) {
 			return ErrApplyUnknown
 		}
 		if intent == nil {
@@ -90,7 +111,7 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 		healthEnv = "SF_CONTROLLER_HEALTH_FILE="
 	}
 	for _, v := range environment {
-		if strings.HasPrefix(v, "SF_AGENT_HEALTH_FILE=") || strings.HasPrefix(v, "SF_CONTROLLER_HEALTH_FILE=") {
+		if strings.HasPrefix(v, "SF_AGENT_HEALTH_FILE=") || strings.HasPrefix(v, "SF_CONTROLLER_HEALTH_FILE=") || strings.HasPrefix(v, "SF_RESIDENT_SUPERVISOR_POLICY=") {
 			return ErrArtifactRejected
 		}
 	}
@@ -111,11 +132,27 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 	if _, e = process.Health(ctx, installed); e != nil {
 		return e
 	}
+	if h.ServeFence != nil {
+		if c.Component != "controller" {
+			return ErrArtifactRejected
+		}
+		closeFence, e := h.ServeFence(ctx, newResidentFenceControl(root, c, process, &operationMu))
+		if e != nil {
+			return e
+		}
+		defer closeFence()
+	}
 	mailbox, e := os.OpenRoot(c.Mailbox)
 	if e != nil {
 		return e
 	}
 	defer mailbox.Close()
+	operationLocked := false
+	defer func() {
+		if operationLocked {
+			operationMu.Unlock()
+		}
+	}()
 	seen := map[string]bool{}
 	// Existing requests on supervisor startup are ambiguous: never replay them.
 	initial, e := os.ReadDir(c.Mailbox)
@@ -135,6 +172,9 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 			return ctx.Err()
 		case <-ticker.C:
 		}
+		if _, e := root.Lstat("fenced-intent.json"); !errors.Is(e, os.ErrNotExist) {
+			continue
+		} // permanently serve observations only
 		entries, e := os.ReadDir(c.Mailbox)
 		if e != nil || len(entries) > 1024 {
 			return ErrUpdateBusy
@@ -162,6 +202,10 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 			if writeResidentRecord(mailbox, "update-active.json", request) != nil {
 				return ErrUpdateBusy
 			}
+			if !operationMu.TryLock() {
+				return ErrUpdateBusy
+			}
+			operationLocked = true
 			intent = &request
 			bounded, cancel := context.WithDeadline(ctx, request.ExpiresAt)
 			current := func(phase string) error { return h.Current(bounded, request, phase) }
@@ -230,6 +274,8 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 			}
 			installed, floor = receipt.Current, max(floor, receipt.Attempted.Sequence)
 			intent = nil
+			operationLocked = false
+			operationMu.Unlock()
 		}
 	}
 }

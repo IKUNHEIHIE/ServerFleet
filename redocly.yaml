@@ -68,3 +68,5 @@ apis:
 
   v09-r22-resident-updates:
     root: api/openapi/revisions/v09-r22/resident-updates-candidate.yaml
+  v09-r23-recovery-authority:
+    root: api/openapi/revisions/v09-r23/recovery-authority-candidate.yaml

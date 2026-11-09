@@ -2,6 +2,7 @@ package recovery
 
 import (
 	"context"
+	"encoding/json"
 	"serverfleet.local/serverfleet/internal/storage"
 	"time"
 )
@@ -32,6 +33,24 @@ func RecordReconciliationTx(ctx context.Context, tx storage.Tx, r Reconciliation
 	}
 	if !validReference(r.OldAuthorityID) || !validReference(r.NewAuthorityID) || r.NewAuthorityID == r.OldAuthorityID || r.TrustGeneration == 0 || r.CreatedAt.IsZero() {
 		return ErrRecoveryRejected
+	}
+	previous, e := ReadReconciliation(ctx, tx)
+	if e == nil {
+		if previous.NewAuthorityID != r.OldAuthorityID || previous.AuthoritySHA256 == r.AuthoritySHA256 {
+			return ErrRecoveryRejected
+		}
+		raw, err := json.Marshal(previous)
+		if err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `INSERT INTO cx_recovery_reconciliation_history VALUES(?,?)`, previous.AuthoritySHA256, string(raw)); err != nil {
+			return err
+		}
+		if _, err = tx.Exec(ctx, `DELETE FROM cx_recovery_reconciliation WHERE id='current'`); err != nil {
+			return err
+		}
+	} else if !storage.IsNotFound(e) {
+		return e
 	}
 	if _, err := tx.Exec(ctx, `INSERT INTO cx_recovery_reconciliation VALUES('current',?,?,?,?,?,?,?,?,?,?,?)`, r.HoldID, r.AuthoritySHA256, r.CipherSHA256, r.ManifestSHA256, r.OldAuthorityID, r.NewAuthorityID, r.RootSPKI, r.IssuerSHA256, r.TrustGeneration, r.RevocationSequence, storage.EncodeTime(r.CreatedAt)); err != nil {
 		return err

@@ -17,6 +17,7 @@ import (
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
 	"serverfleet.local/serverfleet/apps/controller/server"
+	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/updates"
 )
 
@@ -287,7 +288,24 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		}
 		resident = &value
 	}
+	var restoredLatch *recovery.QuarantineLatch
+	var recoveryCleanup func() error
+	if resident != nil && resident.RecoveryRuntime != "" {
+		var e error
+		restoredLatch, e = openActivatedRecovery(ctx, resident.RecoveryRuntime, *resident)
+		if e != nil {
+			return nil, material, e
+		}
+		recoveryCleanup = restoredLatch.Close
+		raw, e := recovery.ReadPrivateFile(resident.RecoveryRuntime, 32<<10)
+		var rc recoveryRuntime
+		if e != nil || strictRecoveryJSON(raw, &rc) != nil || rc.NewPKIDirectory != directory || rc.RootPin != material.RootSPKI || options.CredentialKeyDir != filepath.Join(rc.Directory, "credentials") || resident.NodeID != material.AuthorityID {
+			restoredLatch.Close()
+			return nil, material, recovery.ErrQuarantined
+		}
+	}
 	composed, err := server.New(ctx, server.Config{
+		RecoveryLatch: restoredLatch, RecoveryCleanup: recoveryCleanup,
 		ResidentSupervisor: resident, BuildVersion: options.BuildVersion,
 		ACMEDeployment: acmeDeployment,
 		ReleaseSource:  releaseSource, ControllerAuthorityID: material.AuthorityID,
@@ -305,6 +323,9 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		AgentServerName:       serverName,
 	})
 	if err != nil {
+		if recoveryCleanup != nil {
+			_ = recoveryCleanup()
+		}
 		return nil, nil, err
 	}
 	return composed, material, nil

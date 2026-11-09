@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { RecoveryAuthorityPanel } from "./recovery-authority-panel";
 import { EncryptedBackupsPanel } from "./encrypted-backups-panel";
 import { useSession } from "@/app/session";
 import { Button } from "@/components/ui/button";
@@ -136,6 +137,7 @@ export function BackupsPage() {
         description="备份校验 → 灾难恢复预演 → 恢复作业。恢复密钥只传引用，不传明文。"
         badge={<span className="rounded-md border px-2 py-1 text-xs">DR</span>}
       />
+      <RecoveryAuthorityPanel key={`authority:${session.viewEpoch}`} />
       <EncryptedBackupsPanel key={session.viewEpoch} />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}

@@ -13,18 +13,21 @@ import (
 // Operator-provisioned config. Management requests cannot replace any path,
 // key, argv, health endpoint or component. The supervisor owns one child only.
 type ResidentSupervisorConfig struct {
-	Format      int             `json:"format"`
-	Component   string          `json:"component"`
-	NodeID      string          `json:"nodeId"`
-	Directory   string          `json:"directory"`
-	Mailbox     string          `json:"mailbox"`
-	Inbox       string          `json:"inbox"`
-	StageDir    string          `json:"stageDir"`
-	HealthFile  string          `json:"healthFile"`
-	Arguments   []string        `json:"arguments"`
-	Environment []string        `json:"environment"`
-	Initial     ReleaseManifest `json:"initial"`
-	Policy      ReleasePolicy   `json:"policy"`
+	FenceConfiguration       string          `json:"fenceConfiguration,omitempty"`
+	FenceConfigurationSHA256 string          `json:"fenceConfigurationSha256,omitempty"`
+	RecoveryRuntime          string          `json:"recoveryRuntime,omitempty"`
+	Format                   int             `json:"format"`
+	Component                string          `json:"component"`
+	NodeID                   string          `json:"nodeId"`
+	Directory                string          `json:"directory"`
+	Mailbox                  string          `json:"mailbox"`
+	Inbox                    string          `json:"inbox"`
+	StageDir                 string          `json:"stageDir"`
+	HealthFile               string          `json:"healthFile"`
+	Arguments                []string        `json:"arguments"`
+	Environment              []string        `json:"environment"`
+	Initial                  ReleaseManifest `json:"initial"`
+	Policy                   ReleasePolicy   `json:"policy"`
 	// Controller uses its live owner repositories even while the child is down.
 	Database     string `json:"database,omitempty"`
 	SchemaSHA256 string `json:"schemaSha256,omitempty"`
@@ -40,6 +43,7 @@ type ResidentSupervisorConfig struct {
 	Feed                  *HTTPReleaseFeed `json:"feed,omitempty"`
 }
 type ResidentSupervisorHooks struct {
+	ServeFence   func(context.Context, ResidentFenceControl) (func() error, error)
 	Current      func(context.Context, transport.ResidentUpdateIntent, string) error
 	Ready        func(context.Context, ReleaseManifest, OwnedProcessObservation) error
 	BeforeStop   func(context.Context, transport.ResidentUpdateIntent) error
@@ -74,6 +78,12 @@ func LoadResidentSupervisor(filename string) (ResidentSupervisorConfig, error) {
 	root, e := readSizedRegularFile(c.RootCertificate, 128<<10)
 	if e != nil || releaseDigest(root) != c.RootCertificateSHA256 {
 		return c, ErrArtifactRejected
+	}
+	if c.FenceConfiguration != "" {
+		b, e := readSizedRegularFile(c.FenceConfiguration, 32<<10)
+		if e != nil || !validPlanDigest(c.FenceConfigurationSHA256) || releaseDigest(b) != c.FenceConfigurationSHA256 {
+			return c, ErrArtifactRejected
+		}
 	}
 	if c.Feed != nil {
 		root, e := readSizedRegularFile(c.FeedRootCertificate, 128<<10)

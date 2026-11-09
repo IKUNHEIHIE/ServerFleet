@@ -169,6 +169,13 @@ func (s *OwnedProcessSupervisor) Health(ctx context.Context, m ReleaseManifest) 
 	check, stop := context.WithTimeout(ctx, 5*time.Second)
 	defer stop()
 	readyErr := s.cfg.Ready(check, m, OwnedProcessObservation{p.cmd.Process.Pid, p.nonce, p.started})
+	// A child that actually exited is explicit unhealthy evidence even if the
+	// readiness callback was waiting on its now absent health report.
+	select {
+	case <-p.done:
+		return HealthEvidence{}, ErrHealthUnhealthy
+	default:
+	}
 	if check.Err() != nil || s.cfg.Gate(ctx, m, "supervisor-health-complete") != nil {
 		return HealthEvidence{}, ErrApplyUnknown
 	}
@@ -274,4 +281,27 @@ func (s *OwnedProcessSupervisor) BindExecution(id string) error {
 	}
 	s.cfg.ExecutionID = id
 	return nil
+}
+
+// Only trusted recovery composition may call this after authenticating offline
+// Root authority. It stops THIS object's child, waits, and never adopts a PID.
+func (s *OwnedProcessSupervisor) FenceOwned(ctx context.Context) (ReleaseManifest, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.process == nil {
+		return ReleaseManifest{}, ErrApplyUnknown
+	}
+	image := s.process.manifest
+	gate := s.cfg.Gate
+	s.cfg.Gate = func(context.Context, ReleaseManifest, string) error { return nil }
+	defer func() { s.cfg.Gate = gate }()
+	if e := s.stopLocked(ctx, image); e != nil {
+		return ReleaseManifest{}, e
+	}
+	return image, nil
+}
+func (s *OwnedProcessSupervisor) StoppedOwned() bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.process == nil
 }

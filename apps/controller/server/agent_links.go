@@ -418,6 +418,21 @@ func (b *agentLinkBridge) taskFinished(ctx context.Context, observation transpor
 	if finished.GetTaskId() == "" {
 		return transport.ErrLinkRejected
 	}
+	// A mailbox action can report its own shutdown, never an installation.
+	// Only the separately authenticated supervisor commit with fresh connected
+	// health may finish a remote update. Ignore stale normal-Agent completions.
+	if task, e := b.tasksRepo.Get(ctx, finished.TaskId); e == nil && task.ActionID == transport.ResidentUpdateAction {
+		found := false
+		for _, target := range task.Targets {
+			if target.NodeID == observation.Identity.NodeID {
+				found = true
+			}
+		}
+		if !found || finished.ExecutionId != executionIDFor(task.ID, observation.Identity.NodeID, task.PlanHash) {
+			return transport.ErrLinkRejected
+		}
+		return nil
+	}
 	code := tasks.NodeResultUnknown
 	switch finished.GetResult() {
 	case agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED:

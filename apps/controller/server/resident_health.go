@@ -33,7 +33,7 @@ func (s *Server) RunResidentHealth(ctx context.Context, version string) error {
 	ticker := time.NewTicker(time.Second)
 	defer ticker.Stop()
 	for {
-		if s.runtimeGate(ctx) != nil {
+		if s.residentHealthGate == nil || s.residentHealthGate(ctx) != nil {
 			return updates.ErrApplyUnknown
 		}
 		schema, e := updates.SQLiteSchemaFingerprint(ctx, s.DB)

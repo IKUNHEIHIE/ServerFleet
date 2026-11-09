@@ -18,3 +18,5 @@ V09-CLOUD-CODE-COMPLETE-01；本表为实现登记，全部 UNTESTED，用户要
 R21（UNTESTED）：正式文件页增加“Agent 执行恢复”：按历史任务查看可核验部分，重新审批建立新恢复任务；仅恢复未发布的已确认前缀。旧任务 UNKNOWN/canceled 不改成功；缺源缓存、最终写入状态不明、撤权或 Agent 证明不匹配均拒绝。
 
 R22（代码中，UNTESTED）：系统更新页新增远程 Agent 灰度批次和受监督 Controller 自更新表单；只填版本/已有 Key ID/公开摘要/节点，不能从网页填可执行路径/来源/环境。实际更新需要独立真人管理员审批。Controller 原任务 UNKNOWN 和监督进程历史安装回执分开展示，不把下载、202 或历史健康当成当前活跃健康。
+
+R23核心包收口（UNTESTED）：备份页新增只读恢复权威观察；实际激活仅离线Root授权 + 独立parent实际fence后显式CLI完成，页面不能解除隔离或上传私钥。更新替换期间业务保持维护，独立parent验证真实进程/当前nonce/schema；Agent签名更新不接受普通Agent结束消息抢先判成功。Controller/Agent各有待签名构建manifest。新增第39项迁移；正常/负向/实际进程/普通UID/浏览器仍待集中验收，不称完整v0.9或灾备已通过。

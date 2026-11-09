@@ -47,3 +47,11 @@ Agent 从旧私有暂存目录核对 task/execution/transfer/plan、长度和已
 Controller 自更新由独立父进程执行，关闭/替换/重启自己拥有的 Controller 子进程；本地 owner Repo/Identity 在停机期间继续检查冻结审批、当前管理员与期限，初次 admit 必须 running。只有同一内存中的已接收事务可以完成进程交接，重启父进程不恢复未知请求。Controller 原任务重启后 UNKNOWN 不伪改成功，正式更新页独立读取实际安装回执与当前构建版本。停止前生成真实一致 SQLite 快照，实际 schema 指纹变化则不自动回滚旧程序。Agent 回滚要求原私有状态树仍相同；不复制/回滚身份成旧信任。缺监督进程/真实构建/私有目录/现有身份均拒绝，不自动装 sudoers/systemd/云服务。
 
 新增 updates→transport 仅用于公开 typed 本地交接消息，Agent 仍不导入 updates/DB。无旧 SQL/生成/锁/CI 改写。需整包实际构建与正常、负向、重启、未知和灰度验证；不提前标 B05/发布准入关闭。
+
+## R23：恢复激活与核心包收口（代码已写，集中验收待进行）
+
+独立 supervisor 通过私有配置固定 mTLS peer/CA/服务端 leaf、公开 Root pin 和最低代次。实际 stop/wait 自己的旧 Controller、持久 fence-intent/完成证明；未知更新锁/陌生进程不接管。父进程重启只继续服务当前 fence 观察，不重新启动旧 child。stage/reconcile 后显式 activate 用新 Root 授权/新 Intermediate/新权威/高水位，实际 fence 后事务绑定新 supervisor、激活/audit，最后解除 hold。旧 owner DB 启动时不能省略 supervisor 标志绕过隔离；新权威每个运行门持续读新 nonce fence，断网/证明变化即拒绝。追加 cx/0019，预计迁移39项，旧SQL/hash保持。正式备份页有只读恢复权威状态；不在线接收 Root/恢复私钥。
+
+核心构建现在同时产生 Controller/Agent 待离线签名 manifest。Controller 替换期间业务和任务保持维护拒绝，只有实际 parent 的随机 nonce 可读基础权威保护的 readiness；真实已退出进程可归类 unhealthy，其他未知不冒充可回滚。Agent 普通结束消息不能抢先把 mailbox 更新判成安装结果；监督进程实际健康提交才记逐节点结果。历史 Controller 内拥有本地 Agent slot 的部署与新独立监督部署明确分开，不创建两套进程所有权。
+
+五项均已有产品源码与入口：R20普通/Root受控执行、R21节点确认前缀恢复、R22 Controller/远程Agent灰度更新、R23实际拥有进程的灾备隔离与新信任激活。**代码写入不是验收完成**；整包正常/负向/重启、真实构建/浏览器/普通UID/提权授权及实际双机仍须验证；没有执行 sudo、生产/VPS/外部账号或物理隔离。其他较低优先级与完整G2/发布缺口继续OPEN。下一阶段按用户要求只进行一次集中验收并集中修复发现的问题，不逐处反复跑全套。

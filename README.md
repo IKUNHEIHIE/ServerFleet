@@ -6,7 +6,7 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 ## 当前集中编码包（未验收）
 
-2026-11-09 正在 `feature/cloud-v09-code-completion-20261109` 连续补齐代码，起点为已接收 #16/main `9738648`。新增发布、PKI/恢复/备份、可信发行获取、节点独立 CSR/证书、公网签发和统一 DNS 执行/补偿等实现目前 **UNTESTED**；预计迁移 38 项只表示分支代码登记。按用户要求完成整包代码后统一验收，不用下方历史 CI 证明本分支。实际剩余项见[编码进度](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CODE-COMPLETION.md)与[正式界面变化](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/PRODUCT-DELTA.md)。G2、B03—B06 与发布准入继续开放。
+2026-11-09 正在 `feature/cloud-v09-code-completion-20261109` 连续补齐代码，起点为已接收 #16/main `9738648`。新增发布、PKI/恢复/备份、可信发行获取、节点独立 CSR/证书、公网签发、统一 DNS 执行/补偿，以及受控命令、节点续传、Controller/Agent 更新和持续恢复隔离等实现目前 **UNTESTED**；预计迁移 39 项只表示分支代码登记。按用户要求完成整包代码后统一验收，不用下方历史 CI 证明本分支。实际剩余项见[编码进度](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CODE-COMPLETION.md)与[正式界面变化](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/PRODUCT-DELTA.md)。G2、B03—B06 与发布准入继续开放。
 
 ## 已核验的产品基线
 
