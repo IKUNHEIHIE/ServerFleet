@@ -25,7 +25,7 @@ function dnsRoutes(): FetchRoutes {
       jsonResponse({ items: [{ id: "r-1", zoneId: "z-1", type: "A", name: "www", content: "203.0.113.10", ttl: 120, proxied: false }] }),
     "GET /api/v1/dns/zones/z-2/records": () => jsonResponse({ items: [] }),
     "POST /api/v1/dns/record-tasks": () => jsonResponse({taskId:"dns-record-task",status:"awaiting_approval",planHash:"a".repeat(64)},202),
-    "POST /api/v1/dns/inspection-tasks": () => jsonResponse({taskId:"dns-check-task",status:"queued"},202),
+    "POST /api/v1/dns/provider-tasks": () => jsonResponse({taskId:"dns-check-task",status:"queued"},202),
     "POST /api/v1/dns/accounts": (_init) =>
       jsonResponse({ id: "a-3", providerCode: "cloudflare", displayName: "New", enabled: true, isDefault: false, credentialStatus: "pending_verification" }, 201),
     "POST /api/v1/dns/accounts/a-1/test": () => jsonResponse({ status: "success", zoneRead: true, recordWrite: true }),

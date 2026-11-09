@@ -136,6 +136,11 @@ func serveRecoveryFence(ctx context.Context, c updates.ResidentSupervisorConfig,
 		var request updates.ResidentFenceRequest
 		var record updates.ResidentFenceRecord
 		if r.URL.Path == "/v1/fence" {
+			entries, e := os.ReadDir(f.AuthorizationDirectory)
+			if e != nil || len(entries) > 32 {
+				reject()
+				return
+			} // bound the authenticated immutable-document cache
 			if len(call.Authorization) == 0 || call.Request != nil {
 				reject()
 				return
