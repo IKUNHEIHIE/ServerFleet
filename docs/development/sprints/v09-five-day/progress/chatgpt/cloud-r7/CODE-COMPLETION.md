@@ -15,3 +15,5 @@ age为可选操作员预置CLI，固定v1.3.2并校验实际二进制SHA/版本/
 继续写入可信HTTPS Agent发行获取（仍UNTESTED）：-release-source固定origin/IP/TLS信任，签名manifest先验与有界实际工件字节校验，经当前Controller权威统一任务进入独占签名收件箱，manifest最后发布，不覆盖已存在/部分版本，UNKNOWN不重放。正式Web提供来源元数据与独立拉取任务；不会把拉取当安装/健康成功。追加cx/0014_release_acquisition，当前预计33项；R13差异独立登记。实际外部来源未访问，尚未编译/运行/测试。
 
 补入恢复包的固定白名单启动配置快照和已验证文件/网关/更新/备份/发行源配置及公开CA；仍排除Root/Agent/网站私钥和在线恢复identity。配置/材料SHA在每阶段冻结复核，备份归档实际写入字节再次核对，并同步私有目录。Web持续显示无已确认异地副本与未配置每日任务身份告警。仍UNTESTED；未实现的异地上传/保留/真实fence及远程全批次等未借此关单。
+
+2026-11-09代码环境已恢复，08916fa之后未提交CSR代码完整保留。继续完成typed公开CSR回执存储/audit事务/终态、-certificate-root Agent能力、正式Web、精确待派发复权和R14候选；ACME可消费公开节点CSR且在网络副作用之前核验。追加cx/0015_agent_certificate_csr，当前预计34项；仍未编译/运行/测试，CSR生成不替代实际签发/安装/HTTPS。旧ENVIRONMENT-INTERRUPTION保留历史，不再将当时断线写成当前状态。

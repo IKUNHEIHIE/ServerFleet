@@ -229,3 +229,28 @@ export const publicationsApi = {
       body: { stage },
     }),
 };
+
+export interface NodeCSRTask {
+  readonly taskId: string;
+  readonly status: string;
+  readonly planHash: string;
+  readonly approvalRequired: boolean;
+}
+export interface NodeCSRReceipt {
+  readonly taskId: string;
+  readonly planHash: string;
+  readonly observedAt: string;
+  readonly result: {
+    readonly nodeId: string;
+    readonly domain: string;
+    readonly keyRef: string;
+    readonly csrDerBase64: string;
+    readonly sha256: string;
+  };
+}
+export const nodeCSRApi = {
+  create: (body: { nodeId: string; domain: string; keyRef: string; idempotencyKey: string }) =>
+    apiClient.request<NodeCSRTask>("/api/v1/certificates/csr-tasks", { method: "POST", body }),
+  get: (taskId: string, signal?: AbortSignal) =>
+    apiClient.request<NodeCSRReceipt>(`/api/v1/certificates/csr-tasks/${encodeURIComponent(taskId)}`, { signal }),
+};

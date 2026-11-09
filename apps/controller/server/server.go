@@ -239,6 +239,7 @@ func Migrations() [][]storage.Migration {
 		publishing.TargetMigrations(),
 		recovery.Migrations(),
 		transport.RecoveryMigrations(),
+		transport.CertificateCSRMigrations(),
 		recovery.ReconciliationMigrations(),
 		updates.AcquisitionMigrations(),
 		audit.Migrations(),
@@ -282,6 +283,7 @@ func AuditActions() []string {
 		"ai.budget.configure",
 		"ai.budget.reserve",
 		"gateway.provision",
+		transport.CertificateCSRAction,
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",
@@ -366,6 +368,7 @@ func AuditActions() []string {
 // ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
 func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
+		{Key: transport.CertificateCSRAction, Description: "Create node-local website keys and export only a public CSR", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupRead, Description: "Read owned cleanup records", ResourceType: "node", ReadOnly: true, AdminOnly: true},
 		{Key: certificates.ActionCleanupRetry, Description: "Retry owned cleanup records", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupCancel, Description: "Cancel owned cleanup records", ResourceType: "node", AdminOnly: true},
@@ -1189,6 +1192,7 @@ func (s *Server) registerRoutes() error {
 	s.registerPluginRoutes()
 	s.registerUpdateRecoveryRoutes()
 	s.registerReleaseSourceRoutes()
+	s.registerCertificateCSRRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {

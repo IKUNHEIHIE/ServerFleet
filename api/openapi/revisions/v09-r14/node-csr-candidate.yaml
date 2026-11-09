@@ -1,0 +1,91 @@
+openapi: 3.1.0
+info:
+  title: Node-local website key and public CSR tasks (PROPOSED)
+  version: 0.9.0-r14-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/certificates/csr-tasks:
+    post:
+      operationId: createNodeCSRTaskR14
+      summary: Submit one approved node-local key-generation task
+      description: Current administrator and explicit target-node resources are required. Modifying task, mandatory revision/plan-bound human approval and current dispatch authorization; no AI/plugin/root Shell or direct Agent connection. Agent must explicitly configure a Linux ordinary-user 0700 certificate-root outside the file root. Every key reference is exclusive; existing or partial material is never overwritten or automatically replayed. Only public P-256 CSR proof leaves the node.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nodeId, domain, keyRef, idempotencyKey]
+              properties:
+                nodeId: {$ref: '#/components/schemas/ID'}
+                domain: {type: string, maxLength: 253}
+                keyRef: {type: string, minLength: 1, maxLength: 96, pattern: '^[a-zA-Z0-9_-]+$'}
+                idempotencyKey: {$ref: '#/components/schemas/ID'}
+      responses:
+        '202':
+          description: Durable unified task, not a generated key or certificate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, status, planHash, approvalRequired]
+                properties:
+                  taskId: {$ref: '#/components/schemas/ID'}
+                  status: {type: string}
+                  planHash: {$ref: '#/components/schemas/Digest'}
+                  approvalRequired: {const: true}
+        '400': {description: Invalid bounded request, domain or opaque key reference}
+        '403': {description: Current administrator, node resource, HTTPS or Origin/CSRF denied}
+        '409': {description: Task rejected}
+  /api/v1/certificates/csr-tasks/{taskId}:
+    parameters:
+      - in: path
+        name: taskId
+        required: true
+        schema: {$ref: '#/components/schemas/ID'}
+    get:
+      operationId: readCompletedNodeCSRTaskR14
+      summary: Read only the public receipt of a completed successful CSR task
+      description: Current administrator and task/node read access, exact persisted task/plan/node and actual public CSR signature/hash are checked. A success frame without the exact execution-bound CSR receipt is UNKNOWN. No private key, filesystem path, stdout fallback or inferred certificate is returned.
+      responses:
+        '200':
+          description: Public CSR observed over authenticated Agent WSS, not a signed/installed certificate
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, planHash, observedAt, result]
+                properties:
+                  taskId: {$ref: '#/components/schemas/ID'}
+                  planHash: {$ref: '#/components/schemas/Digest'}
+                  observedAt: {type: string, format: date-time}
+                  result: {$ref: '#/components/schemas/PublicCSR'}
+        '400': {description: Unexpected body or query}
+        '403': {description: Current administrator, task/node read or HTTPS denied}
+        '404': {description: No matching CSR task}
+        '409': {description: Task not successfully complete or public receipt unavailable}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  schemas:
+    ID: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_-]+$'}
+    Digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+    PublicCSR:
+      type: object
+      additionalProperties: false
+      required: [nodeId, domain, keyRef, csrDerBase64, sha256]
+      properties:
+        nodeId: {$ref: '#/components/schemas/ID'}
+        domain: {type: string}
+        keyRef: {type: string, maxLength: 96, pattern: '^[a-zA-Z0-9_-]+$'}
+        csrDerBase64: {type: string, maxLength: 5464, contentEncoding: base64}
+        sha256: {$ref: '#/components/schemas/Digest'}

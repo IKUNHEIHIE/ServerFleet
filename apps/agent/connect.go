@@ -183,6 +183,15 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		semantic.AllowFileFrames = true
 		minor = 1
 	}
+	if request.CertificateRoot != "" {
+		capability, e := newCertificateCSRCapability(request.CertificateRoot, facts.NodeID, request.FileRoot)
+		if e != nil {
+			return errAgentConnect
+		}
+		defer capability.Close()
+		executor.actions[transport.CertificateCSRAction] = capability.Action()
+		semantic.AllowedActions[transport.CertificateCSRAction] = "1"
+	}
 	if request.GatewayPrefix != "" {
 		if !agentPathWithinRoot(request.FileRoot, request.GatewayPrefix) {
 			return errAgentConnect

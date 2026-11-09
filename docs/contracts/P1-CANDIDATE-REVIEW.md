@@ -77,3 +77,5 @@ Wave6-R3补记（2026-11-02）：已接收文件可信CLI、skip/overwrite/renam
 集中代码完成包R12候选（UNTESTED）：Controller本地统一任务/加密备份/离线隔离恢复、32项追加迁移与多网关结构回执差异见[审查登记](revisions/v09-r12-backups-controller-tasks.md)。主控单写，旧候选/Proto/gen/原始资料/已接收SQL/hash保持；未冻结、未获实际fence/Runtime/发布认证。
 
 集中代码包R13（UNTESTED）：可信HTTPS Agent工件拉取经Controller本地统一任务，独立获取/安装，追加第33项迁移，见[差异](revisions/v09-r13-release-source.md)。固定地址/签名/实际字节和UNKNOWN不重放有效；没有默认外部源/秘密/新Runtime或发布认证。
+
+R14集中编码候选（UNTESTED）：节点本地网站私钥/公开CSR统一任务、精确待派发复权和公共回执事务；新增第34项迁移。见[差异](revisions/v09-r14-node-csr.md)。旧候选/Proto/gen/已接收SQL保持；CSR不是ACME签发或HTTPS成功，不关闭B04/G2。

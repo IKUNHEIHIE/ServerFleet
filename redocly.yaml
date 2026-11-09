@@ -41,3 +41,6 @@ apis:
 
   v09-r13-release-source:
     root: api/openapi/revisions/v09-r13/release-source-candidate.yaml
+
+  v09-r14-node-csr:
+    root: api/openapi/revisions/v09-r14/node-csr-candidate.yaml

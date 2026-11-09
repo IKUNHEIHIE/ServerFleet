@@ -960,6 +960,15 @@ func planHash(task Task) string {
 		return ""
 	}
 	hash := sha256.New()
+	if task.TargetType == TargetTypeController {
+		hash.Write([]byte("serverfleet.controller-task.v1\x00"))
+		hash.Write([]byte(task.TargetResourceID))
+		hash.Write([]byte{0})
+		hash.Write([]byte(task.Source))
+		hash.Write([]byte{0})
+		hash.Write([]byte(fmt.Sprintf("%t", task.ApprovalRequired)))
+		hash.Write([]byte{0})
+	}
 	hash.Write([]byte(task.ActionID))
 	hash.Write([]byte{0})
 	hash.Write([]byte(task.OperationClass))

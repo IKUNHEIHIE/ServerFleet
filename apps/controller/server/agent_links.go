@@ -22,10 +22,11 @@ import (
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
 	return map[string]string{
-		"tasks.command":          "1",
-		transport.FileCapability: "1",
-		"host.patch":             "1",
-		"host.root":              "1",
+		"tasks.command":                "1",
+		transport.CertificateCSRAction: "1",
+		transport.FileCapability:       "1",
+		"host.patch":                   "1",
+		"host.root":                    "1",
 	}
 }
 
@@ -33,6 +34,9 @@ func agentAllowedActions() map[string]string {
 // gateway wiring has installed its real child observer and artifact channel.
 func (b *agentLinkBridge) allowedActions() map[string]string {
 	allowed := agentAllowedActions()
+	if b == nil || b.recordCSR == nil {
+		delete(allowed, transport.CertificateCSRAction)
+	}
 	if b != nil && b.gatewayChild != nil {
 		allowed[gateway.NginxActionApply] = "1"
 		allowed[gateway.NginxActionRemove] = "1"
@@ -75,6 +79,8 @@ type agentLinkBridge struct {
 	files        *transport.FileClient
 	fileWorker   *FileExecutionWorker
 	gatewayChild *GatewayArtifactObserver
+	recordCSR    func(context.Context, transport.CertificateCSRReceipt) error
+	readCSR      func(context.Context, string) (transport.CertificateCSRReceipt, error)
 	now          func() time.Time
 
 	seqMu     sync.Mutex
@@ -124,6 +130,23 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	}
 	if task.PlanHash != offer.GetPlanDigestSha256() || task.ActionID != offer.GetActionId() || task.PluginID != offer.GetPluginId() {
 		return transport.ErrLinkRejected
+	}
+	if string(offer.CanonicalParametersJson) != task.Params || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.ScopeRevision != task.ScopeRevision {
+		return transport.ErrLinkRejected
+	}
+	if b.tasks == nil {
+		return transport.ErrLinkRejected
+	}
+	if _, err = b.tasks.CheckDispatch(ctx, task.ID, task.PlanHash, observation.Identity.NodeID); err != nil {
+		return transport.ErrLinkRejected
+	}
+	if task.ActionID == transport.CertificateCSRAction {
+		if task.OperationClass != tasks.OperationClassModifying || !task.ApprovalRequired || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || len(task.Targets) != 1 {
+			return transport.ErrLinkRejected
+		}
+		if _, err := transport.ParseCertificateCSRRequest([]byte(task.Params)); err != nil {
+			return transport.ErrLinkRejected
+		}
 	}
 	if b.allowedActions()[task.ActionID] != offer.GetActionSchemaVersion() {
 		return transport.ErrLinkRejected
@@ -206,6 +229,9 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 		return b.taskLog(ctx, observation, started.GetTaskId(), "info", "agent reported task started")
 	case envelope.GetTaskOutput() != nil:
 		output := envelope.GetTaskOutput()
+		if consumed, err := b.observeCertificateCSR(ctx, observation, output); consumed {
+			return err
+		}
 		message := sanitizeAgentOutput(output.GetChunk())
 		if output.GetTruncated() {
 			message += " [output truncated]"
@@ -348,6 +374,20 @@ func (b *agentLinkBridge) taskFinished(ctx context.Context, observation transpor
 		code = tasks.NodeResultCanceled
 	case agentv1.ExecutionResult_EXECUTION_RESULT_TIMED_OUT:
 		code = tasks.NodeResultTimedOut
+	}
+	if task, err := b.tasksRepo.Get(ctx, finished.TaskId); err == nil && task.ActionID == transport.CertificateCSRAction {
+		if len(task.Targets) != 1 || task.Targets[0].NodeID != observation.Identity.NodeID || finished.ExecutionId != executionIDFor(task.ID, observation.Identity.NodeID, task.PlanHash) {
+			return transport.ErrLinkRejected
+		}
+		if code == tasks.NodeResultSucceeded {
+			if b.readCSR == nil {
+				return transport.ErrLinkRejected
+			}
+			receipt, e := b.readCSR(ctx, task.ID)
+			if e != nil || receipt.PlanSHA256 != task.PlanHash || receipt.NodeID != observation.Identity.NodeID {
+				code = tasks.NodeResultUnknown
+			}
+		}
 	}
 	message := sanitizeAgentCode(finished.GetErrorCode())
 	if message == "" {
