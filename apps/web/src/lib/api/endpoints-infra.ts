@@ -317,3 +317,13 @@ export const publicCertificateApi = {
  get: (taskId:string)=>apiClient.request<PublicCertificateOrder>(`/api/v1/certificates/public-tasks/${encodeURIComponent(taskId)}`),
  inspectDNS: (body:{operation:"test"|"import-zone";accountId:string;zoneId?:string;providerZoneId?:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/dns/provider-tasks",{method:"POST",body}),
 };
+
+
+export const dnsRecordTasksApi = {
+ create: (zoneId:string,record:DNSRecordInput,idempotencyKey:string)=>
+  apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"create",zoneId,recordJson:JSON.stringify({...record,ttl:record.ttl??0,proxied:record.proxied??false}),idempotencyKey}}),
+ update: (zoneId:string,recordId:string,record:DNSRecordInput,idempotencyKey:string)=>
+  apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"update",zoneId,recordId,recordJson:JSON.stringify({...record,ttl:record.ttl??0,proxied:record.proxied??false}),idempotencyKey}}),
+ remove: (zoneId:string,recordId:string,idempotencyKey:string)=>
+  apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"delete",zoneId,recordId,idempotencyKey}}),
+};

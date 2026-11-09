@@ -85,3 +85,5 @@ R15集中编码（UNTESTED）：公开证书链批准安装/节点私钥留存/t
 R16集中代码候选（UNTESTED）：不可变多节点独立证书集合及按实际gateway节点选择路径/叶证书，新增第36项迁移，见[差异](revisions/v09-r16-node-certificate-sets.md)。不复制网站私钥、不跨节点套用单槽、不把集合或任务登记称作HTTPS成功；完整真实组合与G2/发布仍OPEN。
 
 R17 集中编码候选（UNTESTED）：实际节点 CSR 的批准公开签发、私有 ACME account signer 与回调式固定版本 Cloudflare 凭据、Controller DNS 检查/已有 Zone 导入任务、cleanup 当前 claim/lease，以及 DNS 意图/实际 ID/未知结果持久证据；新增第 37 项迁移。见[差异](revisions/v09-r17-public-certificate-tasks.md)。不导出网站私钥、不复用 Root/Issuer、不放行旧直接 HTTP provider 执行、不自动重放未知 CA/DNS 副作用；尚未编译或验收，G2/发布保持 OPEN。
+
+R18 集中编码（UNTESTED）：正式 DNS 记录 create/update/delete 强制统一 modifying 人工审批任务，当前 Zone/凭据与记录快照复核、有界公开 record 片段、正式 Web 任务回执与 UNKNOWN 分类。见[差异](revisions/v09-r18-dns-record-tasks.md)。不扩大通用参数限额、旧直接 HTTP 无 provider scope、不新增迁移；发布父计划 DNS 接线仍须继续，G2/发布不关闭。

@@ -293,6 +293,7 @@ func AuditActions() []string {
 		"certificates.node_sets.create",
 		actionPublicCertificateIssue,
 		actionDNSProviderInspect,
+		actionDNSRecordApply,
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",

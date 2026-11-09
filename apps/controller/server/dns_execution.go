@@ -22,8 +22,9 @@ func (m *publicCertificateExecution) inspectionExecution(authority string, worke
 	}
 	m.authorityID = authority
 	workers[actionDNSProviderInspect] = dnsInspectionWorker{manager: m}
-	return &tasks.ControllerExecution{AuthorityID: authority, Actions: map[string]tasks.ControllerAction{actionDNSProviderInspect: {}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
-		if action != actionDNSProviderInspect {
+	workers[actionDNSRecordApply] = dnsMutationWorker{manager: m}
+	return &tasks.ControllerExecution{AuthorityID: authority, Actions: map[string]tasks.ControllerAction{actionDNSProviderInspect: {}, actionDNSRecordApply: {RequireApproval: true}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
+		if action != actionDNSProviderInspect && action != actionDNSRecordApply {
 			return auth.ErrDenied
 		}
 		return m.s.Identity.AuthorizeAdministrator(ctx, subject)
@@ -34,6 +35,9 @@ func (m *publicCertificateExecution) validExecutionTask(t tasks.Task) bool {
 		return false
 	}
 	switch t.ActionID {
+	case actionDNSRecordApply:
+		_, _, err := m.mutationParams(t)
+		return err == nil
 	case actionPublicCertificateIssue:
 		_, _, err := m.requestParams(t)
 		return err == nil && t.TargetType != tasks.TargetTypeController
@@ -98,6 +102,7 @@ func (w dnsInspectionWorker) Execute(ctx context.Context, t tasks.Task) (map[str
 	return result(tasks.NodeResultFailed, "unsupported DNS inspection")
 }
 func (s *Server) registerDNSProviderTaskRoutes() {
+	s.registerDNSRecordTaskRoutes()
 	s.mux.HandleFunc("POST /api/v1/dns/provider-tasks", func(w http.ResponseWriter, r *http.Request) {
 		id, requestID, err := s.authenticateIdentity(r)
 		if r.TLS == nil || err != nil || s.Identity.AuthorizeAdministrator(r.Context(), id.SubjectID) != nil {

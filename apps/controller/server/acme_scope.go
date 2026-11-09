@@ -81,6 +81,11 @@ func (m *publicCertificateExecution) current(ctx context.Context, scope *publicC
 		if e != nil || ref != m.o.DNSCredentialID {
 			return auth.ErrDenied
 		}
+	} else if scope.task.ActionID == actionDNSRecordApply {
+		p, _, e := m.mutationParams(scope.task)
+		if e != nil || p["zoneId"] != scope.zoneID || m.mutationCurrent(ctx, scope.task, p) != nil {
+			return auth.ErrDenied
+		}
 	} else {
 		csrID, zoneID, e := m.requestParams(scope.task)
 		if e != nil || zoneID != scope.zoneID {

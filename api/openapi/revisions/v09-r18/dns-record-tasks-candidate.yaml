@@ -1,0 +1,76 @@
+openapi: 3.1.0
+info:
+  title: Approved DNS record tasks (PROPOSED, UNTESTED)
+  version: 0.9.0-r18-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/dns/record-tasks:
+    post:
+      operationId: submitDNSRecordChangeR18
+      summary: Submit a modifying Controller task requiring human approval
+      description: Web administrator only. The configured credential owner and revision, current synced zone, exact input and existing record snapshot are frozen in the unified plan. Update/delete reject a changed record before provider I/O. Payload fragments are only bounded canonical public record JSON; they do not expand the general task parameter limit. Provider failures with definite no effect fail, other unobserved outcomes remain UNKNOWN without automatic replay. A 202 receipt is not an applied DNS change.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [operation, zoneId, recordJson, idempotencyKey]
+                  properties:
+                    operation: {const: create}
+                    zoneId: {$ref: '#/components/schemas/ID'}
+                    recordJson: {$ref: '#/components/schemas/RecordJSON'}
+                    idempotencyKey: {$ref: '#/components/schemas/ID'}
+                - type: object
+                  additionalProperties: false
+                  required: [operation, zoneId, recordId, recordJson, idempotencyKey]
+                  properties:
+                    operation: {const: update}
+                    zoneId: {$ref: '#/components/schemas/ID'}
+                    recordId: {$ref: '#/components/schemas/ID'}
+                    recordJson: {$ref: '#/components/schemas/RecordJSON'}
+                    idempotencyKey: {$ref: '#/components/schemas/ID'}
+                - type: object
+                  additionalProperties: false
+                  required: [operation, zoneId, recordId, idempotencyKey]
+                  properties:
+                    operation: {const: delete}
+                    zoneId: {$ref: '#/components/schemas/ID'}
+                    recordId: {$ref: '#/components/schemas/ID'}
+                    idempotencyKey: {$ref: '#/components/schemas/ID'}
+      responses:
+        '202':
+          description: Unified task admitted; inspect and approve through the task API
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, status, planHash, approvalRequired]
+                properties:
+                  taskId: {$ref: '#/components/schemas/ID'}
+                  status: {type: string}
+                  planHash: {type: string, pattern: '^[a-f0-9]{64}$'}
+                  approvalRequired: {const: true}
+        '400': {description: Invalid exact request, JSON record or unsupported input}
+        '403': {description: Current administrator, record read or owned credential denied}
+        '409': {description: Zone/record not current or task admission conflict}
+        '503': {description: Trusted DNS deployment unavailable}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  schemas:
+    ID: {type: string, pattern: '^[a-zA-Z0-9_-]{1,128}$'}
+    RecordJSON:
+      type: string
+      maxLength: 10240
+      description: Strict JSON object encoded as a string. Only type (A/AAAA/CNAME/TXT/MX), name, content, ttl, proxied and optional priority. Existing DNS owner rules remain authoritative, including 4096-byte content bounds. No credential fields or unknown/duplicate keys.

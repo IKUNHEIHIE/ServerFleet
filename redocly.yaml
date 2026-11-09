@@ -53,3 +53,6 @@ apis:
 
   v09-r17-public-certificate-tasks:
     root: api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml
+
+  v09-r18-dns-record-tasks:
+    root: api/openapi/revisions/v09-r18/dns-record-tasks-candidate.yaml

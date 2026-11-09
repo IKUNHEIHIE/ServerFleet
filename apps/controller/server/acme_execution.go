@@ -32,6 +32,7 @@ type publicCertificateExecution struct {
 	acmeRoots                           *x509.CertPool
 	transports                          []*http.Transport
 	trustFiles                          map[string]string
+	dnsRecordLocks                      [64]sync.Mutex
 }
 
 func (s *Server) newPublicCertificateExecution(ctx context.Context, o ACMEDeployment) (*publicCertificateExecution, error) {
