@@ -1,3 +1,4 @@
+import { DNSProviderTaskPanel } from "./provider-task-panel";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -54,7 +55,7 @@ function AccountEditor({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!displayName.trim()) return setLocalError("显示名称不能为空。");
-    if (!account && !apiToken) return setLocalError("创建账号必须输入 Cloudflare API Token。");
+    if (!account && !apiToken) return setLocalError("创建账号必须填写已保存的 Cloudflare 凭据 ID。");
     setLocalError(null);
     const result = await action.run({
       displayName: displayName.trim(),
@@ -72,7 +73,7 @@ function AccountEditor({
     <Modal
       open={open}
       title={account ? "编辑 DNS 账号" : "添加 Cloudflare 账号"}
-      description="API Token 只通过 HTTPS 安全写入；列表与日志不返回明文。首版仅支持 Cloudflare。"
+      description="先在凭据管理中保存 Cloudflare Token，再填写凭据 ID。账号仅绑定引用，不接收 Token 明文。"
       onClose={() => {
         if (!action.pending) onClose();
       }}
@@ -93,12 +94,11 @@ function AccountEditor({
           启用账号
         </label>
         {!account ? (
-          <Field label="Cloudflare API Token" hint="只写入后端凭证服务；提交后立即清空。">
+          <Field label="Cloudflare 凭据 ID" hint="填写凭据管理中的 ID，不要输入 Token 明文。">
             {ids => (
               <TextInput
                 id={ids.inputId}
-                type="password"
-                autoComplete="new-password"
+                autoComplete="off"
                 value={apiToken}
                 onChange={event => setApiToken(event.target.value)}
                 disabled={disabled}
@@ -318,6 +318,7 @@ export function DnsPage() {
         badge={<span className="rounded-md border px-2 py-1 text-xs">Cloudflare</span>}
         actions={<Button type="button" onClick={() => { accounts.reload(); zones.reload(); records.reload(); }}>刷新</Button>}
       />
+      <DNSProviderTaskPanel key={session.viewEpoch} />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
         <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">

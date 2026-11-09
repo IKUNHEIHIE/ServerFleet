@@ -50,3 +50,6 @@ apis:
 
   v09-r16-node-certificate-sets:
     root: api/openapi/revisions/v09-r16/node-certificate-sets-candidate.yaml
+
+  v09-r17-public-certificate-tasks:
+    root: api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml

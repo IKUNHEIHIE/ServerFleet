@@ -21,3 +21,5 @@ age为可选操作员预置CLI，固定v1.3.2并校验实际二进制SHA/版本/
 继续写入公开证书链安装：同一CSR的统一修改类审批任务、Agent独立链/私钥/SAN/当前权限校验、独占槽真实字节与typed回执、正式Web与nodecert发布引用；网关检查同节点根，并对实际TLS叶SHA进行核对。追加cx/0016_node_certificate_chains，当前预计35项；R15独立候选。仍未编译、运行或测试，完整ACME发行/provider组合、多节点独立证书映射与其他全量缺口继续开放。
 
 继续写入多节点独立证书集合及正式Web登记：2—8个同域名/不同节点的已成功安装公开回执冻结为SHA ID，发布逐gateway实际NodeID选择本节点证书根/私钥槽，并核对各自实际TLS叶。追加cx/0017_node_certificate_sets，当前预计36项；R16候选。仍未编译、运行或测试，不将集合登记、队列或代码写完等同于实际全链验收。
+
+继续补入正式 ACME/Cloudflare 接线（UNTESTED）：私有启动配置与独立 account key、Root/Issuer SPKI 复用拒绝、当前 running 的批准节点 CSR 签发任务；普通 HTTP/AI/plugin 不具有内部执行 scope。DNS 当前 owner/revision/plan/单次凭据借用与每次 I/O 复核，固定 HTTPS origin/无代理重定向。首次供应商检查/已有 Zone 导入使用真实 Controller 权威标准任务，非直接 HTTP 副作用。网站私钥不进入 Controller。签发前 TXT 意图、返回 record ID 与每次清理观察同审计持久保存，重启保留 UNKNOWN、不自动重放；后续 cleanup 绑定实际 claim/lease、原订单与记录三元组。正式 Web 已写签发/公链结果与 DNS 任务入口；公开链仍需另行批准安装及实际 HTTPS 证明。追加 cx/0018_public_certificate_orders，预计正式迁移 37 项，R17 单独候选。备份固定白名单增加 account/config/public roots，仍不备份 Root/网站私钥。仅 gofmt/源码核对，未编译、执行供应商、运行测试或新 CI；常规 DNS 记录/发布 DNS 统一任务、续签、远程批次、fence/异地保留与其他全量缺口继续开放。

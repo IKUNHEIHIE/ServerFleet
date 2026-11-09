@@ -136,7 +136,7 @@ func extractRecoveryArchive(ctx context.Context, input io.Reader, target *os.Roo
 	}
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&manifest) != nil || decoder.Decode(&struct{}{}) != io.EOF || manifest.Format != 1 || manifest.Encryption != "age/X25519/v1" || !validReference(manifest.SnapshotID) || !validReference(manifest.AuthorityID) || !validDigest(manifest.RootSPKI) || manifest.CreatedAt.IsZero() || manifest.CreatedAt.After(time.Now().Add(5*time.Minute)) || (len(manifest.Files) < 8 || len(manifest.Files) > 15) || len(manifest.SchemaVersions) == 0 || len(manifest.SchemaVersions) > 1024 || len(manifest.NodeIDs) > 20000 || len(manifest.Snapshot.Tasks) > 100000 {
+	if decoder.Decode(&manifest) != nil || decoder.Decode(&struct{}{}) != io.EOF || manifest.Format != 1 || manifest.Encryption != "age/X25519/v1" || !validReference(manifest.SnapshotID) || !validReference(manifest.AuthorityID) || !validDigest(manifest.RootSPKI) || manifest.CreatedAt.IsZero() || manifest.CreatedAt.After(time.Now().Add(5*time.Minute)) || (len(manifest.Files) < 8 || len(manifest.Files) > 19) || len(manifest.SchemaVersions) == 0 || len(manifest.SchemaVersions) > 1024 || len(manifest.NodeIDs) > 20000 || len(manifest.Snapshot.Tasks) > 100000 {
 		return manifest, nil, ErrRecoveryRejected
 	}
 	canonical, err := json.Marshal(manifest)
@@ -225,7 +225,7 @@ func VerifyStagedFiles(ctx context.Context, directory string, manifest BackupMan
 		return err
 	}
 	defer root.Close()
-	if len(manifest.Files) < 8 || len(manifest.Files) > 15 {
+	if len(manifest.Files) < 8 || len(manifest.Files) > 19 {
 		return ErrRecoveryRejected
 	}
 	for _, entry := range manifest.Files {

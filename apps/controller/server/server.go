@@ -51,6 +51,7 @@ type Config struct {
 	StagingDir                string
 	Dispatcher                tasks.Dispatcher
 	DNSProvider               dns.Provider
+	ACMEDeployment            *ACMEDeployment
 	GatewayChecker            gateway.Checker
 	MonitoringProber          monitoring.Prober
 	MonitoringAllowedHosts    []string
@@ -105,6 +106,7 @@ type Config struct {
 type Server struct {
 	ProductUpdates     updates.ProductDeployment
 	ReleaseAcquirer    *updates.ReleaseAcquirer
+	PublicCertificates *publicCertificateExecution
 	runtimeGate        func(context.Context) error
 	DB                 *storage.DB
 	Audit              *audit.SQLRecorder
@@ -234,6 +236,7 @@ func Migrations() [][]storage.Migration {
 		certificates.Migrations(),
 		certificates.CleanupMigrations(),
 		certificates.CleanupClaimMigrations(),
+		certificates.PublicOrderMigrations(),
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
@@ -288,6 +291,8 @@ func AuditActions() []string {
 		transport.CertificateCSRAction,
 		transport.CertificateInstallAction,
 		"certificates.node_sets.create",
+		actionPublicCertificateIssue,
+		actionDNSProviderInspect,
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",
@@ -372,6 +377,7 @@ func AuditActions() []string {
 // ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
 func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
+		{Key: actionPublicCertificateIssue, Description: "Issue public certificates for approved node-local CSR tasks", ResourceType: "node", AdminOnly: true},
 		{Key: transport.CertificateInstallAction, Description: "Install verified public chains using node-owned website keys", ResourceType: "node", AdminOnly: true},
 		{Key: transport.CertificateCSRAction, Description: "Create node-local website keys and export only a public CSR", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupRead, Description: "Read owned cleanup records", ResourceType: "node", ReadOnly: true, AdminOnly: true},
@@ -483,6 +489,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 		if s != nil && s.ProductUpdates != nil {
 			_ = s.ProductUpdates.Close()
+		}
+		if s != nil && s.PublicCertificates != nil {
+			s.PublicCertificates.Close()
 		}
 		if s != nil && s.ReleaseAcquirer != nil {
 			_ = s.ReleaseAcquirer.Close()
@@ -608,6 +617,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	var aiConversation *ai.ConversationService
+	var publicCertificates *publicCertificateExecution
 	keyDir := cfg.CredentialKeyDir
 	if keyDir == "" {
 		absoluteDB, pathErr := filepath.Abs(cfg.DBPath)
@@ -622,6 +632,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	credentialsService, err := auth.NewPersistentCredentialService(
 		ctx, identityService, keyDir,
 		func(ctx context.Context, op auth.CredentialOperation) error {
+			if publicCertificates != nil && op.Module == "dns" {
+				return publicCertificates.credentialGate(ctx, op)
+			}
 			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" {
 				return auth.ErrDenied
 			}
@@ -758,7 +771,21 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	} else if dispatcher == nil && agentBridge != nil {
 		dispatcher = agentBridge
 	}
+	if cfg.ACMEDeployment != nil {
+		if cfg.DNSProvider != nil {
+			return cleanup(certificates.ErrACMEConfig)
+		}
+		publicCertificates, err = s.newPublicCertificateExecution(ctx, *cfg.ACMEDeployment)
+		if err != nil {
+			return cleanup(err)
+		}
+		s.PublicCertificates = publicCertificates
+		cfg.DNSProvider = publicCertificates.provider
+	}
 	workers := map[string]tasks.Worker{}
+	if publicCertificates != nil {
+		workers[actionPublicCertificateIssue] = publicCertificates
+	}
 	if s.FileWorker != nil {
 		workers[files.ActionTransfer] = s.FileWorker
 		agentBridge.fileWorker = s.FileWorker
@@ -827,6 +854,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	controllerExecution, err = mergeControllerExecutions(controllerExecution, releaseControllerExecution)
 	if err != nil {
 		return cleanup(err)
+	}
+	if publicCertificates != nil {
+		dnsExecution, e := publicCertificates.inspectionExecution(cfg.ControllerAuthorityID, workers)
+		if e != nil {
+			return cleanup(e)
+		}
+		controllerExecution, err = mergeControllerExecutions(controllerExecution, dnsExecution)
+		if err != nil {
+			return cleanup(err)
+		}
 	}
 	tasksService, err := tasks.NewService(tasks.Options{
 		ControllerExecution: controllerExecution,
@@ -1031,6 +1068,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if s.cleanupInterval < time.Second || s.cleanupInterval > time.Hour {
 		return cleanup(errors.New("controller: cleanup retry interval must be between one second and one hour"))
 	}
+	if publicCertificates != nil {
+		cleaner = publicCertificateCleaner{manager: publicCertificates, next: cleaner}
+	}
 	s.CertificateCleanup, err = certificates.NewCleanupJournal(certificates.CleanupJournalOptions{DB: db, Audit: auditRecorder, Authorizer: authorizer, Cleaner: cleaner, Now: now})
 	if err != nil {
 		return cleanup(err)
@@ -1141,6 +1181,10 @@ func (s *Server) Close() error {
 		}
 		s.ProductUpdates = nil
 	}
+	if s.PublicCertificates != nil {
+		s.PublicCertificates.Close()
+		s.PublicCertificates = nil
+	}
 	if s.ReleaseAcquirer != nil {
 		_ = s.ReleaseAcquirer.Close()
 		s.ReleaseAcquirer = nil
@@ -1200,6 +1244,7 @@ func (s *Server) registerRoutes() error {
 	s.registerCertificateCSRRoutes()
 	s.registerCertificateInstallRoutes()
 	s.registerCertificateSetRoutes()
+	s.registerPublicCertificateRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {

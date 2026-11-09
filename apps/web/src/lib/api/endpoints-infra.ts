@@ -293,3 +293,27 @@ export const nodeCertificateSetsApi = {
   create: (installTaskIds: readonly string[]) =>
     apiClient.request<NodeCertificateSet>("/api/v1/certificates/node-sets", { method: "POST", body: { installTaskIds } }),
 };
+
+
+export interface PublicCertificateOrder {
+ readonly taskId: string;
+ readonly taskStatus: string;
+ readonly orderStatus: "issued" | "issued_cleanup_pending" | "unknown" | "running";
+ readonly csrTaskId: string;
+ readonly nodeId: string;
+ readonly domain: string;
+ readonly keyRef: string;
+ readonly chainSha256: string;
+ readonly certificatePemBase64: string;
+ readonly notAfter: string;
+ readonly pendingCleanupCount: number;
+ readonly errorCode: string;
+ readonly observedAt: string;
+ readonly installed: false;
+}
+export const publicCertificateApi = {
+ profile: (signal?:AbortSignal)=>apiClient.request<{profileSha256:string; configured:boolean; dnsCredentialId:string; dnsCredentialRevision:number}>("/api/v1/certificates/public-profile",{signal}),
+ create: (body:{csrTaskId:string;zoneId:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/certificates/public-tasks",{method:"POST",body}),
+ get: (taskId:string)=>apiClient.request<PublicCertificateOrder>(`/api/v1/certificates/public-tasks/${encodeURIComponent(taskId)}`),
+ inspectDNS: (body:{operation:"test"|"import-zone";accountId:string;zoneId?:string;providerZoneId?:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/dns/provider-tasks",{method:"POST",body}),
+};

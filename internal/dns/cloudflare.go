@@ -66,6 +66,9 @@ type SecretScope struct {
 }
 
 func WithSecretScope(ctx context.Context, scope SecretScope) context.Context {
+	if previous := secretScopeFrom(ctx); scope.PlanDigest == "" && scope.SubjectID == previous.SubjectID && scope.RequestID == previous.RequestID {
+		scope.PlanDigest = previous.PlanDigest
+	}
 	return context.WithValue(ctx, secretScopeKey{}, scope)
 }
 

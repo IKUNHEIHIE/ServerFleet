@@ -104,13 +104,13 @@ type BackupManifest struct {
 
 func allowedBundleName(name string) bool {
 	switch name {
-	case "configuration/controller.json", "configuration/file-deployment.json", "configuration/gateway-deployment.json", "configuration/update-deployment.json", "configuration/backup-deployment.json", "configuration/release-source.json", "configuration/release-root.pem", "controller.db", "pki/root.pem", "pki/issuer.pem", "pki/issuer-key.pem", "pki/pki.json", "credentials/credential-keys.json", "tls/controller.pem", "tls/controller-key.pem":
+	case "credentials/acme-account-key.pem", "configuration/acme-deployment.json", "configuration/acme-root.pem", "configuration/dns-root.pem", "configuration/controller.json", "configuration/file-deployment.json", "configuration/gateway-deployment.json", "configuration/update-deployment.json", "configuration/backup-deployment.json", "configuration/release-source.json", "configuration/release-root.pem", "controller.db", "pki/root.pem", "pki/issuer.pem", "pki/issuer-key.pem", "pki/pki.json", "credentials/credential-keys.json", "tls/controller.pem", "tls/controller-key.pem":
 		return true
 	}
 	return false
 }
 func NewBackupManager(o BackupDeploymentOptions) (*BackupManager, error) {
-	if os.Geteuid() == 0 || o.DB == nil || o.Audit == nil || o.Cipher == nil || !validAgeRecipient(o.Recipient) || !validReference(o.AuthorityID) || !validDigest(o.RootSPKI) || o.TrustGeneration == 0 || o.Authorize == nil || o.RuntimeCurrent == nil || o.TaskCurrent == nil || o.Capture == nil || o.ValidateConfiguration == nil || o.Directory == o.StageDir || len(o.Files) < 7 || len(o.Files) > 14 {
+	if os.Geteuid() == 0 || o.DB == nil || o.Audit == nil || o.Cipher == nil || !validAgeRecipient(o.Recipient) || !validReference(o.AuthorityID) || !validDigest(o.RootSPKI) || o.TrustGeneration == 0 || o.Authorize == nil || o.RuntimeCurrent == nil || o.TaskCurrent == nil || o.Capture == nil || o.ValidateConfiguration == nil || o.Directory == o.StageDir || len(o.Files) < 7 || len(o.Files) > 18 {
 		return nil, ErrBackupUnavailable
 	}
 	root, err := openRecoveryDirectory(o.Directory)

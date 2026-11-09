@@ -36,6 +36,12 @@ func RunPKICommand(ctx context.Context, args []string, stdout, stderr io.Writer)
 		return errors.New("pki: unexpected positional arguments")
 	}
 	switch args[0] {
+	case "init-acme-account":
+		fingerprint, err := localpki.CreateACMEAccountKey(*directory)
+		if err != nil {
+			return err
+		}
+		return json.NewEncoder(stdout).Encode(map[string]any{"state": "acme_account_key_created", "spkiSha256": fingerprint, "privateKeyExported": false})
 	case "sign-recovery":
 		if !*offline {
 			return errors.New("pki: offline Root operation requires -offline-ack")
