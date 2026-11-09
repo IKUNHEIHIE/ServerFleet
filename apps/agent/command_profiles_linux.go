@@ -68,6 +68,9 @@ func readCommandPrivateFile(filename string, limit int64, root bool) ([]byte, er
 	if !filepath.IsAbs(filename) {
 		return nil, errExecutionRejected
 	}
+	if root && (filepath.Clean(filename) != filename || !rootCommandAncestors(filepath.Dir(filename))) {
+		return nil, errExecutionRejected
+	}
 	directory, err := os.Lstat(filepath.Dir(filename))
 	if err != nil || !commandFileOwned(directory, true, root) {
 		return nil, errExecutionRejected
@@ -151,6 +154,11 @@ func registeredCommands(filename, node string) (agentAction, error) {
 func runPinnedCommand(ctx context.Context, profile commandProfile, arguments []string, seconds int, root bool) executionResult {
 	unknown := executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
 	if ctx == nil || ctx.Err() != nil || root != (os.Geteuid() == 0) {
+		return unknown
+	}
+	// A root-owned leaf beneath a replaceable ancestor is not a fixed path.
+	// Check the program and working directory as well as private policy files.
+	if root && (!filepath.IsAbs(profile.Executable) || filepath.Clean(profile.Executable) != profile.Executable || !rootCommandAncestors(filepath.Dir(profile.Executable)) || !rootCommandAncestors(profile.Directory)) {
 		return unknown
 	}
 	info, err := os.Lstat(profile.Executable)

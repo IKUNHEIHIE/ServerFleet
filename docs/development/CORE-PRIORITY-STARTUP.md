@@ -8,6 +8,8 @@ Agent serve/connect 显式 -command-profiles 指向节点私有规范 JSON；字
 
 Root 另需 -root-helper 的受控注册和真正 root-owned 助手/程序及所有不可写祖先；配置格式/固定 sudo -n -- 调用见 R20 候选。系统管理员须为确切 helper 手动配置仅必要 sudoers 授权，不能给 Agent 任意免密 Shell；开发流程不修改 sudoers、不运行 sudo。Root helper 的独立 mTLS 客户端证书与 ledger 保存在 root 私有目录，Agent 不读取这些私钥。未批准、撤权、网络不明会拒绝/中止并保留未知副作用；程序输出不进入任务日志，终态只代表观察到的退出状态。
 
+Root 策略、配置、证书/私钥、ledger、执行程序和工作目录逐层拒绝符号链接、非 root 所有或组/其他用户可写的祖先；仅把最内层目录 chmod 0700 不够，不能放在 /tmp 或普通用户可替换的父目录下。普通用户 profile 仍按原当前 UID 私有配置规则读取。
+
 ## 节点文件恢复
 
 -file-root（Agent）和 -file-deployment（Controller）的原可信映射保持。正式文件页“节点传输恢复”读取已结束原任务的确认偏移，创建新的 files.resume 人工审批任务。Controller 私有 resume-cache 保存已核验完整源，最多128份/合计512MiB/每文件64MiB；不足时拒绝而不淘汰未知结果。Agent 只采用已 fsync checkpoint 的实际前缀，一次 adoption 后复制到新执行；最终 publish intent/完成标记存在则拒绝。进程、网络或用户上传到 Controller 的原续传会话不是同一层恢复，不混称已有完整执行证据。旧版本没有 checkpoint 的片段不能凭猜测恢复。

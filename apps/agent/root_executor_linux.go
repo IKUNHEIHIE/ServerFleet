@@ -48,7 +48,7 @@ type rootExecutorConfiguration struct {
 }
 
 func rootExecutable(filename, digest string) (*os.File, error) {
-	if !filepath.IsAbs(filename) || !transport.FileDigest(digest) {
+	if !filepath.IsAbs(filename) || filepath.Clean(filename) != filename || !transport.FileDigest(digest) {
 		return nil, errExecutionRejected
 	}
 	if !rootCommandAncestors(filepath.Dir(filename)) {
@@ -182,7 +182,7 @@ func runRootExecutor(ctx context.Context, args []string, stdin io.Reader, stdout
 		return 2
 	}
 	info, err := os.Lstat(cfg.Ledger)
-	if err != nil || !commandFileOwned(info, true, true) {
+	if err != nil || !commandFileOwned(info, true, true) || !rootCommandAncestors(cfg.Ledger) {
 		return 2
 	}
 	payload, err := io.ReadAll(io.LimitReader(stdin, (24<<10)+1))
@@ -331,6 +331,11 @@ func rootAdmissionClient(cfg rootExecutorConfiguration) (*http.Client, string, e
 }
 
 func rootCommandAncestors(directory string) bool {
+	// Clean before inspecting would hide components traversed by the OS (for
+	// example a symlink followed by ".."). Accept only the exact canonical path.
+	if !filepath.IsAbs(directory) || filepath.Clean(directory) != directory {
+		return false
+	}
 	for {
 		info, err := os.Lstat(directory)
 		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || info.Mode().Perm()&0022 != 0 {

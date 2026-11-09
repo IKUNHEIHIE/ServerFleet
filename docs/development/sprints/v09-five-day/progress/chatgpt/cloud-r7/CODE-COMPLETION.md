@@ -69,3 +69,7 @@ Controller 自更新由独立父进程执行，关闭/替换/重启自己拥有�
 
 
 原生CI #103 / 0aea73c 的 dependencies继续成功；网关发布正向和成功上传残留问题已通过实际组合，foundation仍一项失败：逆序DNS补偿的新操作前GET校验遇到旧TLS协议fixture未实现GET。补充测试端真实已创建record的按ID读取/删除状态，并断言删除前有读取；不削弱生产快照比对、不调用真实Cloudflare。相同源码本地受影响六模块259顶层/169子项PASS、5顶层/2子项SKIP、0FAIL。最终完整同head仍待新CI，不引用旧绿色覆盖新提交。
+
+继续静态复核补齐Root路径祖先约束：root-owned私有材料、ledger、程序和工作目录不能经过普通用户可替换或符号链接祖先；原先仅sudo/helper已逐层检查，现覆盖其余Root执行路径。增加拒绝可写祖先/符号链接的负向回归，无提权、无Root命令执行。6d0f366的真实双架构未签名候选已构建，14项实际文件摘要与manifest匹配；后续代码变化需重新检查，不把旧候选称最终版本。
+
+6d0f366的Foundation CI #104（42649384132）已实际完成：dependencies/foundation均success；Go 996顶层/1309子项PASS、7 SKIP、0 FAIL，Web 422 PASS，契约/生成/漂移/安全检查与Linux交叉构建通过。发布真实Agent→Nginx→HTTP字节及逆序DNS清理、实际上传均通过。此绿灯不覆盖随后Root祖先修复；后者本地受影响命令/执行账本批次10 PASS、0 SKIP、0 FAIL，同head CI仍须重新核对。普通UID新监督更新/恢复/root组合与完整浏览器专项未由旧测试自动证明，五项不改为完整验收DONE。
