@@ -100,7 +100,8 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 	listen := free.Addr().String()
 	free.Close()
 	var dnsMu sync.Mutex
-	creates, deletes := 0, 0
+	creates, deletes, providerReads := 0, 0, 0
+	var providerRecord map[string]any
 	providerHost := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		switch {
@@ -109,13 +110,41 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 		case r.URL.Path == "/zones":
 			_, _ = io.WriteString(w, `{"success":true,"result":[{"id":"pz-r3","name":"example.com","status":"active"}],"result_info":{"page":1,"total_pages":1}}`)
 		case r.Method == "POST" && r.URL.Path == "/zones/pz-r3/dns_records":
+			var record map[string]any
+			if json.NewDecoder(r.Body).Decode(&record) != nil {
+				http.Error(w, "invalid record", http.StatusBadRequest)
+				return
+			}
+			record["id"] = "record-r3"
+			if _, ok := record["proxied"]; !ok {
+				record["proxied"] = false
+			}
 			dnsMu.Lock()
 			creates++
+			providerRecord = record
 			dnsMu.Unlock()
 			_, _ = io.WriteString(w, `{"success":true,"result":{"id":"record-r3"}}`)
+		case r.Method == http.MethodGet && r.URL.Path == "/zones/pz-r3/dns_records/record-r3":
+			dnsMu.Lock()
+			providerReads++
+			var record map[string]any
+			if providerRecord != nil {
+				record = make(map[string]any, len(providerRecord))
+				for k, v := range providerRecord {
+					record[k] = v
+				}
+			}
+			dnsMu.Unlock()
+			if record == nil {
+				w.WriteHeader(http.StatusNotFound)
+				_, _ = io.WriteString(w, `{"success":false,"errors":[]}`)
+				return
+			}
+			_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": record})
 		case r.Method == "DELETE" && r.URL.Path == "/zones/pz-r3/dns_records/record-r3":
 			dnsMu.Lock()
 			deletes++
+			providerRecord = nil
 			dnsMu.Unlock()
 			_, _ = io.WriteString(w, `{"success":true,"result":{}}`)
 		default:
@@ -340,8 +369,8 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 	}
 	dnsMu.Lock()
 	defer dnsMu.Unlock()
-	if creates != 1 || deletes != 1 {
-		t.Fatal("DNS compensation count", creates, deletes)
+	if creates != 1 || deletes != 1 || providerReads < 1 {
+		t.Fatal("DNS compensation count/read-before-delete proof", creates, deletes, providerReads)
 	}
 	if len(approved) != 2 {
 		t.Fatal("apply and removal need separate human approvals", len(approved))
