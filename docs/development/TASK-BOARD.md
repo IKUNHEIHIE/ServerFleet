@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 当前优先子包：五项核心能力（2026-11-09）
+
+用户明确要求先完成 Controller 自身更新、远程 Agent 批次更新、实际灾备接管、Agent 执行端完整续传、普通命令与受控提权。沿用 V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01、当前集中编码分支和唯一目录，起点 2d36f9d；五项均 IN PROGRESS，未验收。主控继续单写既有允许模块及必要受控 CLI/Web/独立候选/追加迁移，不启动其他 Agent，不访问生产/VPS/真实供应商或执行提权。普通/root 能力必须明确配置，Root 必须真人管理员当前审批；恢复释放必须实际验证 fence，不能用自称已隔离的布尔值/文档代替。先连续编码，完成整包后一次集中验收，任何环境硬依赖保留 BLOCKED，不把代码提交当作五项 DONE。
+
 ## 当前：集中完成全部剩余代码（2026-11-09）
 
 用户最新要求：先集中写完代码，再统一一次大体验收；后续收尾由用户另行交DeepSeek，不自动派发。V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01；feature/cloud-v09-code-completion-20261109 / ServerFleet-completion；IN PROGRESS。唯一基线main9738648ecdf44546e4a2d3503f8c9b862c8a5cb3（#16接收；精确head c07bd976，CI42487322510 success，Go987顶层/1309子项PASS、7SKIP、0FAIL，Web422PASS）。环境重建后从私库重新clone，不复用旧Windows目录/秘密。

@@ -23,6 +23,7 @@ import (
 func agentAllowedActions() map[string]string {
 	return map[string]string{
 		"tasks.command":                    "1",
+		transport.CommandCapability:        "1",
 		transport.CertificateCSRAction:     "1",
 		transport.CertificateInstallAction: "1",
 		transport.FileCapability:           "1",
@@ -75,19 +76,20 @@ func agentFrameLimits() transport.FrameDecodeLimits {
 }
 
 type agentLinkBridge struct {
-	nodesRepo    *nodes.Repo
-	nodesService *nodes.Service
-	tasksRepo    *tasks.Repo
-	tasks        *tasks.Service
-	links        *transport.ControllerLinks
-	files        *transport.FileClient
-	fileWorker   *FileExecutionWorker
-	gatewayChild *GatewayArtifactObserver
-	recordCSR    func(context.Context, transport.CertificateCSRReceipt) error
-	readCSR      func(context.Context, string) (transport.CertificateCSRReceipt, error)
-	recordChain  func(context.Context, transport.CertificateChainReceipt) error
-	readChain    func(context.Context, string) (transport.CertificateChainReceipt, error)
-	now          func() time.Time
+	commandCurrent func(context.Context, tasks.Task) error
+	nodesRepo      *nodes.Repo
+	nodesService   *nodes.Service
+	tasksRepo      *tasks.Repo
+	tasks          *tasks.Service
+	links          *transport.ControllerLinks
+	files          *transport.FileClient
+	fileWorker     *FileExecutionWorker
+	gatewayChild   *GatewayArtifactObserver
+	recordCSR      func(context.Context, transport.CertificateCSRReceipt) error
+	readCSR        func(context.Context, string) (transport.CertificateCSRReceipt, error)
+	recordChain    func(context.Context, transport.CertificateChainReceipt) error
+	readChain      func(context.Context, string) (transport.CertificateChainReceipt, error)
+	now            func() time.Time
 
 	seqMu     sync.Mutex
 	sequences map[string]uint64
@@ -137,7 +139,7 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	if task.PlanHash != offer.GetPlanDigestSha256() || task.ActionID != offer.GetActionId() || task.PluginID != offer.GetPluginId() {
 		return transport.ErrLinkRejected
 	}
-	if string(offer.CanonicalParametersJson) != task.Params || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.ScopeRevision != task.ScopeRevision {
+	if string(offer.CanonicalParametersJson) != task.Params || offer.Privilege != dispatchPrivilege(task) || offer.ScopeRevision != task.ScopeRevision {
 		return transport.ErrLinkRejected
 	}
 	if b.tasks == nil {
@@ -145,6 +147,22 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	}
 	if _, err = b.tasks.CheckDispatch(ctx, task.ID, task.PlanHash, observation.Identity.NodeID); err != nil {
 		return transport.ErrLinkRejected
+	}
+	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
+		params, e := transport.ParseCommandParameters(offer.CanonicalParametersJson)
+		if e != nil || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || offer.TimeoutSeconds != uint32(params.TimeoutSeconds) {
+			return transport.ErrLinkRejected
+		}
+		class := tasks.OperationClassModifying
+		if task.ActionID == transport.RootCommandCapability {
+			class = tasks.OperationClassRoot
+		}
+		if task.OperationClass != class {
+			return transport.ErrLinkRejected
+		}
+		if b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
+			return transport.ErrLinkRejected
+		}
 	}
 	if task.ActionID == transport.CertificateCSRAction {
 		if task.OperationClass != tasks.OperationClassModifying || !task.ApprovalRequired || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || len(task.Targets) != 1 {
@@ -517,12 +535,19 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		PlanDigestSha256:        task.PlanHash,
 		ActionId:                command.ActionID,
 		CanonicalParametersJson: append([]byte(nil), command.Params...),
-		Privilege:               agentv1.Privilege_PRIVILEGE_NORMAL,
+		Privilege:               dispatchPrivilege(task),
 		ExpiresAtUnixMs:         b.now().Add(10 * time.Minute).UnixMilli(),
 		TimeoutSeconds:          300,
 		ScopeRevision:           task.ScopeRevision,
 		PluginId:                task.PluginID,
 		ActionSchemaVersion:     b.allowedActions()[command.ActionID],
+	}
+	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
+		params, e := transport.ParseCommandParameters(command.Params)
+		if e != nil {
+			return tasks.DispatchResult{Accepted: false, Reason: "invalid_command_profile"}, nil
+		}
+		offer.TimeoutSeconds = uint32(params.TimeoutSeconds)
 	}
 	envelope := &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: offer}}
 	err = b.links.Send(ctx, command.NodeID, envelope)
@@ -555,3 +580,10 @@ func (b *agentLinkBridge) Cancel(ctx context.Context, command tasks.CancelComman
 }
 
 var _ tasks.Dispatcher = (*agentLinkBridge)(nil)
+
+func dispatchPrivilege(t tasks.Task) agentv1.Privilege {
+	if t.ActionID == transport.RootCommandCapability && t.OperationClass == tasks.OperationClassRoot {
+		return agentv1.Privilege_PRIVILEGE_ROOT
+	}
+	return agentv1.Privilege_PRIVILEGE_NORMAL
+}

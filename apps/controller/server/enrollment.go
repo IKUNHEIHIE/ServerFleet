@@ -73,6 +73,7 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		return nil, err
 	}
 	bridge := newAgentLinkBridge(s.NodesRepo, nodesService, tasksRepo, s.now)
+	bridge.commandCurrent = s.authorizeCommandTask
 	bridge.readCSR = func(ctx context.Context, id string) (transport.CertificateCSRReceipt, error) {
 		return transport.ReadCertificateCSR(ctx, s.DB, id)
 	}

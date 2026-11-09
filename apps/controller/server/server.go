@@ -281,6 +281,7 @@ func AuditActions() []string {
 		"credentials.use.intent",
 		"credentials.use.complete",
 		"tasks.command",
+		transport.CommandCapability,
 		"host.patch",
 		"host.root",
 		"files.transfer",
@@ -398,6 +399,7 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: tasks.ActionCancel, Description: "Cancel tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionResume, Description: "Resume unstarted queued tasks on granted nodes", ResourceType: "node"},
+		{Key: transport.CommandCapability, Description: "Execute approved node executable profiles", ResourceType: "node"},
 		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
 		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
 		{Key: "host.root", Description: "Execute root-level host changes on granted nodes", ResourceType: "node", AdminOnly: true},
@@ -1251,6 +1253,7 @@ func (s *Server) registerRoutes() error {
 	s.registerCertificateInstallRoutes()
 	s.registerCertificateSetRoutes()
 	s.registerPublicCertificateRoutes()
+	s.registerCommandRoutes()
 	s.registerPublicationDNSRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)

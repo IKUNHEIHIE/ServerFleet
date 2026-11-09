@@ -59,3 +59,6 @@ apis:
 
   v09-r19-publication-dns-tasks:
     root: api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml
+
+  v09-r20-command-profiles:
+    root: api/openapi/revisions/v09-r20/command-profiles-candidate.yaml

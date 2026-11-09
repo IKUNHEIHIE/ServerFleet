@@ -72,6 +72,8 @@ type ConnectRequest struct {
 	FileRoot        string
 	CertificateRoot string
 	CertificateCA   string
+	CommandProfiles string
+	RootHelper      string
 	GatewayPrefix   string
 	NginxBinary     string
 }
@@ -118,6 +120,8 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	certificateCA := flags.String("certificate-ca", "", "optional public website CA bundle (requires -certificate-root; otherwise system roots)")
 	gatewayPrefix := flags.String("gateway-prefix", "", "explicit private Linux nginx prefix (enables reviewed gateway.nginx.* profile)")
 	nginxBinary := flags.String("nginx-binary", "", "nginx executable for the trusted gateway prefix (default: nginx on PATH)")
+	rootHelper := flags.String("root-helper", "", "private node-bound sudo/helper registration; root-owned broker required")
+	commandProfiles := flags.String("command-profiles", "", "private node-bound executable profiles (Linux; ordinary user)")
 	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
 	waitTaskMS := flags.Int("wait-task-ms", 0, "one-shot wait window for one TaskOffer after sampling (0..600000)")
 	agentVersion := flags.String("agent-version", DefaultVersion, "Agent version reported during enrollment and connection")
@@ -126,6 +130,12 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	}
 	if flags.NArg() != 0 {
 		fmt.Fprintln(stderr, "agent: unexpected positional arguments")
+		return 2
+	}
+	if *rootHelper != "" && (!filepath.IsAbs(*rootHelper) || !(*serve || *connectOnce)) {
+		return 2
+	}
+	if *commandProfiles != "" && (!filepath.IsAbs(*commandProfiles) || !(*serve || *connectOnce)) {
 		return 2
 	}
 	if *certificateCA != "" && (*certificateRoot == "" || !filepath.IsAbs(*certificateCA)) {
@@ -190,7 +200,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
 			return 1
 		}
-		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
+		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, RootHelper: *rootHelper, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
 			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
 			return 1
 		}
@@ -255,7 +265,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		}
 		result, err := deps.Connect(ctx, ConnectRequest{
 			FileRoot:        *fileRoot,
-			CertificateRoot: *certificateRoot, CertificateCA: *certificateCA,
+			CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, RootHelper: *rootHelper,
 			ControllerURL:   origin,
 			StateDir:        *stateDir,
 			RootPin:         resolvedPin,

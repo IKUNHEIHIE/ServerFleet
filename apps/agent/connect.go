@@ -161,11 +161,27 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 			return err
 		}
 		action, ok := executor.actions[offer.ActionId]
-		if !ok || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL ||
+		if !ok || offer.Privilege != registeredPrivilege(action) ||
 			offer.PluginId != "" || offer.ActionSchemaVersion != semantic.AllowedActions[offer.ActionId] {
 			return errExecutionRejected
 		}
 		return action.Validate(offer.CanonicalParametersJson)
+	}
+	if request.RootHelper != "" {
+		action, e := registeredRootHelper(request.RootHelper, facts.NodeID)
+		if e != nil {
+			return e
+		}
+		executor.actions[transport.RootCommandCapability] = action
+		semantic.AllowedActions[transport.RootCommandCapability] = "1"
+	}
+	if request.CommandProfiles != "" {
+		action, e := registeredCommands(request.CommandProfiles, facts.NodeID)
+		if e != nil {
+			return e
+		}
+		executor.actions[transport.CommandCapability] = guardedCommandAction(action, facts.NodeID, endpoint, tlsConfig)
+		semantic.AllowedActions[transport.CommandCapability] = "1"
 	}
 	if request.FileRoot != "" {
 		files, err = newAgentFileSessions(request.FileRoot, facts.NodeID, func(ctx context.Context, o *agentv1.TaskOffer) error {

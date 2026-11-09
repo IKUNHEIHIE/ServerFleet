@@ -15,6 +15,14 @@ import (
 )
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "command-policy" {
+		os.Exit(inspectCommandPolicy(os.Args[2:], os.Stdout, os.Stderr))
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "root-executor" {
+		os.Exit(runRootExecutor(context.Background(), os.Args[2:], os.Stdin, os.Stdout, os.Stderr))
+		return
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	os.Exit(agentruntime.Run(ctx, os.Args[1:], agentRuntimeDeps(), os.Stdout, os.Stderr))

@@ -1,3 +1,4 @@
+import { CommandProfilePanel } from "./command-profile-panel";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { navigate } from "@/app/router";
 import { useSession } from "@/app/session";
@@ -286,6 +287,7 @@ export function TasksPage() {
 
   return (
     <div className="space-y-5">
+      <CommandProfilePanel key={session.viewEpoch} />
       <PageHeader
         title="批量任务"
         description="统一任务中心：冻结目标、分批/金丝雀、审批、逐节点结果与 SSE 进度。取消不等于回滚，未知结果不自动重跑。"
