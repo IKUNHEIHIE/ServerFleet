@@ -36,7 +36,7 @@ func TestParseOptionsDefaultsAndValidation(t *testing.T) {
 	management, err := ParseOptions([]string{
 		"-listen", "127.0.0.1:9443", "-db", "fleet.db", "-origin", "https://console.local",
 		"-tls-cert", "cert.pem", "-tls-key", "key.pem",
-		"-agent-pki-dir", "/tmp/pki", "-agent-authority", "fleet.local:9443", "-agent-server-name", "fleet.local",
+		"-agent-pki-mode", "local-development", "-agent-pki-dir", "/tmp/pki", "-agent-authority", "fleet.local:9443", "-agent-server-name", "fleet.local",
 	}, io.Discard)
 	if err != nil {
 		t.Fatal(err)
@@ -66,11 +66,12 @@ func TestDefaultAgentAuthority(t *testing.T) {
 func TestComposeInitializesLocalAgentPKI(t *testing.T) {
 	dir := t.TempDir()
 	options := Options{
-		Listen:  "127.0.0.1:9443",
-		DBPath:  filepath.Join(dir, "controller.db"),
-		Origin:  "https://console.local",
-		TLSCert: "unused-cert.pem",
-		TLSKey:  "unused-key.pem",
+		AgentPKIMode: "local-development",
+		Listen:       "127.0.0.1:9443",
+		DBPath:       filepath.Join(dir, "controller.db"),
+		Origin:       "https://console.local",
+		TLSCert:      "unused-cert.pem",
+		TLSKey:       "unused-key.pem",
 	}
 	ctx := context.Background()
 	composed, material, err := Compose(ctx, options)
@@ -131,7 +132,8 @@ func TestComposeFailsClosedOnPartialLocalPKI(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, _, err := Compose(context.Background(), Options{
-		Listen: "127.0.0.1:9443", DBPath: filepath.Join(dir, "controller.db"),
+		AgentPKIMode: "local-development",
+		Listen:       "127.0.0.1:9443", DBPath: filepath.Join(dir, "controller.db"),
 		Origin: "https://console.local", TLSCert: "cert.pem", TLSKey: "key.pem",
 	})
 	if err == nil {
@@ -151,6 +153,7 @@ func TestTrustedUpdateAndCleanupFlagsRequireManagementConfiguration(t *testing.T
 	options.Origin = "https://localhost:8443"
 	options.TLSCert = "cert.pem"
 	options.TLSKey = "key.pem"
+	options.AgentRootPin = strings.Repeat("a", 64)
 	if err := options.Validate(); err != nil {
 		t.Fatal(err)
 	}

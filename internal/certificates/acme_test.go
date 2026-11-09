@@ -674,7 +674,7 @@ func TestACMEDNS01RedirectRefused(t *testing.T) {
 		http.Redirect(w, r, target.URL, http.StatusFound)
 	}))
 	defer source.Close()
-	signer := newTestKeySigner(t)
+	signer := newTestKeySigner(t, "account-key", "cert-key")
 	client, err := certificates.NewACMEClient(certificates.ACMEConfig{
 		DirectoryURL: source.URL + "/directory", Client: source.Client(),
 		AccountKey: "account-key", Signer: signer, TrustRoots: x509.NewCertPool(),

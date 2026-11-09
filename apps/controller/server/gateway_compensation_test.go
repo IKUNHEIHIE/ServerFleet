@@ -190,7 +190,7 @@ func TestGatewayApplyRecordsExactTargetAndRouteRevision(t *testing.T) {
 		t.Fatalf("summary = %q", summary)
 	}
 	if stored.PlanID != plan.ID || stored.PlanTargetRevision != plan.TargetRevision ||
-		stored.RouteRevision != 1 || !stored.RouteCreated || stored.RouteID != plan.ID {
+		stored.RouteRevision != 2 || len(stored.ProbeToken) != 64 || !stored.RouteCreated || stored.RouteID != plan.ID {
 		t.Fatalf("summary = %+v", stored)
 	}
 	if routes.createCalls != 1 || runner.applyCalls != 1 || runner.lastPlan.TargetRevision != plan.TargetRevision {

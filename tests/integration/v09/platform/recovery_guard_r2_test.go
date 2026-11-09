@@ -26,7 +26,10 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 		filtered := []storage.Migration{}
 		for _, migration := range group {
 			total++
-			if migration.Version != "ds/0043_upload_policies" && migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" && migration.Version != "ds/0042_file_distribution" && migration.Version != "cx/0010_gateway_artifact_bindings" {
+			if completionOnlyMigration(migration.Version) {
+				continue
+			}
+			if migration.Version != "ds/0041_file_upload_task" && migration.Version != "ds/0043_upload_policies" && migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" && migration.Version != "ds/0042_file_distribution" && migration.Version != "cx/0010_gateway_artifact_bindings" {
 				filtered = append(filtered, migration)
 			}
 		}
@@ -34,7 +37,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 			old = append(old, filtered)
 		}
 	}
-	if total != 29 {
+	if total != 39 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)
@@ -141,4 +144,14 @@ func TestR2RestoredControllerRequiresOfflineReleaseAndLiveRuntimeGuard(t *testin
 		t.Fatal("execution lookup bypassed quarantine", err)
 	}
 	t.Log("actual restored SQLite/Controller refuses startup before explicit release; live revocation blocks all HTTP route families and execution admission")
+}
+
+// Versions introduced only by the concentrated completion branch, after the
+// accepted 29-version baseline. Historical SQL/checksums are left unchanged.
+func completionOnlyMigration(v string) bool {
+	switch v {
+	case "cx/0011_encrypted_backups", "cx/0012_recovery_revocations", "cx/0013_recovery_reconciliation", "cx/0014_release_acquisition", "cx/0015_agent_certificate_csr", "cx/0016_node_certificate_chains", "cx/0017_node_certificate_sets", "cx/0018_public_certificate_orders", "cx/0019_controller_supervision", "ds/0082_publishing_dns_tasks":
+		return true
+	}
+	return false
 }
