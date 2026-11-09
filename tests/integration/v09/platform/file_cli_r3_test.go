@@ -185,7 +185,7 @@ func TestR3TrustedFileDeploymentActualControllerAndTwoAgentCLI(t *testing.T) {
 	seed.Close()
 	jar, _ := cookiejar.New(nil)
 	client := &r3Client{t: t, ctx: ctx, http: localCAHTTPClient(material.Roots, "127.0.0.1:"+port, jar), origin: origin}
-	args := []string{"-listen", options.Listen, "-db", options.DBPath, "-origin", origin, "-tls-cert", options.TLSCert, "-tls-key", options.TLSKey, "-web-dir", web}
+	args := []string{"-agent-pki-mode", "local-development", "-listen", options.Listen, "-db", options.DBPath, "-origin", origin, "-tls-cert", options.TLSCert, "-tls-key", options.TLSKey, "-web-dir", web}
 	p := startR3Process(t, controller, args...)
 	client.waitHealthy(p)
 	for _, route := range []string{"/", "/assets/console-real.js"} {
