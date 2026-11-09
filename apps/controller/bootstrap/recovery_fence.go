@@ -110,7 +110,7 @@ func serveRecoveryFence(ctx context.Context, c updates.ResidentSupervisorConfig,
 		return nil, recovery.ErrRecoveryRejected
 	}
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		reject := func() { http.Error(w, "recovery fence rejected", 403) }
+		reject := func() { http.Error(w, "recovery fence rejected", http.StatusForbidden) }
 		if r.Method != "POST" || (r.URL.Path != "/v1/fence" && r.URL.Path != "/v1/fence/current") || r.URL.RawQuery != "" || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 || recoveryDigest(r.TLS.PeerCertificates[0].Raw) != f.ClientCertificateSHA256 || r.Header.Get("Content-Type") != "application/json" {
 			reject()
 			return
@@ -135,6 +135,7 @@ func serveRecoveryFence(ctx context.Context, c updates.ResidentSupervisorConfig,
 		defer cancel()
 		var request updates.ResidentFenceRequest
 		var record updates.ResidentFenceRecord
+		var fenceErr error
 		if r.URL.Path == "/v1/fence" {
 			entries, e := os.ReadDir(f.AuthorizationDirectory)
 			if e != nil || len(entries) > 32 {
@@ -169,17 +170,17 @@ func serveRecoveryFence(ctx context.Context, c updates.ResidentSupervisorConfig,
 				return
 			}
 			request = updates.ResidentFenceRequest{AuthorizationSHA256: authority.SHA256(), OldAuthorityID: p.OldAuthorityID, NewAuthorityID: p.NewAuthorityID, TrustGeneration: p.TrustGeneration}
-			record, e = control.Fence(bounded, request)
+			record, fenceErr = control.Fence(bounded, request)
 		} else {
 			if len(call.Authorization) != 0 || call.Request == nil {
 				reject()
 				return
 			}
 			request = *call.Request
-			record, e = control.Current(bounded, request)
+			record, fenceErr = control.Current(bounded, request)
 		}
-		if e != nil || bounded.Err() != nil {
-			http.Error(w, "owned process fence unknown", 503)
+		if fenceErr != nil || bounded.Err() != nil {
+			http.Error(w, "owned process fence unknown", http.StatusServiceUnavailable)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")

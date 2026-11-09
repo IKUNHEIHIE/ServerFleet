@@ -92,7 +92,7 @@ func (h *reviewR2Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.serveMode(w, mode, `{"success":true,"result":{"id":"`+id+`"}}`)
 	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/zones/pz-1/dns_records/"):
 		h.mu.Lock()
-		record := map[string]any{"id": h.createID}
+		record := map[string]any{"id": h.createID, "proxied": false}
 		for k, v := range h.createRecord {
 			record[k] = v
 		}

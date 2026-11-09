@@ -213,8 +213,11 @@ func extractRecoveryArchive(ctx context.Context, input io.Reader, target *os.Roo
 	}
 	return manifest, raw, nil
 }
+
+// tar.Reader preserves SCHILY.xattr entries in PAXRecords as well as its
+// deprecated Xattrs projection. Reject all PAX records, including xattrs.
 func safeRecoveryHeader(h *tar.Header) bool {
-	return h != nil && h.Typeflag == tar.TypeReg && h.Mode == 0600 && h.Linkname == "" && h.Size >= 0 && len(h.PAXRecords) == 0 && len(h.Xattrs) == 0 && h.Uid == 0 && h.Gid == 0 && h.Uname == "" && h.Gname == ""
+	return h != nil && h.Typeflag == tar.TypeReg && h.Mode == 0600 && h.Linkname == "" && h.Size >= 0 && len(h.PAXRecords) == 0 && h.Uid == 0 && h.Gid == 0 && h.Uname == "" && h.Gname == ""
 }
 
 // VerifyStagedFiles rechecks original archive contents before offline mutation.
