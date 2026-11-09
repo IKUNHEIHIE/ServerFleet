@@ -44,6 +44,12 @@ type CertificateInspection interface {
 	Paths(ctx context.Context, subjectID, certificateID string) (certificatePath, keyPath string, err error)
 }
 
+// GatewayCertificateInspection optionally resolves node-owned keys for one exact
+// gateway. Implementations must reject cross-node reuse of a private-key slot.
+type GatewayCertificateInspection interface {
+	PathsForGateway(context.Context, string, string, string) (string, string, error)
+}
+
 // ServiceUpstreams resolves the actual service endpoints of a service group.
 type ServiceUpstreams interface {
 	Upstreams(ctx context.Context, subjectID, serviceGroupID string) ([]string, error)
@@ -271,6 +277,15 @@ func (p *productionGateway) Publish(ctx context.Context, request GatewayRequest)
 	for _, id := range request.GatewayIDs {
 		one := request
 		one.GatewayIDs = []string{id}
+		if request.HTTPS {
+			if scoped, ok := p.config.Certificates.(GatewayCertificateInspection); ok {
+				certificatePath, keyPath, err = scoped.PathsForGateway(ctx, request.SubjectID, request.CertificateID, id)
+				if err != nil {
+					return StageResult{Summary: gatewayBatchSummary(summaries)}, err
+				}
+			}
+		}
+
 		summary, err := p.config.Gateway.Apply(ctx, plan, one, upstreams, certificatePath, keyPath)
 		if strings.TrimSpace(summary) != "" {
 			summaries = append(summaries, summary)

@@ -1,3 +1,4 @@
+import { NodeCertificatePanel } from "./node-certificate-panel";
 import { NodeCSRPanel } from "./node-csr-panel";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
@@ -149,6 +150,7 @@ export function CertificatesPage() {
       {tab === "public" ? (
         <div className="space-y-4">
           <NodeCSRPanel key={session.viewEpoch} />
+          <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
           <Notice tone="info" title="网站证书签发与安装">公开 CSR 可供受控签发流程使用；完整 ACME 申请、证书安装和实际 HTTPS 结果需要分别核验。</Notice>
         </div>
       ) : null}

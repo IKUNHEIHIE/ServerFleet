@@ -254,3 +254,26 @@ export const nodeCSRApi = {
   get: (taskId: string, signal?: AbortSignal) =>
     apiClient.request<NodeCSRReceipt>(`/api/v1/certificates/csr-tasks/${encodeURIComponent(taskId)}`, { signal }),
 };
+
+export interface NodeCertificateReceipt {
+ readonly certificateId: string;
+  readonly taskId: string;
+  readonly csrTaskId: string;
+  readonly planHash: string;
+  readonly observedAt: string;
+  readonly result: {
+    readonly nodeId: string;
+    readonly domain: string;
+    readonly keyRef: string;
+    readonly csrSha256: string;
+    readonly chainSha256: string;
+    readonly leafSha256: string;
+    readonly notAfter: string;
+  };
+}
+export const nodeCertificateApi = {
+  install: (body: { csrTaskId: string; certificatePemBase64: string; idempotencyKey: string }) =>
+    apiClient.request<NodeCSRTask>("/api/v1/certificates/chain-tasks", { method: "POST", body }),
+  get: (taskId: string) =>
+    apiClient.request<NodeCertificateReceipt>(`/api/v1/certificates/chain-tasks/${encodeURIComponent(taskId)}`),
+};

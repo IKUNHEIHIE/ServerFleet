@@ -857,6 +857,9 @@ func sameTargetSet(targets []Target, ids []string) bool {
 }
 
 func paramsFromSubmit(request SubmitRequest) (string, error) {
+	if value, handled, err := publicChainParams(request); handled {
+		return value, err
+	}
 	if request.CanonicalParams != nil {
 		if request.Params != nil {
 			return "", fmt.Errorf("%w: provide params or canonical params, not both", ErrInvalidTask)

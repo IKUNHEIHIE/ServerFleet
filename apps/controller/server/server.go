@@ -240,6 +240,7 @@ func Migrations() [][]storage.Migration {
 		recovery.Migrations(),
 		transport.RecoveryMigrations(),
 		transport.CertificateCSRMigrations(),
+		transport.CertificateChainMigrations(),
 		recovery.ReconciliationMigrations(),
 		updates.AcquisitionMigrations(),
 		audit.Migrations(),
@@ -284,6 +285,7 @@ func AuditActions() []string {
 		"ai.budget.reserve",
 		"gateway.provision",
 		transport.CertificateCSRAction,
+		transport.CertificateInstallAction,
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",
@@ -368,6 +370,7 @@ func AuditActions() []string {
 // ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
 func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
+		{Key: transport.CertificateInstallAction, Description: "Install verified public chains using node-owned website keys", ResourceType: "node", AdminOnly: true},
 		{Key: transport.CertificateCSRAction, Description: "Create node-local website keys and export only a public CSR", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupRead, Description: "Read owned cleanup records", ResourceType: "node", ReadOnly: true, AdminOnly: true},
 		{Key: certificates.ActionCleanupRetry, Description: "Retry owned cleanup records", ResourceType: "node", AdminOnly: true},
@@ -997,7 +1000,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			Tasks: tasksService, TasksRepo: tasksRepo, DB: db,
 			Artifacts: gatewayChain.uploader, NextDispatcher: agentBridge, Authorizer: authorizer,
 			Dispatcher: gatewayChain.dispatcher, Registry: gatewayChain.registry,
-			CertificatePath: gatewayChain.deployment.Certificates, GatewayPaths: gatewayChain.deployment.Gateways,
+			CertificatePath: gatewayChain.deployment.Certificates, NodeCertificateRoots: gatewayChain.deployment.CertificateRoots, GatewayPaths: gatewayChain.deployment.Gateways,
 			Now: now,
 		})
 		if e != nil {
@@ -1193,6 +1196,7 @@ func (s *Server) registerRoutes() error {
 	s.registerUpdateRecoveryRoutes()
 	s.registerReleaseSourceRoutes()
 	s.registerCertificateCSRRoutes()
+	s.registerCertificateInstallRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {

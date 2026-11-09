@@ -22,11 +22,12 @@ import (
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
 	return map[string]string{
-		"tasks.command":                "1",
-		transport.CertificateCSRAction: "1",
-		transport.FileCapability:       "1",
-		"host.patch":                   "1",
-		"host.root":                    "1",
+		"tasks.command":                    "1",
+		transport.CertificateCSRAction:     "1",
+		transport.CertificateInstallAction: "1",
+		transport.FileCapability:           "1",
+		"host.patch":                       "1",
+		"host.root":                        "1",
 	}
 }
 
@@ -36,6 +37,9 @@ func (b *agentLinkBridge) allowedActions() map[string]string {
 	allowed := agentAllowedActions()
 	if b == nil || b.recordCSR == nil {
 		delete(allowed, transport.CertificateCSRAction)
+	}
+	if b == nil || b.recordChain == nil || b.readChain == nil {
+		delete(allowed, transport.CertificateInstallAction)
 	}
 	if b != nil && b.gatewayChild != nil {
 		allowed[gateway.NginxActionApply] = "1"
@@ -81,6 +85,8 @@ type agentLinkBridge struct {
 	gatewayChild *GatewayArtifactObserver
 	recordCSR    func(context.Context, transport.CertificateCSRReceipt) error
 	readCSR      func(context.Context, string) (transport.CertificateCSRReceipt, error)
+	recordChain  func(context.Context, transport.CertificateChainReceipt) error
+	readChain    func(context.Context, string) (transport.CertificateChainReceipt, error)
 	now          func() time.Time
 
 	seqMu     sync.Mutex
@@ -145,6 +151,23 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 			return transport.ErrLinkRejected
 		}
 		if _, err := transport.ParseCertificateCSRRequest([]byte(task.Params)); err != nil {
+			return transport.ErrLinkRejected
+		}
+	}
+	if task.ActionID == transport.CertificateInstallAction {
+		if task.OperationClass != tasks.OperationClassModifying || !task.ApprovalRequired || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || len(task.Targets) != 1 {
+			return transport.ErrLinkRejected
+		}
+		request, csrTaskID, err := certificateInstallTaskParams([]byte(task.Params))
+		if err != nil || b.readCSR == nil {
+			return transport.ErrLinkRejected
+		}
+		source, err := b.tasksRepo.Get(ctx, csrTaskID)
+		if err != nil || source.ActionID != transport.CertificateCSRAction || source.Status != tasks.StatusCompleted || len(source.Targets) != 1 || source.Targets[0].State != tasks.TargetSucceeded || source.Targets[0].NodeID != observation.Identity.NodeID {
+			return transport.ErrLinkRejected
+		}
+		proof, err := b.readCSR(ctx, csrTaskID)
+		if err != nil || proof.PlanSHA256 != source.PlanHash || proof.NodeID != observation.Identity.NodeID || proof.KeyRef != request.KeyRef || proof.Domain != request.Domain || proof.PublicResult.SHA256 != request.CSRSHA256 {
 			return transport.ErrLinkRejected
 		}
 	}
@@ -229,6 +252,9 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 		return b.taskLog(ctx, observation, started.GetTaskId(), "info", "agent reported task started")
 	case envelope.GetTaskOutput() != nil:
 		output := envelope.GetTaskOutput()
+		if consumed, err := b.observeCertificateInstall(ctx, observation, output); consumed {
+			return err
+		}
 		if consumed, err := b.observeCertificateCSR(ctx, observation, output); consumed {
 			return err
 		}
@@ -384,6 +410,20 @@ func (b *agentLinkBridge) taskFinished(ctx context.Context, observation transpor
 				return transport.ErrLinkRejected
 			}
 			receipt, e := b.readCSR(ctx, task.ID)
+			if e != nil || receipt.PlanSHA256 != task.PlanHash || receipt.NodeID != observation.Identity.NodeID {
+				code = tasks.NodeResultUnknown
+			}
+		}
+	}
+	if task, e := b.tasksRepo.Get(ctx, finished.TaskId); e == nil && task.ActionID == transport.CertificateInstallAction {
+		if len(task.Targets) != 1 || task.Targets[0].NodeID != observation.Identity.NodeID || finished.ExecutionId != executionIDFor(task.ID, observation.Identity.NodeID, task.PlanHash) {
+			return transport.ErrLinkRejected
+		}
+		if code == tasks.NodeResultSucceeded {
+			if b.readChain == nil {
+				return transport.ErrLinkRejected
+			}
+			receipt, e := b.readChain(ctx, task.ID)
 			if e != nil || receipt.PlanSHA256 != task.PlanHash || receipt.NodeID != observation.Identity.NodeID {
 				code = tasks.NodeResultUnknown
 			}

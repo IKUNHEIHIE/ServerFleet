@@ -17,3 +17,5 @@ age为可选操作员预置CLI，固定v1.3.2并校验实际二进制SHA/版本/
 补入恢复包的固定白名单启动配置快照和已验证文件/网关/更新/备份/发行源配置及公开CA；仍排除Root/Agent/网站私钥和在线恢复identity。配置/材料SHA在每阶段冻结复核，备份归档实际写入字节再次核对，并同步私有目录。Web持续显示无已确认异地副本与未配置每日任务身份告警。仍UNTESTED；未实现的异地上传/保留/真实fence及远程全批次等未借此关单。
 
 2026-11-09代码环境已恢复，08916fa之后未提交CSR代码完整保留。继续完成typed公开CSR回执存储/audit事务/终态、-certificate-root Agent能力、正式Web、精确待派发复权和R14候选；ACME可消费公开节点CSR且在网络副作用之前核验。追加cx/0015_agent_certificate_csr，当前预计34项；仍未编译/运行/测试，CSR生成不替代实际签发/安装/HTTPS。旧ENVIRONMENT-INTERRUPTION保留历史，不再将当时断线写成当前状态。
+
+继续写入公开证书链安装：同一CSR的统一修改类审批任务、Agent独立链/私钥/SAN/当前权限校验、独占槽真实字节与typed回执、正式Web与nodecert发布引用；网关检查同节点根，并对实际TLS叶SHA进行核对。追加cx/0016_node_certificate_chains，当前预计35项；R15独立候选。仍未编译、运行或测试，完整ACME发行/provider组合、多节点独立证书映射与其他全量缺口继续开放。

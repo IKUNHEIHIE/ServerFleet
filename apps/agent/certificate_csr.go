@@ -23,6 +23,7 @@ import (
 type certificateCSRCapability struct {
 	root   *os.Root
 	nodeID string
+	roots  *x509.CertPool
 }
 
 func newCertificateCSRCapability(directory, nodeID, fileRoot string) (*certificateCSRCapability, error) {
@@ -42,7 +43,7 @@ func newCertificateCSRCapability(directory, nodeID, fileRoot string) (*certifica
 		root.Close()
 		return nil, errExecutionRejected
 	}
-	return &certificateCSRCapability{root, nodeID}, nil
+	return &certificateCSRCapability{root: root, nodeID: nodeID}, nil
 }
 func (c *certificateCSRCapability) Close() error {
 	if c == nil || c.root == nil {

@@ -44,3 +44,6 @@ apis:
 
   v09-r14-node-csr:
     root: api/openapi/revisions/v09-r14/node-csr-candidate.yaml
+
+  v09-r15-node-certificate-chain:
+    root: api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml

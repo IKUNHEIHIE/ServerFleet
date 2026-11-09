@@ -28,6 +28,7 @@ type gatewayRouteReceiptKey struct{}
 // This value is created only after the approved unified nginx task completed.
 // It is never decoded from HTTP, a provider response, an Agent frame or cache.
 type gatewayRouteReceipt struct {
+	ExpectedLeafSHA256                                                       string
 	SubjectID, RequestID, TaskID, PlanID, GatewayID, NodeID, Domain, GroupID string
 	TargetRevision, GroupRevision                                            uint64
 	HTTPS                                                                    bool
@@ -208,6 +209,16 @@ func (c *gatewayRouteChecker) CheckRoute(ctx context.Context, spec gateway.Route
 		return gateway.CheckResult{}, fmt.Errorf("%w: gateway HTTP probe", gateway.ErrRouteCheckFailed)
 	}
 	defer response.Body.Close()
+	if receipt.ExpectedLeafSHA256 != "" {
+		if !receipt.HTTPS || response.TLS == nil || len(response.TLS.PeerCertificates) == 0 {
+			return gateway.CheckResult{}, gateway.ErrRouteCheckFailed
+		}
+		leaf := sha256.Sum256(response.TLS.PeerCertificates[0].Raw)
+		if hex.EncodeToString(leaf[:]) != receipt.ExpectedLeafSHA256 {
+			return gateway.CheckResult{}, gateway.ErrRouteCheckFailed
+		}
+	}
+
 	bytes, err := io.ReadAll(io.LimitReader(response.Body, (64<<10)+1))
 	if err != nil || len(bytes) > 64<<10 || response.StatusCode < 200 || response.StatusCode >= 300 || len(response.Header.Values("X-ServerFleet-Route")) != 1 || response.Header.Get("X-ServerFleet-Route") != receipt.Site.ProbeToken {
 		return gateway.CheckResult{}, gateway.ErrRouteCheckFailed

@@ -1,0 +1,94 @@
+openapi: 3.1.0
+info:
+  title: Approved node-local public certificate chain installation (PROPOSED)
+  version: 0.9.0-r15-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/certificates/chain-tasks:
+    post:
+      operationId: createNodeCertificateInstallR15
+      summary: Freeze a public chain and completed CSR proof into an approved task
+      description: Current administrator and node resources are mandatory. CSR task must be completed and match its durable public receipt. Only canonical public CERTIFICATE PEM blocks, never private keys. The Agent independently checks its own key/CSR, configured CA roots, P-256 key association, exact DNS SAN, chain validity, current private-directory policy and exclusive immutable slot. No arbitrary path, shell, root or AI/plugin operation is admitted.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrTaskId, certificatePemBase64, idempotencyKey]
+              properties:
+                csrTaskId: {$ref: '#/components/schemas/ID'}
+                certificatePemBase64: {type: string, maxLength: 10924, contentEncoding: base64}
+                idempotencyKey: {$ref: '#/components/schemas/ID'}
+      responses:
+        '202':
+          description: Unified modifying task requires plan-bound human approval, not installed/healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, status, planHash, approvalRequired]
+                properties:
+                  taskId: {$ref: '#/components/schemas/ID'}
+                  status: {type: string}
+                  planHash: {$ref: '#/components/schemas/Digest'}
+                  approvalRequired: {const: true}
+        '400': {description: Invalid request/public chain or key mismatch}
+        '403': {description: Current administrator/node resources/HTTPS/Origin/CSRF denied}
+        '409': {description: CSR proof or task admission unavailable}
+  /api/v1/certificates/chain-tasks/{taskId}:
+    parameters:
+      - in: path
+        name: taskId
+        required: true
+        schema: {$ref: '#/components/schemas/ID'}
+    get:
+      operationId: readNodeCertificateInstallReceiptR15
+      summary: Read an actual completed Agent installation receipt
+      description: Requires completed successful task and exact plan/node/execution-bound public result. Success without the typed receipt is UNKNOWN. Installing a chain does not prove nginx reload or HTTPS health. No private key/path is returned.
+      responses:
+        '200':
+          description: Public installation proof and publication reference
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, csrTaskId, certificateId, planHash, observedAt, result]
+                properties:
+                  taskId: {$ref: '#/components/schemas/ID'}
+                  csrTaskId: {$ref: '#/components/schemas/ID'}
+                  certificateId: {type: string, pattern: '^nodecert-[a-zA-Z0-9_-]+$'}
+                  planHash: {$ref: '#/components/schemas/Digest'}
+                  observedAt: {type: string, format: date-time}
+                  result: {$ref: '#/components/schemas/PublicInstallResult'}
+        '400': {description: Unexpected body or query}
+        '403': {description: Current administrator and task/node read denied}
+        '404': {description: No matching certificate installation task}
+        '409': {description: Actual task/typed installation result not complete}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  schemas:
+    ID: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_-]+$'}
+    Digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+    PublicInstallResult:
+      type: object
+      additionalProperties: false
+      required: [nodeId, domain, keyRef, csrSha256, chainSha256, leafSha256, notAfter]
+      properties:
+        nodeId: {$ref: '#/components/schemas/ID'}
+        domain: {type: string}
+        keyRef: {type: string, maxLength: 96, pattern: '^[a-zA-Z0-9_-]+$'}
+        csrSha256: {$ref: '#/components/schemas/Digest'}
+        chainSha256: {$ref: '#/components/schemas/Digest'}
+        leafSha256: {$ref: '#/components/schemas/Digest'}
+        notAfter: {type: string, format: date-time}

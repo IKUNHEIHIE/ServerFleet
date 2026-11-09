@@ -189,6 +189,22 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 			return errAgentConnect
 		}
 		defer capability.Close()
+		roots, e := x509.SystemCertPool()
+		if request.CertificateCA != "" {
+			raw, e := readAgentFile(request.CertificateCA, 128<<10)
+			if e != nil {
+				return errAgentConnect
+			}
+			roots = x509.NewCertPool()
+			if !roots.AppendCertsFromPEM(raw) {
+				return errAgentConnect
+			}
+		} else if e != nil {
+			return errAgentConnect
+		}
+		capability.roots = roots
+		executor.actions[transport.CertificateInstallAction] = capability.InstallAction()
+		semantic.AllowedActions[transport.CertificateInstallAction] = "1"
 		executor.actions[transport.CertificateCSRAction] = capability.Action()
 		semantic.AllowedActions[transport.CertificateCSRAction] = "1"
 	}

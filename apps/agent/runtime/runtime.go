@@ -71,6 +71,7 @@ type ConnectRequest struct {
 	Persistent      bool
 	FileRoot        string
 	CertificateRoot string
+	CertificateCA   string
 	GatewayPrefix   string
 	NginxBinary     string
 }
@@ -114,6 +115,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	serve := flags.Bool("serve", false, "maintain WSS+mTLS with bounded reconnect; stop with SIGTERM")
 	fileRoot := flags.String("file-root", "", "explicit private Linux file root (enables reviewed files.transfer.v1 profile)")
 	certificateRoot := flags.String("certificate-root", "", "explicit private website-key directory OUTSIDE -file-root (Linux)")
+	certificateCA := flags.String("certificate-ca", "", "optional public website CA bundle (requires -certificate-root; otherwise system roots)")
 	gatewayPrefix := flags.String("gateway-prefix", "", "explicit private Linux nginx prefix (enables reviewed gateway.nginx.* profile)")
 	nginxBinary := flags.String("nginx-binary", "", "nginx executable for the trusted gateway prefix (default: nginx on PATH)")
 	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
@@ -124,6 +126,9 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	}
 	if flags.NArg() != 0 {
 		fmt.Fprintln(stderr, "agent: unexpected positional arguments")
+		return 2
+	}
+	if *certificateCA != "" && (*certificateRoot == "" || !filepath.IsAbs(*certificateCA)) {
 		return 2
 	}
 	if *certificateRoot != "" && (!filepath.IsAbs(*certificateRoot) || !(*serve || *connectOnce) || *fileRoot != "" && (agentPathWithinRoot(*fileRoot, *certificateRoot) || agentPathWithinRoot(*certificateRoot, *fileRoot))) {
@@ -185,7 +190,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
 			return 1
 		}
-		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
+		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
 			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
 			return 1
 		}
@@ -250,7 +255,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		}
 		result, err := deps.Connect(ctx, ConnectRequest{
 			FileRoot:        *fileRoot,
-			CertificateRoot: *certificateRoot,
+			CertificateRoot: *certificateRoot, CertificateCA: *certificateCA,
 			ControllerURL:   origin,
 			StateDir:        *stateDir,
 			RootPin:         resolvedPin,
