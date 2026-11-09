@@ -43,8 +43,8 @@ paths:
                   status: {type: string}
                   planHash: {$ref: '#/components/schemas/Digest'}
                   approvalRequired: {const: true}
-        '400': {description: Invalid bounded request, domain or opaque key reference}
-        '403': {description: Current administrator, node resource, HTTPS or Origin/CSRF denied}
+        '400': {description: "Invalid bounded request, domain or opaque key reference"}
+        '403': {description: "Current administrator, node resource, HTTPS or Origin/CSRF denied"}
         '409': {description: Task rejected}
   /api/v1/certificates/csr-tasks/{taskId}:
     parameters:
@@ -70,7 +70,7 @@ paths:
                   observedAt: {type: string, format: date-time}
                   result: {$ref: '#/components/schemas/PublicCSR'}
         '400': {description: Unexpected body or query}
-        '403': {description: Current administrator, task/node read or HTTPS denied}
+        '403': {description: "Current administrator, task/node read or HTTPS denied"}
         '404': {description: No matching CSR task}
         '409': {description: Task not successfully complete or public receipt unavailable}
 components:

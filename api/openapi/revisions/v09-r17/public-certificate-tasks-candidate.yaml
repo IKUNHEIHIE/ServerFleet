@@ -83,7 +83,7 @@ paths:
       responses:
         '202': {$ref: '#/components/responses/Task'}
         '400': {description: Invalid exact bounded request}
-        '403': {description: Current administrator, CSR read or owned credential denied}
+        '403': {description: "Current administrator, CSR read or owned credential denied"}
         '409': {description: CSR/zone unavailable or task admission rejected}
         '503': {description: Trusted deployment unavailable}
   /api/v1/certificates/public-tasks/{taskId}:

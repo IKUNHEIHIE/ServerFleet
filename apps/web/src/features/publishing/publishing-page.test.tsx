@@ -101,15 +101,13 @@ describe("publishing wizard", () => {
     const { calls } = await renderAuthenticated("/publishing", publishRoutes());
     expect(await screen.findByText("pub-seed")).toBeVisible();
 
-    fireEvent.click(screen.getByRole("button", { name: "执行发布" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续发布" }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/publications/pub-seed/run");
       expect(call).toBeDefined();
     });
     expect(await screen.findByText(/执行已受理：状态 partially_completed/)).toBeVisible();
-    // 刷新完成后表格重新挂载，再打开阶段详情。
-    await screen.findByText("pub-seed");
-    fireEvent.click(screen.getAllByRole("button", { name: "阶段详情" })[0]);
+    // A returned staged result opens its current details; it is not all-success.
     const dialog = await screen.findByRole("dialog");
     fireEvent.click(within(dialog).getAllByRole("button", { name: "回滚此阶段" })[0]);
     await waitFor(() => {
@@ -141,7 +139,7 @@ describe("publishing wizard", () => {
     });
     await screen.findByText("pub-seed");
     const listCallsBefore = calls.filter(call => call.method === "GET" && call.url === "/api/v1/publications").length;
-    fireEvent.click(screen.getByRole("button", { name: "执行发布" }));
+    fireEvent.click(screen.getByRole("button", { name: "继续发布" }));
     expect(await screen.findByText(/HTTP 502 · 错误码 stage_failed/)).toBeVisible();
     await waitFor(() => {
       expect(calls.filter(call => call.method === "GET" && call.url === "/api/v1/publications").length).toBeGreaterThan(listCallsBefore);

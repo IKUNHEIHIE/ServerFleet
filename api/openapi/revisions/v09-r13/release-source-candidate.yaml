@@ -26,7 +26,7 @@ paths:
                   host: {type: string}
                   acquisitionIsInstallation: {const: false}
         '400': {description: Invalid query or unexpected body}
-        '403': {description: Current administrator, HTTPS or runtime gate denied}
+        '403': {description: "Current administrator, HTTPS or runtime gate denied"}
         '503': {description: No trusted release source deployment}
   /api/v1/system/updates/acquire:
     post:
@@ -55,7 +55,7 @@ paths:
             application/json:
               schema: {$ref: '../v09-r12/backups-controller-tasks-candidate.yaml#/components/schemas/Admission'}
         '400': {description: Invalid bounded request}
-        '403': {description: Current administrator, HTTPS, Origin/CSRF or runtime gate denied}
+        '403': {description: "Current administrator, HTTPS, Origin/CSRF or runtime gate denied"}
         '409': {description: Task admission rejected}
         '503': {description: No trusted source deployment}
 components:

@@ -61,8 +61,8 @@ paths:
                   status: {type: string}
                   planHash: {type: string, pattern: '^[a-f0-9]{64}$'}
                   approvalRequired: {const: true}
-        '400': {description: Invalid exact request, JSON record or unsupported input}
-        '403': {description: Current administrator, record read or owned credential denied}
+        '400': {description: "Invalid exact request, JSON record or unsupported input"}
+        '403': {description: "Current administrator, record read or owned credential denied"}
         '409': {description: Zone/record not current or task admission conflict}
         '503': {description: Trusted DNS deployment unavailable}
 components:

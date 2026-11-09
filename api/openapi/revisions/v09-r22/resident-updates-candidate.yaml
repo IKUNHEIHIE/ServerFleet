@@ -65,7 +65,7 @@ paths:
       security: []
       responses:
         '200': {description: Exact nonce and intent binding; commit records actual observed node result}
-        '403': {description: Current registered node identity, intent, approval or connection denied}
+        '403': {description: "Current registered node identity, intent, approval or connection denied"}
         '409': {description: Commit outcome unknown; no retry of effects}
         '503': {description: Audit unavailable}
 components:

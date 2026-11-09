@@ -569,10 +569,10 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 	}
 	if task.ActionID == transport.ResidentUpdateAction {
 		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
-			return transport.ErrLinkRejected
+			return tasks.DispatchResult{Accepted: false, Reason: "resident_update_authority_denied"}, nil
 		}
 		if _, e := transport.ParseResidentUpdateParameters(offer.CanonicalParametersJson); e != nil {
-			return e
+			return tasks.DispatchResult{Accepted: false, Reason: "resident_update_parameters_rejected"}, nil
 		}
 	}
 	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {

@@ -154,9 +154,9 @@ components:
         application/json:
           schema: {$ref: '#/components/schemas/Admission'}
     Invalid: {description: Invalid bounded request}
-    Denied: {description: Current administrator, HTTPS, Origin or CSRF denied}
+    Denied: {description: "Current administrator, HTTPS, Origin or CSRF denied"}
     Conflict: {description: Task/key proof/state rejected or ciphertext unavailable}
-    Unavailable: {description: Trusted deployment, fixed tool, private directory or runtime prerequisites unavailable}
+    Unavailable: {description: "Trusted deployment, fixed tool, private directory or runtime prerequisites unavailable"}
   schemas:
     Reference: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_.-]+$'}
     Digest: {type: string, pattern: '^[a-f0-9]{64}$'}

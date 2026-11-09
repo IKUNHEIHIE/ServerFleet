@@ -63,7 +63,7 @@ paths:
       responses:
         '200': {description: Nonce and fresh observation with durable bound request and stopped-owned-process record}
         '403': {description: Exact provisioned mTLS peer or current Root authority rejected}
-        '503': {description: Process stop, update transaction, reservation or durable evidence unknown}
+        '503': {description: "Process stop, update transaction, reservation or durable evidence unknown"}
   /v1/fence/current:
     servers:
       - url: https://independent-supervisor.example.invalid
@@ -92,7 +92,7 @@ paths:
                     newAuthorityId: {type: string}
                     trustGeneration: {type: integer, minimum: 1}
       responses:
-        '200': {description: Exact original binding, durable record, no owned running child and fresh nonce observation}
+        '200': {description: "Exact original binding, durable record, no owned running child and fresh nonce observation"}
         '403': {description: Provisioned mTLS peer or binding rejected}
         '503': {description: Missing evidence or ambiguous running process; never claimed isolated}
 components:

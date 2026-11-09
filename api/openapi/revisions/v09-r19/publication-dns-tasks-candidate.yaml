@@ -58,7 +58,7 @@ paths:
         '202': {description: DNS compensation child requires approval/execution; original stage remains uncompensated}
         '403': {description: Current resource authorization denied}
         '409': {description: Stage not eligible}
-        '502': {description: Compensation failed/unknown, including downstream stage still uncompensated}
+        '502': {description: "Compensation failed/unknown, including downstream stage still uncompensated"}
   /api/v1/publications/{publicationId}/rollback-all:
     post:
       operationId: reverseCompensatePublicationR19

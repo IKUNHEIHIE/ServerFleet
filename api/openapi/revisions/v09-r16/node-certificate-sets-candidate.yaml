@@ -58,9 +58,9 @@ paths:
                         leafSha256: {$ref: '#/components/schemas/Digest'}
                         chainSha256: {$ref: '#/components/schemas/Digest'}
                         csrSha256: {$ref: '#/components/schemas/Digest'}
-        '400': {description: Invalid bounded set, duplicate node or mixed domain}
+        '400': {description: "Invalid bounded set, duplicate node or mixed domain"}
         '403': {description: Current administrator/resources/HTTPS/Origin/CSRF denied}
-        '409': {description: Installation not complete/current, missing proof or immutable commit conflict}
+        '409': {description: "Installation not complete/current, missing proof or immutable commit conflict"}
 components:
   securitySchemes:
     cookieSession: {type: apiKey, in: cookie, name: sf_session}
