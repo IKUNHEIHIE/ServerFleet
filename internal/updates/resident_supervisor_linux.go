@@ -16,7 +16,7 @@ import (
 // RunResidentSupervisor is the actual parent process. It does not attach to
 // existing daemons, assume process ownership from a PID file, or replay a lock.
 func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h ResidentSupervisorHooks) error {
-	if ctx == nil || ctx.Err() != nil || c.Format != 1 || c.Component != c.Initial.Component || !installedManifest(c.Initial) || c.Initial.Architecture != runtime.GOARCH || c.Policy.Component != c.Component || c.Policy.Architecture != runtime.GOARCH || c.Policy.MinimumSequence < c.Initial.Sequence || !installID(c.NodeID) || h.Current == nil || h.Ready == nil || h.BeforeStop == nil || h.RollbackSafe == nil || h.Commit == nil {
+	if ctx == nil || ctx.Err() != nil || c.Format != 1 || c.Component != c.Initial.Component || !installedManifest(c.Initial) || c.Initial.Architecture != runtime.GOARCH || c.Policy.Component != c.Component || c.Policy.Architecture != runtime.GOARCH || c.Policy.MinimumSequence < c.Initial.Sequence || !installID(c.NodeID) || h.Current == nil || h.Ready == nil || h.BeforeStop == nil || h.Stopped == nil || h.RollbackSafe == nil || h.Commit == nil {
 		return ErrArtifactRejected
 	}
 	for _, p := range []string{c.Directory, c.Mailbox, c.Inbox, c.StageDir, filepath.Dir(c.HealthFile)} {
@@ -239,7 +239,10 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 					if h.BeforeStop(gctx, request) != nil {
 						return ErrApplyUnknown
 					}
-					return process.Stop(gctx, m)
+					if process.Stop(gctx, m) != nil {
+						return ErrApplyUnknown
+					}
+					return h.Stopped(gctx, request)
 				},
 				Start: process.Start, Health: process.Health,
 				RollbackSafe: func(gctx context.Context, _, _ ReleaseManifest) error { return h.RollbackSafe(gctx) },

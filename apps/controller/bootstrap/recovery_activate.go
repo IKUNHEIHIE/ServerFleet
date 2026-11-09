@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
@@ -91,7 +92,7 @@ func loadRecoveryActivationContext(ctx context.Context, filename string, c updat
 }
 func (x recoveryActivationContext) clearance(fence updates.ResidentFenceRecord) recovery.ReleaseClearance {
 	b, _ := json.Marshal(fence)
-	return recovery.ReleaseClearance{HoldID: x.staged.Hold.ID, SnapshotSHA256: x.staged.CipherSHA256, ControllerID: x.reconciled.NewAuthorityID, RootSPKISHA256: x.reconciled.RootSPKI, TrustGeneration: x.reconciled.TrustGeneration, RevocationSequence: x.reconciled.RevocationSequence, FencingEvidenceSHA256: recoveryDigest(b), ReconciledStateSHA256: x.receiptSHA, AuditRecordID: "activate-" + x.staged.Hold.ID[:32]}
+	return recovery.ReleaseClearance{HoldID: x.staged.Hold.ID, SnapshotSHA256: x.staged.CipherSHA256, ControllerID: x.reconciled.NewAuthorityID, RootSPKISHA256: x.reconciled.RootSPKI, TrustGeneration: x.reconciled.TrustGeneration, RevocationSequence: x.reconciled.RevocationSequence, FencingEvidenceSHA256: recoveryDigest(b), ReconciledStateSHA256: x.receiptSHA, AuditRecordID: ""}
 }
 func activatedRecoveryVerifier(filename string, c updates.ResidentSupervisorConfig, activation recoveryActivation) recovery.QuarantineVerifier {
 	return recovery.QuarantineVerifier{Current: func(ctx context.Context, hold recovery.QuarantineHold, clearance recovery.ReleaseClearance) error {
@@ -103,7 +104,9 @@ func activatedRecoveryVerifier(filename string, c updates.ResidentSupervisorConf
 			return recovery.ErrQuarantined
 		}
 		record, e := callRecoveryFence(ctx, x.config.Fence, x.request, nil)
-		if e != nil || x.clearance(record) != clearance {
+		expectedClearance := x.clearance(record)
+		expectedClearance.AuditRecordID = clearance.AuditRecordID
+		if e != nil || expectedClearance != clearance {
 			return recovery.ErrQuarantined
 		}
 		db, e := storage.Open(ctx, storage.Config{Path: c.Database, ReadOnly: true})
@@ -169,7 +172,9 @@ func activateRecoveredController(ctx context.Context, filename, supervisorFile s
 		return zero, e
 	}
 	activation := recoveryActivation{Version: 1, Clearance: x.clearance(fence), ReconciliationSHA256: x.receiptSHA, SupervisorPolicySHA256: updates.ResidentPolicySHA(c), ActivatedAt: time.Now().UTC()}
-	verifier := activatedRecoveryVerifier(filename, c, activation)
+	verifier := recovery.QuarantineVerifier{Current: func(ctx context.Context, hold recovery.QuarantineHold, clearance recovery.ReleaseClearance) error {
+		return activatedRecoveryVerifier(filename, c, activation).Current(ctx, hold, clearance)
+	}}
 	verifier.Prepare = func(ctx context.Context, hold recovery.QuarantineHold) (recovery.ReleaseClearance, error) {
 		if hold != x.staged.Hold {
 			return recovery.ReleaseClearance{}, recovery.ErrQuarantined
@@ -191,7 +196,6 @@ func activateRecoveredController(ctx context.Context, filename, supervisorFile s
 		if e != nil {
 			return recovery.ReleaseClearance{}, e
 		}
-		raw, _ := json.Marshal(activation)
 		e = db.InTx(ctx, func(txctx context.Context, tx storage.Tx) error {
 			actual, e := recovery.ReadReconciliation(txctx, tx)
 			if e != nil || actual != x.reconciled {
@@ -200,10 +204,16 @@ func activateRecoveredController(ctx context.Context, filename, supervisorFile s
 			if e = recovery.BindResidentAuthorityTx(txctx, tx, recovery.ResidentAuthority{AuthorityID: c.NodeID, PolicySHA256: updates.ResidentPolicySHA(c), Directory: c.Directory, Mode: "owned"}, true); e != nil {
 				return e
 			}
-			if e = recovery.RecordResidentActivationTx(txctx, tx, string(raw)); e != nil {
+			auditID, e := recorder.AppendTxWithID(txctx, tx, audit.Event{SubjectID: x.reconciled.NewAuthorityID, Action: "recovery.activate", Result: "success", RequestID: "activate-" + x.staged.Hold.ID[:32], Source: audit.SourceSystem, ReasonCode: "offline_root_authority_and_live_owned_old_controller_fence", At: activation.ActivatedAt})
+			if e != nil {
 				return e
 			}
-			return recorder.AppendTx(txctx, tx, audit.Event{SubjectID: x.reconciled.NewAuthorityID, Action: "recovery.activate", Result: "success", RequestID: activation.Clearance.AuditRecordID, Source: audit.SourceSystem, ReasonCode: "offline_root_authority_and_live_owned_old_controller_fence", At: activation.ActivatedAt})
+			activation.Clearance.AuditRecordID = strconv.FormatInt(auditID, 10)
+			raw, e := json.Marshal(activation)
+			if e != nil {
+				return e
+			}
+			return recovery.RecordResidentActivationTx(txctx, tx, string(raw))
 		})
 		if e != nil {
 			return recovery.ReleaseClearance{}, e

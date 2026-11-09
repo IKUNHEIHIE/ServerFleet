@@ -345,3 +345,34 @@ func (r *SQLRecorder) Get(ctx context.Context, id int64) (Event, error) {
 	}
 	return event, nil
 }
+
+// Actual SQLite row ID, never a request correlation token. The ID returned by
+// the transaction port becomes durable only if the caller commits its owner tx.
+func (r *SQLRecorder) AppendTxWithID(ctx context.Context, tx storage.Tx, event Event) (int64, error) {
+	if e := r.AppendTx(ctx, tx, event); e != nil {
+		return 0, e
+	}
+	var id int64
+	if e := tx.QueryRow(ctx, `SELECT last_insert_rowid()`).Scan(&id); e != nil {
+		return 0, e
+	}
+	if id <= 0 {
+		return 0, errors.New("audit: appended event identity unavailable")
+	}
+	return id, nil
+}
+func (r *SQLRecorder) AppendWithID(ctx context.Context, event Event) (int64, error) {
+	if r == nil || r.db == nil {
+		return 0, errors.New("audit: recorder is not configured")
+	}
+	var id int64
+	e := r.db.InTx(ctx, func(ctx context.Context, tx storage.Tx) error {
+		var e error
+		id, e = r.AppendTxWithID(ctx, tx, event)
+		return e
+	})
+	if e != nil {
+		return 0, e
+	}
+	return id, nil
+}

@@ -67,7 +67,7 @@ func RunSuperviseCommand(ctx context.Context, args []string, stdout, stderr io.W
 			if e != nil {
 				return "", e
 			}
-			roots, e := recovery.ReadPrivateFile(c.RootCertificate, 128<<10)
+			roots, e := pinnedSupervisorRoots(c)
 			if e != nil {
 				return "", e
 			}
@@ -100,7 +100,7 @@ func RunSuperviseCommand(ctx context.Context, args []string, stdout, stderr io.W
 			defer response.Body.Close()
 			var reply map[string]string
 			d := json.NewDecoder(io.LimitReader(response.Body, 4097))
-			if response.StatusCode != 200 || d.Decode(&reply) != nil || len(reply) != 6 || reply["nonce"] != text || reply["phase"] != phase || reply["taskId"] != i.TaskID || reply["executionId"] != i.ExecutionID || reply["planHash"] != i.PlanSHA256 || !transport.FileID(reply["auditRecordId"]) {
+			if response.StatusCode != 200 || d.Decode(&reply) != nil || len(reply) != 6 || reply["nonce"] != text || reply["phase"] != phase || reply["taskId"] != i.TaskID || reply["executionId"] != i.ExecutionID || reply["planHash"] != i.PlanSHA256 || (phase == "commit" && !transport.FileID(reply["auditRecordId"])) || (phase != "commit" && reply["auditRecordId"] != "") {
 				return "", updates.ErrApplyUnknown
 			}
 			return reply["auditRecordId"], nil
@@ -124,33 +124,25 @@ func RunSuperviseCommand(ctx context.Context, args []string, stdout, stderr io.W
 			_, e := call(ctx, *latest, "ready", nil)
 			return e
 		})
-		var state string
+		checkpoint := &supervisorAgentCheckpoint{directory: c.IdentityDir}
 		hooks.BeforeStop = func(ctx context.Context, i transport.ResidentUpdateIntent) error {
 			if hooks.Current(ctx, i, "before-stop") != nil {
 				return updates.ErrApplyUnknown
 			}
-			digest, e := supervisorStateDigest(c.IdentityDir)
-			if e != nil {
-				return e
-			}
-			if state == "" {
-				state = digest
-			} else if state != digest {
+			return checkpoint.BeforeStop(ctx)
+		}
+		hooks.Stopped = func(ctx context.Context, i transport.ResidentUpdateIntent) error {
+			if hooks.Current(ctx, i, "stopped") != nil {
 				return updates.ErrApplyUnknown
 			}
-			return nil
+			return checkpoint.Stopped(ctx)
 		}
-		hooks.RollbackSafe = func(ctx context.Context) error {
-			digest, e := supervisorStateDigest(c.IdentityDir)
-			if e != nil || state == "" || digest != state {
-				return updates.ErrApplyUnknown
-			}
-			return ctx.Err()
-		}
+		hooks.RollbackSafe = func(ctx context.Context) error { return checkpoint.RollbackSafe(ctx) }
+
 		hooks.Commit = func(ctx context.Context, i transport.ResidentUpdateIntent, r updates.InstallReceipt) (string, error) {
 			id, e := call(ctx, i, "commit", &r)
 			if e == nil {
-				state = ""
+				checkpoint = &supervisorAgentCheckpoint{directory: c.IdentityDir}
 			}
 			return id, e
 		}
@@ -262,7 +254,7 @@ func supervisorStateDigest(directory string) (string, error) {
 }
 func controllerResidentReady(c updates.ResidentSupervisorConfig) func(context.Context, updates.ReleaseManifest, updates.OwnedProcessObservation) error {
 	return func(ctx context.Context, m updates.ReleaseManifest, p updates.OwnedProcessObservation) error {
-		roots, e := recovery.ReadPrivateFile(c.RootCertificate, 128<<10)
+		roots, e := pinnedSupervisorRoots(c)
 		if e != nil {
 			return e
 		}
@@ -306,4 +298,12 @@ func controllerResidentReady(c updates.ResidentSupervisorConfig) func(context.Co
 			}
 		}
 	}
+}
+
+func pinnedSupervisorRoots(c updates.ResidentSupervisorConfig) ([]byte, error) {
+	raw, e := recovery.ReadPrivateFile(c.RootCertificate, 128<<10)
+	if e != nil || recoveryDigest(raw) != c.RootCertificateSHA256 {
+		return nil, updates.ErrArtifactRejected
+	}
+	return raw, nil
 }

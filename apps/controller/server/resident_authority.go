@@ -10,6 +10,7 @@ import (
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
 	"serverfleet.local/serverfleet/internal/updates"
+	"strconv"
 	"time"
 )
 
@@ -102,7 +103,7 @@ func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.Reside
 		return nil
 	}
 	backed := map[string]bool{}
-	hooks := updates.ResidentSupervisorHooks{Current: current, BeforeStop: func(ctx context.Context, i transport.ResidentUpdateIntent) error {
+	hooks := updates.ResidentSupervisorHooks{Current: current, Stopped: func(ctx context.Context, i transport.ResidentUpdateIntent) error { return current(ctx, i, "stopped") }, BeforeStop: func(ctx context.Context, i transport.ResidentUpdateIntent) error {
 		if current(ctx, i, "before-stop") != nil {
 			return updates.ErrApplyUnknown
 		}
@@ -120,11 +121,11 @@ func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.Reside
 			return "", updates.ErrApplyUnknown
 		}
 		id := "resident-" + i.ExecutionID
-		e := recorder.Append(ctx, audit.Event{SubjectID: c.NodeID, Action: transport.ControllerUpdateAction, Result: "success", TaskID: i.TaskID, RequestID: id, Source: audit.SourceSystem, ReasonCode: "owned_controller_signed_image_fresh_health_compatible_storage", At: time.Now().UTC()})
+		auditID, e := recorder.AppendWithID(ctx, audit.Event{SubjectID: c.NodeID, Action: transport.ControllerUpdateAction, Result: "success", TaskID: i.TaskID, RequestID: id, Source: audit.SourceSystem, ReasonCode: "owned_controller_signed_image_fresh_health_compatible_storage", At: time.Now().UTC()})
 		if e != nil {
 			return "", e
 		}
-		return id, nil
+		return strconv.FormatInt(auditID, 10), nil
 	}}
 	return hooks, db.Close, nil
 }

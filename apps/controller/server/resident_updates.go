@@ -13,6 +13,7 @@ import (
 	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/transport"
 	"serverfleet.local/serverfleet/internal/updates"
+	"strconv"
 	"time"
 )
 
@@ -117,16 +118,19 @@ func (s *Server) residentUpdateAdmission(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
+	auditRecordID := ""
 	if b.Phase == "commit" {
 		receipt := b.Receipt
-		if receipt == nil || receipt.Intent.TaskID != t.ID || receipt.Intent.ExecutionID != b.Intent.ExecutionID || receipt.Attempted.Component != "agent" || receipt.Attempted.Version != p.Version || receipt.Attempted.SHA256 != p.ReleaseSHA256 || (receipt.State != "installed" && receipt.State != "rolled_back") || receipt.State == "installed" && receipt.Current != receipt.Attempted || receipt.State == "rolled_back" && (!receipt.Intent.AllowRollback || receipt.Current != receipt.Intent.Previous) || receipt.Health.ExecutionID != b.Intent.ExecutionID || receipt.Health.Component != "agent" || receipt.Health.Version != receipt.Current.Version || receipt.Health.SHA256 != receipt.Current.SHA256 || receipt.Health.ObservedAt.Before(receipt.Health.StartedAt) || time.Since(receipt.Health.ObservedAt) < 0 || time.Since(receipt.Health.ObservedAt) > 10*time.Second {
+		if receipt == nil || !updates.ValidInstallCommitReceipt(*receipt) || receipt.Intent.TaskID != t.ID || receipt.Intent.ExecutionID != b.Intent.ExecutionID || receipt.Attempted.Component != "agent" || receipt.Attempted.Version != p.Version || receipt.Attempted.SHA256 != p.ReleaseSHA256 || (receipt.State != "installed" && receipt.State != "rolled_back") || receipt.State == "installed" && receipt.Current != receipt.Attempted || receipt.State == "rolled_back" && (!receipt.Intent.AllowRollback || receipt.Current != receipt.Intent.Previous) || receipt.Health.ExecutionID != b.Intent.ExecutionID || receipt.Health.Component != "agent" || receipt.Health.Version != receipt.Current.Version || receipt.Health.SHA256 != receipt.Current.SHA256 || receipt.Health.ObservedAt.Before(receipt.Health.StartedAt) || time.Since(receipt.Health.ObservedAt) < 0 || time.Since(receipt.Health.ObservedAt) > 10*time.Second {
 			deny()
 			return
 		}
-		if s.Audit.Append(r.Context(), audit.Event{SubjectID: t.SubmitterID, Action: transport.ResidentUpdateAction, Result: "success", RequestID: b.Nonce, TaskID: t.ID, NodeIDs: []string{peer.NodeID}, Source: audit.SourceSystem, ReasonCode: "supervisor_verified_signed_image_and_fresh_connected_health", At: time.Now().UTC()}) != nil {
+		auditID, auditErr := s.Audit.AppendWithID(r.Context(), audit.Event{SubjectID: t.SubmitterID, Action: transport.ResidentUpdateAction, Result: "success", RequestID: b.Nonce, TaskID: t.ID, NodeIDs: []string{peer.NodeID}, Source: audit.SourceSystem, ReasonCode: "supervisor_verified_signed_image_and_fresh_connected_health", At: time.Now().UTC()})
+		if auditErr != nil {
 			releaseSourceJSON(w, 503, map[string]string{"code": "UPDATE_AUDIT_UNAVAILABLE"})
 			return
 		}
+		auditRecordID = strconv.FormatInt(auditID, 10)
 		code, message := tasks.NodeResultSucceeded, "signed Agent installed; owned process and reconnected health observed"
 		if receipt.State == "rolled_back" {
 			code, message = tasks.NodeResultFailed, "candidate unhealthy; compatible previous Agent restored and observed healthy; later batches halted"
@@ -136,7 +140,7 @@ func (s *Server) residentUpdateAdmission(w http.ResponseWriter, r *http.Request)
 			return
 		}
 	}
-	releaseSourceJSON(w, 200, map[string]string{"nonce": b.Nonce, "phase": b.Phase, "taskId": t.ID, "executionId": b.Intent.ExecutionID, "planHash": t.PlanHash, "auditRecordId": "update-" + b.Nonce})
+	releaseSourceJSON(w, 200, map[string]string{"nonce": b.Nonce, "phase": b.Phase, "taskId": t.ID, "executionId": b.Intent.ExecutionID, "planHash": t.PlanHash, "auditRecordId": auditRecordID})
 }
 
 type residentControllerWorker struct {

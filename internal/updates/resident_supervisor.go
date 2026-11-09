@@ -47,6 +47,7 @@ type ResidentSupervisorHooks struct {
 	Current      func(context.Context, transport.ResidentUpdateIntent, string) error
 	Ready        func(context.Context, ReleaseManifest, OwnedProcessObservation) error
 	BeforeStop   func(context.Context, transport.ResidentUpdateIntent) error
+	Stopped      func(context.Context, transport.ResidentUpdateIntent) error
 	RollbackSafe func(context.Context) error
 	Commit       func(context.Context, transport.ResidentUpdateIntent, InstallReceipt) (string, error)
 }

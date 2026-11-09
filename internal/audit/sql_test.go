@@ -251,3 +251,35 @@ func TestSQLRecorderInvalidQuery(t *testing.T) {
 		t.Fatal("accepted unknown source filter")
 	}
 }
+
+func TestReturnedAuditIDMatchesDurableRowAndTransactionRollback(t *testing.T) {
+	now := time.Now().UTC()
+	recorder, db := newRecorder(t, now)
+	ctx := context.Background()
+	event := baseEvent(now)
+	event.RequestID = "actual-row-reference"
+	id, e := recorder.AppendWithID(ctx, event)
+	if e != nil || id <= 0 {
+		t.Fatal(id, e)
+	}
+	page, e := recorder.Query(ctx, audit.Query{RequestID: event.RequestID})
+	if e != nil || len(page.Items) != 1 || page.Items[0].ID != id {
+		t.Fatal(page, e)
+	}
+	aborted := baseEvent(now)
+	aborted.RequestID = "rolled-back-reference"
+	abort := errors.New("abort owner mutation")
+	e = db.InTx(ctx, func(ctx context.Context, tx storage.Tx) error {
+		if _, e := recorder.AppendTxWithID(ctx, tx, aborted); e != nil {
+			return e
+		}
+		return abort
+	})
+	if !errors.Is(e, abort) {
+		t.Fatal(e)
+	}
+	page, e = recorder.Query(ctx, audit.Query{RequestID: aborted.RequestID})
+	if e != nil || len(page.Items) != 0 {
+		t.Fatal("uncommitted audit survived", page, e)
+	}
+}

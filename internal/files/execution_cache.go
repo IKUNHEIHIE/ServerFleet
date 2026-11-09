@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 )
 
@@ -153,7 +154,7 @@ func OpenExecutionCache(ctx context.Context, directory, id string) (ExecutionCac
 	if !validChannelID(id) || ctx.Err() != nil {
 		return meta, nil, ErrTransferIdentity
 	}
-	root, err := cacheRoot(directory)
+	root, err := existingCacheRoot(directory)
 	if err != nil {
 		return meta, nil, err
 	}
@@ -220,7 +221,7 @@ func ReadExecutionCacheManifest(directory, id string) (ExecutionCacheManifest, e
 	if !validChannelID(id) {
 		return meta, ErrTransferIdentity
 	}
-	root, err := cacheRoot(directory)
+	root, err := existingCacheRoot(directory)
 	if err != nil {
 		return meta, err
 	}
@@ -246,7 +247,7 @@ func ReleaseExecutionCache(directory, id, task, plan string) error {
 	if err != nil || meta.TaskID != task || meta.PlanSHA256 != plan {
 		return ErrTransferIdentity
 	}
-	root, err := cacheRoot(directory)
+	root, err := existingCacheRoot(directory)
 	if err != nil {
 		return err
 	}
@@ -258,6 +259,45 @@ func ReleaseExecutionCache(directory, id, task, plan string) error {
 	if err != nil {
 		return err
 	}
-	defer dir.Close()
-	return dir.Sync()
+	if e := dir.Sync(); e != nil {
+		dir.Close()
+		return e
+	}
+	dir.Close()
+	// Only remove an empty container after proven success. Other active/UNKNOWN
+	// caches make rmdir fail and are retained; never recursively delete the root.
+	_ = os.Remove(filepath.Join(directory, "resume-cache"))
+	return nil
+}
+
+// Read/cleanup paths never create a new cache directory. In particular a second
+// cleanup or an unavailable resume candidate must not recreate empty residue.
+func existingCacheRoot(directory string) (*os.Root, error) {
+	if !filepath.IsAbs(directory) {
+		return nil, ErrSpoolInsecure
+	}
+	path := filepath.Join(directory, "resume-cache")
+	for _, p := range []string{directory, path} {
+		i, e := os.Lstat(p)
+		if e != nil {
+			return nil, e
+		}
+		if !i.IsDir() || i.Mode()&os.ModeSymlink != 0 || !spoolOwned(i) || runtime.GOOS != "windows" && i.Mode().Perm()&0077 != 0 {
+			return nil, ErrSpoolInsecure
+		}
+	}
+	before, e := os.Lstat(path)
+	if e != nil {
+		return nil, e
+	}
+	r, e := os.OpenRoot(path)
+	if e != nil {
+		return nil, e
+	}
+	after, e := r.Stat(".")
+	if e != nil || !os.SameFile(before, after) {
+		r.Close()
+		return nil, ErrSpoolInsecure
+	}
+	return r, nil
 }
