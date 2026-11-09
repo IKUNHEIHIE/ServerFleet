@@ -221,7 +221,7 @@ type publicationCertificateInspection struct {
 }
 
 func (c publicationCertificateInspection) Inspect(ctx context.Context, subjectID, certificateID, domain string) (string, error) {
-	if strings.HasPrefix(certificateID, nodeCertificatePrefix) {
+	if isNodeCertificateReference(certificateID) {
 		return c.nodeCertificates.inspect(ctx, subjectID, certificateID, domain)
 	}
 	detail, err := c.service.Get(ctx, subjectID, certificateID)
@@ -240,7 +240,7 @@ func (c publicationCertificateInspection) Inspect(ctx context.Context, subjectID
 }
 
 func (c publicationCertificateInspection) Paths(ctx context.Context, subject, certificateID string) (string, string, error) {
-	if strings.HasPrefix(certificateID, nodeCertificatePrefix) {
+	if isNodeCertificateReference(certificateID) {
 		return c.nodeCertificates.paths(ctx, subject, certificateID, "")
 	}
 	paths, ok := c.paths[certificateID]
@@ -329,12 +329,12 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		return "", err
 	}
 	expectedLeaf := ""
-	if request.HTTPS && strings.HasPrefix(request.CertificateID, nodeCertificatePrefix) {
+	if request.HTTPS && isNodeCertificateReference(request.CertificateID) {
 		cp, kp, e := a.nodeCertificates.paths(ctx, request.SubjectID, request.CertificateID, gatewayID)
 		if e != nil || cp != certificatePath || kp != keyPath {
 			return "", publishing.ErrProductionCertificate
 		}
-		proof, e := a.nodeCertificates.proof(ctx, request.SubjectID, request.CertificateID)
+		proof, e := a.nodeCertificates.proofForGateway(ctx, request.SubjectID, request.CertificateID, gatewayID)
 		if e != nil {
 			return "", e
 		}
@@ -689,7 +689,7 @@ func (c publicationCleanupCleaner) DeleteChallengeRecord(ctx context.Context, su
 }
 
 func (c publicationCertificateInspection) PathsForGateway(ctx context.Context, subject, certificateID, gatewayID string) (string, string, error) {
-	if strings.HasPrefix(certificateID, nodeCertificatePrefix) {
+	if isNodeCertificateReference(certificateID) {
 		return c.nodeCertificates.paths(ctx, subject, certificateID, gatewayID)
 	}
 	return c.Paths(ctx, subject, certificateID)

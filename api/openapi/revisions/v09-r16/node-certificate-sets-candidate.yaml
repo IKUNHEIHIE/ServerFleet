@@ -1,0 +1,68 @@
+openapi: 3.1.0
+info:
+  title: Immutable multi-node website certificate sets (PROPOSED)
+  version: 0.9.0-r16-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/certificates/node-sets:
+    post:
+      operationId: freezeNodeCertificateSetR16
+      summary: Register an immutable mapping of completed node-specific installations
+      description: Current administrator, task/node read and certificate resource access for every member are required. All actual successful installation receipts must be current, for distinct nodes and the same exact DNS identity. This metadata operation executes no Agent/provider request and copies no key. Installation task/plan/CSR/chain/leaf digests are included in a canonical SHA-256 set ID. Repeating the same set cannot overwrite an existing different mapping. Publication resolves each gateway through its actual node and rechecks the matching completed proof, node resources, expiry and trusted private root; actual HTTPS leaf is checked against that node's certificate.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [installTaskIds]
+              properties:
+                installTaskIds:
+                  type: array
+                  minItems: 2
+                  maxItems: 8
+                  uniqueItems: true
+                  items: {type: string, pattern: '^[a-zA-Z0-9_-]{1,128}$'}
+      responses:
+        '201':
+          description: Persisted public mapping, not a successful gateway publication
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [certificateId, entries]
+                properties:
+                  certificateId: {type: string, pattern: '^nodecertset-[a-f0-9]{64}$'}
+                  entries:
+                    type: array
+                    minItems: 2
+                    maxItems: 8
+                    items:
+                      type: object
+                      required: [nodeId, taskId, planSha256, domain, keyRef, leafSha256, chainSha256, csrSha256]
+                      properties:
+                        nodeId: {type: string}
+                        taskId: {type: string}
+                        planSha256: {$ref: '#/components/schemas/Digest'}
+                        domain: {type: string}
+                        keyRef: {type: string}
+                        leafSha256: {$ref: '#/components/schemas/Digest'}
+                        chainSha256: {$ref: '#/components/schemas/Digest'}
+                        csrSha256: {$ref: '#/components/schemas/Digest'}
+        '400': {description: Invalid bounded set, duplicate node or mixed domain}
+        '403': {description: Current administrator/resources/HTTPS/Origin/CSRF denied}
+        '409': {description: Installation not complete/current, missing proof or immutable commit conflict}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  schemas:
+    Digest: {type: string, pattern: '^[a-f0-9]{64}$'}

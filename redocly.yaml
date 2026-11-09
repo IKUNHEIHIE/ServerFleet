@@ -47,3 +47,6 @@ apis:
 
   v09-r15-node-certificate-chain:
     root: api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml
+
+  v09-r16-node-certificate-sets:
+    root: api/openapi/revisions/v09-r16/node-certificate-sets-candidate.yaml

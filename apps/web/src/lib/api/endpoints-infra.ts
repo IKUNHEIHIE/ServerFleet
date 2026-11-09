@@ -277,3 +277,19 @@ export const nodeCertificateApi = {
   get: (taskId: string) =>
     apiClient.request<NodeCertificateReceipt>(`/api/v1/certificates/chain-tasks/${encodeURIComponent(taskId)}`),
 };
+
+export interface NodeCertificateSet {
+  readonly certificateId: string;
+  readonly entries: readonly {
+    readonly nodeId: string;
+    readonly taskId: string;
+    readonly domain: string;
+    readonly keyRef: string;
+    readonly leafSha256: string;
+    readonly chainSha256: string;
+  }[];
+}
+export const nodeCertificateSetsApi = {
+  create: (installTaskIds: readonly string[]) =>
+    apiClient.request<NodeCertificateSet>("/api/v1/certificates/node-sets", { method: "POST", body: { installTaskIds } }),
+};

@@ -139,7 +139,7 @@ func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {
 	}
 	certificates := make(map[string]CertificateInstallPaths, len(document.Certificates))
 	for _, entry := range document.Certificates {
-		if strings.HasPrefix(entry.CertificateID, nodeCertificatePrefix) || entry.CertificateID == "" || len(entry.CertificateID) > 128 || entry.CertificateID != strings.TrimSpace(entry.CertificateID) {
+		if isNodeCertificateReference(entry.CertificateID) || entry.CertificateID == "" || len(entry.CertificateID) > 128 || entry.CertificateID != strings.TrimSpace(entry.CertificateID) {
 			return nil, ErrGatewayDeployment
 		}
 		if _, exists := certificates[entry.CertificateID]; exists {

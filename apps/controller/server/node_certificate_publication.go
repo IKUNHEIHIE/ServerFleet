@@ -28,7 +28,7 @@ type nodeCertificatePublication struct {
 }
 
 func (p *nodeCertificatePublication) proof(ctx context.Context, subject, id string) (transport.CertificateChainReceipt, error) {
-	if p == nil || p.db == nil || p.tasks == nil || p.authorizer == nil || !strings.HasPrefix(id, nodeCertificatePrefix) {
+	if p == nil || p.db == nil || p.tasks == nil || p.authorizer == nil || p.now == nil || !strings.HasPrefix(id, nodeCertificatePrefix) {
 		return transport.CertificateChainReceipt{}, publishing.ErrProductionCertificate
 	}
 	taskID := strings.TrimPrefix(id, nodeCertificatePrefix)
@@ -52,8 +52,42 @@ func (p *nodeCertificatePublication) proof(ctx context.Context, subject, id stri
 	}
 	return receipt, nil
 }
+func isNodeCertificateReference(id string) bool {
+	return strings.HasPrefix(id, nodeCertificatePrefix) || strings.HasPrefix(id, transport.CertificateSetPrefix)
+}
+func (p *nodeCertificatePublication) proofForGateway(ctx context.Context, subject, id, gatewayID string) (transport.CertificateChainReceipt, error) {
+	if !strings.HasPrefix(id, transport.CertificateSetPrefix) {
+		return p.proof(ctx, subject, id)
+	}
+	if p == nil {
+		return transport.CertificateChainReceipt{}, publishing.ErrProductionCertificate
+	}
+	set, err := transport.ReadCertificateSet(ctx, p.db, id)
+	if err != nil {
+		return transport.CertificateChainReceipt{}, err
+	}
+	targetNode := ""
+	if gatewayID != "" {
+		record, e := p.gateways.GetGateway(ctx, subject, gatewayID)
+		if e != nil {
+			return transport.CertificateChainReceipt{}, e
+		}
+		targetNode = record.NodeID
+	}
+	for _, entry := range set.Entries {
+		if targetNode != "" && entry.NodeID != targetNode {
+			continue
+		}
+		proof, e := p.proof(ctx, subject, nodeCertificatePrefix+entry.TaskID)
+		if e != nil || transport.CertificateSetEntryFromReceipt(proof) != entry {
+			return transport.CertificateChainReceipt{}, publishing.ErrProductionCertificate
+		}
+		return proof, nil
+	}
+	return transport.CertificateChainReceipt{}, publishing.ErrProductionCertificate
+}
 func (p *nodeCertificatePublication) paths(ctx context.Context, subject, id, gatewayID string) (string, string, error) {
-	receipt, err := p.proof(ctx, subject, id)
+	receipt, err := p.proofForGateway(ctx, subject, id, gatewayID)
 	if err != nil {
 		return "", "", err
 	}
@@ -67,6 +101,22 @@ func (p *nodeCertificatePublication) paths(ctx context.Context, subject, id, gat
 	return filepath.Join(root, receipt.Result.KeyRef, "chain-"+receipt.Result.LeafSHA256+".pem"), filepath.Join(root, receipt.Result.KeyRef, "website-key.pem"), nil
 }
 func (p *nodeCertificatePublication) inspect(ctx context.Context, subject, id, domain string) (string, error) {
+	if p == nil {
+		return "", publishing.ErrProductionCertificate
+	}
+	if strings.HasPrefix(id, transport.CertificateSetPrefix) {
+		set, err := transport.ReadCertificateSet(ctx, p.db, id)
+		if err != nil {
+			return "", err
+		}
+		for _, entry := range set.Entries {
+			proof, e := p.proof(ctx, subject, nodeCertificatePrefix+entry.TaskID)
+			if e != nil || transport.CertificateSetEntryFromReceipt(proof) != entry || !certificateMatchesDomain(proof.Result.Domain, domain) {
+				return "", publishing.ErrProductionCertificate
+			}
+		}
+		return fmt.Sprintf("node_certificate_set=%s;nodes=%d", set.ID, len(set.Entries)), nil
+	}
 	receipt, err := p.proof(ctx, subject, id)
 	if err != nil || !certificateMatchesDomain(receipt.Result.Domain, domain) {
 		return "", publishing.ErrProductionCertificate

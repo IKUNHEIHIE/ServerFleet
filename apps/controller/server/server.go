@@ -241,6 +241,7 @@ func Migrations() [][]storage.Migration {
 		transport.RecoveryMigrations(),
 		transport.CertificateCSRMigrations(),
 		transport.CertificateChainMigrations(),
+		transport.CertificateSetMigrations(),
 		recovery.ReconciliationMigrations(),
 		updates.AcquisitionMigrations(),
 		audit.Migrations(),
@@ -286,6 +287,7 @@ func AuditActions() []string {
 		"gateway.provision",
 		transport.CertificateCSRAction,
 		transport.CertificateInstallAction,
+		"certificates.node_sets.create",
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",
@@ -1197,6 +1199,7 @@ func (s *Server) registerRoutes() error {
 	s.registerReleaseSourceRoutes()
 	s.registerCertificateCSRRoutes()
 	s.registerCertificateInstallRoutes()
+	s.registerCertificateSetRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {

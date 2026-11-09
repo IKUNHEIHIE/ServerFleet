@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, TextArea, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
-import { nodeCertificateApi, type NodeCSRTask, type NodeCertificateReceipt } from "@/lib/api/endpoints-infra";
+import { nodeCertificateApi, nodeCertificateSetsApi, type NodeCSRTask, type NodeCertificateReceipt, type NodeCertificateSet } from "@/lib/api/endpoints-infra";
 import { describeApiError } from "@/lib/api/errors";
 import { useAction } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
@@ -18,8 +18,11 @@ export function NodeCertificatePanel() {
   const [task, setTask] = useState<NodeCSRTask | null>(null);
   const [lookupId, setLookupId] = useState("");
   const [receipt, setReceipt] = useState<NodeCertificateReceipt | null>(null);
+  const [setTaskIDs,setSetTaskIDs]=useState("");
+  const [certificateSet,setCertificateSet]=useState<NodeCertificateSet|null>(null);
   const [validation, setValidation] = useState<string | null>(null);
   const install = useAction((body: Parameters<typeof nodeCertificateApi.install>[0]) => nodeCertificateApi.install(body));
+  const registerSet=useAction((ids:readonly string[])=>nodeCertificateSetsApi.create(ids));
   const read = useAction((id: string) => nodeCertificateApi.get(id));
   const locked = !allowed || session.writesLocked || install.pending;
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -42,6 +45,13 @@ export function NodeCertificatePanel() {
     const result = await read.run(lookupId);
     if (result.ok && result.data) setReceipt(result.data.data);
   }
+  async function createSet(event:FormEvent<HTMLFormElement>){
+    event.preventDefault();
+    const ids=setTaskIDs.split(/[\s,]+/).filter(Boolean);
+    if(ids.length<2 || ids.length>8 || new Set(ids).size!==ids.length || ids.some(id=>!/^[a-zA-Z0-9_-]{1,128}$/.test(id))){setValidation("请填写 2—8 个不同节点的已完成证书安装任务 ID，以逗号或空白分隔。");return;}
+    setValidation(null);setCertificateSet(null);
+    const result=await registerSet.run(ids);if(result.ok&&result.data)setCertificateSet(result.data.data);
+  }
   return <Panel title="安装公开网站证书链" description="使用已完成的节点 CSR 关联网站私钥。节点校验信任链、域名、有效期与私钥匹配；私钥不会上传到 Controller。">
     <div className="space-y-4 px-5 py-4">
       {!allowed ? <Notice tone="warning" title="需要管理员及节点授权">当前身份不能安装网站证书。</Notice> : null}
@@ -63,6 +73,12 @@ export function NodeCertificatePanel() {
         <p className="break-all font-mono text-xs">叶证书 SHA-256 {receipt.result.leafSha256}</p>
         <p className="break-all font-mono text-xs">实际链字节 SHA-256 {receipt.result.chainSha256}</p>
       </div> : null}
+      <form onSubmit={createSet} className="space-y-3 border-t pt-4">
+        <Field label="多节点证书集合" hint="每个节点先完成自己的 CSR、公开证书签发与安装；集合只绑定已完成回执，不复制私钥。">{ids=><TextArea id={ids.inputId} value={setTaskIDs} onChange={event=>setSetTaskIDs(event.target.value)} disabled={locked||registerSet.pending} rows={3} maxLength={1100} required />}</Field>
+        <Button type="submit" disabled={locked||registerSet.pending} loading={registerSet.pending}>登记不可变证书集合</Button>
+      </form>
+      {registerSet.error?<Notice tone="error" title="证书集合未登记">{describeApiError(registerSet.error)}</Notice>:null}
+      {certificateSet?<div className="space-y-2 rounded-lg border p-3 text-sm"><p className="break-all font-mono text-xs">多网关发布证书 ID：{certificateSet.certificateId}</p><ul>{certificateSet.entries.map(entry=><li key={entry.nodeId}>{entry.nodeId} · {entry.domain} · {entry.keyRef}</li>)}</ul></div>:null}
       {validation ? <Notice tone="error" title="输入无效">{validation}</Notice> : null}
       {install.error ? <Notice tone="error" title="安装任务未登记">{describeApiError(install.error)}</Notice> : null}
       {read.error ? <Notice tone="error" title="安装回执未就绪">{describeApiError(read.error)}</Notice> : null}

@@ -81,3 +81,5 @@ Wave6-R3补记（2026-11-02）：已接收文件可信CLI、skip/overwrite/renam
 R14集中编码候选（UNTESTED）：节点本地网站私钥/公开CSR统一任务、精确待派发复权和公共回执事务；新增第34项迁移。见[差异](revisions/v09-r14-node-csr.md)。旧候选/Proto/gen/已接收SQL保持；CSR不是ACME签发或HTTPS成功，不关闭B04/G2。
 
 R15集中编码（UNTESTED）：公开证书链批准安装/节点私钥留存/typed终态、第35项迁移和nodecert发布/TLS叶指纹绑定，见[差异](revisions/v09-r15-node-certificate-chain.md)。通用任务参数1024字节限制不放宽；仅严格公开链专用载荷有界例外。跨节点证书槽拒绝，不据此关闭完整ACME/多节点HTTPS/B04/G2。
+
+R16集中代码候选（UNTESTED）：不可变多节点独立证书集合及按实际gateway节点选择路径/叶证书，新增第36项迁移，见[差异](revisions/v09-r16-node-certificate-sets.md)。不复制网站私钥、不跨节点套用单槽、不把集合或任务登记称作HTTPS成功；完整真实组合与G2/发布仍OPEN。
