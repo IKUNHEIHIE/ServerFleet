@@ -153,6 +153,9 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		if ctx.Err() != nil {
 			return errAgentSession
 		}
+		if request.UpdateMailbox != "" && residentUpdateBusy(request.UpdateMailbox) {
+			return errExecutionRejected
+		}
 		if offer == nil {
 			return errExecutionRejected
 		}
@@ -166,6 +169,14 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 			return errExecutionRejected
 		}
 		return action.Validate(offer.CanonicalParametersJson)
+	}
+	if request.UpdateMailbox != "" {
+		action, e := registeredResidentUpdate(request.UpdateMailbox, facts.NodeID)
+		if e != nil {
+			return e
+		}
+		executor.actions[transport.ResidentUpdateAction] = action
+		semantic.AllowedActions[transport.ResidentUpdateAction] = "1"
 	}
 	if request.RootHelper != "" {
 		action, e := registeredRootHelper(request.RootHelper, facts.NodeID)

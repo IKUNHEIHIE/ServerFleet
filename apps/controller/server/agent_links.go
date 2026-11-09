@@ -24,6 +24,7 @@ func agentAllowedActions() map[string]string {
 	return map[string]string{
 		"tasks.command":                    "1",
 		transport.CommandCapability:        "1",
+		transport.ResidentUpdateAction:     "1",
 		transport.CertificateCSRAction:     "1",
 		transport.CertificateInstallAction: "1",
 		transport.FileCapability:           "1",
@@ -148,6 +149,14 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	}
 	if _, err = b.tasks.CheckDispatch(ctx, task.ID, task.PlanHash, observation.Identity.NodeID); err != nil {
 		return transport.ErrLinkRejected
+	}
+	if task.ActionID == transport.ResidentUpdateAction {
+		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
+			return transport.ErrLinkRejected
+		}
+		if _, e := transport.ParseResidentUpdateParameters(offer.CanonicalParametersJson); e != nil {
+			return e
+		}
 	}
 	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
 		params, e := transport.ParseCommandParameters(offer.CanonicalParametersJson)
@@ -542,6 +551,14 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		ScopeRevision:           task.ScopeRevision,
 		PluginId:                task.PluginID,
 		ActionSchemaVersion:     b.allowedActions()[command.ActionID],
+	}
+	if task.ActionID == transport.ResidentUpdateAction {
+		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
+			return transport.ErrLinkRejected
+		}
+		if _, e := transport.ParseResidentUpdateParameters(offer.CanonicalParametersJson); e != nil {
+			return e
+		}
 	}
 	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
 		params, e := transport.ParseCommandParameters(command.Params)

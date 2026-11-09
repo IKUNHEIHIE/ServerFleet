@@ -1,0 +1,83 @@
+openapi: 3.0.3
+info:
+  title: Server Fleet R22 resident supervised updates candidate
+  version: 0.9.0-r22
+  description: Explicit signed release, human administrator approval, owned child lifecycle and live health; no claimed download success.
+servers:
+  - url: https://controller.example.invalid
+security:
+  - session: []
+paths:
+  /api/v1/system/agent-fleet-updates:
+    post:
+      operationId: submitResidentAgentFleetUpdate
+      summary: Freeze ordered homogeneous nodes and use existing modifying batches of one then five
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - {$ref: '#/components/schemas/ReleaseRequest'}
+                - type: object
+                  required: [nodeIds]
+                  properties:
+                    nodeIds:
+                      type: array
+                      minItems: 1
+                      maxItems: 64
+                      items: {type: string}
+      responses:
+        '202': {description: Unified task awaits independent current human administrator approval}
+        '403': {description: Administrator or current resource scope denied}
+        '409': {description: Task rejected}
+  /api/v1/system/controller-update-tasks:
+    post:
+      operationId: submitResidentControllerUpdate
+      summary: Submit external supervisor handoff for the actual Controller component
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: {$ref: '#/components/schemas/ReleaseRequest'}
+      responses:
+        '202': {description: Human approved task required; the external parent performs the actual restart}
+        '403': {description: Missing current administrator or provisioned owning supervisor}
+        '409': {description: Policy changed or task rejected}
+  /api/v1/system/controller-update-receipts/{taskId}:
+    get:
+      operationId: readResidentControllerReceipt
+      summary: Read historical verified install receipt separately from restarted task UNKNOWN and current build label
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: {type: string}
+      responses:
+        '200': {description: Verified slot receipt; historical health is not a current liveness claim}
+        '403': {description: Current administrator denied}
+        '404': {description: Original owner or task not found}
+        '409': {description: Missing or ambiguous receipt remains UNKNOWN}
+  /api/v1/agent/update-admission:
+    post:
+      operationId: residentSupervisorCurrentAdmission
+      summary: Node mTLS only; exact running offer, current approval and phase-bound health/commit
+      security: []
+      responses:
+        '200': {description: Exact nonce and intent binding; commit records actual observed node result}
+        '403': {description: Current registered node identity, intent, approval or connection denied}
+        '409': {description: Commit outcome unknown; no retry of effects}
+        '503': {description: Audit unavailable}
+components:
+  securitySchemes:
+    session: {type: apiKey, in: cookie, name: sf_session}
+  schemas:
+    ReleaseRequest:
+      type: object
+      required: [version, keyId, releaseSha256, policySha256, idempotencyKey]
+      properties:
+        version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+        keyId: {type: string}
+        releaseSha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        policySha256: {type: string, pattern: '^[0-9a-f]{64}$'}
+        idempotencyKey: {type: string}

@@ -95,3 +95,7 @@ R20 五项核心包首个代码检查点（UNTESTED）：普通程序 profile、
 ### R21 — Agent file execution resume (candidate / UNTESTED)
 
 New files.resume permission/task and files.resume.v1 capability are explicit, Web-only human-approved modifications. Existing file capability unchanged; optional resumeFrom is accepted only by the new capability. No generated wire changes: existing resume_offset carries the new verified offset. Original executions are immutable; commit-intent/unknown final publication cannot be resumed. Private confirmed-prefix adoption and retained source require real restart/permission/negative verification in the final consolidated acceptance.
+
+### R22 — supervised Controller/Agent update (candidate / UNTESTED)
+
+Typed Agent apply is explicitly enabled by node-owned mailbox configuration and remains WSS-dispatched. Read-only/current mTLS admission and commit are Controller-owned, not a new inbound execution endpoint on an Agent. Existing unified modifying task batches supply ordered canary then five, independent current human administrator approval, stop on failure/UNKNOWN, and per-node results. Controller handoff uses the external owned supervisor and separate historical install receipt; original interrupted tasks remain UNKNOWN. New updates→transport edge consumes only the typed message. No generated protocol or historical schema changes. Standalone Linux supervisor, actual signed builds, independent health/storage and restart/negative evidence await consolidated verification.

@@ -73,6 +73,7 @@ type ConnectRequest struct {
 	CertificateRoot string
 	CertificateCA   string
 	CommandProfiles string
+	UpdateMailbox   string
 	RootHelper      string
 	GatewayPrefix   string
 	NginxBinary     string
@@ -121,6 +122,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	gatewayPrefix := flags.String("gateway-prefix", "", "explicit private Linux nginx prefix (enables reviewed gateway.nginx.* profile)")
 	nginxBinary := flags.String("nginx-binary", "", "nginx executable for the trusted gateway prefix (default: nginx on PATH)")
 	rootHelper := flags.String("root-helper", "", "private node-bound sudo/helper registration; root-owned broker required")
+	updateMailbox := flags.String("update-mailbox", "", "private node-bound resident supervisor mailbox configuration (Linux)")
 	commandProfiles := flags.String("command-profiles", "", "private node-bound executable profiles (Linux; ordinary user)")
 	nodeName := flags.String("node-name", "", "optional operator label reported in the one-shot result")
 	waitTaskMS := flags.Int("wait-task-ms", 0, "one-shot wait window for one TaskOffer after sampling (0..600000)")
@@ -200,7 +202,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
 			return 1
 		}
-		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, RootHelper: *rootHelper, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
+		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, UpdateMailbox: *updateMailbox, RootHelper: *rootHelper, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
 			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
 			return 1
 		}
@@ -265,7 +267,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		}
 		result, err := deps.Connect(ctx, ConnectRequest{
 			FileRoot:        *fileRoot,
-			CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, RootHelper: *rootHelper,
+			CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, UpdateMailbox: *updateMailbox, RootHelper: *rootHelper,
 			ControllerURL:   origin,
 			StateDir:        *stateDir,
 			RootPin:         resolvedPin,

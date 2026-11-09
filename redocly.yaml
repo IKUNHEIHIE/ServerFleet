@@ -65,3 +65,6 @@ apis:
 
   v09-r21-file-execution-resume:
     root: api/openapi/revisions/v09-r21/file-execution-resume-candidate.yaml
+
+  v09-r22-resident-updates:
+    root: api/openapi/revisions/v09-r22/resident-updates-candidate.yaml

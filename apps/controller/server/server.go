@@ -87,6 +87,8 @@ type Config struct {
 	BackupDir             string
 	BackupDeployment      *BackupDeployment
 	RecoveryLatch         *recovery.QuarantineLatch
+	ResidentSupervisor    *updates.ResidentSupervisorConfig
+	BuildVersion          string
 	UpdateProduct         *updates.ProductDeploymentOptions
 	ReleaseSource         *ReleaseSourceDeployment
 	ControllerAuthorityID string
@@ -104,6 +106,9 @@ type Config struct {
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
+	residentSupervisor *updates.ResidentSupervisorConfig
+	buildVersion       string
+	dbPath             string
 	ProductUpdates     updates.ProductDeployment
 	ReleaseAcquirer    *updates.ReleaseAcquirer
 	PublicCertificates *publicCertificateExecution
@@ -286,6 +291,7 @@ func AuditActions() []string {
 		"host.root",
 		"files.transfer",
 		files.ActionResume,
+		transport.ResidentUpdateAction, transport.ControllerUpdateAction,
 		updates.ActionInstall,
 		updates.ActionAcquireRelease,
 		"ai.budget.configure",
@@ -400,6 +406,7 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: tasks.ActionCancel, Description: "Cancel tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionResume, Description: "Resume unstarted queued tasks on granted nodes", ResourceType: "node"},
+		{Key: transport.ResidentUpdateAction, ResourceTypes: []string{"node", "node_group", "service_group"}},
 		{Key: transport.CommandCapability, Description: "Execute approved node executable profiles", ResourceType: "node"},
 		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
 		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
@@ -662,6 +669,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	s = &Server{
+		buildVersion: cfg.BuildVersion, dbPath: cfg.DBPath,
 		runtimeGate:       runtimeGate,
 		DB:                db,
 		Audit:             auditRecorder,
@@ -872,6 +880,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if err != nil {
 			return cleanup(err)
 		}
+	}
+	residentExecution, residentErr := s.setupResidentController(cfg.ResidentSupervisor, cfg.ControllerAuthorityID, workers)
+	if residentErr != nil {
+		return cleanup(residentErr)
+	}
+	controllerExecution, err = mergeControllerExecutions(controllerExecution, residentExecution)
+	if err != nil {
+		return cleanup(err)
 	}
 	tasksService, err := tasks.NewService(tasks.Options{
 		ControllerExecution: controllerExecution,
@@ -1257,6 +1273,7 @@ func (s *Server) registerRoutes() error {
 	s.registerCertificateSetRoutes()
 	s.registerPublicCertificateRoutes()
 	s.registerCommandRoutes()
+	s.registerResidentUpdateRoutes()
 	s.registerFileResumeRoutes()
 	s.registerPublicationDNSRoutes()
 	if s.AgentLinkHTTP != nil {

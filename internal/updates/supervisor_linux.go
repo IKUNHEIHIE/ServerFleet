@@ -263,3 +263,15 @@ func (s *OwnedProcessSupervisor) Close(ctx context.Context) error {
 	}
 	return nil
 }
+
+// BindExecution changes the receipt binding for the next owned transaction; it
+// never attaches to another process or alters its ownership reservation.
+func (s *OwnedProcessSupervisor) BindExecution(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if !installID(id) || s.root == nil {
+		return ErrArtifactRejected
+	}
+	s.cfg.ExecutionID = id
+	return nil
+}

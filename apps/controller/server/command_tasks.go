@@ -125,7 +125,7 @@ func (s *Server) authorizeCommandTask(ctx context.Context, t tasks.Task) error {
 	if err != nil || !approval.Approved() || approval.PlanHash != t.PlanHash {
 		return auth.ErrDenied
 	}
-	if t.ActionID == transport.RootCommandCapability {
+	if t.ActionID == transport.RootCommandCapability || t.ActionID == transport.ResidentUpdateAction {
 		return s.Identity.AuthorizeAdministrator(ctx, approval.ApproverID)
 	}
 	return nil

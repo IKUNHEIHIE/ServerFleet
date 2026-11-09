@@ -40,6 +40,7 @@ type Options struct {
 	BackupDeployment      string
 	ReleaseSource         string
 	ACMEDeployment        string
+	ResidentSupervisor    string
 	BuildVersion          string
 	CredentialKeyDir      string
 	DisableCleanupRetries bool
@@ -68,6 +69,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.UpdateDeployment, "update-deployment", "", "private signed local Agent update configuration (Linux; requires management TLS mode)")
 	flags.StringVar(&options.BackupDeployment, "backup-deployment", "", "private encrypted backup startup configuration (provisioned PKI only)")
 	flags.StringVar(&options.ReleaseSource, "release-source", "", "private fixed HTTPS signed Agent release feed (requires provisioned PKI and -update-deployment)")
+	flags.StringVar(&options.ResidentSupervisor, "resident-supervisor", "", "private owning Controller supervisor configuration")
 	flags.StringVar(&options.ACMEDeployment, "acme-deployment", "", "private ACME/Cloudflare task configuration (provisioned PKI only)")
 	flags.BoolVar(&options.DisableCleanupRetries, "disable-cleanup-retries", false, "disable automatic retries of owned ACME cleanup records")
 	if err := flags.Parse(args); err != nil {
@@ -84,6 +86,9 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 
 // Validate enforces the management-mode prerequisites without opening storage.
 func (o Options) Validate() error {
+	if o.ResidentSupervisor != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: resident supervision requires provisioned management HTTPS")
+	}
 	if o.ACMEDeployment != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
 		return errors.New("controller: ACME execution requires provisioned PKI and management HTTPS")
 	}
@@ -274,7 +279,16 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 			}
 		}
 	}
+	var resident *updates.ResidentSupervisorConfig
+	if options.ResidentSupervisor != "" {
+		value, e := updates.LoadResidentSupervisor(options.ResidentSupervisor)
+		if e != nil {
+			return nil, material, e
+		}
+		resident = &value
+	}
 	composed, err := server.New(ctx, server.Config{
+		ResidentSupervisor: resident, BuildVersion: options.BuildVersion,
 		ACMEDeployment: acmeDeployment,
 		ReleaseSource:  releaseSource, ControllerAuthorityID: material.AuthorityID,
 		BackupDeployment:      backupDeployment,

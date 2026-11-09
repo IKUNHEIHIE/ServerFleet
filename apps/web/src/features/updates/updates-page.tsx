@@ -1,3 +1,4 @@
+import { ResidentUpdatePanel } from "../settings/resident-update-panel";
 import { ReleaseSourcePanel } from "./release-source-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
@@ -369,6 +370,7 @@ export function ControllerUpdatePanel() {
 }
 
 export function UpdatesPage() {
+  const session=useSession();
   return (
     <div className="space-y-5">
       <PageHeader
@@ -377,6 +379,7 @@ export function UpdatesPage() {
         badge={<span className="rounded-md border px-2 py-1 text-xs">Controller</span>}
       />
       <ReleaseSourcePanel />
+      <ResidentUpdatePanel key={session.viewEpoch} />
       <ControllerUpdatePanel />
     </div>
   );

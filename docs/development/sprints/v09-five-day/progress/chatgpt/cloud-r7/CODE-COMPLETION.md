@@ -39,3 +39,11 @@ R19 源码收口同时补入 CA/DNS 重启 UNKNOWN 与审计同事务、固定�
 Agent 从旧私有暂存目录核对 task/execution/transfer/plan、长度和已确认前缀摘要；独占锁及一次 adoption 标记后复制到新执行。最终发布 intent 已存在、完整成功或结果不明均拒绝接续，保留原历史；skip/overwrite/rename 保持。正常成功并观察 Agent 终态后才释放源缓存；UNKNOWN 保留，有界配额不足拒绝新缓存。无 Proto/gen/迁移改写。
 
 待整包统一验收：实际进程重启、前缀破坏、最终发布未知、并发 adoption、当前撤权/取消、三策略和多目标源缓存；本段不表示已测试或 main 接收。
+
+## R22：Controller/远程 Agent 受监督更新（代码中，UNTESTED）
+
+新 controller supervise 管理自己启动的一个普通 UID Linux 子进程；现有签名/固定平台/序列防降级/同 FD 工件/SlotInstaller/进程所有权/健康回滚复用。私有配置冻结组件/路径/argv/信任来源；可从独立已签名 inbox 或固定 IP+CA 的 HTTPS 发行源获取工件，无环境代理/重定向。远程 Agent 只从已审批 WSS typed action 写私有 mailbox；每阶段用现有节点 mTLS 身份向 Controller 复核同一冻结任务及当前真人管理员审批，实际新进程 WSS 连接、nonce/PID/版本/摘要健康证明后才提交逐节点结果。任务原有修改类批次 1→5；任何非成功阻断扩批。更新期间 Agent 拒绝并发执行和未决更新后的新任务，Heartbeat 保持。
+
+Controller 自更新由独立父进程执行，关闭/替换/重启自己拥有的 Controller 子进程；本地 owner Repo/Identity 在停机期间继续检查冻结审批、当前管理员与期限，初次 admit 必须 running。只有同一内存中的已接收事务可以完成进程交接，重启父进程不恢复未知请求。Controller 原任务重启后 UNKNOWN 不伪改成功，正式更新页独立读取实际安装回执与当前构建版本。停止前生成真实一致 SQLite 快照，实际 schema 指纹变化则不自动回滚旧程序。Agent 回滚要求原私有状态树仍相同；不复制/回滚身份成旧信任。缺监督进程/真实构建/私有目录/现有身份均拒绝，不自动装 sudoers/systemd/云服务。
+
+新增 updates→transport 仅用于公开 typed 本地交接消息，Agent 仍不导入 updates/DB。无旧 SQL/生成/锁/CI 改写。需整包实际构建与正常、负向、重启、未知和灰度验证；不提前标 B05/发布准入关闭。
