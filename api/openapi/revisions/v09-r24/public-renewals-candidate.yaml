@@ -1,0 +1,101 @@
+openapi: 3.1.0
+info:
+  title: Approval-required public certificate renewal policies (PROPOSED, UNTESTED)
+  version: 0.9.0-r24-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/certificates/public-renewals:
+    get:
+      operationId: listPublicRenewalPoliciesR24
+      summary: Read current owner's visible certificate renewal policies
+      description: TLS, current administrator and base order/installation task read permissions required. No query or body. Lists only the current owner's policies, at most 1000 deployment-wide. A completed renewal task means issuance only; installation and website rollout remain separate.
+      responses:
+        '200':
+          description: Authoritative policies and current task observations
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required: [items]
+                properties:
+                  items:
+                    type: array
+                    maxItems: 1000
+                    items:
+                      type: object
+                      additionalProperties: false
+                      required: [policy, state, dueAt, approvalRequired, automaticInstallation]
+                      properties:
+                        policy: {$ref: '#/components/schemas/Policy'}
+                        state: {type: string}
+                        dueAt: {type: string, format: date-time}
+                        approvalRequired: {const: true}
+                        automaticInstallation: {const: false}
+        '400': {description: Query or body rejected}
+        '403': {description: TLS or administrator authorization denied}
+        '503': {description: Deployment, policy or task state unavailable}
+    post:
+      operationId: configurePublicRenewalPolicyR24
+      summary: Create, disable, configure or adopt a successfully installed successor
+      description: TLS, CSRF and current administrator required. Strict seven-string JSON object, at most 4096 bytes, duplicate fields rejected. Initial expectedRevision is 0. Updates require exact revision; replay after a committed write returns 409 rather than repeating the mutation. One policy per node/key slot. configure cannot reset any already submitted cycle, including a task submitted before its binding was persisted. adopt requires exactly this cycle's clean issued task and matching independently successful installation with later expiry. Disabled policies deny further provider I/O; completed external effects are retained for reconciliation. No task, DNS or CA side effect occurs in this handler. The background scheduler uses system-source modifying tasks with human approval and stable cycle keys. Unknown, failed, canceled or expired cycles are not automatically replayed. Website rollout is a separate publication.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [id, orderTaskId, installTaskId, expectedRevision, renewBeforeDays, enabled, operation]
+              properties:
+                id: {$ref: '#/components/schemas/ID'}
+                orderTaskId: {$ref: '#/components/schemas/ID'}
+                installTaskId: {$ref: '#/components/schemas/ID'}
+                expectedRevision: {type: string, pattern: '^(0|[1-9][0-9]{0,15})$'}
+                renewBeforeDays: {type: string, pattern: '^([1-9]|[1-5][0-9]|60)$'}
+                enabled: {type: string, enum: ['true', 'false']}
+                operation: {type: string, enum: [configure, adopt]}
+      responses:
+        '200':
+          description: Policy and same-transaction audit committed; no certificate issuance implied
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/Policy'}
+        '400': {description: Invalid strict JSON or input bounds}
+        '403': {description: Administrator, ownership or CSRF denied}
+        '409': {description: Recovery hold, stale revision, unresolved existing cycle, base proof mismatch, duplicate slot or policy write conflict}
+        '503': {description: Signing deployment or current task state unavailable}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  schemas:
+    ID: {type: string, pattern: '^[A-Za-z0-9_-]{1,128}$'}
+    Policy:
+      type: object
+      additionalProperties: false
+      required: [id, ownerId, revision, enabled, orderTaskId, installTaskId, csrTaskId, nodeId, domain, keyRef, zoneId, profileSha256, notAfter, renewBeforeDays, updatedAt]
+      properties:
+        id: {$ref: '#/components/schemas/ID'}
+        ownerId: {type: string}
+        revision: {type: integer, minimum: 1, maximum: 9007199254740991}
+        enabled: {type: boolean}
+        orderTaskId: {$ref: '#/components/schemas/ID'}
+        installTaskId: {$ref: '#/components/schemas/ID'}
+        csrTaskId: {$ref: '#/components/schemas/ID'}
+        nodeId: {type: string}
+        domain: {type: string}
+        keyRef: {type: string, description: Public opaque node-owned slot reference; no key bytes}
+        zoneId: {type: string}
+        profileSha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+        notAfter: {type: string, format: date-time}
+        renewBeforeDays: {type: integer, minimum: 1, maximum: 60}
+        taskId: {type: string}
+        updatedAt: {type: string, format: date-time}

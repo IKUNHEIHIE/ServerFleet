@@ -103,3 +103,7 @@ Typed Agent apply is explicitly enabled by node-owned mailbox configuration and 
 ### R23 — owned-process fence and explicit recovered authority (candidate / UNTESTED)
 
 [差异](revisions/v09-r23-recovery-authority.md)。新 cx/0019（预计 39 项）记录不可省略的 supervisor 权威绑定、恢复激活与历史；Root 签名 + 独立 mTLS parent 实际 stop/wait + 当前 nonce 观察后才能释放 hold。每个 runtime gate 持续复核，未知锁/不可用保持隔离；不等于物理 fence/双机认证。Controller 替换维护门与私有 parent readiness 分离；远程 Agent 终态只接受实际 supervisor 提交。代码阶段仍 UNTESTED，原始材料/旧迁移与生成保持，B03—B06/G2/发布未关闭。
+
+# 2026-11-10 R24 增量登记
+
+公开证书续签策略、system 人工审批签发任务和恢复失效候选见 `revisions/v09-r24-public-renewals.md` 与 `api/openapi/revisions/v09-r24/public-renewals-candidate.yaml`。追加 cx/0020，预计40迁移；普通Web R17三字段路径不变。正式UI/功能文档同步；全部UNTESTED，集中整包验收后再评审，不冻结G2。

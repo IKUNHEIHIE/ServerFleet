@@ -321,6 +321,36 @@ export const publicCertificateApi = {
  inspectDNS: (body:{operation:"test"|"import-zone";accountId:string;zoneId?:string;providerZoneId?:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/dns/provider-tasks",{method:"POST",body}),
 };
 
+export interface PublicRenewalPolicy {
+ readonly id: string;
+ readonly ownerId: string;
+ readonly revision: number;
+ readonly enabled: boolean;
+ readonly orderTaskId: string;
+ readonly installTaskId: string;
+ readonly csrTaskId: string;
+ readonly nodeId: string;
+ readonly domain: string;
+ readonly keyRef: string;
+ readonly zoneId: string;
+ readonly profileSha256: string;
+ readonly notAfter: string;
+ readonly renewBeforeDays: number;
+ readonly taskId?: string;
+ readonly updatedAt: string;
+}
+export interface PublicRenewalView {
+ readonly policy: PublicRenewalPolicy;
+ readonly state: string;
+ readonly dueAt: string;
+ readonly approvalRequired: true;
+ readonly automaticInstallation: false;
+}
+export const publicRenewalsApi = {
+ list: (signal?:AbortSignal)=>apiClient.request<{items:readonly PublicRenewalView[]}>("/api/v1/certificates/public-renewals",{signal}),
+ save: (body:{id:string;orderTaskId:string;installTaskId:string;expectedRevision:string;renewBeforeDays:string;enabled:"true"|"false";operation:"configure"|"adopt"})=>apiClient.request<PublicRenewalPolicy>("/api/v1/certificates/public-renewals",{method:"POST",body}),
+};
+
 
 export const dnsRecordTasksApi = {
  create: (zoneId:string,record:DNSRecordInput,idempotencyKey:string)=>

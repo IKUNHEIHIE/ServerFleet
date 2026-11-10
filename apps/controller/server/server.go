@@ -246,6 +246,7 @@ func Migrations() [][]storage.Migration {
 		certificates.CleanupMigrations(),
 		certificates.CleanupClaimMigrations(),
 		certificates.PublicOrderMigrations(),
+		certificates.PublicRenewalMigrations(),
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
@@ -307,6 +308,7 @@ func AuditActions() []string {
 		transport.CertificateInstallAction,
 		"certificates.node_sets.create",
 		actionPublicCertificateIssue,
+		actionPublicRenewalConfigure,
 		actionDNSProviderInspect,
 		actionDNSRecordApply,
 		actionPublicationDNSApply, actionPublicationDNSRollback,
@@ -395,6 +397,7 @@ func AuditActions() []string {
 func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
 		{Key: actionPublicCertificateIssue, Description: "Issue public certificates for approved node-local CSR tasks", ResourceType: "node", AdminOnly: true},
+		{Key: actionPublicRenewalConfigure, Description: "Configure owner-scoped public certificate renewal approval cycles", ResourceType: "node", AdminOnly: true},
 		{Key: transport.CertificateInstallAction, Description: "Install verified public chains using node-owned website keys", ResourceType: "node", AdminOnly: true},
 		{Key: transport.CertificateCSRAction, Description: "Create node-local website keys and export only a public CSR", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupRead, Description: "Read owned cleanup records", ResourceType: "node", ReadOnly: true, AdminOnly: true},
@@ -1200,6 +1203,10 @@ func (s *Server) startTaskScheduler() {
 		if s.Backups != nil && s.backupAutomaticOwner != "" {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runBackupSchedule(ctx) }()
+		}
+		if s.PublicCertificates != nil {
+			workers.Add(1)
+			go func() { defer workers.Done(); s.runPublicRenewalSchedule(ctx) }()
 		}
 		workers.Wait()
 	}()

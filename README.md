@@ -8,6 +8,8 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 2026-11-09 正在 `feature/cloud-v09-code-completion-20261109` 连续补齐代码，起点为已接收 #16/main `9738648`。新增发布、PKI/恢复/备份、可信发行获取、节点独立 CSR/证书、公网签发、统一 DNS 执行/补偿，以及受控命令、节点续传、Controller/Agent 更新和持续恢复隔离等实现已写入。本轮已进行集中检查并定向修复发现的问题，Web 422项、契约、安全扫描及真实双架构候选构建通过；普通用户/真实提权与完整灾备等专项仍有环境阻塞，**完整验收未通过**。预计迁移39项是分支登记，未签名候选不代表可发布。详见[集中检查记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CORE-ACCEPTANCE.md)，不用下方历史CI证明本分支。实际剩余项见[编码进度](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CODE-COMPLETION.md)与[正式界面变化](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/PRODUCT-DELTA.md)。G2、B03—B06 与发布准入继续开放。
 
+2026-11-10在独立 `feature/cloud-public-renewals-20261110` 从原分支最新 `ca309ea` 继续，保留R20—R23及原验收记录；R24新增公开证书续签审批策略，追加第40项迁移，此增量UNTESTED，旧CI不覆盖新代码。
+
 ## 已核验的产品基线
 
 截至2026-11-08（Asia/Shanghai），已接收main为[6031c1f](https://github.com/IKUNHEIHIE/ServerFleet/commit/6031c1f9d9b2b840ef5a477520aa937799bb3ba5)。#15精确候选[CI42485042788](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/42485042788) foundation/dependencies均success，Go983顶层/1301子项PASS、7SKIP、0FAIL，Web422PASS；已按精确head审查接收，独立main CI42486235557在记录时运行中，最终状态见GitHub。正式29项迁移，原25fixture及历史SQL/hash保持。
