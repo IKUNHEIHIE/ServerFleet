@@ -1,0 +1,362 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet durable AI Agent loop (additive candidate)
+  version: 0.9.0-r28-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/ai/sessions/{sessionId}/runs:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+    get:
+      operationId: listAIAgentRunsR28
+      summary: List current scope runs
+      description: TLS and current authenticated owner required. No query. Every previous tool
+        target/action and current session scope are rechecked. Internal provider history and
+        reasoning are never disclosed. No body. Maximum sixteen records per session. Old scope or
+        currently denied runs are excluded. No model I/O or task is started by reading.
+      responses:
+        "200":
+          description: Authoritative current owner view; no-store.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                required:
+                  - items
+                properties:
+                  items:
+                    type: array
+                    maxItems: 16
+                    items:
+                      $ref: "#/components/schemas/Run"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "403":
+          $ref: "#/components/responses/Denied"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+    post:
+      operationId: createAIAgentRunR28
+      summary: Authorize and start a bounded Agent loop
+      description: "TLS and current authenticated owner required. No query. Every previous tool
+        target/action and current session scope are rechecked. Internal provider history and
+        reasoning are never disclosed. Current human owner and CSRF required. Unique exact-case
+        fields, maximum 64 KiB. clientRunId binds normalized input and current enabled BYOK profile;
+        exact replay returns the same durable run. Only one nonterminal run per current session
+        scope. A timeout or driver failure may occur after persistence: retry ONLY the same
+        clientRunId and body. Four fixed native Responses functions propose scoped reads,
+        self-checks and installed ordinary/root command profiles. Task approvals and current
+        dispatch gates remain authoritative. Browser closure does not cancel the in-memory driver.
+        After Controller restart, fresh explicit continue is required. No hosted tools, arbitrary
+        shell, URL, task ID, resource grant or provider-side execution."
+      responses:
+        "202":
+          $ref: "#/components/responses/Run"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "403":
+          $ref: "#/components/responses/Denied"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      parameters:
+        - $ref: "#/components/parameters/CSRF"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required:
+                - goal
+                - clientRunId
+                - scopeRevision
+              properties:
+                goal:
+                  type: string
+                  minLength: 1
+                  maxLength: 24000
+                  description: At most 24000 UTF-8 bytes; Web input maximum 8000 characters. Secret filter applies.
+                clientRunId:
+                  $ref: "#/components/schemas/ID"
+                scopeRevision:
+                  type: integer
+                  minimum: 1
+                maxSteps:
+                  type: integer
+                  minimum: 0
+                  maximum: 12
+                  default: 8
+                  description: Zero/omitted means 8; includes final planning turn.
+                timeoutSeconds:
+                  type: integer
+                  minimum: 0
+                  maximum: 3600
+                  default: 900
+                  description: Zero/omitted means 900. Nonzero minimum 60; includes approval and task waits.
+  /api/v1/ai/sessions/{sessionId}/runs/{runId}:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RunId"
+    get:
+      operationId: getAIAgentRunR28
+      summary: Read authorized run progress
+      description: TLS and current authenticated owner required. No query. Every previous tool
+        target/action and current session scope are rechecked. Internal provider history and
+        reasoning are never disclosed. No body. driverActive is an instantaneous process
+        observation. completed means the Agent returned a final answer, not that every task
+        succeeded. Actual task state and observations determine operation outcomes.
+      responses:
+        "200":
+          $ref: "#/components/responses/Run"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "403":
+          $ref: "#/components/responses/Denied"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+  /api/v1/ai/sessions/{sessionId}/runs/{runId}/advance:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RunId"
+    post:
+      operationId: continueAIAgentRunR28
+      summary: Resume bounded driver
+      description: TLS and current authenticated owner required. No query. Every previous tool
+        target/action and current session scope are rechecked. Internal provider history and
+        reasoning are never disclosed. Current human owner, CSRF and exact revision required. Reuses
+        an existing driver. Observes waiting approvals/tasks first. Persisted thinking/submitting
+        without a live driver stops UNKNOWN without replay. Terminal runs never restart. Maximum
+        sixteen active drivers per Controller process.
+      responses:
+        "202":
+          $ref: "#/components/responses/Run"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "403":
+          $ref: "#/components/responses/Denied"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      parameters:
+        - $ref: "#/components/parameters/CSRF"
+      requestBody:
+        $ref: "#/components/requestBodies/Revision"
+  /api/v1/ai/sessions/{sessionId}/runs/{runId}/cancel:
+    parameters:
+      - $ref: "#/components/parameters/SessionId"
+      - $ref: "#/components/parameters/RunId"
+    post:
+      operationId: cancelAIAgentRunR28
+      summary: Stop planning or request bound task cancellation
+      description: TLS and current authenticated owner required. No query. Every previous tool
+        target/action and current session scope are rechecked. Internal provider history and
+        reasoning are never disclosed. Current human owner, CSRF and exact revision required. Stops
+        queued/planning/approval waits; submitting becomes UNKNOWN. For a known task, persist
+        canceling before unified cancellation, then wait for a confirmed task terminal state. No
+        undo of completed effects; missing acknowledgement remains UNKNOWN.
+      responses:
+        "200":
+          $ref: "#/components/responses/Run"
+        "400":
+          $ref: "#/components/responses/Invalid"
+        "403":
+          $ref: "#/components/responses/Denied"
+        "409":
+          $ref: "#/components/responses/Conflict"
+        "503":
+          $ref: "#/components/responses/Unavailable"
+      parameters:
+        - $ref: "#/components/parameters/CSRF"
+      requestBody:
+        $ref: "#/components/requestBodies/Revision"
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: sf_session
+  parameters:
+    SessionId:
+      in: path
+      name: sessionId
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    RunId:
+      in: path
+      name: runId
+      required: true
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 128
+    CSRF:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema:
+        type: string
+  responses:
+    Invalid:
+      description: "INVALID_REQUEST: strict JSON, shape, TLS, body or query rejected."
+    Denied:
+      description: "NOT_AUTHORIZED or APPROVAL_REQUIRED: current identity, owner, scope, approval or CSRF
+        denied."
+    Conflict:
+      description: "STALE_SCOPE_OR_REQUEST or APPROVAL_EXPIRED_OR_STALE: read current state before retry."
+    Unavailable:
+      description: "AI_SOURCE_UNAVAILABLE: model, budget, store or bounded driver unavailable. Durable run
+        may exist; read or retry the exact clientRunId/body."
+    Run:
+      description: Authoritative current owner view; no-store.
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/Run"
+  requestBodies:
+    Revision:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required:
+              - expectedRevision
+            properties:
+              expectedRevision:
+                type: integer
+                minimum: 1
+  schemas:
+    ID:
+      type: string
+      minLength: 1
+      maxLength: 128
+    State:
+      type: string
+      enum:
+        - queued
+        - thinking
+        - waiting_approval
+        - submitting
+        - waiting_task
+        - canceling
+        - completed
+        - failed
+        - canceled
+        - unknown
+        - limit_reached
+    Step:
+      type: object
+      additionalProperties: false
+      required:
+        - number
+        - state
+        - nodeIds
+        - startedAt
+      properties:
+        number:
+          type: integer
+          minimum: 1
+          maximum: 12
+        state:
+          $ref: "#/components/schemas/State"
+        nodeIds:
+          type: array
+          maxItems: 200
+          uniqueItems: true
+          items:
+            $ref: "#/components/schemas/ID"
+        toolName:
+          type: string
+          enum:
+            - nodes.read
+            - tasks.command
+            - tasks.exec.v1
+            - host.root
+        parameters:
+          type: object
+          additionalProperties:
+            type: string
+          description: Exact canonical parameters bound to approval and task.
+        approvalId:
+          $ref: "#/components/schemas/ID"
+        taskId:
+          $ref: "#/components/schemas/ID"
+        taskState:
+          type: string
+        result:
+          type: string
+          maxLength: 32768
+          description: Bounded redacted actual observation; no arbitrary stdout or secrets.
+        messageId:
+          $ref: "#/components/schemas/ID"
+        startedAt:
+          type: string
+          format: date-time
+    Run:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - sessionId
+        - goal
+        - state
+        - revision
+        - scopeRevision
+        - maxSteps
+        - createdAt
+        - expiresAt
+        - driverActive
+        - steps
+      properties:
+        id:
+          $ref: "#/components/schemas/ID"
+        sessionId:
+          $ref: "#/components/schemas/ID"
+        goal:
+          type: string
+        state:
+          $ref: "#/components/schemas/State"
+        revision:
+          type: integer
+          minimum: 1
+        scopeRevision:
+          type: integer
+          minimum: 1
+        maxSteps:
+          type: integer
+          minimum: 1
+          maximum: 12
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        driverActive:
+          type: boolean
+        steps:
+          type: array
+          maxItems: 12
+          items:
+            $ref: "#/components/schemas/Step"
+        finalText:
+          type: string
+        stopReason:
+          type: string
+          maxLength: 256

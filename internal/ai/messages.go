@@ -58,8 +58,9 @@ type ConversationConfig struct {
 	// and before provider/reader disclosure. There is no default pass-through.
 	Filter func(context.Context, SessionView, string, string) (string, error)
 	// Generate is a program-registered provider bridge. It borrows BYOK via the
-	// credential service using OperationID, and honors ctx. Output is text only;
-	// it cannot supply authoritative task IDs or run tools. Tool execution must
+	// credential service using OperationID, and honors ctx. Ordinary chat is
+	// text only; the private Agent prompt permits typed function proposals, never
+	// authoritative task IDs or execution. Tool execution must
 	// separately use AssessTool and the sole task/approval/audit path.
 	Generate func(context.Context, GenerationRequest, func(string) error) error
 }

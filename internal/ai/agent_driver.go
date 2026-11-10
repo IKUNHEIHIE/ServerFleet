@@ -2,6 +2,7 @@ package ai
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -49,6 +50,11 @@ func (l *AgentLoop) Drive(ctx context.Context, session, id string, expected uint
 			defer stop()
 			a, e := l.read(cleanup, session, id)
 			if e == nil && !agentTerminal(a.View.State) {
+				// Graceful shutdown pauses known durable waits. It must not
+				// manufacture user authority on restart or replay an in-flight I/O.
+				if !panicked && errors.Is(bounded.Err(), context.Canceled) && a.View.State != "thinking" && a.View.State != "submitting" {
+					return
+				}
 				state := "failed"
 				if panicked || a.View.State == "thinking" || a.View.State == "submitting" || a.View.State == "waiting_task" || a.View.State == "canceling" {
 					state = "unknown"
@@ -63,6 +69,16 @@ func (l *AgentLoop) Drive(ctx context.Context, session, id string, expected uint
 			}
 			next, e := l.Advance(bounded, session, id, current.Revision)
 			if e != nil {
+				if errors.Is(e, ErrScopeConflict) {
+					t := time.NewTimer(100 * time.Millisecond)
+					select {
+					case <-bounded.Done():
+						t.Stop()
+						return
+					case <-t.C:
+						continue
+					}
+				}
 				return
 			}
 			if agentTerminal(next.State) {

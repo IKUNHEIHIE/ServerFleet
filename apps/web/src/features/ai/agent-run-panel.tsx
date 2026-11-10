@@ -42,7 +42,11 @@ export function AgentRunPanel({ session }: { readonly session: AISession }) {
     const result = await create.run(pendingInput.current);
     if (result.ok && result.data) {
       setSelected(result.data.data.id); pendingInput.current = null; setUncertain(false); setGoal(""); runs.refreshSilent();
-    } else { setUncertain(true); runs.reload(); }
+    } else {
+      if (result.error?.status === 400) { pendingInput.current = null; setUncertain(false); }
+      else { setUncertain(true); }
+      runs.reload();
+    }
   }
 
   return (
@@ -66,12 +70,12 @@ export function AgentRunPanel({ session }: { readonly session: AISession }) {
           {items => <div className="flex flex-wrap gap-2 px-5 py-4">{items.map(run => <Button type="button" key={run.id} aria-pressed={selected === run.id} onClick={() => setSelected(run.id)}>{run.goal.slice(0, 32)} · {STATE_LABEL[run.state]}</Button>)}</div>}
         </AsyncPanel>
       </Panel>
-      {selected ? <AgentRunDetail key={`${selected}:${appSession.viewEpoch}`} sessionId={session.id} runId={selected} locked={locked} onChanged={runs.refreshSilent} /> : null}
+      {selected ? <AgentRunDetail key={`${selected}:${appSession.viewEpoch}`} sessionId={session.id} runId={selected} locked={locked} canApprove={appSession.identity?.roles.includes("administrator") ?? false} onChanged={runs.refreshSilent} /> : null}
     </div>
   );
 }
 
-function AgentRunDetail({ sessionId, runId, locked, onChanged }: { readonly sessionId: string; readonly runId: string; readonly locked: boolean; readonly onChanged: () => void }) {
+function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { readonly sessionId: string; readonly runId: string; readonly locked: boolean; readonly canApprove: boolean; readonly onChanged: () => void }) {
   const run = useResource(`ai:run:${sessionId}:${runId}`, signal => aiAgentApi.get(sessionId, runId, signal).then(result => result.data), {
     refreshIntervalMs: 2000, shouldPoll: value => !TERMINAL.has((value as AgentRun).state),
   });
@@ -103,7 +107,8 @@ function AgentRunDetail({ sessionId, runId, locked, onChanged }: { readonly sess
             </div> : null}
             {data.state === "waiting_approval" && last?.approvalId ? <Notice tone="info" title="等待你批准本次工具调用">
               <p>请核对下方目标节点和参数。修改类和 Root 命令随后还需在关联任务页完成独立管理员审批。</p>
-              <div className="mt-3 flex gap-2"><Button type="button" disabled={locked || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "approve"))}>批准本次调用</Button><Button type="button" variant="danger" disabled={locked || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "deny"))}>拒绝</Button></div>
+              {!canApprove ? <p className="mt-2">本次审批需要当前真人管理员。</p> : null}
+              <div className="mt-3 flex gap-2"><Button type="button" disabled={locked || !canApprove || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "approve"))}>批准本次调用</Button><Button type="button" variant="danger" disabled={locked || !canApprove || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "deny"))}>拒绝</Button></div>
             </Notice> : null}
             <ol className="space-y-3" aria-label="Agent 执行步骤">{data.steps.map(step => <StepCard key={step.number} step={step} />)}</ol>
             {data.finalText ? <section className="rounded-lg border bg-secondary/40 p-4"><h3 className="font-semibold">最终答复</h3><p className="mt-2 whitespace-pre-wrap text-sm">{data.finalText}</p></section> : null}

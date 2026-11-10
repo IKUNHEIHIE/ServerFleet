@@ -328,6 +328,11 @@ func (s *SessionService) Execute(ctx context.Context, sessionID string, input To
 	if result.State == "" || result.TaskID == "" && (!tool.Definition.ReadOnly || result.State != "completed" || len(result.Observation) == 0 || len(result.Observation) > 32<<10 || !json.Valid(result.Observation)) || result.TaskID != "" && len(result.Observation) != 0 {
 		return ToolExecutionResult{}, ErrExecutionUnavailable
 	}
+	// Group membership and target permissions may change during the executor
+	// call without changing the saved session revision. Recheck before disclosure.
+	if _, err := s.AssessTool(ctx, sessionID, assessment.Call); err != nil {
+		return ToolExecutionResult{}, ErrToolDenied
+	}
 	err = s.change(ctx, func(st *sessionState, now time.Time) error {
 		if _, e := s.recheck(ctx, actor, "ai.tools.execute", sessionID, true); e != nil {
 			return e

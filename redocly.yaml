@@ -73,3 +73,6 @@ apis:
 
   v09-r24-public-renewals:
     root: api/openapi/revisions/v09-r24/public-renewals-candidate.yaml
+
+  v09-r28-ai-agent-loop:
+    root: api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml

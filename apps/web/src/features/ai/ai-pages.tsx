@@ -1003,7 +1003,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                         )}
                       </Field>
                     </div>
-                    <Field label="允许动作（逗号分隔）" hint="例如 nodes.read,metrics.read,tasks.execute；最终取用户权限交集。">
+                    <Field label="允许动作（逗号分隔）" hint="Agent工具：nodes.read（状态）、tasks.command（自检）、tasks.exec.v1（普通配置）、host.root（受控Root配置）；最终取用户权限交集。">
                       {ids => <TextInput id={ids.inputId} value={actions} onChange={event => setActions(event.target.value)} />}
                     </Field>
                     <Button type="submit" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse}>添加授权</Button>

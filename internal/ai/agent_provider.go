@@ -118,6 +118,9 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 			if decodeAgentJSON([]byte(v.Arguments), &a) != nil || len(a.NodeIDs) == 0 || len(a.NodeIDs) > 200 || !validIDs(a.NodeIDs) {
 				return "", ErrToolDenied
 			}
+			if tool.Name == "inspect_nodes" && len(a.NodeIDs) > 50 {
+				return "", ErrToolDenied
+			}
 			for _, node := range a.NodeIDs {
 				if !slices.Contains(tool.NodeIDs, node) {
 					return "", ErrToolDenied

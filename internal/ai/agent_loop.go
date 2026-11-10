@@ -92,7 +92,7 @@ func (l *AgentLoop) Get(ctx context.Context, session, id string) (AgentRun, erro
 		}
 	}
 	current, e := l.sessions.Get(ctx, session)
-	if e != nil || current.ScopeRevision != v.ScopeRevision {
+	if e != nil || current.ScopeRevision != v.ScopeRevision || !slices.Equal(current.AllowedNodeIDs, view.AllowedNodeIDs) {
 		return AgentRun{}, ErrScopeConflict
 	}
 	l.workerMu.Lock()
@@ -154,6 +154,9 @@ func (l *AgentLoop) Create(ctx context.Context, session string, in AgentRunInput
 	text, e := l.conversation.filter(ctx, view, "user", in.Goal)
 	if e != nil {
 		return AgentRun{}, e
+	}
+	if len(text) > 24000 {
+		return AgentRun{}, ErrToolDenied
 	}
 	in.Goal = text
 	profile, e := l.conversation.profile(ctx, actor.SubjectID)
@@ -321,18 +324,20 @@ func (l *AgentLoop) Advance(ctx context.Context, session, id string, expected ui
 	}
 	if !l.sessions.now().Before(a.View.ExpiresAt) {
 		state := "failed"
-		if a.View.State == "waiting_task" || a.View.State == "canceling" {
+		if a.View.State == "waiting_task" || a.View.State == "canceling" || a.View.State == "thinking" || a.View.State == "submitting" {
 			state = "unknown"
 		}
 		return l.stop(ctx, a, state, "run_deadline_expired")
 	}
-	current, e := l.sessions.Get(ctx, session)
-	if e != nil {
-		return AgentRun{}, e
-	}
-	profile, e := l.conversation.profile(ctx, current.CreatedBy)
-	if e != nil || profile != a.Profile {
-		return l.stop(ctx, a, "failed", "model_profile_changed_or_unavailable")
+	if a.View.State == "queued" || a.View.State == "waiting_approval" {
+		current, e := l.sessions.Get(ctx, session)
+		if e != nil {
+			return AgentRun{}, e
+		}
+		profile, e := l.conversation.profile(ctx, current.CreatedBy)
+		if e != nil || profile != a.Profile {
+			return l.stop(ctx, a, "failed", "model_profile_changed_or_unavailable")
+		}
 	}
 	switch a.View.State {
 	case "thinking", "submitting":

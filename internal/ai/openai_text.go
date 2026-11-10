@@ -212,8 +212,9 @@ func decodeProviderText(raw []byte, model string) (string, error) {
 }
 
 // Generate borrows BYOK through the persistent credential use fence. Provider
-// I/O is text-only; the final text is emitted ONCE, after post-use authorization
-// and credential/audit checks succeed. Model output never grants execution.
+// I/O returns ordinary text or a privately bound typed Agent proposal. Output
+// is emitted ONCE after post-use authorization and credential/audit checks.
+// Model output never grants execution.
 func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, emit func(string) error) (result error) {
 	if p == nil || p.credentials == nil || p.resolve == nil || p.client == nil || ctx == nil || ctx.Err() != nil || emit == nil {
 		return ErrModelUnavailable
