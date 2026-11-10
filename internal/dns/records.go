@@ -7,6 +7,7 @@ import (
 	"net"
 	"time"
 
+	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/storage"
 )
 
@@ -149,8 +150,18 @@ func (s *Service) DeleteRecord(ctx context.Context, subjectID, requestID, record
 		return err
 	}
 	providerAbsent := false
-	if err := provider.DeleteRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, current.ID); err != nil {
+	scoped := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+	var deleteErr error
+	if checked, ok := provider.(CheckedRecordDeleter); ok {
+		deleteErr = checked.DeleteVerifiedRecord(scoped, credential, zone.ProviderZoneID, current.ID, recordInputFrom(current))
+	} else {
+		deleteErr = provider.DeleteRecord(scoped, credential, zone.ProviderZoneID, current.ID)
+	}
+	if err := deleteErr; err != nil {
 		if !errors.Is(err, ErrProviderNotFound) {
+			if errors.Is(err, ErrProviderRecordChanged) {
+				return err
+			}
 			if providerOutcomeUnknown(err) {
 				return fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
 			}
@@ -189,7 +200,7 @@ func providerOutcomeUnknown(err error) bool {
 	if err == nil {
 		return false
 	}
-	if errors.Is(err, ErrProviderOutcomeUnknown) || errors.Is(err, context.Canceled) ||
+	if errors.Is(err, auth.ErrCredentialUseUnknown) || errors.Is(err, ErrProviderOutcomeUnknown) || errors.Is(err, context.Canceled) ||
 		errors.Is(err, context.DeadlineExceeded) || errors.Is(err, ErrCloudflareTransport) {
 		return true
 	}

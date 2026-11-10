@@ -1,8 +1,21 @@
 # 任务登记板
 
-## 当前：正式Web与可移植构建装配（2026-11-08）
+## 当前优先子包：五项核心能力（2026-11-09）
 
-V09-CLOUD-DEPLOY-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-deploy-assembly-20261108 / ServerFleet-deploy；IN PROGRESS。依赖#15 b4305fed7fb03fcbce6d3f87654a71e4e51be4a5已接收为main6031c1f9d9b2b840ef5a477520aa937799bb3ba5，CI42485042788 success，当前已正常合并该共享基线。原#15源码冻结等待CI，不并发修改其分支。
+用户明确要求先完成 Controller 自身更新、远程 Agent 批次更新、实际灾备接管、Agent 执行端完整续传、普通命令与受控提权。沿用 V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01、当前集中编码分支和唯一目录，起点 2d36f9d；五项已有源码与产品入口，已执行集中检查并修复发现的问题；Web422/契约/安全/双架构候选构建通过，普通UID与新功能专项/完整灾备仍BLOCKED或待证；仍IN PROGRESS，完整验收未通过。R20—R23 含受控命令、节点确认前缀恢复、Controller/Agent 独立监督更新、实际拥有进程 fence 与新权威激活（预计39项迁移）。主控继续单写既有允许模块及必要受控 CLI/Web/独立候选/追加迁移，不启动其他 Agent，不访问生产/VPS/真实供应商或执行提权。普通/root 能力必须明确配置，Root 必须真人管理员当前审批；恢复释放必须实际验证 fence，不能用自称已隔离的布尔值/文档代替。先连续编码，完成整包后一次集中验收，任何环境硬依赖保留 BLOCKED，不把代码提交当作五项 DONE。
+
+## 当前：集中完成全部剩余代码（2026-11-09）
+
+用户最新要求：先集中写完代码，再统一一次大体验收；后续收尾由用户另行交DeepSeek，不自动派发。V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01；feature/cloud-v09-code-completion-20261109 / ServerFleet-completion；IN PROGRESS。唯一基线main9738648ecdf44546e4a2d3503f8c9b862c8a5cb3（#16接收；精确head c07bd976，CI42487322510 success，Go987顶层/1309子项PASS、7SKIP、0FAIL，Web422PASS）。环境重建后从私库重新clone，不复用旧Windows目录/秘密。
+
+主控单写所有剩余必要生产模块及正式Web、Controller/Agent受控入口、内部公共接缝/独立候选/追加迁移、相应记录；不启动其他Agent、不恢复三平台并发。先接正式发布路由/实际HTTP健康与逆序补偿、ACME/node-local CSR及受控业务组合，再接更新固定可信来源/批次、加密备份/离线恢复/新权威fence、普通执行真实权限及其他实现缺口。新增共享接口由主控协调；旧SQL/hash/原始资料/历史ADR/原候选保持。Xray只做获准可选范围，Runtime/安全准入不能自行宣布通过，WASM/Eino不准入。
+
+按用户最新要求覆盖旧逐增量检查节奏：本连续包期间集中编码，仅必要格式整理，不逐小改动/逐包重复测试和收尾；完成代码后再统一check/security/必要组合的大验收，保留FAIL/BLOCKED/SKIP，不降权限/版本/门槛。进度通过本任务和远端分支检查点保留，最终PR仍须精确head检查/COMMENT及expected-SHA合并，不直接推main/强推/自动合并/同账号自批。没有生产/VPS/awskr/真实供应商/云API授权，不制造外部验收或秘密。停止条件为全部可实施代码与明确剩余硬依赖登记、统一验收与可审交接；G2/发布认证和真实外部/物理/ARM/硬1C1G不因写码关单。
+
+
+## 已接收检查点：正式Web与核心构建装配（2026-11-08）
+
+V09-CLOUD-DEPLOY-IMPLEMENT-01 / chatgpt-takeover-01；feature/cloud-deploy-assembly-20261108 / ServerFleet-deploy；CHECKPOINT ACCEPTED（#16 / main9738648 / CI42487322510）。依赖#15 b4305fed7fb03fcbce6d3f87654a71e4e51be4a5已接收为main6031c1f9d9b2b840ef5a477520aa937799bb3ba5，CI42485042788 success，当前已正常合并该共享基线。原#15源码冻结等待CI，不并发修改其分支。
 
 允许apps/controller正式Web静态装配/启动选项、apps/agent/runtime的已签名构建版本默认值注入、scripts可移植发布构建、相关专项与docs当前进度；主控单写，无其他Agent。目标为同源HTTPS正式控制台而非测试fixturehost、受限构建资产/保留API/隔离门、固定工具与独立输出目录的核心发行包/字节清单；可选Xray不编入核心，不添加依赖/秘密/部署行为。集中一个功能包后检查，用户手动验收。停止条件为实现与必要路径/方法/权限/启动负向及精确head检查/PR接收；完整发布/更新/恢复与G2仍OPEN，无生产/VPS/外部供应商/云API授权。
 

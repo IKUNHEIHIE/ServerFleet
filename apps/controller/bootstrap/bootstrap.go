@@ -5,6 +5,7 @@ package bootstrap
 import (
 	"context"
 	"crypto/tls"
+	"encoding/json"
 	"errors"
 	"flag"
 	"fmt"
@@ -16,6 +17,7 @@ import (
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
 	"serverfleet.local/serverfleet/apps/controller/server"
+	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/updates"
 )
 
@@ -29,11 +31,18 @@ type Options struct {
 	TLSCert               string
 	TLSKey                string
 	AgentPKIDir           string
+	AgentPKIMode          string
+	AgentRootPin          string
 	AgentAuthority        string
 	AgentServerName       string
 	FileDeployment        string
 	GatewayDeployment     string
 	UpdateDeployment      string
+	BackupDeployment      string
+	ReleaseSource         string
+	ACMEDeployment        string
+	ResidentSupervisor    string
+	BuildVersion          string
 	CredentialKeyDir      string
 	DisableCleanupRetries bool
 }
@@ -49,6 +58,8 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.Origin, "origin", "", "trusted https:// browser Origin (required with -db)")
 	flags.StringVar(&options.TLSCert, "tls-cert", "", "TLS server certificate path (required with -db)")
 	flags.StringVar(&options.TLSKey, "tls-key", "", "TLS server private key path (required with -db)")
+	flags.StringVar(&options.AgentPKIMode, "agent-pki-mode", "provisioned", "provisioned offline-Root/online-Intermediate PKI, or explicit local-development")
+	flags.StringVar(&options.AgentRootPin, "agent-root-pin", "", "offline-approved Agent Root SPKI SHA-256 (required in provisioned mode)")
 	flags.StringVar(&options.AgentPKIDir, "agent-pki-dir", "", "local Agent CA directory (default: pki beside -db)")
 	flags.StringVar(&options.AgentAuthority, "agent-authority", "", "Agent-facing authority host:port (default: derived from -listen)")
 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
@@ -57,6 +68,10 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
 	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
 	flags.StringVar(&options.UpdateDeployment, "update-deployment", "", "private signed local Agent update configuration (Linux; requires management TLS mode)")
+	flags.StringVar(&options.BackupDeployment, "backup-deployment", "", "private encrypted backup startup configuration (provisioned PKI only)")
+	flags.StringVar(&options.ReleaseSource, "release-source", "", "private fixed HTTPS signed Agent release feed (requires provisioned PKI and -update-deployment)")
+	flags.StringVar(&options.ResidentSupervisor, "resident-supervisor", "", "private owning Controller supervisor configuration")
+	flags.StringVar(&options.ACMEDeployment, "acme-deployment", "", "private ACME/Cloudflare task configuration (provisioned PKI only)")
 	flags.BoolVar(&options.DisableCleanupRetries, "disable-cleanup-retries", false, "disable automatic retries of owned ACME cleanup records")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
@@ -72,6 +87,18 @@ func (o Options) Scaffold() bool { return o.DBPath == "" }
 
 // Validate enforces the management-mode prerequisites without opening storage.
 func (o Options) Validate() error {
+	if o.ResidentSupervisor != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: resident supervision requires provisioned management HTTPS")
+	}
+	if o.ACMEDeployment != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: ACME execution requires provisioned PKI and management HTTPS")
+	}
+	if o.ReleaseSource != "" && (o.Scaffold() || o.UpdateDeployment == "" || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: release acquisition requires provisioned PKI and trusted Agent update deployment")
+	}
+	if o.BackupDeployment != "" && (o.Scaffold() || o.AgentPKIMode == "local-development") {
+		return errors.New("controller: encrypted backups require provisioned PKI and management HTTPS")
+	}
 	if o.WebDirectory != "" && o.Scaffold() {
 		return errors.New("controller: -web-dir requires -db and direct HTTPS")
 	}
@@ -86,6 +113,16 @@ func (o Options) Validate() error {
 	}
 	if o.Scaffold() {
 		return nil
+	}
+	mode := o.AgentPKIMode
+	if mode == "" {
+		mode = "provisioned"
+	}
+	if mode != "provisioned" && mode != "local-development" {
+		return errors.New("controller: unsupported Agent PKI mode")
+	}
+	if mode == "provisioned" && len(o.AgentRootPin) != 64 {
+		return errors.New("controller: provisioned PKI requires an independently verified -agent-root-pin; local development must be explicit")
 	}
 	if o.Origin == "" || o.TLSCert == "" || o.TLSKey == "" {
 		return errors.New("controller: -db requires -origin, -tls-cert and -tls-key (direct HTTPS is mandatory)")
@@ -166,7 +203,12 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 	if err != nil {
 		return nil, nil, err
 	}
-	material, err := localpki.Ensure(directory)
+	var material *localpki.Material
+	if options.AgentPKIMode == "local-development" {
+		material, err = localpki.Ensure(directory)
+	} else {
+		material, err = localpki.LoadProvisioned(directory, options.AgentRootPin)
+	}
 	if err != nil {
 		return nil, nil, err
 	}
@@ -185,7 +227,89 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		}
 		serverName = host
 	}
+	var backupDeployment *server.BackupDeployment
+	if options.BackupDeployment != "" {
+		backupDeployment, err = server.LoadBackupDeployment(options.BackupDeployment)
+		if err != nil {
+			return nil, nil, err
+		}
+		backupDeployment.PKIDirectory = directory
+		backupDeployment.RootPin = material.RootSPKI
+		backupDeployment.TLSCertificate = options.TLSCert
+		backupDeployment.TLSKey = options.TLSKey
+		backupDeployment.CredentialDirectory = options.CredentialKeyDir
+		backupDeployment.AgentEndpoint = authority
+		backupDeployment.ReleaseVersion = options.BuildVersion
+		backupDeployment.Configuration, _ = json.Marshal(struct {
+			Version                                                                                                                                                                                                      int `json:"version"`
+			Origin, AgentAuthority, AgentServerName, AgentPKIDirectory, RootPin, CredentialDirectory, WebDirectory, FileDeployment, GatewayDeployment, UpdateDeployment, BackupDeployment, ReleaseSource, ACMEDeployment string
+		}{1, options.Origin, authority, serverName, directory, material.RootSPKI, options.CredentialKeyDir, options.WebDirectory, options.FileDeployment, options.GatewayDeployment, options.UpdateDeployment, options.BackupDeployment, options.ReleaseSource, options.ACMEDeployment})
+		backupDeployment.ConfigurationFiles = map[string]string{}
+		for name, path := range map[string]string{"configuration/file-deployment.json": options.FileDeployment, "configuration/gateway-deployment.json": options.GatewayDeployment, "configuration/update-deployment.json": options.UpdateDeployment, "configuration/backup-deployment.json": options.BackupDeployment, "configuration/release-source.json": options.ReleaseSource} {
+			if path != "" {
+				backupDeployment.ConfigurationFiles[name] = path
+			}
+		}
+
+	}
+	var releaseSource *server.ReleaseSourceDeployment
+	if options.ReleaseSource != "" {
+		releaseSource, err = server.LoadReleaseSourceDeployment(options.ReleaseSource)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	if backupDeployment != nil && releaseSource != nil && releaseSource.RootCertificate != "" {
+		backupDeployment.ConfigurationFiles["configuration/release-root.pem"] = releaseSource.RootCertificate
+	}
+	var acmeDeployment *server.ACMEDeployment
+	if options.ACMEDeployment != "" {
+		acmeDeployment, err = server.LoadACMEDeployment(options.ACMEDeployment)
+		if err != nil {
+			return nil, nil, err
+		}
+		acmeDeployment.ForbiddenKeySPKI = []string{material.RootSPKI, material.IssuerSPKI}
+		if backupDeployment != nil {
+			backupDeployment.ConfigurationFiles["configuration/acme-deployment.json"] = options.ACMEDeployment
+			backupDeployment.ConfigurationFiles["credentials/acme-account-key.pem"] = acmeDeployment.AccountKeyFile
+			if acmeDeployment.ACMERootFile != "" {
+				backupDeployment.ConfigurationFiles["configuration/acme-root.pem"] = acmeDeployment.ACMERootFile
+			}
+			if acmeDeployment.DNSRootFile != "" {
+				backupDeployment.ConfigurationFiles["configuration/dns-root.pem"] = acmeDeployment.DNSRootFile
+			}
+		}
+	}
+	var resident *updates.ResidentSupervisorConfig
+	if options.ResidentSupervisor != "" {
+		value, e := updates.LoadResidentSupervisor(options.ResidentSupervisor)
+		if e != nil {
+			return nil, material, e
+		}
+		resident = &value
+	}
+	var restoredLatch *recovery.QuarantineLatch
+	var recoveryCleanup func() error
+	if resident != nil && resident.RecoveryRuntime != "" {
+		var e error
+		restoredLatch, e = openActivatedRecovery(ctx, resident.RecoveryRuntime, *resident)
+		if e != nil {
+			return nil, material, e
+		}
+		recoveryCleanup = restoredLatch.Close
+		raw, e := recovery.ReadPrivateFile(resident.RecoveryRuntime, 32<<10)
+		var rc recoveryRuntime
+		if e != nil || strictRecoveryJSON(raw, &rc) != nil || rc.NewPKIDirectory != directory || rc.RootPin != material.RootSPKI || options.CredentialKeyDir != filepath.Join(rc.Directory, "credentials") || resident.NodeID != material.AuthorityID {
+			restoredLatch.Close()
+			return nil, material, recovery.ErrQuarantined
+		}
+	}
 	composed, err := server.New(ctx, server.Config{
+		RecoveryLatch: restoredLatch, RecoveryCleanup: recoveryCleanup,
+		ResidentSupervisor: resident, BuildVersion: options.BuildVersion,
+		ACMEDeployment: acmeDeployment,
+		ReleaseSource:  releaseSource, ControllerAuthorityID: material.AuthorityID,
+		BackupDeployment:      backupDeployment,
 		FileExecution:         fileConfig,
 		WebDirectory:          options.WebDirectory,
 		GatewayDeployment:     gatewayDeployment,
@@ -199,6 +323,9 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		AgentServerName:       serverName,
 	})
 	if err != nil {
+		if recoveryCleanup != nil {
+			_ = recoveryCleanup()
+		}
 		return nil, nil, err
 	}
 	return composed, material, nil

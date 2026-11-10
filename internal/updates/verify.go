@@ -51,8 +51,26 @@ func (r contextReader) Read(p []byte) (int, error) {
 // must not be projected as installed/healthy. Installer must retain the same
 // private staging object and recheck before use to prevent path-swap races.
 func VerifyRelease(ctx context.Context, raw, signature []byte, keyID string, artifact io.Reader, policy ReleasePolicy) (ReleaseManifest, error) {
+	if artifact == nil {
+		return ReleaseManifest{}, ErrArtifactRejected
+	}
+	m, err := VerifyManifest(ctx, raw, signature, keyID, policy)
+	if err != nil {
+		return ReleaseManifest{}, err
+	}
+
+	h := sha256.New()
+	n, err := io.Copy(h, io.LimitReader(contextReader{ctx, artifact}, m.Bytes+1))
+	if err != nil || ctx.Err() != nil || n != m.Bytes || hex.EncodeToString(h.Sum(nil)) != m.SHA256 {
+		return ReleaseManifest{}, ErrArtifactRejected
+	}
+	return m, nil
+}
+
+// VerifyManifest authenticates bounded canonical metadata before fetching bytes.
+func VerifyManifest(ctx context.Context, raw, signature []byte, keyID string, policy ReleasePolicy) (ReleaseManifest, error) {
 	var m ReleaseManifest
-	if ctx == nil || artifact == nil || ctx.Err() != nil || len(raw) == 0 || len(raw) > 16<<10 || len(signature) != ed25519.SignatureSize || policy.MaxBytes <= 0 || policy.MaxBytes > 256<<20 {
+	if ctx == nil || ctx.Err() != nil || len(raw) == 0 || len(raw) > 16<<10 || len(signature) != ed25519.SignatureSize || policy.MaxBytes <= 0 || policy.MaxBytes > 256<<20 {
 		return m, ErrArtifactRejected
 	}
 	key := policy.TrustedKeys[keyID]
@@ -64,11 +82,6 @@ func VerifyRelease(ctx context.Context, raw, signature []byte, keyID string, art
 	}
 	canonical, _ := json.Marshal(m)
 	if !bytes.Equal(canonical, raw) || m.Format != 1 || (m.Component != "controller" && m.Component != "agent") || m.Component != policy.Component || !versionPattern.MatchString(m.Version) || m.Sequence <= policy.MinimumSequence || m.OS != "linux" || (m.Architecture != "amd64" && m.Architecture != "arm64") || m.Architecture != policy.Architecture || m.Bytes <= 0 || m.Bytes > policy.MaxBytes {
-		return ReleaseManifest{}, ErrArtifactRejected
-	}
-	h := sha256.New()
-	n, err := io.Copy(h, io.LimitReader(contextReader{ctx, artifact}, m.Bytes+1))
-	if err != nil || ctx.Err() != nil || n != m.Bytes || hex.EncodeToString(h.Sum(nil)) != m.SHA256 {
 		return ReleaseManifest{}, ErrArtifactRejected
 	}
 	return m, nil

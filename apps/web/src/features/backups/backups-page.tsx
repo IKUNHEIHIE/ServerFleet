@@ -1,4 +1,6 @@
 import { useState, type FormEvent } from "react";
+import { RecoveryAuthorityPanel } from "./recovery-authority-panel";
+import { EncryptedBackupsPanel } from "./encrypted-backups-panel";
 import { useSession } from "@/app/session";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
@@ -135,13 +137,12 @@ export function BackupsPage() {
         description="备份校验 → 灾难恢复预演 → 恢复作业。恢复密钥只传引用，不传明文。"
         badge={<span className="rounded-md border px-2 py-1 text-xs">DR</span>}
       />
+      <RecoveryAuthorityPanel key={`authority:${session.viewEpoch}`} />
+      <EncryptedBackupsPanel key={session.viewEpoch} />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
 
-      <Notice tone="warning" title="契约缺口：没有备份记录列表/创建端点">
-        候选契约只有 `POST /api/v1/backups/{backupId}/verify`、`/api/v1/disaster-recovery/preview|jobs`；没有备份记录列表、创建备份或备份保留策略端点（SHARED-CHANGES §4）。
-        因此本页不显示伪造的备份记录表格，也不提供“立即备份”按钮；backupId 需要来自服务端（例如更新作业返回的 `backupId`）或管理员已有记录。
-      </Notice>
+      <Notice tone="info" title="离线恢复">上方管理加密备份；下方恢复预演仅展示服务端校验。实际恢复密钥和 Root 私钥不进入网页。</Notice>
 
       <Panel title="校验备份" description="POST /api/v1/backups/{backupId}/verify → 返回恢复计划（202 表示已受理）。">
         <form onSubmit={verify} className="space-y-3 px-5 py-4">

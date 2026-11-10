@@ -178,11 +178,6 @@ func (s *Service) checkExecution(ctx context.Context, id, plan, nodeID string) (
 	if t.Status != StatusRunning || t.CancelRequested || t.PlanHash != plan {
 		return Task{}, ErrInvalidStatus
 	}
-	if t.ApprovalRequired {
-		if err = s.checkApproval(ctx, t); err != nil {
-			return Task{}, err
-		}
-	}
 	scope := taskTargetIDs(t)
 	if nodeID != "" {
 		found := false
@@ -197,7 +192,12 @@ func (s *Service) checkExecution(ctx context.Context, id, plan, nodeID string) (
 		}
 		scope = []string{nodeID}
 	}
-	if err = s.authorize(ctx, t.SubmitterID, t.ActionID, t.RequestID, scope, "task_execute"); err != nil {
+	if t.ApprovalRequired {
+		if err = s.checkApproval(ctx, t, scope); err != nil {
+			return Task{}, err
+		}
+	}
+	if err = s.authorizeForTask(ctx, t, t.SubmitterID, t.ActionID, t.RequestID, scope, "task_execute"); err != nil {
 		return Task{}, err
 	}
 	return t, nil

@@ -12,7 +12,7 @@
     "internal/storage": [],
     "internal/ai": ["internal/auth", "internal/tasks", "internal/nodes", "internal/servicegroups", "internal/audit", "internal/storage"],
     "internal/workflows": ["internal/auth", "internal/tasks", "internal/nodes", "internal/notifications", "internal/audit", "internal/storage"],
-    "internal/updates": ["internal/auth", "internal/tasks", "internal/nodes", "internal/audit", "internal/storage"],
+    "internal/updates": ["internal/transport", "internal/auth", "internal/tasks", "internal/nodes", "internal/audit", "internal/storage"],
     "internal/recovery": ["internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/storage"],
     "internal/files": ["internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/storage"],
     "internal/monitoring": ["internal/auth", "internal/nodes", "internal/notifications", "internal/audit", "internal/storage"],

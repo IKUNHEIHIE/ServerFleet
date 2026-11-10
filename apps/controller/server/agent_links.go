@@ -22,10 +22,15 @@ import (
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
 	return map[string]string{
-		"tasks.command":          "1",
-		transport.FileCapability: "1",
-		"host.patch":             "1",
-		"host.root":              "1",
+		"tasks.command":                    "1",
+		transport.CommandCapability:        "1",
+		transport.ResidentUpdateAction:     "1",
+		transport.CertificateCSRAction:     "1",
+		transport.CertificateInstallAction: "1",
+		transport.FileCapability:           "1",
+		transport.FileResumeCapability:     "1",
+		"host.patch":                       "1",
+		"host.root":                        "1",
 	}
 }
 
@@ -33,6 +38,12 @@ func agentAllowedActions() map[string]string {
 // gateway wiring has installed its real child observer and artifact channel.
 func (b *agentLinkBridge) allowedActions() map[string]string {
 	allowed := agentAllowedActions()
+	if b == nil || b.recordCSR == nil {
+		delete(allowed, transport.CertificateCSRAction)
+	}
+	if b == nil || b.recordChain == nil || b.readChain == nil {
+		delete(allowed, transport.CertificateInstallAction)
+	}
 	if b != nil && b.gatewayChild != nil {
 		allowed[gateway.NginxActionApply] = "1"
 		allowed[gateway.NginxActionRemove] = "1"
@@ -67,15 +78,20 @@ func agentFrameLimits() transport.FrameDecodeLimits {
 }
 
 type agentLinkBridge struct {
-	nodesRepo    *nodes.Repo
-	nodesService *nodes.Service
-	tasksRepo    *tasks.Repo
-	tasks        *tasks.Service
-	links        *transport.ControllerLinks
-	files        *transport.FileClient
-	fileWorker   *FileExecutionWorker
-	gatewayChild *GatewayArtifactObserver
-	now          func() time.Time
+	commandCurrent func(context.Context, tasks.Task) error
+	nodesRepo      *nodes.Repo
+	nodesService   *nodes.Service
+	tasksRepo      *tasks.Repo
+	tasks          *tasks.Service
+	links          *transport.ControllerLinks
+	files          *transport.FileClient
+	fileWorker     *FileExecutionWorker
+	gatewayChild   *GatewayArtifactObserver
+	recordCSR      func(context.Context, transport.CertificateCSRReceipt) error
+	readCSR        func(context.Context, string) (transport.CertificateCSRReceipt, error)
+	recordChain    func(context.Context, transport.CertificateChainReceipt) error
+	readChain      func(context.Context, string) (transport.CertificateChainReceipt, error)
+	now            func() time.Time
 
 	seqMu     sync.Mutex
 	sequences map[string]uint64
@@ -96,7 +112,7 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	allowed := b.allowedActions()
 	granted := make([]string, 0, len(hello.CapabilityIds))
 	for _, capability := range hello.CapabilityIds {
-		if allowed[capability] != "" && (capability != transport.FileCapability || b.files != nil) {
+		if allowed[capability] != "" && (!transport.IsFileAction(capability) || b.files != nil) {
 			granted = append(granted, capability)
 		}
 	}
@@ -108,7 +124,7 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 }
 
 func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkObservation, envelope *agentv1.Envelope) error {
-	if transport.FileEnvelope(envelope) || envelope.GetTaskOffer() != nil && envelope.GetTaskOffer().ActionId == transport.FileCapability {
+	if transport.FileEnvelope(envelope) || envelope.GetTaskOffer() != nil && transport.IsFileAction(envelope.GetTaskOffer().ActionId) {
 		if b.files == nil {
 			return transport.ErrLinkRejected
 		}
@@ -124,6 +140,64 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	}
 	if task.PlanHash != offer.GetPlanDigestSha256() || task.ActionID != offer.GetActionId() || task.PluginID != offer.GetPluginId() {
 		return transport.ErrLinkRejected
+	}
+	if string(offer.CanonicalParametersJson) != task.Params || offer.Privilege != dispatchPrivilege(task) || offer.ScopeRevision != task.ScopeRevision {
+		return transport.ErrLinkRejected
+	}
+	if b.tasks == nil {
+		return transport.ErrLinkRejected
+	}
+	if _, err = b.tasks.CheckDispatch(ctx, task.ID, task.PlanHash, observation.Identity.NodeID); err != nil {
+		return transport.ErrLinkRejected
+	}
+	if task.ActionID == transport.ResidentUpdateAction {
+		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
+			return transport.ErrLinkRejected
+		}
+		if _, e := transport.ParseResidentUpdateParameters(offer.CanonicalParametersJson); e != nil {
+			return e
+		}
+	}
+	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
+		params, e := transport.ParseCommandParameters(offer.CanonicalParametersJson)
+		if e != nil || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || offer.TimeoutSeconds != uint32(params.TimeoutSeconds) {
+			return transport.ErrLinkRejected
+		}
+		class := tasks.OperationClassModifying
+		if task.ActionID == transport.RootCommandCapability {
+			class = tasks.OperationClassRoot
+		}
+		if task.OperationClass != class {
+			return transport.ErrLinkRejected
+		}
+		if b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
+			return transport.ErrLinkRejected
+		}
+	}
+	if task.ActionID == transport.CertificateCSRAction {
+		if task.OperationClass != tasks.OperationClassModifying || !task.ApprovalRequired || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || len(task.Targets) != 1 {
+			return transport.ErrLinkRejected
+		}
+		if _, err := transport.ParseCertificateCSRRequest([]byte(task.Params)); err != nil {
+			return transport.ErrLinkRejected
+		}
+	}
+	if task.ActionID == transport.CertificateInstallAction {
+		if task.OperationClass != tasks.OperationClassModifying || !task.ApprovalRequired || task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || len(task.Targets) != 1 {
+			return transport.ErrLinkRejected
+		}
+		request, csrTaskID, err := certificateInstallTaskParams([]byte(task.Params))
+		if err != nil || b.readCSR == nil {
+			return transport.ErrLinkRejected
+		}
+		source, err := b.tasksRepo.Get(ctx, csrTaskID)
+		if err != nil || source.ActionID != transport.CertificateCSRAction || source.Status != tasks.StatusCompleted || len(source.Targets) != 1 || source.Targets[0].State != tasks.TargetSucceeded || source.Targets[0].NodeID != observation.Identity.NodeID {
+			return transport.ErrLinkRejected
+		}
+		proof, err := b.readCSR(ctx, csrTaskID)
+		if err != nil || proof.PlanSHA256 != source.PlanHash || proof.NodeID != observation.Identity.NodeID || proof.KeyRef != request.KeyRef || proof.Domain != request.Domain || proof.PublicResult.SHA256 != request.CSRSHA256 {
+			return transport.ErrLinkRejected
+		}
 	}
 	if b.allowedActions()[task.ActionID] != offer.GetActionSchemaVersion() {
 		return transport.ErrLinkRejected
@@ -206,6 +280,12 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 		return b.taskLog(ctx, observation, started.GetTaskId(), "info", "agent reported task started")
 	case envelope.GetTaskOutput() != nil:
 		output := envelope.GetTaskOutput()
+		if consumed, err := b.observeCertificateInstall(ctx, observation, output); consumed {
+			return err
+		}
+		if consumed, err := b.observeCertificateCSR(ctx, observation, output); consumed {
+			return err
+		}
 		message := sanitizeAgentOutput(output.GetChunk())
 		if output.GetTruncated() {
 			message += " [output truncated]"
@@ -338,6 +418,21 @@ func (b *agentLinkBridge) taskFinished(ctx context.Context, observation transpor
 	if finished.GetTaskId() == "" {
 		return transport.ErrLinkRejected
 	}
+	// A mailbox action can report its own shutdown, never an installation.
+	// Only the separately authenticated supervisor commit with fresh connected
+	// health may finish a remote update. Ignore stale normal-Agent completions.
+	if task, e := b.tasksRepo.Get(ctx, finished.TaskId); e == nil && task.ActionID == transport.ResidentUpdateAction {
+		found := false
+		for _, target := range task.Targets {
+			if target.NodeID == observation.Identity.NodeID {
+				found = true
+			}
+		}
+		if !found || finished.ExecutionId != executionIDFor(task.ID, observation.Identity.NodeID, task.PlanHash) {
+			return transport.ErrLinkRejected
+		}
+		return nil
+	}
 	code := tasks.NodeResultUnknown
 	switch finished.GetResult() {
 	case agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED:
@@ -348,6 +443,34 @@ func (b *agentLinkBridge) taskFinished(ctx context.Context, observation transpor
 		code = tasks.NodeResultCanceled
 	case agentv1.ExecutionResult_EXECUTION_RESULT_TIMED_OUT:
 		code = tasks.NodeResultTimedOut
+	}
+	if task, err := b.tasksRepo.Get(ctx, finished.TaskId); err == nil && task.ActionID == transport.CertificateCSRAction {
+		if len(task.Targets) != 1 || task.Targets[0].NodeID != observation.Identity.NodeID || finished.ExecutionId != executionIDFor(task.ID, observation.Identity.NodeID, task.PlanHash) {
+			return transport.ErrLinkRejected
+		}
+		if code == tasks.NodeResultSucceeded {
+			if b.readCSR == nil {
+				return transport.ErrLinkRejected
+			}
+			receipt, e := b.readCSR(ctx, task.ID)
+			if e != nil || receipt.PlanSHA256 != task.PlanHash || receipt.NodeID != observation.Identity.NodeID {
+				code = tasks.NodeResultUnknown
+			}
+		}
+	}
+	if task, e := b.tasksRepo.Get(ctx, finished.TaskId); e == nil && task.ActionID == transport.CertificateInstallAction {
+		if len(task.Targets) != 1 || task.Targets[0].NodeID != observation.Identity.NodeID || finished.ExecutionId != executionIDFor(task.ID, observation.Identity.NodeID, task.PlanHash) {
+			return transport.ErrLinkRejected
+		}
+		if code == tasks.NodeResultSucceeded {
+			if b.readChain == nil {
+				return transport.ErrLinkRejected
+			}
+			receipt, e := b.readChain(ctx, task.ID)
+			if e != nil || receipt.PlanSHA256 != task.PlanHash || receipt.NodeID != observation.Identity.NodeID {
+				code = tasks.NodeResultUnknown
+			}
+		}
 	}
 	message := sanitizeAgentCode(finished.GetErrorCode())
 	if message == "" {
@@ -437,12 +560,27 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		PlanDigestSha256:        task.PlanHash,
 		ActionId:                command.ActionID,
 		CanonicalParametersJson: append([]byte(nil), command.Params...),
-		Privilege:               agentv1.Privilege_PRIVILEGE_NORMAL,
+		Privilege:               dispatchPrivilege(task),
 		ExpiresAtUnixMs:         b.now().Add(10 * time.Minute).UnixMilli(),
 		TimeoutSeconds:          300,
 		ScopeRevision:           task.ScopeRevision,
 		PluginId:                task.PluginID,
 		ActionSchemaVersion:     b.allowedActions()[command.ActionID],
+	}
+	if task.ActionID == transport.ResidentUpdateAction {
+		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
+			return tasks.DispatchResult{Accepted: false, Reason: "resident_update_authority_denied"}, nil
+		}
+		if _, e := transport.ParseResidentUpdateParameters(offer.CanonicalParametersJson); e != nil {
+			return tasks.DispatchResult{Accepted: false, Reason: "resident_update_parameters_rejected"}, nil
+		}
+	}
+	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
+		params, e := transport.ParseCommandParameters(command.Params)
+		if e != nil {
+			return tasks.DispatchResult{Accepted: false, Reason: "invalid_command_profile"}, nil
+		}
+		offer.TimeoutSeconds = uint32(params.TimeoutSeconds)
 	}
 	envelope := &agentv1.Envelope{Message: &agentv1.Envelope_TaskOffer{TaskOffer: offer}}
 	err = b.links.Send(ctx, command.NodeID, envelope)
@@ -475,3 +613,10 @@ func (b *agentLinkBridge) Cancel(ctx context.Context, command tasks.CancelComman
 }
 
 var _ tasks.Dispatcher = (*agentLinkBridge)(nil)
+
+func dispatchPrivilege(t tasks.Task) agentv1.Privilege {
+	if t.ActionID == transport.RootCommandCapability && t.OperationClass == tasks.OperationClassRoot {
+		return agentv1.Privilege_PRIVILEGE_ROOT
+	}
+	return agentv1.Privilege_PRIVILEGE_NORMAL
+}

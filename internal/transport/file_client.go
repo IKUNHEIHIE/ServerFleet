@@ -156,7 +156,7 @@ func (s *FileSession) Open(ctx context.Context) (*agentv1.FileOpenReply, error) 
 		return nil, ErrDeliveryUnknown
 	}
 	p := s.parameters
-	r := &agentv1.FileOpenRequest{TaskId: s.offer.TaskId, ExecutionId: s.offer.ExecutionId, TransferId: p.TransferID, RelativePath: p.RelativePath, Direction: p.Direction, Size: p.Size, Sha256: p.SHA256, ConflictPolicy: p.ConflictPolicy, CreateParents: p.CreateParents, PlanDigestSha256: s.offer.PlanDigestSha256}
+	r := &agentv1.FileOpenRequest{TaskId: s.offer.TaskId, ExecutionId: s.offer.ExecutionId, TransferId: p.TransferID, RelativePath: p.RelativePath, Direction: p.Direction, Size: p.Size, Sha256: p.SHA256, ConflictPolicy: p.ConflictPolicy, CreateParents: p.CreateParents, ResumeOffset: FileResumeOffset(p), PlanDigestSha256: s.offer.PlanDigestSha256}
 	e, err = s.exchange(ctx, &agentv1.Envelope{Message: &agentv1.Envelope_FileOpenRequest{FileOpenRequest: r}}, "open")
 	if err != nil {
 		return nil, err
@@ -171,9 +171,10 @@ func (s *FileSession) Open(ctx context.Context) (*agentv1.FileOpenReply, error) 
 	if p.ConflictPolicy == "rename" {
 		pathOK = FilePath(reply.RelativePath) && fileDirectory(reply.RelativePath) == fileDirectory(p.RelativePath)
 	}
-	if reply.ResultCode != "ok" || !pathOK || reply.PlanDigestSha256 != s.offer.PlanDigestSha256 || reply.ResumeOffset != 0 || reply.Size > FileMaxBytes || !FileDigest(reply.Sha256) || p.SHA256 != "" && (reply.Size != p.Size || reply.Sha256 != p.SHA256) {
+	if reply.ResultCode != "ok" || !pathOK || reply.PlanDigestSha256 != s.offer.PlanDigestSha256 || reply.ResumeOffset != FileResumeOffset(p) || reply.Size > FileMaxBytes || !FileDigest(reply.Sha256) || p.SHA256 != "" && (reply.Size != p.Size || reply.Sha256 != p.SHA256) {
 		return nil, ErrLinkRejected
 	}
+	s.offset = reply.ResumeOffset
 	s.opened = true
 	s.finished = reply.Complete
 	s.size = reply.Size

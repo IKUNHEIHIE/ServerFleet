@@ -345,14 +345,16 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 	for _, stage := range stages {
 		switch stage.Status {
 		case StageRunning:
-			return plan, ErrStageAlreadyRunning
+			if _, resumable := s.dns.(DeferredDNSPublisher); !resumable || stage.Kind != StageDNS {
+				return plan, ErrStageAlreadyRunning
+			}
 		case StageRolledBack:
 			return plan, ErrPlanNotRunnable
 		}
 	}
 	runnable := make([]int, 0, len(stages))
 	for index, stage := range stages {
-		if stage.Status == StagePending || stage.Status == StageFailed {
+		if stage.Status == StagePending || stage.Status == StageFailed || stage.Status == StageRunning && stage.Kind == StageDNS {
 			runnable = append(runnable, index)
 		}
 	}
@@ -392,12 +394,14 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 		group = stageGroup
 		stage := &stages[index]
 		now := s.now().UTC()
-		stage.Status = StageRunning
-		stage.Attempts++
-		stage.ResultSummary = ""
-		stage.ErrorCode = ""
-		stage.StartedAt = now
-		stage.FinishedAt = time.Time{}
+		if stage.Status != StageRunning {
+			stage.Status = StageRunning
+			stage.Attempts++
+			stage.ResultSummary = ""
+			stage.ErrorCode = ""
+			stage.StartedAt = now
+			stage.FinishedAt = time.Time{}
+		}
 		plan.Status = PlanRunning
 		plan.CurrentStage = stage.Kind
 		plan.UpdatedAt = now
@@ -406,12 +410,20 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 		}
 
 		result, publishErr := s.publish(ctx, subjectID, requestID, plan, stage.Kind)
+		if errors.Is(publishErr, ErrStageAwaitingTask) {
+			stage.ResultSummary = sanitizeReceipt(result.Summary)
+			plan.UpdatedAt = s.now().UTC()
+			if err := s.persistProgress(ctx, subjectID, requestID, plan, *stage, group.NodeIDs, "stage_awaiting_unified_task"); err != nil {
+				return plan, err
+			}
+			return plan, ErrStageAwaitingTask
+		}
 		if publishErr != nil {
 			if ctx.Err() != nil {
 				return plan, ctx.Err()
 			}
 			return s.fail(ctx, subjectID, requestID, plan, stages, index, ErrorCodePublishError,
-				sanitizeMessage(result.Summary), nil, group.NodeIDs)
+				sanitizeReceipt(result.Summary), nil, group.NodeIDs)
 		}
 		summary, resultErr := normalizeStageResult(result)
 		if resultErr != nil {
@@ -530,7 +542,10 @@ func (s *Service) Rollback(ctx context.Context, subjectID, requestID, planID str
 		}
 		return plan, err
 	}
-	if err := s.rollback(ctx, plan, normalized, StageResult{Summary: stage.ResultSummary}); err != nil {
+	if err := s.rollback(context.WithValue(ctx, rollbackActorKey{}, rollbackActor{subjectID, requestID}), plan, normalized, StageResult{Summary: stage.ResultSummary}); err != nil {
+		if errors.Is(err, ErrStageAwaitingTask) {
+			return plan, err
+		}
 		auditErr := s.recordFailure(ctx, subjectID, ActionRollback, requestID, group.NodeIDs, "rollback_failed")
 		if auditErr != nil {
 			return plan, fmt.Errorf("%w (rollback audit failed)", ErrRollbackFailed)
@@ -591,7 +606,7 @@ func (s *Service) fail(ctx context.Context, subjectID, requestID string, plan Pl
 	now := s.now().UTC()
 	stage.Status = StageFailed
 	stage.ErrorCode = errorCode
-	stage.ResultSummary = sanitizeMessage(partialSummary)
+	stage.ResultSummary = sanitizeReceipt(partialSummary)
 	stage.FinishedAt = now
 	plan.Status = PlanPartialFailure
 	plan.CurrentStage = stage.Kind

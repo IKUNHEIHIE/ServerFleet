@@ -116,3 +116,38 @@ func (r *Repo) ObserveExecution(ctx context.Context, id, phase string, sink Audi
 		return sink.AppendTx(ctx, tx, bindingAudit(b, phase))
 	})
 }
+
+// ExecutionsForTask is a bounded owned read projection, not a caller-supplied
+// SQL view. Metadata contains no transferred file bytes.
+func (r *Repo) ExecutionsForTask(ctx context.Context, taskID string) ([]ExecutionBinding, error) {
+	if !validChannelID(taskID) {
+		return nil, ErrTransferIdentity
+	}
+	rows, err := r.db.Query(ctx, `SELECT execution_id FROM cx_file_execution_bindings WHERE task_id=? ORDER BY node_id,item_sequence LIMIT 257`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			rows.Close()
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || len(ids) > 256 {
+		return nil, ErrTransferExecution
+	}
+	out := make([]ExecutionBinding, 0, len(ids))
+	for _, id := range ids {
+		binding, e := r.Execution(ctx, id)
+		if e != nil {
+			return nil, e
+		}
+		out = append(out, binding)
+	}
+	return out, nil
+}

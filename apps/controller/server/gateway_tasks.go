@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -46,6 +47,7 @@ type GatewayInstallPaths struct {
 	ArtifactDir string
 	HTTPListen  string
 	HTTPSListen string
+	ProbeCAFile string
 }
 
 // ProductionPublishingConfig binds concrete DS owners to the production
@@ -65,17 +67,18 @@ type ProductionPublishingConfig struct {
 	// Dispatcher and Registry reuse the exact gateway dispatcher the task
 	// service is already constructed with. When both are supplied the bridge
 	// never creates a second dispatcher or a second artifact registry.
-	Dispatcher      tasks.Dispatcher
-	Registry        *gatewayArtifactRegistry
-	Authorizer      auth.Authorizer
-	CertificatePath map[string]CertificateInstallPaths
-	GatewayPaths    map[string]GatewayInstallPaths
-	Now             func() time.Time
-	ApprovalTTL     time.Duration
-	ApprovalWait    time.Duration
-	ExecutionWait   time.Duration
-	Poll            time.Duration
-	OnTaskSubmitted func(string)
+	Dispatcher           tasks.Dispatcher
+	Registry             *gatewayArtifactRegistry
+	Authorizer           auth.Authorizer
+	CertificatePath      map[string]CertificateInstallPaths
+	NodeCertificateRoots map[string]string
+	GatewayPaths         map[string]GatewayInstallPaths
+	Now                  func() time.Time
+	ApprovalTTL          time.Duration
+	ApprovalWait         time.Duration
+	ExecutionWait        time.Duration
+	Poll                 time.Duration
+	OnTaskSubmitted      func(string)
 }
 
 // NewProductionPublishingBridge is the controller composition seam. The
@@ -122,16 +125,28 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 	if err != nil {
 		return publishing.LocalBridge{}, nil, err
 	}
+	roots := map[string]string{}
+	for node, root := range config.NodeCertificateRoots {
+		if !deploymentID.MatchString(node) || !validCertificatePath(root) {
+			return publishing.LocalBridge{}, nil, ErrGatewayDeployment
+		}
+		roots[node] = root
+	}
+	proofNow := config.Now
+	if proofNow == nil {
+		proofNow = time.Now
+	}
+	nodeCertificates := &nodeCertificatePublication{db: config.DB, tasks: config.TasksRepo, gateways: config.Gateways, authorizer: config.Authorizer, roots: roots, now: proofNow}
 	applier := &publicationGatewayApplier{
 		gateways: config.Gateways, tasks: host, plans: publicationPlanLookup{repo: config.Plans},
-		sitePaths: config.GatewayPaths,
+		sitePaths: config.GatewayPaths, nodeCertificates: nodeCertificates,
 	}
 	bridge, err := publishing.NewProductionBridge(publishing.ProductionBridgeConfig{
 		Plans:     publicationPlanLookup{repo: config.Plans},
 		DNS:       publicationDNSWriter{service: config.DNS},
 		Addresses: publicationGatewayAddresses{gateways: config.Gateways, nodes: config.Nodes},
 		Certificates: publicationCertificateInspection{
-			service: config.Certificates, paths: config.CertificatePath,
+			service: config.Certificates, paths: config.CertificatePath, nodeCertificates: nodeCertificates,
 		},
 		Upstreams: publicationServiceUpstreams{groups: config.ServiceGroups, nodes: config.Nodes},
 		Gateway:   applier,
@@ -200,11 +215,15 @@ func (a publicationGatewayAddresses) Addresses(ctx context.Context, subjectID st
 }
 
 type publicationCertificateInspection struct {
-	service *certificates.Service
-	paths   map[string]CertificateInstallPaths
+	nodeCertificates *nodeCertificatePublication
+	service          *certificates.Service
+	paths            map[string]CertificateInstallPaths
 }
 
 func (c publicationCertificateInspection) Inspect(ctx context.Context, subjectID, certificateID, domain string) (string, error) {
+	if isNodeCertificateReference(certificateID) {
+		return c.nodeCertificates.inspect(ctx, subjectID, certificateID, domain)
+	}
 	detail, err := c.service.Get(ctx, subjectID, certificateID)
 	if err != nil {
 		return "", err
@@ -220,7 +239,10 @@ func (c publicationCertificateInspection) Inspect(ctx context.Context, subjectID
 	return "serial=" + certificate.Serial + ";not_after=" + certificate.NotAfter.UTC().Format(time.RFC3339), nil
 }
 
-func (c publicationCertificateInspection) Paths(_ context.Context, _, certificateID string) (string, string, error) {
+func (c publicationCertificateInspection) Paths(ctx context.Context, subject, certificateID string) (string, string, error) {
+	if isNodeCertificateReference(certificateID) {
+		return c.nodeCertificates.paths(ctx, subject, certificateID, "")
+	}
 	paths, ok := c.paths[certificateID]
 	if !ok || !validCertificatePath(paths.CertificatePath) || !validCertificatePath(paths.PrivateKeyPath) {
 		return "", "", publishing.ErrProductionCertificate
@@ -266,18 +288,7 @@ func (u publicationServiceUpstreams) Upstreams(ctx context.Context, _ string, se
 	return upstreams, nil
 }
 
-type gatewayPublicationSummary struct {
-	RouteID            string `json:"routeId"`
-	GatewayID          string `json:"gatewayId"`
-	NodeID             string `json:"nodeId"`
-	SitePath           string `json:"sitePath"`
-	ConfigSHA256       string `json:"configSha256"`
-	TaskID             string `json:"taskId"`
-	RouteRevision      uint64 `json:"routeRevision"`
-	RouteCreated       bool   `json:"routeCreated"`
-	PlanID             string `json:"planId"`
-	PlanTargetRevision uint64 `json:"planTargetRevision"`
-}
+type gatewayPublicationSummary = publishing.GatewayReceipt
 
 type gatewayRouteService interface {
 	GetGateway(ctx context.Context, subjectID, gatewayID string) (gateway.GatewayNode, error)
@@ -293,10 +304,11 @@ type gatewayTaskRunner interface {
 }
 
 type publicationGatewayApplier struct {
-	gateways  gatewayRouteService
-	tasks     gatewayTaskRunner
-	plans     publishing.PlanLookup
-	sitePaths map[string]GatewayInstallPaths
+	nodeCertificates *nodeCertificatePublication
+	gateways         gatewayRouteService
+	tasks            gatewayTaskRunner
+	plans            publishing.PlanLookup
+	sitePaths        map[string]GatewayInstallPaths
 }
 
 func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.Plan, request publishing.GatewayRequest, upstreams []string, certificatePath, keyPath string) (string, error) {
@@ -316,34 +328,50 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 	if err != nil {
 		return "", err
 	}
+	expectedLeaf := ""
+	if request.HTTPS && isNodeCertificateReference(request.CertificateID) {
+		cp, kp, e := a.nodeCertificates.paths(ctx, request.SubjectID, request.CertificateID, gatewayID)
+		if e != nil || cp != certificatePath || kp != keyPath {
+			return "", publishing.ErrProductionCertificate
+		}
+		proof, e := a.nodeCertificates.proofForGateway(ctx, request.SubjectID, request.CertificateID, gatewayID)
+		if e != nil {
+			return "", e
+		}
+		expectedLeaf = proof.Result.LeafSHA256
+	}
 	sitePaths, err := a.pathsFor(gatewayID)
 	if err != nil {
 		return "", err
 	}
 	routeID := plan.ID
+	if len(plan.GatewayIDs) > 1 {
+		h := sha256.Sum256([]byte(plan.ID + "\x00" + gatewayID))
+		routeID = "pub-route-" + hex.EncodeToString(h[:16])
+	}
 	route, err := a.gateways.GetRoute(ctx, request.SubjectID, routeID)
 	created := false
 	switch {
 	case errors.Is(err, gateway.ErrRouteNotFound):
 		route, err = a.gateways.CreateRoute(ctx, request.SubjectID, request.RequestID, gatewayID, gateway.CreateRouteInput{
 			ID: routeID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
-			HTTPS: request.HTTPS, Enabled: true,
+			HTTPS: request.HTTPS, Enabled: false,
 		})
 		created = true
 	case err != nil:
 		return "", err
 	case route.GatewayID != gatewayID || route.Domain != request.Domain ||
-		route.ServiceGroupID != request.ServiceGroupID || route.HTTPS != request.HTTPS || !route.Enabled:
+		route.ServiceGroupID != request.ServiceGroupID || route.HTTPS != request.HTTPS:
 		route, err = a.gateways.UpdateRoute(ctx, request.SubjectID, request.RequestID, gatewayID, routeID, route.Revision, gateway.UpdateRouteInput{
 			Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
-			HTTPS: request.HTTPS, Enabled: true,
+			HTTPS: request.HTTPS, Enabled: false,
 		})
 	}
 	if err != nil {
 		return "", err
 	}
 	site, err := gateway.RenderNginxSite(gateway.NginxSiteRequest{
-		GatewayID: gatewayID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
+		ProbeToken: gatewayPublicationProbeToken(plan.ID, plan.TargetRevision, gatewayID), GatewayID: gatewayID, Domain: request.Domain, ServiceGroupID: request.ServiceGroupID,
 		ServiceGroupRevision: request.ExpectedGroupRevision, UpstreamHosts: upstreams,
 		HTTPS: request.HTTPS, CertificatePath: certificatePath, PrivateKeyPath: keyPath,
 		SiteDir: sitePaths.SiteDir, ArtifactDir: sitePaths.ArtifactDir,
@@ -373,6 +401,19 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 		return gatewayPublicationState(partial), err
 	}
 	partial.TaskID = taskID
+	partial.ProbeToken = site.ProbeToken
+	receipt := &gatewayRouteReceipt{SubjectID: request.SubjectID, RequestID: request.RequestID, TaskID: taskID, PlanID: plan.ID, TargetRevision: plan.TargetRevision, GatewayID: gatewayID, NodeID: record.NodeID, Domain: request.Domain, GroupID: request.ServiceGroupID, GroupRevision: request.ExpectedGroupRevision, HTTPS: request.HTTPS, Site: site, ExpectedLeafSHA256: expectedLeaf}
+	checked := context.WithValue(ctx, gatewayRouteReceiptKey{}, receipt)
+	// The route becomes enabled only after the exact approved nginx task has
+	// completed AND the active site returns its frozen plan-bound probe token.
+	route, err = a.gateways.UpdateRoute(checked, request.SubjectID, request.RequestID, gatewayID, routeID, route.Revision, gateway.UpdateRouteInput{Domain: request.Domain, ServiceGroupID: request.ServiceGroupID, HTTPS: request.HTTPS, Enabled: true})
+	if err != nil {
+		return gatewayPublicationState(partial), err
+	}
+	partial.RouteRevision = route.Revision
+	partial.HTTPStatus = receipt.HTTPStatus
+	partial.ResponseSHA256 = receipt.ResponseSHA256
+	partial.ResponseBytes = receipt.ResponseBytes
 	return gatewayPublicationState(partial), nil
 }
 
@@ -429,7 +470,7 @@ func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishin
 		return publishing.ErrProductionUnavailable
 	}
 	var state gatewayPublicationSummary
-	if len(summary) == 0 || len(summary) > 2048 || json.Unmarshal([]byte(summary), &state) != nil {
+	if len(summary) == 0 || len(summary) > 4096 || json.Unmarshal([]byte(summary), &state) != nil {
 		return publishing.ErrProductionTarget
 	}
 	if state.PlanID != plan.ID || state.PlanTargetRevision != plan.TargetRevision ||
@@ -437,6 +478,15 @@ func (a *publicationGatewayApplier) Rollback(ctx context.Context, plan publishin
 		(state.SitePath == "") != (state.ConfigSHA256 == "") ||
 		state.SitePath != "" && !validGatewayDigest(state.ConfigSHA256) ||
 		state.RouteCreated && (state.RouteID == "" || state.RouteRevision == 0) {
+		return publishing.ErrProductionTarget
+	}
+	member := false
+	for _, id := range plan.GatewayIDs {
+		if id == state.GatewayID {
+			member = true
+		}
+	}
+	if !member {
 		return publishing.ErrProductionTarget
 	}
 	if _, err := a.currentPlan(ctx, plan); err != nil {
@@ -636,4 +686,11 @@ func (c publicationCleanupCleaner) DeleteChallengeRecord(ctx context.Context, su
 		return errors.Join(certificates.ErrCleanupRetryable, err)
 	}
 	return errors.Join(certificates.ErrCleanupUnknown, err)
+}
+
+func (c publicationCertificateInspection) PathsForGateway(ctx context.Context, subject, certificateID, gatewayID string) (string, string, error) {
+	if isNodeCertificateReference(certificateID) {
+		return c.nodeCertificates.paths(ctx, subject, certificateID, gatewayID)
+	}
+	return c.Paths(ctx, subject, certificateID)
 }

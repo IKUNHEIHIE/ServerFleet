@@ -35,3 +35,38 @@ apis:
 
   v09-r11-upload-policies:
     root: api/openapi/revisions/v09-r11/upload-policies-candidate.yaml
+
+  v09-r12-encrypted-backups:
+    root: api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml
+
+  v09-r13-release-source:
+    root: api/openapi/revisions/v09-r13/release-source-candidate.yaml
+
+  v09-r14-node-csr:
+    root: api/openapi/revisions/v09-r14/node-csr-candidate.yaml
+
+  v09-r15-node-certificate-chain:
+    root: api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml
+
+  v09-r16-node-certificate-sets:
+    root: api/openapi/revisions/v09-r16/node-certificate-sets-candidate.yaml
+
+  v09-r17-public-certificate-tasks:
+    root: api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml
+
+  v09-r18-dns-record-tasks:
+    root: api/openapi/revisions/v09-r18/dns-record-tasks-candidate.yaml
+
+  v09-r19-publication-dns-tasks:
+    root: api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml
+
+  v09-r20-command-profiles:
+    root: api/openapi/revisions/v09-r20/command-profiles-candidate.yaml
+
+  v09-r21-file-execution-resume:
+    root: api/openapi/revisions/v09-r21/file-execution-resume-candidate.yaml
+
+  v09-r22-resident-updates:
+    root: api/openapi/revisions/v09-r22/resident-updates-candidate.yaml
+  v09-r23-recovery-authority:
+    root: api/openapi/revisions/v09-r23/recovery-authority-candidate.yaml

@@ -1,0 +1,67 @@
+openapi: 3.1.0
+info:
+  title: Explicit normal and root command profiles (PROPOSED, UNTESTED)
+  version: 0.9.0-r20-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/commands/tasks:
+    post:
+      operationId: submitCommandProfileR20
+      summary: Submit a node-bound command profile for human approval
+      description: Web only. Explicit Agent policy SHA, bounded argv and timeout are frozen in a modifying or root task. Root requires current administrator submission/approval and an explicitly installed root-owned broker. No implicit shell, executable path, environment or sudo password input. A task receipt is not execution success; command output is withheld by this profile.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nodeId, privilege, profileId, policySha256, arguments, timeoutSeconds, idempotencyKey]
+              properties:
+                nodeId: {type: string}
+                privilege: {enum: [normal, root]}
+                profileId: {type: string}
+                policySha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+                arguments: {type: string, maxLength: 1024, description: "Canonical JSON string array, at most 32 entries and 768 bytes of argument data"}
+                timeoutSeconds: {type: string, description: Integer 1 through 300}
+                idempotencyKey: {type: string}
+      responses:
+        '202': {description: Frozen unified task with taskId/status/planHash/approvalRequired}
+        '400': {description: Invalid exact command schema}
+        '403': {description: Current identity or root administrator denied}
+        '409': {description: Unified resource/task admission rejected}
+  /api/v1/agent/root-admission:
+    post:
+      operationId: checkRootBrokerAdmissionR20
+      summary: Live mTLS admission for the exact running approved root execution
+      security:
+        - nodeMTLS: []
+      description: Registered current node certificate; rejects browser headers. Offer task/node/execution/parameters/privilege/expiry and current human administrator approval must match. Private root ledger prevents repeated execution; the broker polls current authorization and cancels its process group on loss. No password or root key is returned.
+      responses:
+        '200': {description: "Exact nonce/phase/task/execution/plan/timeout binding, not a process-health receipt"}
+        '400': {description: Invalid bounded request}
+        '403': {description: "Current certificate, task or human approval denied"}
+        '503': {description: Admission audit unavailable}
+  /api/v1/agent/command-admission:
+    post:
+      operationId: checkNormalCommandAdmissionR20
+      summary: Live mTLS admission for a running approved ordinary-user command
+      security:
+        - nodeMTLS: []
+      responses:
+        '200': {description: Current exact nonce/phase/task/execution/plan/timeout binding}
+        '400': {description: Invalid bounded request}
+        '403': {description: Current node/task/approval denied}
+        '503': {description: Admission audit unavailable}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+    nodeMTLS: {type: mutualTLS}

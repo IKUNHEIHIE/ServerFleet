@@ -24,6 +24,30 @@ import (
 var controllerBuildVersion = "0.9.0-dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "supervise" {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		if err := bootstrap.RunSuperviseCommand(ctx, os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			log.Print(err)
+			os.Exit(2)
+		}
+		return
+	}
+
+	if len(os.Args) > 1 && os.Args[1] == "recovery" {
+		if err := bootstrap.RunRecoveryCommand(context.Background(), os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			log.Print(err)
+			os.Exit(2)
+		}
+		return
+	}
+	if len(os.Args) > 1 && os.Args[1] == "pki" {
+		if err := bootstrap.RunPKICommand(context.Background(), os.Args[2:], os.Stdout, os.Stderr); err != nil {
+			log.Print(err)
+			os.Exit(2)
+		}
+		return
+	}
 	options, err := bootstrap.ParseOptions(os.Args[1:], os.Stderr)
 	if err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -39,6 +63,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	options.BuildVersion = controllerBuildVersion
 	composed, material, err := bootstrap.Compose(ctx, options)
 	if err != nil {
 		log.Fatalf("initialize controller: %v", err)
@@ -48,6 +73,13 @@ func main() {
 		log.Printf("local agent CA: %s (root pin sha256 %s)", material.CertificatePath, material.RootSPKI)
 	}
 
+	if composed != nil {
+		go func() {
+			if err := composed.RunResidentHealth(ctx, controllerBuildVersion); err != nil && ctx.Err() == nil {
+				log.Printf("resident readiness unavailable: %v", err)
+			}
+		}()
+	}
 	var handler http.Handler = health.Handler()
 	if composed != nil {
 		handler = composed

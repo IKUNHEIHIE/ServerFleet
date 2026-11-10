@@ -22,6 +22,7 @@ type gatewayDeploymentEntry struct {
 	ArtifactDir string `json:"artifactDir"`
 	HTTPListen  string `json:"httpListen"`
 	HTTPSListen string `json:"httpsListen"`
+	ProbeCAFile string `json:"probeCaFile,omitempty"`
 }
 
 type certificateDeploymentEntry struct {
@@ -30,17 +31,23 @@ type certificateDeploymentEntry struct {
 	PrivateKeyPath  string `json:"privateKeyPath"`
 }
 
+type certificateRootEntry struct {
+	NodeID    string `json:"nodeId"`
+	Directory string `json:"directory"`
+}
 type gatewayDeploymentDocument struct {
-	Version      int                          `json:"version"`
-	Gateways     []gatewayDeploymentEntry     `json:"gateways"`
-	Certificates []certificateDeploymentEntry `json:"certificates"`
+	CertificateRoots []certificateRootEntry       `json:"certificateRoots,omitempty"`
+	Version          int                          `json:"version"`
+	Gateways         []gatewayDeploymentEntry     `json:"gateways"`
+	Certificates     []certificateDeploymentEntry `json:"certificates"`
 }
 
 // GatewayDeployment is the immutable startup view of operator-owned Agent-side
 // nginx roots and certificate install paths. It contains no secret values.
 type GatewayDeployment struct {
-	Gateways     map[string]GatewayInstallPaths
-	Certificates map[string]CertificateInstallPaths
+	Gateways         map[string]GatewayInstallPaths
+	Certificates     map[string]CertificateInstallPaths
+	CertificateRoots map[string]string
 }
 
 // LoadGatewayDeployment reads one private, owner-checked startup document. It is
@@ -122,14 +129,17 @@ func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {
 		if !validGatewayListen(entry.HTTPListen) || !validGatewayListen(entry.HTTPSListen) {
 			return nil, ErrGatewayDeployment
 		}
+		if entry.ProbeCAFile != "" && !validGatewayDeploymentPath(entry.ProbeCAFile) {
+			return nil, ErrGatewayDeployment
+		}
 		gateways[entry.GatewayID] = GatewayInstallPaths{
 			SiteDir: entry.SiteDir, ArtifactDir: entry.ArtifactDir,
-			HTTPListen: entry.HTTPListen, HTTPSListen: entry.HTTPSListen,
+			HTTPListen: entry.HTTPListen, HTTPSListen: entry.HTTPSListen, ProbeCAFile: entry.ProbeCAFile,
 		}
 	}
 	certificates := make(map[string]CertificateInstallPaths, len(document.Certificates))
 	for _, entry := range document.Certificates {
-		if entry.CertificateID == "" || len(entry.CertificateID) > 128 || entry.CertificateID != strings.TrimSpace(entry.CertificateID) {
+		if isNodeCertificateReference(entry.CertificateID) || entry.CertificateID == "" || len(entry.CertificateID) > 128 || entry.CertificateID != strings.TrimSpace(entry.CertificateID) {
 			return nil, ErrGatewayDeployment
 		}
 		if _, exists := certificates[entry.CertificateID]; exists {
@@ -142,7 +152,17 @@ func parseGatewayDeployment(raw []byte) (*GatewayDeployment, error) {
 			CertificatePath: entry.CertificatePath, PrivateKeyPath: entry.PrivateKeyPath,
 		}
 	}
-	return &GatewayDeployment{Gateways: gateways, Certificates: certificates}, nil
+	roots := map[string]string{}
+	if len(document.CertificateRoots) > 100 {
+		return nil, ErrGatewayDeployment
+	}
+	for _, entry := range document.CertificateRoots {
+		if !deploymentID.MatchString(entry.NodeID) || !validGatewayDeploymentPath(entry.Directory) || roots[entry.NodeID] != "" {
+			return nil, ErrGatewayDeployment
+		}
+		roots[entry.NodeID] = entry.Directory
+	}
+	return &GatewayDeployment{Gateways: gateways, Certificates: certificates, CertificateRoots: roots}, nil
 }
 
 func validGatewayListen(listen string) bool {

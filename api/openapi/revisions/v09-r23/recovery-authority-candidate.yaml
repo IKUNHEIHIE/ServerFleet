@@ -1,0 +1,102 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet R23 recovery authority and independent owned-process fence candidate
+  version: 0.9.0-r23
+  description: Live owned-process evidence and offline Root authority are mandatory; no claimed-fenced flag or arbitrary execution API.
+servers:
+  - url: https://controller.example.invalid
+security:
+  - session: []
+paths:
+  /api/v1/system/recovery-authority:
+    get:
+      operationId: readCurrentRecoveryAuthority
+      summary: Read current administrator-only authority observation behind continuous runtime fence
+      responses:
+        '200':
+          description: Current observation; standard mode does not assert a completed recovery
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [mode, continuousRecoveryFence, recoveryActivationObserved]
+                properties:
+                  mode: {type: string, enum: [standard, supervised, restored_supervised]}
+                  authorityId: {type: string}
+                  trustGeneration: {type: integer, minimum: 1}
+                  revocationSequence: {type: integer, minimum: 0}
+                  holdId: {type: string}
+                  continuousRecoveryFence: {type: boolean}
+                  recoveryActivationObserved: {type: boolean}
+                  agentReenrollmentRequired: {type: boolean}
+        '403': {description: Current human administrator required}
+        '503': {description: Live fence or authority state unavailable; runtime remains denied}
+  /internal/resident-ready:
+    get:
+      operationId: readOwnedControllerReadiness
+      summary: Private owning-parent liveness during signed replacement; grants no business execution
+      security:
+        - parentNonce: []
+      responses:
+        '200': {description: Exact live parent nonce and base authority/fence checked; actual image and private PID/schema report independently verified by parent}
+        '404': {description: Private readiness not admitted}
+        '503': {description: Underlying quarantine or authority fence rejected}
+  /v1/fence:
+    servers:
+      - url: https://independent-supervisor.example.invalid
+    post:
+      operationId: fenceActuallyOwnedOldController
+      summary: Verify fresh offline Root signature then stop and wait only this supervisor owned child
+      security:
+        - recoveryPeer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nonce, authorization]
+              properties:
+                nonce: {type: string, pattern: '^[a-f0-9]{32}$'}
+                authorization: {type: object, description: Canonical existing offline Root-signed recovery document; never a private key}
+      responses:
+        '200': {description: Nonce and fresh observation with durable bound request and stopped-owned-process record}
+        '403': {description: Exact provisioned mTLS peer or current Root authority rejected}
+        '503': {description: "Process stop, update transaction, reservation or durable evidence unknown"}
+  /v1/fence/current:
+    servers:
+      - url: https://independent-supervisor.example.invalid
+    post:
+      operationId: observeCurrentOwnedControllerFence
+      summary: Recheck the same irreversible fence with a new nonce; never execute or revive the child
+      security:
+        - recoveryPeer: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [nonce, request]
+              properties:
+                nonce: {type: string, pattern: '^[a-f0-9]{32}$'}
+                request:
+                  type: object
+                  additionalProperties: false
+                  required: [authorizationSha256, oldAuthorityId, newAuthorityId, trustGeneration]
+                  properties:
+                    authorizationSha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+                    oldAuthorityId: {type: string}
+                    newAuthorityId: {type: string}
+                    trustGeneration: {type: integer, minimum: 1}
+      responses:
+        '200': {description: "Exact original binding, durable record, no owned running child and fresh nonce observation"}
+        '403': {description: Provisioned mTLS peer or binding rejected}
+        '503': {description: Missing evidence or ambiguous running process; never claimed isolated}
+components:
+  securitySchemes:
+    session: {type: apiKey, in: cookie, name: sf_session}
+    parentNonce: {type: apiKey, in: header, name: X-SF-Resident-Nonce, description: Random nonce delivered privately by the actual owning parent; read-only endpoint}
+    recoveryPeer: {type: mutualTLS, description: Mandatory TLS13 client chain and exact operator-provisioned leaf SHA; server leaf and fixed addresses separately pinned by caller}

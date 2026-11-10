@@ -7,8 +7,10 @@ import (
 	"path/filepath"
 	"strings"
 
+	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/storage"
+	"serverfleet.local/serverfleet/internal/tasks"
 	"serverfleet.local/serverfleet/internal/updates"
 )
 
@@ -44,6 +46,17 @@ func (s *Server) setupUpdatesRecovery(cfg Config) error {
 	if err != nil {
 		return err
 	}
+	if s.Backups != nil {
+		s.BackupHTTP, err = recovery.NewBackupHTTP(recovery.BackupHTTPOptions{Manager: s.Backups, Authenticate: func(r *http.Request) (recovery.Principal, error) {
+			id, request, e := s.authenticateIdentity(r)
+			return recovery.Principal{SubjectID: id.SubjectID, RequestID: request, Administrator: id.Administrator}, e
+		}, Submit: func(ctx context.Context, p recovery.Principal, kind, key string) (tasks.Task, error) {
+			return s.submitBackup(ctx, p, kind, key, audit.SourceWeb)
+		}})
+		if err != nil {
+			return err
+		}
+	}
 	recoveryHTTP, err := recovery.NewHTTP(recovery.Options{
 		Authenticate: func(r *http.Request) (recovery.Principal, error) {
 			identity, requestID, err := s.authenticateIdentity(r)
@@ -65,6 +78,9 @@ func (s *Server) setupUpdatesRecovery(cfg Config) error {
 }
 
 func (s *Server) verifyBackupFile(ctx context.Context, backupID string) (recovery.BackupVerification, error) {
+	if s.Backups != nil {
+		return recovery.BackupVerification{}, recovery.ErrBackupUnavailable
+	}
 	if backupID == "" || backupID != filepath.Base(backupID) || strings.ContainsAny(backupID, "/\\\x00") {
 		return recovery.BackupVerification{}, recovery.ErrBackupNotFound
 	}
@@ -91,6 +107,29 @@ func (s *Server) verifyBackupFile(ctx context.Context, backupID string) (recover
 }
 
 func (s *Server) registerUpdateRecoveryRoutes() {
+	if s.BackupHTTP != nil {
+		for _, pattern := range s.BackupHTTP.Patterns() {
+			s.mux.Handle(pattern, s.BackupHTTP)
+		}
+	} else {
+		for _, pattern := range recovery.BackupHTTPPatterns() {
+			if pattern == "POST /api/v1/backups/{backupId}/verify" {
+				continue
+			}
+			s.mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.Header().Set("Cache-Control", "no-store")
+				p, _, err := s.authenticateIdentity(r)
+				if r.TLS == nil || err != nil || s.Identity.AuthorizeAdministrator(r.Context(), p.SubjectID) != nil {
+					w.WriteHeader(403)
+					_, _ = w.Write([]byte(`{"code":"NOT_AUTHORIZED","status":403}`))
+					return
+				}
+				w.WriteHeader(503)
+				_, _ = w.Write([]byte(`{"code":"BACKUP_DEPLOYMENT_UNAVAILABLE","status":503}`))
+			})
+		}
+	}
 	if s.UpdatesHTTP != nil {
 		for _, pattern := range s.UpdatesHTTP.Patterns() {
 			s.mux.Handle(pattern, s.UpdatesHTTP)
@@ -98,6 +137,9 @@ func (s *Server) registerUpdateRecoveryRoutes() {
 	}
 	if s.RecoveryHTTP != nil {
 		for _, pattern := range s.RecoveryHTTP.Patterns() {
+			if s.BackupHTTP != nil && pattern == "POST /api/v1/backups/{backupId}/verify" {
+				continue
+			}
 			s.mux.Handle(pattern, s.RecoveryHTTP)
 		}
 	}

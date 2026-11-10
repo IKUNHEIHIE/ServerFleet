@@ -1,3 +1,5 @@
+import { ResidentUpdatePanel } from "../settings/resident-update-panel";
+import { ReleaseSourcePanel } from "./release-source-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -368,6 +370,7 @@ export function ControllerUpdatePanel() {
 }
 
 export function UpdatesPage() {
+  const session=useSession();
   return (
     <div className="space-y-5">
       <PageHeader
@@ -375,6 +378,8 @@ export function UpdatesPage() {
         description="主控更新：检查 → 计划/预检 → 人工确认 → 异步作业 → 健康检查/回滚。第一版禁止默认静默安装。"
         badge={<span className="rounded-md border px-2 py-1 text-xs">Controller</span>}
       />
+      <ReleaseSourcePanel />
+      <ResidentUpdatePanel key={session.viewEpoch} />
       <ControllerUpdatePanel />
     </div>
   );

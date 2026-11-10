@@ -223,9 +223,121 @@ export const publicationsApi = {
     apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/run`, {
       method: "POST",
     }),
+  rollbackAll: (publicationId:string)=>apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/rollback-all`,{method:"POST"}),
+  dnsTasks: (publicationId:string,signal?:AbortSignal)=>apiClient.request<PublicationDNSBatch>(`/api/v1/publications/${encodeURIComponent(publicationId)}/dns-tasks`,{signal}),
+
   rollback: (publicationId: string, stage: string) =>
     apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/rollback`, {
       method: "POST",
       body: { stage },
     }),
 };
+
+export interface NodeCSRTask {
+  readonly taskId: string;
+  readonly status: string;
+  readonly planHash: string;
+  readonly approvalRequired: boolean;
+}
+export interface NodeCSRReceipt {
+  readonly taskId: string;
+  readonly planHash: string;
+  readonly observedAt: string;
+  readonly result: {
+    readonly nodeId: string;
+    readonly domain: string;
+    readonly keyRef: string;
+    readonly csrDerBase64: string;
+    readonly sha256: string;
+  };
+}
+export const nodeCSRApi = {
+  create: (body: { nodeId: string; domain: string; keyRef: string; idempotencyKey: string }) =>
+    apiClient.request<NodeCSRTask>("/api/v1/certificates/csr-tasks", { method: "POST", body }),
+  get: (taskId: string, signal?: AbortSignal) =>
+    apiClient.request<NodeCSRReceipt>(`/api/v1/certificates/csr-tasks/${encodeURIComponent(taskId)}`, { signal }),
+};
+
+export interface NodeCertificateReceipt {
+ readonly certificateId: string;
+  readonly taskId: string;
+  readonly csrTaskId: string;
+  readonly planHash: string;
+  readonly observedAt: string;
+  readonly result: {
+    readonly nodeId: string;
+    readonly domain: string;
+    readonly keyRef: string;
+    readonly csrSha256: string;
+    readonly chainSha256: string;
+    readonly leafSha256: string;
+    readonly notAfter: string;
+  };
+}
+export const nodeCertificateApi = {
+  install: (body: { csrTaskId: string; certificatePemBase64: string; idempotencyKey: string }) =>
+    apiClient.request<NodeCSRTask>("/api/v1/certificates/chain-tasks", { method: "POST", body }),
+  get: (taskId: string) =>
+    apiClient.request<NodeCertificateReceipt>(`/api/v1/certificates/chain-tasks/${encodeURIComponent(taskId)}`),
+};
+
+export interface NodeCertificateSet {
+  readonly certificateId: string;
+  readonly entries: readonly {
+    readonly nodeId: string;
+    readonly taskId: string;
+    readonly domain: string;
+    readonly keyRef: string;
+    readonly leafSha256: string;
+    readonly chainSha256: string;
+  }[];
+}
+export const nodeCertificateSetsApi = {
+  create: (installTaskIds: readonly string[]) =>
+    apiClient.request<NodeCertificateSet>("/api/v1/certificates/node-sets", { method: "POST", body: { installTaskIds } }),
+};
+
+
+export interface PublicCertificateOrder {
+ readonly taskId: string;
+ readonly taskStatus: string;
+ readonly orderStatus: "issued" | "issued_cleanup_pending" | "unknown" | "running";
+ readonly csrTaskId: string;
+ readonly nodeId: string;
+ readonly domain: string;
+ readonly keyRef: string;
+ readonly chainSha256: string;
+ readonly certificatePemBase64: string;
+ readonly notAfter: string;
+ readonly pendingCleanupCount: number;
+ readonly errorCode: string;
+ readonly observedAt: string;
+ readonly installed: false;
+}
+export const publicCertificateApi = {
+ profile: (signal?:AbortSignal)=>apiClient.request<{profileSha256:string; configured:boolean; dnsCredentialId:string; dnsCredentialRevision:number}>("/api/v1/certificates/public-profile",{signal}),
+ create: (body:{csrTaskId:string;zoneId:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/certificates/public-tasks",{method:"POST",body}),
+ get: (taskId:string)=>apiClient.request<PublicCertificateOrder>(`/api/v1/certificates/public-tasks/${encodeURIComponent(taskId)}`),
+ inspectDNS: (body:{operation:"test"|"import-zone";accountId:string;zoneId?:string;providerZoneId?:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/dns/provider-tasks",{method:"POST",body}),
+};
+
+
+export const dnsRecordTasksApi = {
+ create: (zoneId:string,record:DNSRecordInput,idempotencyKey:string)=>
+  apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"create",zoneId,recordJson:JSON.stringify({...record,ttl:record.ttl??0,proxied:record.proxied??false}),idempotencyKey}}),
+ update: (zoneId:string,recordId:string,record:DNSRecordInput,idempotencyKey:string)=>
+  apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"update",zoneId,recordId,recordJson:JSON.stringify({...record,ttl:record.ttl??0,proxied:record.proxied??false}),idempotencyKey}}),
+ remove: (zoneId:string,recordId:string,idempotencyKey:string)=>
+  apiClient.request<NodeCSRTask>("/api/v1/dns/record-tasks",{method:"POST",body:{operation:"delete",zoneId,recordId,idempotencyKey}}),
+};
+
+
+export interface PublicationDNSBatch {
+ readonly id:string;
+ readonly state:string;
+ readonly applyTaskId?:string;
+ readonly rollbackTaskId?:string;
+ readonly updatedAt:string;
+ readonly descriptor:{readonly planId:string;readonly planSha256:string;readonly zoneId:string;readonly records:readonly {readonly type:string;readonly name:string;readonly content:string;readonly existingId?:string}[]};
+ readonly observations:readonly {readonly state:string;readonly recordId?:string;readonly recordSha256?:string}[];
+}

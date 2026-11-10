@@ -66,6 +66,9 @@ type SecretScope struct {
 }
 
 func WithSecretScope(ctx context.Context, scope SecretScope) context.Context {
+	if previous := secretScopeFrom(ctx); scope.PlanDigest == "" && scope.SubjectID == previous.SubjectID && scope.RequestID == previous.RequestID {
+		scope.PlanDigest = previous.PlanDigest
+	}
 	return context.WithValue(ctx, secretScopeKey{}, scope)
 }
 
@@ -181,7 +184,12 @@ type cloudflareRecordEnvelope struct {
 }
 
 type cloudflareRecord struct {
-	ID string `json:"id"`
+	ID       string `json:"id"`
+	Type     string `json:"type"`
+	Name     string `json:"name"`
+	Content  string `json:"content"`
+	Proxied  *bool  `json:"proxied"`
+	Priority *int   `json:"priority"`
 }
 
 type cloudflareTokenVerify struct {

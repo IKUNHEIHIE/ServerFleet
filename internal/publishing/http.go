@@ -227,6 +227,10 @@ func (api *httpAPI) run(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail, err := api.service.RunDetail(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("publicationId"))
+	if errors.Is(err, ErrStageAwaitingTask) {
+		writeJSON(w, http.StatusAccepted, operationFromDetail(detail))
+		return
+	}
 	if err == nil {
 		writeJSON(w, http.StatusOK, operationFromDetail(detail))
 		return
@@ -256,6 +260,10 @@ func (api *httpAPI) rollback(w http.ResponseWriter, r *http.Request) {
 	}
 	detail, err := api.service.RollbackDetail(r.Context(), principal.SubjectID, principal.RequestID,
 		r.PathValue("publicationId"), StageKind(body.Stage))
+	if errors.Is(err, ErrStageAwaitingTask) {
+		writeJSON(w, http.StatusAccepted, operationFromDetail(detail))
+		return
+	}
 	if err == nil {
 		writeJSON(w, http.StatusOK, operationFromDetail(detail))
 		return
@@ -294,6 +302,10 @@ func (api *httpAPI) rollbackAll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail, err := api.service.RollbackAllDetail(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("publicationId"))
+	if errors.Is(err, ErrStageAwaitingTask) {
+		writeJSON(w, http.StatusAccepted, operationFromDetail(detail))
+		return
+	}
 	if err == nil {
 		writeJSON(w, http.StatusOK, operationFromDetail(detail))
 		return

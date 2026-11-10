@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -51,6 +52,7 @@ type Config struct {
 	StagingDir                string
 	Dispatcher                tasks.Dispatcher
 	DNSProvider               dns.Provider
+	ACMEDeployment            *ACMEDeployment
 	GatewayChecker            gateway.Checker
 	MonitoringProber          monitoring.Prober
 	MonitoringAllowedHosts    []string
@@ -83,24 +85,37 @@ type Config struct {
 	PluginTrustCapabilities map[string]bool
 
 	// BackupDir defaults to a private directory beside the SQLite database.
-	BackupDir         string
-	RecoveryLatch     *recovery.QuarantineLatch
-	UpdateProduct     *updates.ProductDeploymentOptions
-	UpdateExecution   *updates.TaskInstallWorkerOptions
-	UpdateResolvePlan func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
-	UpdateJobs        func(context.Context, updates.Principal) (updates.JobPage, error)
-	UpdateJob         func(context.Context, updates.Principal, string) (updates.ApplyResult, error)
-	UpdateCheck       func(context.Context, string) (updates.CheckResult, error)
-	UpdatePlan        func(context.Context, string) (updates.Plan, error)
-	UpdateApply       func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
-	RecoveryExecute   func(context.Context, recovery.Plan) (string, error)
-	PluginRuntime     plugins.AdmittedRuntime
-	XrayTaskHost      *plugins.XrayTaskHost
+	BackupDir             string
+	BackupDeployment      *BackupDeployment
+	RecoveryCleanup       func() error
+	RecoveryLatch         *recovery.QuarantineLatch
+	ResidentSupervisor    *updates.ResidentSupervisorConfig
+	BuildVersion          string
+	UpdateProduct         *updates.ProductDeploymentOptions
+	ReleaseSource         *ReleaseSourceDeployment
+	ControllerAuthorityID string
+	UpdateExecution       *updates.TaskInstallWorkerOptions
+	UpdateResolvePlan     func(context.Context, updates.ApplyRequest) (updates.FrozenInstallPlan, error)
+	UpdateJobs            func(context.Context, updates.Principal) (updates.JobPage, error)
+	UpdateJob             func(context.Context, updates.Principal, string) (updates.ApplyResult, error)
+	UpdateCheck           func(context.Context, string) (updates.CheckResult, error)
+	UpdatePlan            func(context.Context, string) (updates.Plan, error)
+	UpdateApply           func(context.Context, updates.ApplyRequest) (updates.ApplyResult, error)
+	RecoveryExecute       func(context.Context, recovery.Plan) (string, error)
+	PluginRuntime         plugins.AdmittedRuntime
+	XrayTaskHost          *plugins.XrayTaskHost
 }
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
+	residentHealthGate func(context.Context) error
+	recoveryCleanup    func() error
+	residentSupervisor *updates.ResidentSupervisorConfig
+	buildVersion       string
+	dbPath             string
 	ProductUpdates     updates.ProductDeployment
+	ReleaseAcquirer    *updates.ReleaseAcquirer
+	PublicCertificates *publicCertificateExecution
 	runtimeGate        func(context.Context) error
 	DB                 *storage.DB
 	Audit              *audit.SQLRecorder
@@ -157,8 +172,11 @@ type Server struct {
 	PluginHTTP       *plugins.ManagementHTTP
 	XrayHTTP         *plugins.XrayDeclarativeHTTP
 
-	UpdatesHTTP  *updates.HTTP
-	RecoveryHTTP *recovery.HTTP
+	UpdatesHTTP          *updates.HTTP
+	RecoveryHTTP         *recovery.HTTP
+	Backups              *recovery.BackupManager
+	BackupHTTP           *recovery.BackupHTTP
+	backupAutomaticOwner string
 
 	Workflows     *workflows.Engine
 	workflowState *workflowRuntime
@@ -227,9 +245,19 @@ func Migrations() [][]storage.Migration {
 		certificates.Migrations(),
 		certificates.CleanupMigrations(),
 		certificates.CleanupClaimMigrations(),
+		certificates.PublicOrderMigrations(),
 		gateway.Migrations(),
 		publishing.Migrations(),
 		publishing.TargetMigrations(),
+		publishing.DNSBatchMigrations(),
+		recovery.Migrations(),
+		transport.RecoveryMigrations(),
+		transport.CertificateCSRMigrations(),
+		transport.CertificateChainMigrations(),
+		transport.CertificateSetMigrations(),
+		recovery.ReconciliationMigrations(),
+		recovery.ResidentAuthorityMigrations(),
+		updates.AcquisitionMigrations(),
 		audit.Migrations(),
 	}
 }
@@ -248,6 +276,9 @@ func AuditActions() []string {
 		"auth.grant.revoke",
 		"auth.password.change",
 		"auth.http.denied",
+		"auth.recovery.invalidate",
+		"recovery.reconcile",
+		"recovery.activate",
 		"auth.token.issue",
 		"auth.token.revoke",
 		"auth.approval.request",
@@ -261,13 +292,24 @@ func AuditActions() []string {
 		"credentials.use.intent",
 		"credentials.use.complete",
 		"tasks.command",
+		transport.CommandCapability,
 		"host.patch",
 		"host.root",
 		"files.transfer",
+		files.ActionResume,
+		transport.ResidentUpdateAction, transport.ControllerUpdateAction,
 		updates.ActionInstall,
+		updates.ActionAcquireRelease,
 		"ai.budget.configure",
 		"ai.budget.reserve",
 		"gateway.provision",
+		transport.CertificateCSRAction,
+		transport.CertificateInstallAction,
+		"certificates.node_sets.create",
+		actionPublicCertificateIssue,
+		actionDNSProviderInspect,
+		actionDNSRecordApply,
+		actionPublicationDNSApply, actionPublicationDNSRollback,
 		"gateway.nginx.site_apply",
 		"gateway.nginx.site_remove",
 		"enrollment.issue",
@@ -333,6 +375,7 @@ func AuditActions() []string {
 		certificates.ServiceActions(),
 		gateway.ServiceActions(),
 		publishing.ServiceActions(),
+		recovery.BackupAuditActions(),
 	} {
 		raw = append(raw, list...)
 	}
@@ -351,6 +394,9 @@ func AuditActions() []string {
 // ExtraPermissions returns the domain permissions registered beyond auth's built-in 5 keys.
 func ExtraPermissions() []auth.PermissionDefinition {
 	return []auth.PermissionDefinition{
+		{Key: actionPublicCertificateIssue, Description: "Issue public certificates for approved node-local CSR tasks", ResourceType: "node", AdminOnly: true},
+		{Key: transport.CertificateInstallAction, Description: "Install verified public chains using node-owned website keys", ResourceType: "node", AdminOnly: true},
+		{Key: transport.CertificateCSRAction, Description: "Create node-local website keys and export only a public CSR", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupRead, Description: "Read owned cleanup records", ResourceType: "node", ReadOnly: true, AdminOnly: true},
 		{Key: certificates.ActionCleanupRetry, Description: "Retry owned cleanup records", ResourceType: "node", AdminOnly: true},
 		{Key: certificates.ActionCleanupCancel, Description: "Cancel owned cleanup records", ResourceType: "node", AdminOnly: true},
@@ -366,11 +412,14 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: tasks.ActionCancel, Description: "Cancel tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionResume, Description: "Resume unstarted queued tasks on granted nodes", ResourceType: "node"},
+		{Key: transport.ResidentUpdateAction, Description: "Install approved signed remote Agent releases", ResourceType: "node", AdminOnly: true},
+		{Key: transport.CommandCapability, Description: "Execute approved node executable profiles", ResourceType: "node"},
 		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
 		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
 		{Key: "host.root", Description: "Execute root-level host changes on granted nodes", ResourceType: "node", AdminOnly: true},
 		{Key: files.ActionRead, Description: "Read files on granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: files.ActionWrite, Description: "Write files on granted nodes", ResourceType: "node"},
+		{Key: files.ActionResume, Description: "Resume verified unpublished file prefixes with approval", ResourceType: "node"},
 		{Key: files.ActionTransfer, Description: "Transfer files across granted nodes", ResourceType: "node"},
 		{Key: monitoring.ActionRead, Description: "Read availability monitors and traffic risks", ResourceType: "node", ReadOnly: true},
 		{Key: monitoring.ActionWrite, Description: "Create and update availability monitors", ResourceType: "node"},
@@ -461,6 +510,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if s != nil && s.ProductUpdates != nil {
 			_ = s.ProductUpdates.Close()
 		}
+		if s != nil && s.PublicCertificates != nil {
+			s.PublicCertificates.Close()
+		}
+		if s != nil && s.ReleaseAcquirer != nil {
+			_ = s.ReleaseAcquirer.Close()
+		}
+		if s != nil && s.Backups != nil {
+			_ = s.Backups.Close()
+		}
 		_ = db.Close()
 		return nil, cause
 	}
@@ -473,6 +531,30 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	var expectedResident *recovery.ResidentAuthority
+	if cfg.ResidentSupervisor != nil {
+		c := cfg.ResidentSupervisor
+		expectedResident = &recovery.ResidentAuthority{AuthorityID: cfg.ControllerAuthorityID, PolicySHA256: updates.ResidentPolicySHA(*c), Directory: c.Directory, Mode: "owned"}
+		if os.Getenv("SF_RESIDENT_SUPERVISOR_POLICY") != expectedResident.PolicySHA256 {
+			return cleanup(recovery.ErrQuarantined)
+		}
+		if err := db.InTx(ctx, func(txctx context.Context, tx storage.Tx) error {
+			return recovery.BindResidentAuthorityTx(txctx, tx, *expectedResident, false)
+		}); err != nil {
+			return cleanup(err)
+		}
+	}
+	runtimeGate = recovery.ResidentAuthorityGate(db, expectedResident, os.Getenv("SF_RESIDENT_SUPERVISOR_POLICY"), runtimeGate)
+	if runtimeGate(ctx) != nil {
+		return cleanup(recovery.ErrQuarantined)
+	}
+	authorityGate := runtimeGate
+	if cfg.ResidentSupervisor != nil {
+		if cfg.UpdateProduct != nil {
+			return cleanup(errors.New("controller: use independent Agent supervisors with Controller self supervision; legacy Controller-owned Agent update slot is a separate deployment mode"))
+		}
+		runtimeGate = recovery.ResidentMaintenanceGate(cfg.ResidentSupervisor.Directory, runtimeGate)
+	}
 	limits := audit.DefaultLimits()
 	limits.RequireSource = true
 	validator, err := audit.NewValidator(AuditActions(), limits)
@@ -579,6 +661,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	var aiConversation *ai.ConversationService
+	var publicCertificates *publicCertificateExecution
 	keyDir := cfg.CredentialKeyDir
 	if keyDir == "" {
 		absoluteDB, pathErr := filepath.Abs(cfg.DBPath)
@@ -593,6 +676,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	credentialsService, err := auth.NewPersistentCredentialService(
 		ctx, identityService, keyDir,
 		func(ctx context.Context, op auth.CredentialOperation) error {
+			if publicCertificates != nil && op.Module == "dns" {
+				return publicCertificates.credentialGate(ctx, op)
+			}
 			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" {
 				return auth.ErrDenied
 			}
@@ -613,6 +699,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	s = &Server{
+		residentHealthGate: authorityGate,
+		recoveryCleanup:    cfg.RecoveryCleanup,
+		buildVersion:       cfg.BuildVersion, dbPath: cfg.DBPath,
 		runtimeGate:       runtimeGate,
 		DB:                db,
 		Audit:             auditRecorder,
@@ -729,9 +818,24 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	} else if dispatcher == nil && agentBridge != nil {
 		dispatcher = agentBridge
 	}
+	if cfg.ACMEDeployment != nil {
+		if cfg.DNSProvider != nil {
+			return cleanup(certificates.ErrACMEConfig)
+		}
+		publicCertificates, err = s.newPublicCertificateExecution(ctx, *cfg.ACMEDeployment)
+		if err != nil {
+			return cleanup(err)
+		}
+		s.PublicCertificates = publicCertificates
+		cfg.DNSProvider = publicCertificates.provider
+	}
 	workers := map[string]tasks.Worker{}
+	if publicCertificates != nil {
+		workers[actionPublicCertificateIssue] = publicCertificates
+	}
 	if s.FileWorker != nil {
 		workers[files.ActionTransfer] = s.FileWorker
+		workers[files.ActionResume] = s.FileWorker
 		agentBridge.fileWorker = s.FileWorker
 	}
 	if cfg.UpdateProduct != nil {
@@ -787,16 +891,47 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return updates.ApplyResult{ID: t.ID, TaskID: t.ID, Status: string(t.Status), TargetVersion: p.Attempted.Version}, nil
 		}
 	}
+	controllerExecution, err := s.setupEncryptedBackups(ctx, cfg, workers)
+	if err != nil {
+		return cleanup(err)
+	}
+	releaseControllerExecution, err := s.setupReleaseSource(ctx, cfg, workers)
+	if err != nil {
+		return cleanup(err)
+	}
+	controllerExecution, err = mergeControllerExecutions(controllerExecution, releaseControllerExecution)
+	if err != nil {
+		return cleanup(err)
+	}
+	if publicCertificates != nil {
+		dnsExecution, e := publicCertificates.inspectionExecution(cfg.ControllerAuthorityID, workers)
+		if e != nil {
+			return cleanup(e)
+		}
+		controllerExecution, err = mergeControllerExecutions(controllerExecution, dnsExecution)
+		if err != nil {
+			return cleanup(err)
+		}
+	}
+	residentExecution, residentErr := s.setupResidentController(cfg.ResidentSupervisor, cfg.ControllerAuthorityID, workers)
+	if residentErr != nil {
+		return cleanup(residentErr)
+	}
+	controllerExecution, err = mergeControllerExecutions(controllerExecution, residentExecution)
+	if err != nil {
+		return cleanup(err)
+	}
 	tasksService, err := tasks.NewService(tasks.Options{
-		RuntimeGate: runtimeGate,
-		Workers:     workers,
-		DB:          db,
-		Repo:        tasksRepo,
-		Audit:       auditRecorder,
-		Authorizer:  authorizer,
-		Dispatcher:  dispatcher,
-		Nodes:       nodeLookup,
-		Now:         now,
+		ControllerExecution: controllerExecution,
+		RuntimeGate:         runtimeGate,
+		Workers:             workers,
+		DB:                  db,
+		Repo:                tasksRepo,
+		Audit:               auditRecorder,
+		Authorizer:          authorizer,
+		Dispatcher:          dispatcher,
+		Nodes:               nodeLookup,
+		Now:                 now,
 	})
 	if err != nil {
 		return cleanup(err)
@@ -878,12 +1013,19 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 
 	sgLookup := &composedServiceGroupLookup{repo: serviceGroupsRepo}
+	routeChecker := cfg.GatewayChecker
+	if routeChecker == nil && gatewayChain != nil {
+		routeChecker, err = newGatewayRouteChecker(s, tasksService, publishingRepo, nodesRepo, serviceGroupsRepo, gatewayRepo, authorizer, gatewayChain.deployment.Gateways)
+		if err != nil {
+			return cleanup(err)
+		}
+	}
 	gatewayService, err := gateway.NewService(gateway.Options{
 		DB:            db,
 		Repo:          gatewayRepo,
 		Nodes:         nodeLookup,
 		ServiceGroups: sgLookup,
-		Checker:       cfg.GatewayChecker,
+		Checker:       routeChecker,
 		Tasks:         taskBridge,
 		Audit:         auditRecorder,
 		Authorizer:    authorizer,
@@ -953,11 +1095,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			Tasks: tasksService, TasksRepo: tasksRepo, DB: db,
 			Artifacts: gatewayChain.uploader, NextDispatcher: agentBridge, Authorizer: authorizer,
 			Dispatcher: gatewayChain.dispatcher, Registry: gatewayChain.registry,
-			CertificatePath: gatewayChain.deployment.Certificates, GatewayPaths: gatewayChain.deployment.Gateways,
+			CertificatePath: gatewayChain.deployment.Certificates, NodeCertificateRoots: gatewayChain.deployment.CertificateRoots, GatewayPaths: gatewayChain.deployment.Gateways,
 			Now: now,
 		})
 		if e != nil {
 			return cleanup(e)
+		}
+		if publicCertificates != nil {
+			composed.DNS = publicationDNSStage{manager: publicCertificates}
 		}
 		productionBridge = composed
 		observer, e := NewGatewayArtifactObserver(db, gatewayChain.dispatcher)
@@ -981,6 +1126,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	if s.cleanupInterval < time.Second || s.cleanupInterval > time.Hour {
 		return cleanup(errors.New("controller: cleanup retry interval must be between one second and one hour"))
+	}
+	if publicCertificates != nil {
+		cleaner = publicCertificateCleaner{manager: publicCertificates, next: cleaner}
 	}
 	s.CertificateCleanup, err = certificates.NewCleanupJournal(certificates.CleanupJournalOptions{DB: db, Audit: auditRecorder, Authorizer: authorizer, Cleaner: cleaner, Now: now})
 	if err != nil {
@@ -1011,9 +1159,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		if _, err := s.Files.RecoverTransfers(ctx); err != nil {
 			return cleanup(err)
 		}
-		if _, err := s.Tasks.Recover(ctx); err != nil {
-			return cleanup(err)
-		}
+	}
+	if _, err := s.Tasks.Recover(ctx); err != nil {
+		return cleanup(err)
 	}
 	s.DNS = dnsService
 	s.Notifications = notificationsService
@@ -1048,6 +1196,10 @@ func (s *Server) startTaskScheduler() {
 		if s.cleanupEnabled {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()
+		}
+		if s.Backups != nil && s.backupAutomaticOwner != "" {
+			workers.Add(1)
+			go func() { defer workers.Done(); s.runBackupSchedule(ctx) }()
 		}
 		workers.Wait()
 	}()
@@ -1088,10 +1240,29 @@ func (s *Server) Close() error {
 		}
 		s.ProductUpdates = nil
 	}
+	if s.PublicCertificates != nil {
+		s.PublicCertificates.Close()
+		s.PublicCertificates = nil
+	}
+	if s.ReleaseAcquirer != nil {
+		_ = s.ReleaseAcquirer.Close()
+		s.ReleaseAcquirer = nil
+	}
+	if s.Backups != nil {
+		_ = s.Backups.Close()
+		s.Backups = nil
+	}
 	if s.DB == nil {
 		return nil
 	}
-	return s.DB.Close()
+	err := s.DB.Close()
+	if s.recoveryCleanup != nil {
+		if e := s.recoveryCleanup(); err == nil {
+			err = e
+		}
+		s.recoveryCleanup = nil
+	}
+	return err
 }
 
 // ServeHTTP sets security headers and a request ID before dispatching to the composed mux.
@@ -1101,6 +1272,19 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqID := newRequestID()
 	w.Header().Set("X-Request-ID", reqID)
 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
+	// Private read-only readiness for the actual owning parent. Business APIs,
+	// workers and browser access keep the maintenance gate during replacement.
+	if r.Method == "GET" && r.URL.Path == "/internal/resident-ready" && r.URL.RawQuery == "" && s.residentSupervisor != nil {
+		nonce := os.Getenv("SF_SUPERVISOR_NONCE")
+		if len(nonce) == 32 && subtle.ConstantTimeCompare([]byte(r.Header.Get("X-SF-Resident-Nonce")), []byte(nonce)) == 1 {
+			handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]string{"state": "owned_process_ready"})
+			})
+			recovery.RuntimeHTTP(handler, s.residentHealthGate).ServeHTTP(w, r.WithContext(ctx))
+			return
+		}
+	}
 	next := http.Handler(s.mux)
 	if s.console != nil && (r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/favicon.ico" || strings.HasPrefix(r.URL.Path, "/assets/")) {
 		next = s.console
@@ -1135,6 +1319,16 @@ func (s *Server) registerRoutes() error {
 	}
 	s.registerPluginRoutes()
 	s.registerUpdateRecoveryRoutes()
+	s.registerReleaseSourceRoutes()
+	s.registerCertificateCSRRoutes()
+	s.registerCertificateInstallRoutes()
+	s.registerCertificateSetRoutes()
+	s.registerPublicCertificateRoutes()
+	s.registerCommandRoutes()
+	s.registerResidentUpdateRoutes()
+	s.registerRecoveryAuthorityRoutes()
+	s.registerFileResumeRoutes()
+	s.registerPublicationDNSRoutes()
 	if s.AgentLinkHTTP != nil {
 		s.mux.Handle("/api/v1/agent/link", s.AgentLinkHTTP)
 	} else {
@@ -1485,6 +1679,9 @@ func (g *composedTaskReadGate) AuthorizeTaskRead(ctx context.Context, subjectID,
 	task, err := g.tasks.Get(ctx, taskID)
 	if err != nil {
 		return err
+	}
+	if task.TargetType == tasks.TargetTypeController {
+		return g.identity.AuthorizeAdministrator(ctx, subjectID)
 	}
 	if len(task.Targets) == 0 {
 		return nil

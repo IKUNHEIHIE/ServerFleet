@@ -230,3 +230,28 @@ func (m Migration) checksum() string {
 func IsNotFound(err error) bool {
 	return errors.Is(err, errNoRows)
 }
+
+// VerifyApplied performs read-only ledger verification without creating tables
+// or applying migrations. Offline bundle validation must not mutate a snapshot.
+func (m *Migrator) VerifyApplied(ctx context.Context, db *DB, requireComplete bool) error {
+	if m == nil || db == nil || ctx == nil {
+		return ErrInvalidConfig
+	}
+	applied, err := appliedMigrations(ctx, db)
+	if err != nil {
+		return err
+	}
+	for version, checksum := range applied {
+		registered, ok := m.byVersion[version]
+		if !ok {
+			return ErrUnknownMigration
+		}
+		if registered.checksum() != checksum {
+			return ErrMigrationDrift
+		}
+	}
+	if requireComplete && len(applied) != len(m.byVersion) {
+		return ErrUnknownMigration
+	}
+	return nil
+}

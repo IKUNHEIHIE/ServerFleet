@@ -124,28 +124,30 @@ func (s *Service) process(ctx context.Context, taskID string) error {
 	if len(pending) == 0 {
 		return nil
 	}
-	if s.nodes == nil {
-		_, err := s.finalize(ctx, task, StatusFailed, "node_lookup_unavailable")
-		return err
-	}
-	for _, target := range pending {
-		online, err := s.nodes.Online(ctx, target.NodeID)
-		if err != nil {
+	if task.TargetType != TargetTypeController {
+		if s.nodes == nil {
+			_, err := s.finalize(ctx, task, StatusFailed, "node_lookup_unavailable")
 			return err
 		}
-		if !online {
-			if task.StartedAt.IsZero() && now.After(task.UnstartedDeadline) {
-				_, finalErr := s.finalize(ctx, task, StatusExpired, "offline wait expired")
-				return finalErr
+		for _, target := range pending {
+			online, err := s.nodes.Online(ctx, target.NodeID)
+			if err != nil {
+				return err
 			}
-			return nil
+			if !online {
+				if task.StartedAt.IsZero() && now.After(task.UnstartedDeadline) {
+					_, finalErr := s.finalize(ctx, task, StatusExpired, "offline wait expired")
+					return finalErr
+				}
+				return nil
+			}
 		}
 	}
 	pendingIDs := make([]string, 0, len(pending))
 	for _, target := range pending {
 		pendingIDs = append(pendingIDs, target.NodeID)
 	}
-	if err := s.authorize(ctx, task.SubmitterID, task.ActionID, task.RequestID, pendingIDs, "task_execute"); err != nil {
+	if err := s.authorizeForTask(ctx, task, task.SubmitterID, task.ActionID, task.RequestID, pendingIDs, "task_execute"); err != nil {
 		if isPureDenial(err) {
 			if eventErr := s.repo.AppendEvent(ctx, s.db, task.ID, "dispatch_denied", map[string]any{
 				"reason": "authorization_revoked",
@@ -162,6 +164,10 @@ func (s *Service) process(ctx context.Context, taskID string) error {
 	}
 	if worker := s.workers[task.ActionID]; worker != nil {
 		return s.startWorker(ctx, task, pending, worker)
+	}
+	if task.TargetType == TargetTypeController {
+		_, err := s.finalize(ctx, task, StatusFailed, "controller_worker_unavailable")
+		return err
 	}
 	return s.dispatch(ctx, task, pending)
 }
@@ -437,7 +443,7 @@ func (s *Service) ensureRunning(ctx context.Context, task Task) error {
 	return s.repo.SetStarted(ctx, s.db, task.ID)
 }
 
-func (s *Service) checkApproval(ctx context.Context, task Task) error {
+func (s *Service) checkApproval(ctx context.Context, task Task, scoped ...[]string) error {
 	approval, err := s.repo.Approval(ctx, s.db, task.ID, task.Revision)
 	if err != nil {
 		return ErrApprovalInvalid
@@ -451,7 +457,11 @@ func (s *Service) checkApproval(ctx context.Context, task Task) error {
 	if s.approvalTTL > 0 && s.now().UTC().After(approval.DecidedAt.Add(s.approvalTTL)) {
 		return ErrApprovalInvalid
 	}
-	return nil
+	ids := taskTargetIDs(task)
+	if len(scoped) > 0 {
+		ids = scoped[0]
+	}
+	return s.authorizeForTask(ctx, task, approval.ApproverID, ActionApprove, task.RequestID, ids, "task_approval_current")
 }
 
 // Recover must be called once at startup. Any target that was dispatched when the

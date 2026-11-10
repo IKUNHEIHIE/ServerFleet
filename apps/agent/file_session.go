@@ -37,7 +37,7 @@ func newAgentFileSessions(root, node string, current func(context.Context, *agen
 		// Handle holds f.mu while performing disk I/O. The captured task is
 		// retrieved from a context private to this registered session adapter.
 		t, ok := ctx.Value(agentFileTaskKey{}).(*agentFileTask)
-		if !ok || t.ctx.Err() != nil || t.finished || t.offer.TaskId != b.TaskID || t.offer.ExecutionId != b.ExecutionID || t.parameters.TransferID != b.TransferID || b.NodeID != node {
+		if !ok || t.ctx.Err() != nil || t.finished || t.offer.TaskId != b.TaskID || t.offer.ExecutionId != b.ExecutionID || t.offer.PlanDigestSha256 != b.PlanSHA256 || t.parameters.TransferID != b.TransferID || b.NodeID != node {
 			return errFileCapability
 		}
 		return current(ctx, t.offer)
@@ -59,9 +59,17 @@ func (f *agentFileSessions) Close() {
 	f.mu.Unlock()
 	f.io.Close()
 }
+func parseAnyFileParameters(raw []byte) (transport.FileParameters, error) {
+	p, err := transport.ParseFileParameters(raw)
+	if err != nil {
+		return transport.ParseResumedFileParameters(raw)
+	}
+	return p, nil
+}
+
 func (f *agentFileSessions) Action() agentAction {
-	return agentAction{Validate: func(raw []byte) error { _, err := transport.ParseFileParameters(raw); return err }, Run: func(ctx context.Context, raw []byte) executionResult {
-		p, err := transport.ParseFileParameters(raw)
+	return agentAction{Validate: func(raw []byte) error { _, err := parseAnyFileParameters(raw); return err }, Run: func(ctx context.Context, raw []byte) executionResult {
+		p, err := parseAnyFileParameters(raw)
 		if err != nil {
 			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
 		}
@@ -79,6 +87,7 @@ func (f *agentFileSessions) Action() agentAction {
 			}
 			f.mu.Unlock()
 			f.io.mu.Lock()
+			delete(f.io.writeHashes, p.TransferID)
 			if file := f.io.snapshots[p.TransferID]; file != nil {
 				file.Close()
 				delete(f.io.snapshots, p.TransferID)
@@ -133,10 +142,10 @@ func (f *agentFileSessions) Handle(ctx context.Context, e *agentv1.Envelope) (*a
 	complete := func(result agentv1.ExecutionResult) func() { return func() { f.Finish(transfer, result) } }
 	if r := e.GetFileOpenRequest(); r != nil {
 		p := t.parameters
-		if t.opened || r.TaskId != t.offer.TaskId || r.ExecutionId != t.offer.ExecutionId || r.PlanDigestSha256 != t.offer.PlanDigestSha256 || r.TransferId != p.TransferID || r.RelativePath != p.RelativePath || r.Direction != p.Direction || r.Size != p.Size || r.Sha256 != p.SHA256 || r.ConflictPolicy != p.ConflictPolicy || r.CreateParents != p.CreateParents || r.ResumeOffset != 0 {
+		if t.opened || r.TaskId != t.offer.TaskId || r.ExecutionId != t.offer.ExecutionId || r.PlanDigestSha256 != t.offer.PlanDigestSha256 || r.TransferId != p.TransferID || r.RelativePath != p.RelativePath || r.Direction != p.Direction || r.Size != p.Size || r.Sha256 != p.SHA256 || r.ConflictPolicy != p.ConflictPolicy || r.CreateParents != p.CreateParents || r.ResumeOffset != transport.FileResumeOffset(p) {
 			return nil, nil, errFileCapability
 		}
-		b := agentFileBinding{TaskID: task, ExecutionID: execution, TransferID: transfer, NodeID: f.node, RelativePath: p.RelativePath, SHA256: p.SHA256, Direction: p.Direction, ConflictPolicy: p.ConflictPolicy, Size: int64(p.Size)}
+		b := agentFileBinding{PlanSHA256: t.offer.PlanDigestSha256, TaskID: task, ExecutionID: execution, TransferID: transfer, NodeID: f.node, RelativePath: p.RelativePath, SHA256: p.SHA256, Direction: p.Direction, ConflictPolicy: p.ConflictPolicy, Size: int64(p.Size)}
 		skipped := false
 		if p.Direction == "read" {
 			var err error
@@ -145,18 +154,32 @@ func (f *agentFileSessions) Handle(ctx context.Context, e *agentv1.Envelope) (*a
 				return nil, nil, err
 			}
 		} else {
+			if p.ResumeFrom != "" {
+				var err error
+				b, err = f.io.adoptResume(ioctx, b, p.ResumeFrom)
+				if err != nil {
+					return nil, nil, err
+				}
+			}
 			// The trusted plan decides skip/overwrite/rename. Only a non-symlink
 			// regular destination is ever replaced; rename reports the actual
 			// chosen sibling path back to the Controller.
 			var err error
-			b, skipped, err = f.io.resolveWriteDestination(ioctx, b)
+			if p.ResumeFrom == "" {
+				b, skipped, err = f.io.resolveWriteDestination(ioctx, b)
+			} else if b.ConflictPolicy == "skip" {
+				kind, e := agentFileDestination(f.io.root, b.RelativePath)
+				err = e
+				skipped = kind == agentDestinationRegular
+			}
 			if err != nil {
 				return nil, nil, err
 			}
 		}
 		t.opened = true
 		t.binding = b
-		reply := &agentv1.FileOpenReply{TaskId: task, ExecutionId: execution, TransferId: transfer, Size: uint64(b.Size), Sha256: b.SHA256, RelativePath: b.RelativePath, Skipped: skipped, Complete: skipped || b.Size == 0 && p.Direction == "read", ResultCode: "ok", PlanDigestSha256: t.offer.PlanDigestSha256}
+		t.offset = transport.FileResumeOffset(p)
+		reply := &agentv1.FileOpenReply{TaskId: task, ExecutionId: execution, TransferId: transfer, Size: uint64(b.Size), Sha256: b.SHA256, RelativePath: b.RelativePath, Skipped: skipped, Complete: skipped || b.Size == 0 && p.Direction == "read", ResumeOffset: t.offset, ResultCode: "ok", PlanDigestSha256: t.offer.PlanDigestSha256}
 		var after func()
 		if reply.Complete {
 			after = complete(agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED)

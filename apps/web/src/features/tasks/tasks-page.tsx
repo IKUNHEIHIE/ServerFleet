@@ -1,3 +1,4 @@
+import { CommandProfilePanel } from "./command-profile-panel";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { navigate } from "@/app/router";
 import { useSession } from "@/app/session";
@@ -286,6 +287,7 @@ export function TasksPage() {
 
   return (
     <div className="space-y-5">
+      <CommandProfilePanel key={session.viewEpoch} />
       <PageHeader
         title="批量任务"
         description="统一任务中心：冻结目标、分批/金丝雀、审批、逐节点结果与 SSE 进度。取消不等于回滚，未知结果不自动重跑。"
@@ -343,7 +345,7 @@ export function TasksPage() {
                   ),
                 },
                 { key: "state", header: "状态", render: task => TASK_STATE_LABEL[task.state] },
-                { key: "targets", header: "目标快照", align: "right", render: task => `${task.targetNodeIdsSnapshot.length} 台` },
+                { key: "targets", header: "目标快照", align: "right", render: task => task.targetType === "controller" ? `主控 ${task.targetControllerId ?? "身份未返回"}` : `${task.targetNodeIdsSnapshot.length} 台` },
                 { key: "created", header: "创建时间", render: task => formatDateTime(task.createdAt) ?? "—" },
                 { key: "expires", header: "到期", render: task => formatDateTime(task.expiresAt) ?? "—" },
                 { key: "by", header: "创建者", render: task => task.createdBy ?? "—" },

@@ -442,7 +442,7 @@ func validateStageRecord(stage Stage) error {
 	if stage.Attempts < 0 {
 		return fmt.Errorf("%w: attempts", ErrInvalidStage)
 	}
-	if stage.ResultSummary != "" && sanitizeMessage(stage.ResultSummary) != stage.ResultSummary {
+	if stage.ResultSummary != "" && sanitizeReceipt(stage.ResultSummary) != stage.ResultSummary {
 		return fmt.Errorf("%w: result summary is not redacted", ErrInvalidStage)
 	}
 	if stage.ErrorCode != "" && !validErrorCode(stage.ErrorCode) {

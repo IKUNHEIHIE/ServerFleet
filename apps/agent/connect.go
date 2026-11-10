@@ -153,19 +153,46 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		if ctx.Err() != nil {
 			return errAgentSession
 		}
+		if request.UpdateMailbox != "" && residentUpdateBusy(request.UpdateMailbox) {
+			return errExecutionRejected
+		}
 		if offer == nil {
 			return errExecutionRejected
 		}
-		if offer.ActionId == transport.FileCapability && request.FileRoot != "" {
+		if transport.IsFileAction(offer.ActionId) && request.FileRoot != "" {
 			_, err := transport.FileOffer(offer)
 			return err
 		}
 		action, ok := executor.actions[offer.ActionId]
-		if !ok || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL ||
+		if !ok || offer.Privilege != registeredPrivilege(action) ||
 			offer.PluginId != "" || offer.ActionSchemaVersion != semantic.AllowedActions[offer.ActionId] {
 			return errExecutionRejected
 		}
 		return action.Validate(offer.CanonicalParametersJson)
+	}
+	if request.UpdateMailbox != "" {
+		action, e := registeredResidentUpdate(request.UpdateMailbox, facts.NodeID)
+		if e != nil {
+			return e
+		}
+		executor.actions[transport.ResidentUpdateAction] = action
+		semantic.AllowedActions[transport.ResidentUpdateAction] = "1"
+	}
+	if request.RootHelper != "" {
+		action, e := registeredRootHelper(request.RootHelper, facts.NodeID)
+		if e != nil {
+			return e
+		}
+		executor.actions[transport.RootCommandCapability] = action
+		semantic.AllowedActions[transport.RootCommandCapability] = "1"
+	}
+	if request.CommandProfiles != "" {
+		action, e := registeredCommands(request.CommandProfiles, facts.NodeID)
+		if e != nil {
+			return e
+		}
+		executor.actions[transport.CommandCapability] = guardedCommandAction(action, facts.NodeID, endpoint, tlsConfig)
+		semantic.AllowedActions[transport.CommandCapability] = "1"
 	}
 	if request.FileRoot != "" {
 		files, err = newAgentFileSessions(request.FileRoot, facts.NodeID, func(ctx context.Context, o *agentv1.TaskOffer) error {
@@ -179,9 +206,36 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		}
 		defer files.Close()
 		executor.actions[transport.FileCapability] = files.Action()
+		executor.actions[transport.FileResumeCapability] = files.Action()
 		semantic.AllowedActions[transport.FileCapability] = "1"
+		semantic.AllowedActions[transport.FileResumeCapability] = "1"
 		semantic.AllowFileFrames = true
 		minor = 1
+	}
+	if request.CertificateRoot != "" {
+		capability, e := newCertificateCSRCapability(request.CertificateRoot, facts.NodeID, request.FileRoot)
+		if e != nil {
+			return errAgentConnect
+		}
+		defer capability.Close()
+		roots, e := x509.SystemCertPool()
+		if request.CertificateCA != "" {
+			raw, e := readAgentFile(request.CertificateCA, 128<<10)
+			if e != nil {
+				return errAgentConnect
+			}
+			roots = x509.NewCertPool()
+			if !roots.AppendCertsFromPEM(raw) {
+				return errAgentConnect
+			}
+		} else if e != nil {
+			return errAgentConnect
+		}
+		capability.roots = roots
+		executor.actions[transport.CertificateInstallAction] = capability.InstallAction()
+		semantic.AllowedActions[transport.CertificateInstallAction] = "1"
+		executor.actions[transport.CertificateCSRAction] = capability.Action()
+		semantic.AllowedActions[transport.CertificateCSRAction] = "1"
 	}
 	if request.GatewayPrefix != "" {
 		if !agentPathWithinRoot(request.FileRoot, request.GatewayPrefix) {

@@ -237,8 +237,21 @@ type acmeJWS struct {
 // IssueDNS01 obtains one certificate through a DNS-01 challenge. The returned
 // chain is only produced after the CA reports the order as valid and the leaf
 // parses; no local self-signed fallback exists.
-func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (result ACMEIssued, resultErr error) {
-	if c == nil {
+func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (ACMEIssued, error) {
+	return c.issueDNS01(ctx, request, nil)
+}
+
+// IssueDNS01WithCSR consumes ONLY a public node-generated CSR. The website
+// private key never enters Controller memory, an ACME signer or a file upload.
+// Composition must supply the actual approved Agent receipt and current task.
+func (c *ACMEClient) IssueDNS01WithCSR(ctx context.Context, request ACMERequest, csr []byte) (ACMEIssued, error) {
+	if len(csr) == 0 || len(csr) > 4096 {
+		return ACMEIssued{}, ErrACMEConfig
+	}
+	return c.issueDNS01(ctx, request, bytes.Clone(csr))
+}
+func (c *ACMEClient) issueDNS01(ctx context.Context, request ACMERequest, externalCSR []byte) (result ACMEIssued, resultErr error) {
+	if c == nil || ctx == nil || ctx.Err() != nil {
 		return ACMEIssued{}, ErrACMEConfig
 	}
 	if err := request.KeyRef.Validate(); err != nil {
@@ -247,6 +260,27 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (resul
 	commonName, err := normalizeACMEDomain(request.CommonName)
 	if err != nil {
 		return ACMEIssued{}, err
+	}
+	csr := externalCSR
+	if len(csr) > 0 {
+		parsed, e := x509.ParseCertificateRequest(csr)
+		if e != nil || parsed.CheckSignature() != nil || parsed.Subject.CommonName != commonName || len(parsed.DNSNames) != 1 || parsed.DNSNames[0] != commonName || len(parsed.IPAddresses) != 0 || len(parsed.EmailAddresses) != 0 || len(parsed.URIs) != 0 {
+			return ACMEIssued{}, ErrACMEConfig
+		}
+		key, ok := parsed.PublicKey.(*ecdsa.PublicKey)
+		if !ok || key.Curve != elliptic.P256() || parsed.SignatureAlgorithm != x509.ECDSAWithSHA256 {
+			return ACMEIssued{}, ErrACMEConfig
+		}
+		for _, extension := range parsed.Extensions {
+			if !extension.Id.Equal([]int{2, 5, 29, 17}) {
+				return ACMEIssued{}, ErrACMEConfig
+			}
+		}
+	} else {
+		csr, err = c.createCSR(ctx, commonName, request.KeyRef)
+		if err != nil {
+			return ACMEIssued{}, err
+		}
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -318,10 +352,6 @@ func (c *ACMEClient) IssueDNS01(ctx context.Context, request ACMERequest) (resul
 		if err := c.waitAuthorization(ctx, accountURL, authzURL, commonName, wildcard); err != nil {
 			return ACMEIssued{}, err
 		}
-	}
-	csr, err := c.createCSR(ctx, commonName, request.KeyRef)
-	if err != nil {
-		return ACMEIssued{}, err
 	}
 	finalized, err := c.finalize(ctx, accountURL, order.Finalize, csr)
 	if err != nil {

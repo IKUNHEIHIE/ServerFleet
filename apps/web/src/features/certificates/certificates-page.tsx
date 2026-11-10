@@ -1,3 +1,6 @@
+import { PublicCertificatePanel } from "./public-certificate-panel";
+import { NodeCertificatePanel } from "./node-certificate-panel";
+import { NodeCSRPanel } from "./node-csr-panel";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -130,7 +133,7 @@ export function CertificatesPage() {
     <div className="space-y-5">
       <PageHeader
         title="证书管理"
-        description="内部 TLS 下发按服务组成员快照逐节点执行；公网 ACME/证书生命周期当前没有契约端点。"
+        description="内部 TLS 下发与节点本地网站 CSR；执行结果以统一任务和实际证书回执为准。"
         badge={<span className="rounded-md border px-2 py-1 text-xs">TLS</span>}
         actions={<Button type="button" onClick={() => jobs.reload()} loading={jobs.state.status === "loading"}>刷新</Button>}
       />
@@ -146,10 +149,12 @@ export function CertificatesPage() {
       />
 
       {tab === "public" ? (
-        <Notice tone="warning" title="公网证书契约缺口">
-          当前 OpenAPI 只有 `certificates/internal/distributions`，没有 ACME 申请、续期、吊销或公网证书列表端点。
-          本页不伪造证书签发成功；公网 HTTPS 验收保持 BLOCKED/UNTESTED。
-        </Notice>
+        <div className="space-y-4">
+          <NodeCSRPanel key={session.viewEpoch} />
+          <PublicCertificatePanel key={`public:${session.viewEpoch}`} />
+          <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
+          <Notice tone="info" title="网站证书签发与安装">公开 CSR 可供受控签发流程使用；完整 ACME 申请、证书安装和实际 HTTPS 结果需要分别核验。</Notice>
+        </div>
       ) : null}
 
       {tab === "internal" ? (

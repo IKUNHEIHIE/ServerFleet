@@ -70,12 +70,12 @@ try {
       const buildInfo = execute(go, ["version", "-m", destination]);
       if (!buildInfo.includes(`vcs.revision=${commit}\n`) || !buildInfo.includes("vcs.modified=false")) throw new Error("Executable provenance differs from the captured source commit");
       chmodSync(destination, 0o700); record(path.relative(output, destination));
-      if (component === "agent") {
+      {
         const artifact = manifest.files.at(-1);
         // Exact canonical ReleaseManifest bytes for later OFFLINE signing.
-        const release = { format: 1, component: "agent", version: values.version, sequence: Number(values.sequence), os: "linux", architecture: arch, sha256: artifact.sha256, bytes: artifact.bytes };
-        writeFileSync(path.join(directory, "agent.manifest.json"), JSON.stringify(release), { mode: 0o600, flag: "wx" });
-        record(path.relative(output, path.join(directory, "agent.manifest.json")));
+        const release = { format: 1, component, version: values.version, sequence: Number(values.sequence), os: "linux", architecture: arch, sha256: artifact.sha256, bytes: artifact.bytes };
+        writeFileSync(path.join(directory, `${component}.manifest.json`), JSON.stringify(release), { mode: 0o600, flag: "wx" });
+        record(path.relative(output, path.join(directory, `${component}.manifest.json`)));
       }
     }
     copyWeb(path.join(root, "apps/web/dist"), path.join(directory, "web"));

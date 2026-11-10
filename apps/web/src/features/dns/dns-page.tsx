@@ -1,3 +1,4 @@
+import { DNSProviderTaskPanel } from "./provider-task-panel";
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -8,8 +9,8 @@ import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
-import { dnsApi } from "@/lib/api/endpoints-infra";
-import type { DNSAccount, DNSConnectionTest, DNSRecord, DNSRecordInput, DNSZone } from "@/lib/api/dto";
+import { dnsApi, dnsRecordTasksApi, publicCertificateApi, type NodeCSRTask } from "@/lib/api/endpoints-infra";
+import type { DNSAccount, DNSRecord, DNSRecordInput, DNSZone } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
@@ -54,7 +55,7 @@ function AccountEditor({
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!displayName.trim()) return setLocalError("显示名称不能为空。");
-    if (!account && !apiToken) return setLocalError("创建账号必须输入 Cloudflare API Token。");
+    if (!account && !apiToken) return setLocalError("创建账号必须填写已保存的 Cloudflare 凭据 ID。");
     setLocalError(null);
     const result = await action.run({
       displayName: displayName.trim(),
@@ -72,7 +73,7 @@ function AccountEditor({
     <Modal
       open={open}
       title={account ? "编辑 DNS 账号" : "添加 Cloudflare 账号"}
-      description="API Token 只通过 HTTPS 安全写入；列表与日志不返回明文。首版仅支持 Cloudflare。"
+      description="先在凭据管理中保存 Cloudflare Token，再填写凭据 ID。账号仅绑定引用，不接收 Token 明文。"
       onClose={() => {
         if (!action.pending) onClose();
       }}
@@ -93,12 +94,11 @@ function AccountEditor({
           启用账号
         </label>
         {!account ? (
-          <Field label="Cloudflare API Token" hint="只写入后端凭证服务；提交后立即清空。">
+          <Field label="Cloudflare 凭据 ID" hint="填写凭据管理中的 ID，不要输入 Token 明文。">
             {ids => (
               <TextInput
                 id={ids.inputId}
-                type="password"
-                autoComplete="new-password"
+                autoComplete="off"
                 value={apiToken}
                 onChange={event => setApiToken(event.target.value)}
                 disabled={disabled}
@@ -122,7 +122,7 @@ function RecordEditor({
   readonly record: DNSRecord | null;
   readonly zone: DNSZone | null;
   readonly onClose: () => void;
-  readonly onSaved: () => void;
+  readonly onSaved: (task:NodeCSRTask) => void;
 }) {
   const session = useSession();
   const [type, setType] = useState<DNSRecordInput["type"]>("A");
@@ -132,8 +132,9 @@ function RecordEditor({
   const [proxied, setProxied] = useState(false);
   const [priority, setPriority] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const action = useAction((body: DNSRecordInput) =>
-    record && zone ? dnsApi.updateRecord(zone.id, record.id, body) : zone ? dnsApi.createRecord(zone.id, body) : Promise.reject(new Error("no zone")),
+  const [operationKey,setOperationKey] = useState<string|null>(null);
+  const action = useAction((body: DNSRecordInput,key:string) =>
+    record && zone ? dnsRecordTasksApi.update(zone.id, record.id, body,key) : zone ? dnsRecordTasksApi.create(zone.id, body,key) : Promise.reject(new Error("no zone")),
   );
 
   useEffect(() => {
@@ -145,6 +146,7 @@ function RecordEditor({
     setProxied(record?.proxied ?? false);
     setPriority(record?.priority === undefined ? "" : String(record.priority));
     setLocalError(null);
+    setOperationKey(null);
   }, [open, record]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -159,11 +161,14 @@ function RecordEditor({
       ...(priority ? { priority: Number(priority) } : {}),
     };
     setLocalError(null);
-    const result = await action.run(body);
-    if (result.ok) onSaved();
+    const key=operationKey??globalThis.crypto.randomUUID();setOperationKey(key);
+    const result = await action.run(body,key);
+    if(result.ok&&result.data){setOperationKey(null);onSaved(result.data.data);}
+    else if(result.error&&[400,401,403,422,429].includes(result.error.status))setOperationKey(null);
   }
 
   const disabled = !session.can("dns.record.manage") || session.writesLocked;
+  const inputsLocked=disabled||action.pending||operationKey!==null;
 
   return (
     <Modal
@@ -176,29 +181,30 @@ function RecordEditor({
       footer={
         <>
           <Button type="button" onClick={onClose} disabled={action.pending}>取消</Button>
-          <Button type="submit" form="dns-record-editor" variant="primary" loading={action.pending} disabled={disabled}>保存记录</Button>
+          <Button type="submit" form="dns-record-editor" variant="primary" loading={action.pending} disabled={disabled}>登记审批任务</Button>
         </>
       }
     >
       <form id="dns-record-editor" onSubmit={submit} className="space-y-4">
+        {operationKey?<Notice tone="warning" title="任务提交结果待核对">再次提交复用当前编号；请先在任务列表核对，不要重建未知结果操作。</Notice>:null}
         {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
         {action.error ? <Notice tone="error" title="保存失败">{describeApiError(action.error)}</Notice> : null}
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="类型">
             {ids => (
-              <Select id={ids.inputId} value={type} onChange={event => setType(event.target.value as DNSRecordInput["type"])} disabled={disabled}>
+              <Select id={ids.inputId} value={type} onChange={event => setType(event.target.value as DNSRecordInput["type"])} disabled={inputsLocked}>
                 {["A", "AAAA", "CNAME", "TXT", "MX"].map(value => <option key={value} value={value}>{value}</option>)}
               </Select>
             )}
           </Field>
-          <Field label="TTL（可选）">{ids => <TextInput id={ids.inputId} type="number" min={1} value={ttl} onChange={event => setTtl(event.target.value)} disabled={disabled} />}</Field>
+          <Field label="TTL（可选）">{ids => <TextInput id={ids.inputId} type="number" min={1} value={ttl} onChange={event => setTtl(event.target.value)} disabled={inputsLocked} />}</Field>
         </div>
-        <Field label="名称">{ids => <TextInput id={ids.inputId} value={name} onChange={event => setName(event.target.value)} required disabled={disabled} />}</Field>
-        <Field label="内容">{ids => <TextInput id={ids.inputId} value={content} onChange={event => setContent(event.target.value)} required disabled={disabled} />}</Field>
+        <Field label="名称">{ids => <TextInput id={ids.inputId} value={name} onChange={event => setName(event.target.value)} required disabled={inputsLocked} />}</Field>
+        <Field label="内容">{ids => <TextInput id={ids.inputId} value={content} onChange={event => setContent(event.target.value)} required disabled={inputsLocked} />}</Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="优先级（MX 等，可选）">{ids => <TextInput id={ids.inputId} type="number" min={0} value={priority} onChange={event => setPriority(event.target.value)} disabled={disabled} />}</Field>
+          <Field label="优先级（MX 等，可选）">{ids => <TextInput id={ids.inputId} type="number" min={0} value={priority} onChange={event => setPriority(event.target.value)} disabled={inputsLocked} />}</Field>
           <label className="mt-6 flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={proxied} onChange={event => setProxied(event.target.checked)} disabled={disabled} />
+            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={proxied} onChange={event => setProxied(event.target.checked)} disabled={inputsLocked} />
             Cloudflare 代理（供应商支持时）
           </label>
         </div>
@@ -217,7 +223,10 @@ export function DnsPage() {
   const [deletingAccount, setDeletingAccount] = useState<DNSAccount | null>(null);
   const [rotating, setRotating] = useState<DNSAccount | null>(null);
   const [rotateToken, setRotateToken] = useState("");
-  const [testResult, setTestResult] = useState<{ accountId: string; result: DNSConnectionTest } | null>(null);
+  const [testResult, setTestResult] = useState<{ accountId: string; result: NodeCSRTask } | null>(null);
+  const [deleteKeys,setDeleteKeys]=useState<Record<string,string>>({});
+  const [testKeys,setTestKeys]=useState<Record<string,string>>({});
+  const [syncKeys,setSyncKeys]=useState<Record<string,string>>({});
   const [recordEditor, setRecordEditor] = useState<{ open: boolean; record: DNSRecord | null }>({ open: false, record: null });
   const [deletingRecord, setDeletingRecord] = useState<DNSRecord | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -245,9 +254,9 @@ export function DnsPage() {
   const deleteAccountAction = useAction((id: string) => dnsApi.removeAccount(id));
   const rotateAction = useAction((id: string, token: string) => dnsApi.rotateCredential(id, token));
   const defaultAction = useAction((id: string) => dnsApi.setDefault(id));
-  const testAction = useAction((id: string) => dnsApi.test(id));
-  const syncAction = useAction((id: string, providerZoneId: string) => dnsApi.syncZones(id, { providerZoneId }));
-  const deleteRecordAction = useAction((record: DNSRecord) => dnsApi.removeRecord(record.zoneId, record.id));
+  const testAction = useAction((id: string,key:string) => publicCertificateApi.inspectDNS({operation:"test",accountId:id,idempotencyKey:key}));
+  const syncAction = useAction((id: string, providerZoneId: string,key:string) => publicCertificateApi.inspectDNS({operation:"import-zone",accountId:id,providerZoneId,zoneId:`zone-${key}`,idempotencyKey:key}));
+  const deleteRecordAction = useAction((record: DNSRecord,key:string) => dnsRecordTasksApi.remove(record.zoneId, record.id,key));
 
   async function removeAccount() {
     if (!deletingAccount) return;
@@ -267,7 +276,7 @@ export function DnsPage() {
     setRotateToken("");
     if (result.ok) {
       setRotating(null);
-      setOutcome("API Token 已轮换写入（服务端结果）；不会回显。");
+      setOutcome("DNS 账号凭据引用已更换；须同步可信启动配置中的凭据版本并重新验证账号。");
       accounts.reload();
     }
   }
@@ -282,8 +291,9 @@ export function DnsPage() {
 
   async function test(account: DNSAccount) {
     setTestResult(null);
-    const result = await testAction.run(account.id);
-    if (result.ok && result.data) setTestResult({ accountId: account.id, result: result.data.data });
+    const key=testKeys[account.id]??globalThis.crypto.randomUUID();setTestKeys(previous=>({...previous,[account.id]:key}));
+    const result = await testAction.run(account.id,key);
+    if (result.ok && result.data) {setTestResult({ accountId: account.id, result: result.data.data });setTestKeys(previous=>{const next={...previous};delete next[account.id];return next;});}
   }
 
   async function sync(account: DNSAccount) {
@@ -293,19 +303,25 @@ export function DnsPage() {
       setOutcome("同步被跳过：请先填写服务商 Zone ID（真实 Controller 按显式 Zone ID 同步）。");
       return;
     }
-    const result = await syncAction.run(account.id, providerZoneId);
+    const scope=`${account.id}:${providerZoneId}`;
+    const key=syncKeys[scope]??globalThis.crypto.randomUUID();setSyncKeys(previous=>({...previous,[scope]:key}));
+    const result = await syncAction.run(account.id, providerZoneId,key);
     if (result.ok) {
-      setOutcome(`Zone 同步请求已完成（${providerZoneId}，服务端结果）。`);
+      setOutcome(`Zone 导入任务已登记：${result.data?.data.taskId??""}；完成后刷新 Zone。`);
+      setSyncKeys(previous=>{const next={...previous};delete next[scope];return next;});
       zones.reload();
     }
   }
 
   async function removeRecord() {
     if (!deletingRecord) return;
-    const result = await deleteRecordAction.run(deletingRecord);
+    const scope=`${deletingRecord.zoneId}:${deletingRecord.id}`;
+    const key=deleteKeys[scope]??globalThis.crypto.randomUUID();setDeleteKeys(previous=>({...previous,[scope]:key}));
+    const result = await deleteRecordAction.run(deletingRecord,key);
     if (result.ok) {
       setDeletingRecord(null);
-      setOutcome("DNS 记录已删除；服务端会记录变更。");
+      setDeleteKeys(previous=>{const next={...previous};delete next[scope];return next;});
+      setOutcome(`DNS 删除审批任务已登记：${result.data?.data.taskId??""}；审批及执行前记录尚未删除。`);
       records.reload();
     }
   }
@@ -318,6 +334,7 @@ export function DnsPage() {
         badge={<span className="rounded-md border px-2 py-1 text-xs">Cloudflare</span>}
         actions={<Button type="button" onClick={() => { accounts.reload(); zones.reload(); records.reload(); }}>刷新</Button>}
       />
+      <DNSProviderTaskPanel key={session.viewEpoch} />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
         <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
@@ -353,8 +370,7 @@ export function DnsPage() {
                     </div>
                     {testResult?.accountId === account.id ? (
                       <div className="mx-3 mb-3 rounded-md border bg-secondary/30 px-3 py-2 text-xs">
-                        连接检查：{testResult.result.status} · Zone 读取 {testResult.result.zoneRead ? "通过" : "失败"} · 记录写入 {testResult.result.recordWrite ? "通过" : "失败"}
-                        {testResult.result.message ? ` · ${testResult.result.message}` : ""}
+                        检查任务 {testResult.result.taskId} · {testResult.result.status}；请在任务列表核对实际结果。
                       </div>
                     ) : null}
                   </li>
@@ -458,9 +474,9 @@ export function DnsPage() {
         record={recordEditor.record}
         zone={selectedZone}
         onClose={() => setRecordEditor({ open: false, record: null })}
-        onSaved={() => {
+        onSaved={task => {
           setRecordEditor({ open: false, record: null });
-          setOutcome("DNS 记录已保存（服务端结果）。");
+          setOutcome(`DNS 修改审批任务已登记：${task.taskId}；当前 ${task.status}，执行后再刷新记录。`);
           records.reload();
         }}
       />
@@ -480,8 +496,8 @@ export function DnsPage() {
       </Modal>
       <Modal
         open={rotating !== null}
-        title="轮换 API Token"
-        description={rotating ? `账号 ${rotating.displayName}；新 Token 只写不读。` : undefined}
+        title="更换 DNS 凭据引用"
+        description={rotating ? `账号 ${rotating.displayName}；填写已保存的新凭据 ID。` : undefined}
         onClose={() => { if (!rotateAction.pending) setRotating(null); }}
         footer={
           <>
@@ -491,8 +507,8 @@ export function DnsPage() {
         }
       >
         {rotateAction.error ? <Notice tone="error" title="轮换失败">{describeApiError(rotateAction.error)}</Notice> : null}
-        <Field label="新的 Cloudflare API Token">
-          {ids => <TextInput id={ids.inputId} type="password" autoComplete="new-password" value={rotateToken} onChange={event => setRotateToken(event.target.value)} />}
+        <Field label="新的 Cloudflare 凭据 ID">
+          {ids => <TextInput id={ids.inputId} autoComplete="off" value={rotateToken} onChange={event => setRotateToken(event.target.value)} />}
         </Field>
       </Modal>
       <Modal
@@ -503,12 +519,12 @@ export function DnsPage() {
         footer={
           <>
             <Button type="button" onClick={() => setDeletingRecord(null)} disabled={deleteRecordAction.pending}>取消</Button>
-            <Button type="button" variant="danger" onClick={removeRecord} loading={deleteRecordAction.pending}>确认删除</Button>
+            <Button type="button" variant="danger" onClick={removeRecord} loading={deleteRecordAction.pending}>登记删除审批任务</Button>
           </>
         }
       >
         {deleteRecordAction.error ? <Notice tone="error" title="删除失败">{describeApiError(deleteRecordAction.error)}</Notice> : null}
-        <p className="text-sm text-muted-foreground">该操作直接作用于所选账号与 Zone；不会跨账号删除。</p>
+        <p className="text-sm text-muted-foreground">登记后需先完成人工审批，再由统一任务删除所选记录；请核对实际执行结果。</p>
       </Modal>
     </div>
   );

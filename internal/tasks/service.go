@@ -87,25 +87,27 @@ type NodeLookup interface {
 
 // Options configures the unified task service.
 type Options struct {
-	DB              *storage.DB
-	Repo            *Repo
-	Audit           AuditSink
-	Authorizer      auth.Authorizer
-	Dispatcher      Dispatcher
-	Workers         map[string]Worker
-	RuntimeGate     func(context.Context) error
-	Approvals       ApprovalConsumer
-	Nodes           NodeLookup
-	Now             func() time.Time
-	ApprovalTTL     time.Duration
-	UnstartedTTL    time.Duration
-	Interval        time.Duration
-	Concurrency     int
-	RequireApproval func(OperationClass) bool
-	OnError         func(error)
+	ControllerExecution *ControllerExecution
+	DB                  *storage.DB
+	Repo                *Repo
+	Audit               AuditSink
+	Authorizer          auth.Authorizer
+	Dispatcher          Dispatcher
+	Workers             map[string]Worker
+	RuntimeGate         func(context.Context) error
+	Approvals           ApprovalConsumer
+	Nodes               NodeLookup
+	Now                 func() time.Time
+	ApprovalTTL         time.Duration
+	UnstartedTTL        time.Duration
+	Interval            time.Duration
+	Concurrency         int
+	RequireApproval     func(OperationClass) bool
+	OnError             func(error)
 }
 
 type Service struct {
+	controller      *ControllerExecution
 	runtimeGate     func(context.Context) error
 	db              *storage.DB
 	repo            *Repo
@@ -177,9 +179,13 @@ func NewService(options Options) (*Service, error) {
 		}
 		workers[action] = worker
 	}
+	controller, err := cloneControllerExecution(options.ControllerExecution, workers)
+	if err != nil {
+		return nil, err
+	}
 	return &Service{
-		runtimeGate: options.RuntimeGate,
-		db:          options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
+		runtimeGate: options.RuntimeGate, controller: controller,
+		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
 		dispatcher: options.Dispatcher, approvals: options.Approvals, nodes: options.Nodes, now: now,
 		approvalTTL: approvalTTL, unstartedTTL: unstartedTTL, interval: interval,
 		concurrency: concurrency, requireApproval: require, onError: onError,
@@ -232,6 +238,10 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 		targetType = "node_ids"
 	}
 	switch targetType {
+	case TargetTypeController:
+		if ctx.Value(controllerAdmissionKey{}) != s || s.controller == nil || request.TargetResourceID != s.controller.AuthorityID || snapshot.Len() != 1 || snapshot.IDs()[0] != s.controller.AuthorityID || request.ScopeRevision != 0 || request.PluginID != "" || request.ApprovalID != "" || request.OperationClass == OperationClassRoot {
+			return Task{}, ErrInvalidTask
+		}
 	case "node_ids":
 		if request.TargetResourceID != "" {
 			return Task{}, fmt.Errorf("%w: target resource id", ErrInvalidTask)
@@ -263,14 +273,18 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 	if source == audit.SourcePlugin && request.PluginID == "" {
 		return Task{}, fmt.Errorf("%w: plugin id is required", ErrInvalidTask)
 	}
-	if err := s.authorize(ctx, request.SubjectID, request.ActionID, request.RequestID, snapshot.IDs(), "task_submit"); err != nil {
+	admission := Task{ActionID: request.ActionID, TargetType: targetType, TargetResourceID: request.TargetResourceID, ScopeRevision: request.ScopeRevision, PluginID: request.PluginID, Source: string(source), OperationClass: request.OperationClass, Targets: []Target{{NodeID: snapshot.IDs()[0]}}}
+	if targetType != TargetTypeController {
+		admission.Targets = nil
+	}
+	if err := s.authorizeForTask(ctx, admission, request.SubjectID, request.ActionID, request.RequestID, snapshot.IDs(), "task_submit"); err != nil {
 		return Task{}, err
 	}
 	if existing, found, err := s.repo.GetByIdempotencyKey(ctx, request.SubjectID, request.IdempotencyKey); err != nil {
 		return Task{}, err
 	} else if found {
 		if existing.ActionID != request.ActionID || existing.OperationClass != request.OperationClass ||
-			existing.Params != params || !sameTargetSet(existing.Targets, snapshot.IDs()) {
+			existing.Params != params || existing.TargetType != targetType || existing.TargetResourceID != request.TargetResourceID || !sameTargetSet(existing.Targets, snapshot.IDs()) {
 			return Task{}, ErrIdempotencyMismatch
 		}
 		return existing, nil
@@ -283,6 +297,13 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 	}
 	targets := buildTargets(snapshot.IDs(), plan)
 	approvalRequired := request.RequireApproval || s.requireApproval(request.OperationClass)
+	if targetType == TargetTypeController {
+		rule, err := s.controllerRule(admission)
+		if err != nil {
+			return Task{}, err
+		}
+		approvalRequired = approvalRequired || rule.RequireApproval
+	}
 	status := StatusQueued
 	if approvalRequired {
 		status = StatusAwaitingApproval
@@ -349,7 +370,7 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 				return err
 			}
 		}
-		event := s.event(request.SubjectID, ActionSubmit, "success", request.RequestID, snapshot.IDs(), "")
+		event := s.event(request.SubjectID, ActionSubmit, "success", request.RequestID, auditSnapshotIDs(targetType, snapshot.IDs()), "")
 		event.Source = source
 		event.TaskID = task.ID
 		return s.audit.AppendTx(txCtx, tx, event)
@@ -409,7 +430,7 @@ func (s *Service) Decide(ctx context.Context, taskID string, expectedRevision ui
 		return Task{}, ErrSelfApproval
 	}
 	targetIDs := taskTargetIDs(task)
-	if err := s.authorize(ctx, decision.ApproverID, ActionApprove, decision.RequestID, targetIDs, "task_approve"); err != nil {
+	if err := s.authorizeForTask(ctx, task, decision.ApproverID, ActionApprove, decision.RequestID, targetIDs, "task_approve"); err != nil {
 		return Task{}, err
 	}
 	now := s.now().UTC()
@@ -450,7 +471,7 @@ func (s *Service) Decide(ctx context.Context, taskID string, expectedRevision ui
 		if reasonCode != "" && !validToken(reasonCode, audit.DefaultLimits().MaxReasonCodeBytes) {
 			reasonCode = approvalDecision
 		}
-		event := s.event(decision.ApproverID, ActionApprove, record, decision.RequestID, targetIDs, reasonCode)
+		event := s.event(decision.ApproverID, ActionApprove, record, decision.RequestID, taskAuditIDs(task), reasonCode)
 		event.TaskID = taskID
 		return s.audit.AppendTx(txCtx, tx, event)
 	})
@@ -482,6 +503,9 @@ func (s *Service) Revise(ctx context.Context, taskID string, request ReviseReque
 	task, err := s.repo.Get(ctx, taskID)
 	if err != nil {
 		return Task{}, err
+	}
+	if task.TargetType == TargetTypeController {
+		return Task{}, ErrInvalidTask
 	}
 	if task.Revision != request.ExpectedRevision {
 		return Task{}, ErrInvalidStatus
@@ -570,8 +594,11 @@ func (s *Service) Resume(ctx context.Context, taskID, subjectID, requestID strin
 			return Task{}, err
 		}
 	}
+	if task.TargetType == TargetTypeController {
+		return Task{}, ErrInvalidTask
+	}
 	targetIDs := taskTargetIDs(task)
-	if err := s.authorize(ctx, subjectID, task.ActionID, requestID, targetIDs, "task_resume"); err != nil {
+	if err := s.authorizeForTask(ctx, task, subjectID, task.ActionID, requestID, targetIDs, "task_resume"); err != nil {
 		return Task{}, err
 	}
 	now := s.now().UTC()
@@ -589,7 +616,7 @@ func (s *Service) Resume(ctx context.Context, taskID, subjectID, requestID strin
 		}, now); err != nil {
 			return err
 		}
-		event := s.event(subjectID, ActionResume, "success", requestID, targetIDs, "resumed")
+		event := s.event(subjectID, ActionResume, "success", requestID, taskAuditIDs(task), "resumed")
 		event.TaskID = taskID
 		return s.audit.AppendTx(txCtx, tx, event)
 	})
@@ -619,7 +646,7 @@ func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID strin
 		return Task{}, ErrTaskTerminal
 	}
 	targetIDs := taskTargetIDs(task)
-	if err := s.authorize(ctx, subjectID, ActionCancel, requestID, targetIDs, "task_cancel"); err != nil {
+	if err := s.authorizeForTask(ctx, task, subjectID, ActionCancel, requestID, targetIDs, "task_cancel"); err != nil {
 		return Task{}, err
 	}
 	now := s.now().UTC()
@@ -656,7 +683,7 @@ func (s *Service) Cancel(ctx context.Context, taskID, subjectID, requestID strin
 		}, now); err != nil {
 			return err
 		}
-		event := s.event(subjectID, ActionCancel, "success", requestID, targetIDs, "")
+		event := s.event(subjectID, ActionCancel, "success", requestID, taskAuditIDs(task), "")
 		event.TaskID = taskID
 		return s.audit.AppendTx(txCtx, tx, event)
 	})
@@ -706,6 +733,12 @@ func (s *Service) RecordResult(ctx context.Context, taskID, nodeID string, code 
 		return Task{}, ErrTaskTerminal
 	}
 	now := s.now().UTC()
+	logNodeID := nodeID
+	targetKey := "nodeId"
+	if task.TargetType == TargetTypeController {
+		logNodeID = ""
+		targetKey = "controllerId"
+	}
 	applied := false
 	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		var err error
@@ -717,12 +750,12 @@ func (s *Service) RecordResult(ctx context.Context, taskID, nodeID string, code 
 			return nil
 		}
 		if err := s.repo.AppendLog(txCtx, tx, LogEntry{
-			TaskID: taskID, NodeID: nodeID, Level: logLevelFor(code), Message: redacted, At: now,
+			TaskID: taskID, NodeID: logNodeID, Level: logLevelFor(code), Message: redacted, At: now,
 		}); err != nil {
 			return err
 		}
 		return s.repo.AppendEvent(txCtx, tx, taskID, "target_result", map[string]any{
-			"nodeId": nodeID, "code": string(code),
+			targetKey: nodeID, "code": string(code),
 		}, now)
 	})
 	if err != nil {
@@ -824,6 +857,9 @@ func sameTargetSet(targets []Target, ids []string) bool {
 }
 
 func paramsFromSubmit(request SubmitRequest) (string, error) {
+	if value, handled, err := publicChainParams(request); handled {
+		return value, err
+	}
 	if request.CanonicalParams != nil {
 		if request.Params != nil {
 			return "", fmt.Errorf("%w: provide params or canonical params, not both", ErrInvalidTask)
@@ -927,6 +963,15 @@ func planHash(task Task) string {
 		return ""
 	}
 	hash := sha256.New()
+	if task.TargetType == TargetTypeController {
+		hash.Write([]byte("serverfleet.controller-task.v1\x00"))
+		hash.Write([]byte(task.TargetResourceID))
+		hash.Write([]byte{0})
+		hash.Write([]byte(task.Source))
+		hash.Write([]byte{0})
+		hash.Write([]byte(fmt.Sprintf("%t", task.ApprovalRequired)))
+		hash.Write([]byte{0})
+	}
 	hash.Write([]byte(task.ActionID))
 	hash.Write([]byte{0})
 	hash.Write([]byte(task.OperationClass))

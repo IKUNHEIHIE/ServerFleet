@@ -24,12 +24,13 @@ const (
 )
 
 type reviewR2Handler struct {
-	mu          sync.Mutex
-	createMode  reviewR2Mode
-	deleteMode  reviewR2Mode
-	createID    string
-	createCalls int
-	deleteCalls int
+	mu           sync.Mutex
+	createMode   reviewR2Mode
+	deleteMode   reviewR2Mode
+	createRecord map[string]any
+	createID     string
+	createCalls  int
+	deleteCalls  int
 }
 
 func (h *reviewR2Handler) setCreateMode(mode reviewR2Mode) {
@@ -85,9 +86,19 @@ func (h *reviewR2Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	case r.Method == http.MethodPost && r.URL.Path == "/zones/pz-1/dns_records":
 		h.mu.Lock()
 		h.createCalls++
+		_ = json.NewDecoder(r.Body).Decode(&h.createRecord)
 		mode, id := h.createMode, h.createID
 		h.mu.Unlock()
 		h.serveMode(w, mode, `{"success":true,"result":{"id":"`+id+`"}}`)
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/zones/pz-1/dns_records/"):
+		h.mu.Lock()
+		record := map[string]any{"id": h.createID, "proxied": false}
+		for k, v := range h.createRecord {
+			record[k] = v
+		}
+		h.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{"success": true, "result": record})
 	case r.Method == http.MethodDelete && strings.HasPrefix(r.URL.Path, "/zones/pz-1/dns_records/"):
 		h.mu.Lock()
 		h.deleteCalls++

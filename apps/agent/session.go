@@ -46,6 +46,7 @@ type agentSessionConfig struct {
 	Files             *agentFileSessions
 }
 type activeAgentExecution struct {
+	residentUpdate    bool
 	taskID, digest    string
 	cancel            context.CancelFunc
 	reserved          bool
@@ -327,7 +328,7 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 			}
 		case envelope.GetTaskOffer() != nil:
 			offer := envelope.GetTaskOffer()
-			if !granted[offer.ActionId] || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.PluginId != "" || admit(bounded, offer) != nil {
+			if !granted[offer.ActionId] || offer.Privilege != registeredPrivilege(executor.actions[offer.ActionId]) || offer.PluginId != "" || admit(bounded, offer) != nil {
 				if ack(offer, false, false, "CAPABILITY_REJECTED") != nil {
 					return errAgentSession
 				}
@@ -358,7 +359,13 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 					delete(running, id)
 				}
 			}
-			if len(running) >= cfg.MaxConcurrent {
+			exclusive := offer.ActionId == transport.ResidentUpdateAction && len(running) > 0
+			for _, active := range running {
+				if active.residentUpdate && !active.finished {
+					exclusive = true
+				}
+			}
+			if exclusive || len(running) >= cfg.MaxConcurrent {
 				runningMu.Unlock()
 				if ack(offer, false, false, "AGENT_BUSY") != nil {
 					return errAgentSession
@@ -366,7 +373,7 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 				continue
 			}
 			workCtx, workCancel := context.WithCancel(bounded)
-			work := &activeAgentExecution{taskID: offer.TaskId, digest: offerDigest(offer), cancel: workCancel}
+			work := &activeAgentExecution{taskID: offer.TaskId, digest: offerDigest(offer), cancel: workCancel, residentUpdate: offer.ActionId == transport.ResidentUpdateAction}
 			running[offer.ExecutionId] = work
 			runningMu.Unlock()
 			workers.Add(1)
@@ -390,7 +397,7 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 						return errAgentSession
 					}
 					if stage == "accepted" {
-						if offer.ActionId == transport.FileCapability {
+						if transport.IsFileAction(offer.ActionId) {
 							if cfg.Files == nil || accepted.SelectedProtocolMinor < 1 || cfg.Files.Accept(workCtx, offer, seen) != nil {
 								return errAgentSession
 							}

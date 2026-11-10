@@ -19,6 +19,8 @@ import (
 var errExecutionRejected = errors.New("agent: execution rejected")
 var executionIDPattern = regexp.MustCompile(`^[A-Za-z0-9_-]{1,128}$`)
 
+type agentOfferKey struct{}
+
 type executionClaim struct{ TaskID, ExecutionID, OfferDigest string }
 type executionResult struct {
 	Result    agentv1.ExecutionResult
@@ -27,6 +29,7 @@ type executionResult struct {
 	Truncated bool
 }
 type agentAction struct {
+	Privilege agentv1.Privilege
 	// Validate and Run are fixed program-owned capabilities, never client code.
 	Validate func([]byte) error
 	Run      func(context.Context, []byte) executionResult
@@ -98,7 +101,7 @@ func (e *agentExecutor) executeObserved(ctx context.Context, offer *agentv1.Task
 	// ScopeRevision identifies an AI session scope; web and workflow tasks are
 	// unscoped and legitimately carry 0. It is recorded in the offer digest but is
 	// never an Agent-side authorization substitute for the Controller.
-	if !executionIDPattern.MatchString(offer.ExecutionId) || !executionIDPattern.MatchString(offer.TaskId) || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.PluginId != "" || offer.ActionSchemaVersion == "" || offer.TimeoutSeconds == 0 || offer.TimeoutSeconds > 3600 || len(offer.CanonicalParametersJson) > 64<<10 {
+	if !executionIDPattern.MatchString(offer.ExecutionId) || !executionIDPattern.MatchString(offer.TaskId) || offer.PluginId != "" || offer.ActionSchemaVersion == "" || offer.TimeoutSeconds == 0 || offer.TimeoutSeconds > 3600 || len(offer.CanonicalParametersJson) > 64<<10 {
 		return unknown, false, errExecutionRejected
 	}
 	if digest, err := hex.DecodeString(offer.PlanDigestSha256); err != nil || len(digest) != 32 {
@@ -109,7 +112,7 @@ func (e *agentExecutor) executeObserved(ctx context.Context, offer *agentv1.Task
 		return unknown, false, errExecutionRejected
 	}
 	action, ok := e.actions[offer.ActionId]
-	if !ok || action.Validate(offer.CanonicalParametersJson) != nil {
+	if !ok || offer.Privilege != registeredPrivilege(action) || action.Validate(offer.CanonicalParametersJson) != nil {
 		return unknown, false, errExecutionRejected
 	}
 	// Claim the ID before invoking any action. os.Root prevents traversal and
@@ -168,7 +171,7 @@ func (e *agentExecutor) executeObserved(ctx context.Context, offer *agentv1.Task
 	}
 	runCtx, cancel := context.WithTimeout(ctx, time.Duration(offer.TimeoutSeconds)*time.Second)
 	defer cancel()
-	result := runRegisteredAction(runCtx, action, append([]byte(nil), offer.CanonicalParametersJson...))
+	result := runRegisteredAction(context.WithValue(runCtx, agentOfferKey{}, offer), action, append([]byte(nil), offer.CanonicalParametersJson...))
 	if result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_SUCCEEDED && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_FAILED && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_CANCELED && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_TIMED_OUT && result.Result != agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN {
 		result = unknown
 	}
@@ -234,4 +237,11 @@ func (e *agentExecutor) syncDirectory(name string) error {
 	}
 	defer dir.Close()
 	return dir.Sync()
+}
+
+func registeredPrivilege(action agentAction) agentv1.Privilege {
+	if action.Privilege == agentv1.Privilege_PRIVILEGE_ROOT {
+		return action.Privilege
+	}
+	return agentv1.Privilege_PRIVILEGE_NORMAL
 }

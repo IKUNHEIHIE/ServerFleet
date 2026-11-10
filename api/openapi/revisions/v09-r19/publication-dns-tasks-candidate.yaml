@@ -1,0 +1,134 @@
+openapi: 3.1.0
+info:
+  title: Persisted publication DNS child tasks (PROPOSED, UNTESTED)
+  version: 0.9.0-r19-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/publications/{publicationId}/dns-tasks:
+    get:
+      operationId: publicationDNSObservationsR19
+      summary: Read frozen public targets, child task identities and provider observations
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+      responses:
+        '200':
+          description: Current administrator and publication/task resource read. No credential material.
+          content:
+            application/json:
+              schema: {$ref: '#/components/schemas/DNSBatch'}
+        '400': {description: Query/body rejected}
+        '403': {description: Current administrator or publication/task read denied}
+        '409': {description: DNS batch not observed or frozen plan changed}
+  /api/v1/publications/{publicationId}/run:
+    post:
+      operationId: continuePublicationDNSR19
+      summary: Continue a publication through the same approved DNS child
+      description: Additive pending behavior to the existing run operation. A configured deferred DNS stage returns 202 with its persisted running stage and typed dnsBatchId/taskId receipt. Subsequent explicit run observes the same task; it does not increment the DNS attempt or resubmit effects. Only both a successful unified task and an applied owner receipt allow the next stage. Unknown effects are never replayed. Other existing success/errors keep their established meanings.
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+        - $ref: '#/components/parameters/CSRF'
+      responses:
+        '200': {description: Existing observed publication result}
+        '202': {description: DNS child awaiting approval/execution; existing async operation DTO with running stage and public task receipt}
+        '403': {description: Current resource authorization denied}
+        '409': {description: Existing plan/revision conflict}
+        '502': {description: Observed stage failure or unknown child outcome; owner evidence retained}
+  /api/v1/publications/{publicationId}/rollback:
+    post:
+      operationId: compensatePublicationDNSR19
+      summary: Request compensation of one observed stage
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [stage]
+              properties:
+                stage: {enum: [dns, certificate, gateway]}
+      responses:
+        '200': {description: Actual stage compensation observed}
+        '202': {description: DNS compensation child requires approval/execution; original stage remains uncompensated}
+        '403': {description: Current resource authorization denied}
+        '409': {description: Stage not eligible}
+        '502': {description: "Compensation failed/unknown, including downstream stage still uncompensated"}
+  /api/v1/publications/{publicationId}/rollback-all:
+    post:
+      operationId: reverseCompensatePublicationR19
+      summary: Compensate gateway, certificate and then DNS in reverse order
+      parameters:
+        - $ref: '#/components/parameters/PublicationID'
+        - $ref: '#/components/parameters/CSRF'
+      responses:
+        '200': {description: Persisted actual inverse compensation progress}
+        '202': {description: DNS compensation awaiting its human approval or execution; no rollback success implied}
+        '403': {description: Current resource authorization denied}
+        '409': {description: Existing stage/plan conflict}
+        '502': {description: Stop at unresolved compensation; do not remove upstream stages}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  parameters:
+    PublicationID:
+      in: path
+      name: publicationId
+      required: true
+      schema: {type: string}
+    CSRF:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema: {type: string}
+  schemas:
+    DNSBatch:
+      type: object
+      required: [id, descriptor, state, observations, updatedAt]
+      properties:
+        id: {type: string, pattern: '^[a-f0-9]{64}$'}
+        descriptor:
+          type: object
+          required: [planId, planSha256, targetRevision, zoneId, profileSha256, records]
+          properties:
+            planId: {type: string}
+            planSha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+            targetRevision: {type: integer, minimum: 1}
+            zoneId: {type: string}
+            profileSha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+            records:
+              type: array
+              minItems: 1
+              maxItems: 8
+              items:
+                type: object
+                required: [type, name, content, ttl]
+                properties:
+                  type: {enum: [A, AAAA]}
+                  name: {type: string}
+                  content: {type: string}
+                  ttl: {const: 60}
+                  existingId: {type: string}
+                  existingSha256: {type: string}
+        applyTaskId: {type: string}
+        applyPlanSha256: {type: string}
+        rollbackTaskId: {type: string}
+        rollbackPlanSha256: {type: string}
+        state: {enum: [reserved, running, applied, partial, unknown, rolling_back, rolled_back]}
+        observations:
+          type: array
+          minItems: 1
+          maxItems: 8
+          items:
+            type: object
+            required: [state]
+            properties:
+              state: {enum: [pending, creating, reused, created, deleting, deleted, unknown]}
+              recordId: {type: string}
+              recordSha256: {type: string}
+        updatedAt: {type: string, format: date-time}

@@ -1,0 +1,63 @@
+openapi: 3.1.0
+info:
+  title: Fixed HTTPS signed Agent release acquisition (PROPOSED)
+  version: 0.9.0-r13-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/system/updates/source:
+    get:
+      operationId: getTrustedReleaseSourceR13
+      summary: Read public source configuration metadata as current administrator
+      description: Trusted startup fixes source origin, concrete allowed IPs, TLS roots, release version and Ed25519 trust. This request performs no provider access or artifact download. No tokens, private paths, proxy settings, arbitrary URL or executable is accepted from a caller.
+      responses:
+        '200':
+          description: Public fixed source binding
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [version, sourceSha256, host, acquisitionIsInstallation]
+                properties:
+                  version: {type: string, pattern: '^[0-9]+\.[0-9]+\.[0-9]+$'}
+                  sourceSha256: {type: string, pattern: '^[a-f0-9]{64}$'}
+                  host: {type: string}
+                  acquisitionIsInstallation: {const: false}
+        '400': {description: Invalid query or unexpected body}
+        '403': {description: "Current administrator, HTTPS or runtime gate denied"}
+        '503': {description: No trusted release source deployment}
+  /api/v1/system/updates/acquire:
+    post:
+      operationId: acquireSignedAgentReleaseR13
+      summary: Submit acquisition to the sole Controller task scheduler
+      description: Fetches bounded canonical manifest/signature first and authenticates component/platform/version/sequence, then downloads and verifies actual artifact bytes. Fixed HTTPS/TLS1.3/allowed IPs, no proxy/cookies/credentials/redirect/compression. Every I/O rechecks current task/admin/runtime. Existing and partial inbox versions are never overwritten or automatically replayed. Downloaded artifact is not installed; installation still uses its separate approved plan and worker. Missing source is 503.
+      parameters:
+        - in: header
+          name: X-CSRF-Token
+          required: true
+          schema: {type: string}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [idempotencyKey]
+              properties:
+                idempotencyKey: {type: string, minLength: 1, maxLength: 128, pattern: '^[a-zA-Z0-9_-]+$'}
+      responses:
+        '202':
+          description: Durable Controller task; no installation or health success implied
+          content:
+            application/json:
+              schema: {$ref: '../v09-r12/backups-controller-tasks-candidate.yaml#/components/schemas/Admission'}
+        '400': {description: Invalid bounded request}
+        '403': {description: "Current administrator, HTTPS, Origin/CSRF or runtime gate denied"}
+        '409': {description: Task admission rejected}
+        '503': {description: No trusted source deployment}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}

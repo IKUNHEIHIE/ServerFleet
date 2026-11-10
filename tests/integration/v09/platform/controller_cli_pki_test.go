@@ -37,11 +37,12 @@ import (
 
 func bootstrapOptions(dir, portText, origin string) bootstrap.Options {
 	return bootstrap.Options{
-		Listen:  "127.0.0.1:" + portText,
-		DBPath:  filepath.Join(dir, "controller-cli.db"),
-		Origin:  origin,
-		TLSCert: filepath.Join(dir, "tls-server.pem"),
-		TLSKey:  filepath.Join(dir, "tls-server-key.pem"),
+		AgentPKIMode: "local-development",
+		Listen:       "127.0.0.1:" + portText,
+		DBPath:       filepath.Join(dir, "controller-cli.db"),
+		Origin:       origin,
+		TLSCert:      filepath.Join(dir, "tls-server.pem"),
+		TLSKey:       filepath.Join(dir, "tls-server-key.pem"),
 	}
 }
 
@@ -522,6 +523,7 @@ func runControllerAgentCLILoop(t *testing.T, resident bool) {
 		t.Fatal(err)
 	}
 	controllerCmd := exec.Command(controllerBinary,
+		"-agent-pki-mode", "local-development",
 		"-listen", options.Listen, "-db", options.DBPath, "-origin", origin,
 		"-tls-cert", options.TLSCert, "-tls-key", options.TLSKey,
 	)

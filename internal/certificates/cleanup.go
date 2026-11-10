@@ -125,6 +125,12 @@ func NewCleanupJournal(options CleanupJournalOptions) (*CleanupJournal, error) {
 // RecordFailure persists the cleanup identities returned by ACME for a failed
 // issuance. Repeated identical records are idempotent and remain pending.
 func (j *CleanupJournal) RecordFailure(ctx context.Context, subjectID, requestID, planID, domain string, records []ACMEDNS01Record) ([]CleanupRecord, error) {
+	return j.RecordFailureOutcome(ctx, subjectID, requestID, planID, domain, records, false)
+}
+
+// RecordFailureOutcome retains proven-unapplied cleanup as pending, and an
+// ambiguous provider deletion as UNKNOWN. Unknown effects are never retried.
+func (j *CleanupJournal) RecordFailureOutcome(ctx context.Context, subjectID, requestID, planID, domain string, records []ACMEDNS01Record, unknown bool) ([]CleanupRecord, error) {
 	if j == nil {
 		return nil, ErrCleanupUnavailable
 	}
@@ -138,6 +144,12 @@ func (j *CleanupJournal) RecordFailure(ctx context.Context, subjectID, requestID
 		return nil, err
 	}
 	now := j.now().UTC()
+	var initialState = CleanupPending
+	var nextAttempt any = storage.EncodeTime(now)
+	if unknown {
+		initialState = CleanupUnknown
+		nextAttempt = nil
+	}
 	var saved []CleanupRecord
 	err := j.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		for _, record := range records {
@@ -151,7 +163,7 @@ func (j *CleanupJournal) RecordFailure(ctx context.Context, subjectID, requestID
 				VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, '', ?, ?, ?)
 				ON CONFLICT (fqdn, record_id) DO NOTHING`,
 				subjectID, requestID, planID, domain, record.FQDN, record.RecordID, record.Value,
-				string(CleanupPending), storage.EncodeTime(now), storage.EncodeTime(now), storage.EncodeTime(now))
+				string(initialState), nextAttempt, storage.EncodeTime(now), storage.EncodeTime(now))
 			if err != nil {
 				return err
 			}
@@ -159,6 +171,16 @@ func (j *CleanupJournal) RecordFailure(ctx context.Context, subjectID, requestID
 			stored, err := scanCleanup(row)
 			if err != nil {
 				return err
+			}
+			if stored.SubjectID != subjectID || stored.PlanID != planID || stored.RecordValue != record.Value || stored.Domain != domain {
+				return ErrInvalidInput
+			}
+			if unknown && (stored.State == CleanupPending || stored.State == CleanupUnknown) {
+				if _, err = tx.Exec(txCtx, `UPDATE certificate_dns_cleanup SET state='unknown',last_error_code='provider_outcome_unknown',next_attempt_at=NULL,updated_at=? WHERE id=? AND state IN ('pending','unknown')`, storage.EncodeTime(now), stored.ID); err != nil {
+					return err
+				}
+				stored.State = CleanupUnknown
+				stored.LastErrorCode = "provider_outcome_unknown"
 			}
 			saved = append(saved, stored)
 		}
@@ -428,7 +450,8 @@ func (j *CleanupJournal) execute(ctx context.Context, subjectID, requestID strin
 		return CleanupRecord{}, ErrCleanupBusy
 	}
 	cleanerSubject, cleanerRequest := subjectID, requestID
-	deleteErr := j.cleaner.DeleteChallengeRecord(ctx, cleanerSubject, cleanerRequest, record.FQDN, record.RecordID, record.RecordValue)
+	executionCtx := context.WithValue(ctx, cleanupExecutionKey{}, cleanupExecution{journal: j, attempt: attempt, system: system})
+	deleteErr := j.cleaner.DeleteChallengeRecord(executionCtx, cleanerSubject, cleanerRequest, record.FQDN, record.RecordID, record.RecordValue)
 	// The outcome is persisted even if authorization was revoked during I/O;
 	// the second check only records the revocation instead of hiding it.
 	j.authorizeAfterIO(ctx, subjectID, requestID, system)

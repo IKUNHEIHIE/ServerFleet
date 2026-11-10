@@ -1,0 +1,149 @@
+openapi: 3.1.0
+info:
+  title: Approved public certificate and DNS inspection tasks (PROPOSED, UNTESTED)
+  version: 0.9.0-r17-candidate
+servers:
+  - url: https://server-fleet.example.invalid
+security:
+  - cookieSession: []
+paths:
+  /api/v1/certificates/public-profile:
+    get:
+      operationId: publicCertificateProfileR17
+      summary: Read the trusted startup profile without secret material
+      responses:
+        '200':
+          description: Current administrator only, configured profile
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  profileSha256: {$ref: '#/components/schemas/Digest'}
+                  configured: {const: true}
+                  websitePrivateKeyOnController: {const: false}
+                  dnsCredentialId: {$ref: '#/components/schemas/ID'}
+                  dnsCredentialRevision: {type: integer, minimum: 1}
+        '403': {description: Current administrator required}
+        '503': {description: Trusted ACME deployment unavailable}
+  /api/v1/dns/provider-tasks:
+    post:
+      operationId: submitDNSProviderInspectionR17
+      summary: Submit a Controller-owned DNS check or import of an existing zone
+      description: Standard Web-only administrator task. Provider calls require its running plan and callback-scoped current credential. No remote record or zone mutation. Unknown outcomes never automatically resubmit.
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - type: object
+                  additionalProperties: false
+                  required: [operation, accountId, idempotencyKey]
+                  properties:
+                    operation: {const: test}
+                    accountId: {$ref: '#/components/schemas/ID'}
+                    idempotencyKey: {$ref: '#/components/schemas/ID'}
+                - type: object
+                  additionalProperties: false
+                  required: [operation, accountId, zoneId, providerZoneId, idempotencyKey]
+                  properties:
+                    operation: {const: import-zone}
+                    accountId: {$ref: '#/components/schemas/ID'}
+                    zoneId: {$ref: '#/components/schemas/ID'}
+                    providerZoneId: {$ref: '#/components/schemas/ID'}
+                    idempotencyKey: {$ref: '#/components/schemas/ID'}
+      responses:
+        '202': {$ref: '#/components/responses/Task'}
+        '400': {description: Invalid exact bounded request}
+        '403': {description: Administrator or current owned credential denied}
+        '409': {description: Task admission rejected}
+        '503': {description: Trusted deployment unavailable}
+  /api/v1/certificates/public-tasks:
+    post:
+      operationId: submitPublicCertificateTaskR17
+      summary: Submit a modifying task requiring human approval for an actual node CSR
+      description: Only a completed successful public CSR receipt and current zone within that domain are accepted. Node key remains private. The profile, actor, credential revision, plan and current approval bind every side effect. DNS intents and observed IDs are persisted. CA/provider ambiguity and process death are not replayed.
+      parameters:
+        - $ref: '#/components/parameters/CSRF'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [csrTaskId, zoneId, idempotencyKey]
+              properties:
+                csrTaskId: {$ref: '#/components/schemas/ID'}
+                zoneId: {$ref: '#/components/schemas/ID'}
+                idempotencyKey: {$ref: '#/components/schemas/ID'}
+      responses:
+        '202': {$ref: '#/components/responses/Task'}
+        '400': {description: Invalid exact bounded request}
+        '403': {description: "Current administrator, CSR read or owned credential denied"}
+        '409': {description: CSR/zone unavailable or task admission rejected}
+        '503': {description: Trusted deployment unavailable}
+  /api/v1/certificates/public-tasks/{taskId}:
+    get:
+      operationId: observePublicCertificateOrderR17
+      summary: Read persisted public issuance evidence, never installation success
+      parameters:
+        - in: path
+          name: taskId
+          required: true
+          schema: {$ref: '#/components/schemas/ID'}
+      responses:
+        '200':
+          description: Public evidence. A pending cleanup or unknown intent is not success.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [taskId, taskStatus, orderStatus, installed, pendingCleanupCount]
+                properties:
+                  taskId: {$ref: '#/components/schemas/ID'}
+                  taskStatus: {type: string}
+                  orderStatus: {enum: [running, issued, issued_cleanup_pending, unknown]}
+                  installed: {const: false}
+                  csrTaskId: {$ref: '#/components/schemas/ID'}
+                  nodeId: {$ref: '#/components/schemas/ID'}
+                  domain: {type: string}
+                  keyRef: {type: string}
+                  chainSha256: {type: string}
+                  certificatePemBase64: {type: string, maxLength: 10924, contentEncoding: base64}
+                  notAfter: {type: string, format: date-time}
+                  pendingCleanupCount: {type: integer, minimum: 0, maximum: 16}
+                  errorCode: {type: string}
+                  observedAt: {type: string, format: date-time}
+        '400': {description: Query/body rejected}
+        '403': {description: Administrator/task read denied}
+        '404': {description: Wrong or missing task}
+        '409': {description: Order not observed or proof binding changed}
+components:
+  securitySchemes:
+    cookieSession: {type: apiKey, in: cookie, name: sf_session}
+  parameters:
+    CSRF:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema: {type: string}
+  schemas:
+    ID: {type: string, pattern: '^[a-zA-Z0-9_-]{1,128}$'}
+    Digest: {type: string, pattern: '^[a-f0-9]{64}$'}
+  responses:
+    Task:
+      description: Admitted unified task; no issuance, installation or health result implied
+      content:
+        application/json:
+          schema:
+            type: object
+            required: [taskId, status, planHash, approvalRequired]
+            properties:
+              taskId: {$ref: '#/components/schemas/ID'}
+              status: {type: string}
+              planHash: {$ref: '#/components/schemas/Digest'}
+              approvalRequired: {type: boolean}

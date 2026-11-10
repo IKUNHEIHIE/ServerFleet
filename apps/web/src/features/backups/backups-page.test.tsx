@@ -22,6 +22,9 @@ function plan(fenced: boolean) {
 
 function recoveryRoutes(fenced: boolean, previewChecks: { name: string; passed: boolean; reason?: string }[]): FetchRoutes {
   return {
+    "GET /api/v1/system/recovery-authority":()=>jsonResponse({mode:"standard",continuousRecoveryFence:false,recoveryActivationObserved:false}),
+    "GET /api/v1/backups":()=>jsonResponse({items:[],recipientFingerprint:"public-test-fingerprint",recoveryKeyConfirmed:false,automaticBackupsConfigured:false}),
+    "POST /api/v1/backups/key-challenges":()=>jsonResponse({taskId:"key-check-task",status:"queued",targetType:"controller",controllerId:"ctl-2",planHash:"a".repeat(64),approvalRequired:false},202),
     "POST /api/v1/backups/bk-1/verify": () => jsonResponse(plan(fenced), 202),
     "POST /api/v1/disaster-recovery/preview": () => jsonResponse({ ...plan(fenced), checks: previewChecks }),
     "POST /api/v1/disaster-recovery/jobs": () =>
@@ -43,11 +46,15 @@ async function verifyBackup(calls: { method: string; url: string; init?: Request
 }
 
 describe("backup and disaster recovery", () => {
-  it("states the missing backup list endpoint and never offers a fake backup", async () => {
-    await renderAuthenticated("/backups", recoveryRoutes(false, []));
+  it("shows actual backup list admission and does not claim a backup or recovery from an empty response", async () => {
+    const {calls}=await renderAuthenticated("/backups", recoveryRoutes(false, []));
     expect(await screen.findByRole("heading", { level: 1, name: "备份与恢复" })).toBeVisible();
-    expect(screen.getByText("契约缺口：没有备份记录列表/创建端点")).toBeVisible();
-    expect(screen.queryByRole("button", { name: /立即备份|新建备份|创建备份/ })).not.toBeInTheDocument();
+    expect(await screen.findByText("尚无加密备份或离线密钥确认文件。")).toBeVisible();
+    expect(screen.getByRole("button",{name:"创建加密备份"})).toBeDisabled();
+    expect(screen.getByText(/未观察到灾备激活回执/)).toBeVisible();
+    fireEvent.click(screen.getByRole("button",{name:"生成离线密钥确认文件"}));
+    expect(await screen.findByText(/任务 key-check-task · 状态 queued/)).toBeVisible();
+    expect(calls.some(call=>call.method==="POST"&&call.url==="/api/v1/backups")).toBe(false);
     expect(screen.getByRole("button", { name: "创建恢复作业" })).toBeDisabled();
   });
 

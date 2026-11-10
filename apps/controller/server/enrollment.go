@@ -73,6 +73,30 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		return nil, err
 	}
 	bridge := newAgentLinkBridge(s.NodesRepo, nodesService, tasksRepo, s.now)
+	bridge.commandCurrent = s.authorizeCommandTask
+	bridge.readCSR = func(ctx context.Context, id string) (transport.CertificateCSRReceipt, error) {
+		return transport.ReadCertificateCSR(ctx, s.DB, id)
+	}
+	bridge.recordCSR = func(ctx context.Context, receipt transport.CertificateCSRReceipt) error {
+		return s.DB.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+			if err := transport.RecordCertificateCSRTx(txCtx, tx, receipt); err != nil {
+				return err
+			}
+			return s.Audit.AppendTx(txCtx, tx, audit.Event{SubjectID: receipt.NodeID, Action: transport.CertificateCSRAction, Result: "success", RequestID: "csr-" + receipt.TaskID, TaskID: receipt.TaskID, NodeIDs: []string{receipt.NodeID}, Source: audit.SourceAgent, ReasonCode: "public_csr_observed_no_private_key", At: receipt.ObservedAt})
+		})
+	}
+
+	bridge.readChain = func(ctx context.Context, id string) (transport.CertificateChainReceipt, error) {
+		return transport.ReadCertificateChain(ctx, s.DB, id)
+	}
+	bridge.recordChain = func(ctx context.Context, receipt transport.CertificateChainReceipt) error {
+		return s.DB.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+			if err := transport.RecordCertificateChainTx(txCtx, tx, receipt); err != nil {
+				return err
+			}
+			return s.Audit.AppendTx(txCtx, tx, audit.Event{SubjectID: receipt.NodeID, Action: transport.CertificateInstallAction, Result: "success", RequestID: "chain-" + receipt.TaskID, TaskID: receipt.TaskID, NodeIDs: []string{receipt.NodeID}, Source: audit.SourceAgent, ReasonCode: "node_public_chain_installed_observed", At: receipt.ObservedAt})
+		})
+	}
 	semantic, minor := agentValidationLimits(), uint32(0)
 	if cfg.AgentFileGate != nil {
 		semantic.AllowFileFrames = true
