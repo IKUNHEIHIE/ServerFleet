@@ -1,5 +1,11 @@
 # 任务登记板
 
+## 当前：合并开发代码（2026-11-10）
+
+用户明确“开始合并”。V09-CLOUD-MERGE-01 / chatgpt-merge-20261110，单会话总控，允许当前任务分支、PR基线调整、既有实现及检查阻断的必要修复、检查记录与按精确SHA合并main；不直推/强推main、不自我APPROVE，不扩展生产操作。#17精确ca309ea的CI42651887446两job成功，已合入main c88dca45；#18 d4f54ba的CI42788427970因回滚测试重启后立即取消与健康末次核验竞态失败。保留生产UNKNOWN，修正该测试对实际退出/持久锁的核对。#18/#19已转main基线，最新组合9df049e包含全部前置代码；待同head完整检查合格后接收，旧失败不抹去。
+
+本地固定Go1.27.3、实际UID1000，`go test -race ./internal/updates -run '^TestResidentSupervisorUnhealthyRollbackAndPersistentFloor$' -count=5` PASS（8.670s），gofmt/diff检查通过。仅修改该取消测试与本登记，不改生产安全门/依赖/接口/迁移/CI；完整组合检查由最终head的原生CI完成，结果在PR评论按精确SHA记录，避免为记录结果重触发检查。
+
 ## 当前：AI运维完整Agent循环（2026-11-10 R28）
 
 用户明确要求完成AI运维完整Agent执行循环。任务V09-CLOUD-AI-LOOP-01 / chatgpt-ai-loop-20261110，从d4f54ba恢复独立ServerFleet-ai / feature/cloud-ai-loop-20261110，单会话主控，不启动其他Agent。允许internal/ai、Controller AI/命令/统一任务授权接缝、正式Web AI及契约/产品/检查记录；复用现有Go/BYOK/统一任务、审批和审计，不引入未准入Runtime、AI直连Agent或Shell，不改旧SQL/生成/原ADR。模型计划、审批等待、真实任务结果、多轮继续、取消/期限/步数和重启UNKNOWN均需实际代码。用户负责联调/bug验证，本轮集中编译/静态后交可审分支，不逐处重复测试。
