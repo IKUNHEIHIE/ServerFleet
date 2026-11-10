@@ -1,5 +1,7 @@
 # 五项核心功能：部署接线与验证边界
 
+2026-11-10 R25补充：parent在启动child前冻结已有请求，readiness期间新请求正常处理；遗留mailbox/update-active.json与slot update-lock同样阻止重启，不自行删除。Controller停机交接沿用统一任务的独立审批/版本/计划和默认30分钟期限；普通命令只用同一次已校验profile快照。细则见 `../contracts/revisions/v09-r25-core-lifecycle.md`，启动字段和Root权限保持。
+
 2026-11-09；V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01。本页说明集中编码分支的真实入口，验收记录另行补入。**未运行验证不能当可部署证明；未操作生产、VPS 或真实外部账号。** 固定 Go1.27.3、Node24.22.1、npm11；普通 Linux UID，私有目录0700/文件0600，无符号链接/硬链接，不从 Windows 搬运行材料。实际签名和部署由操作员预置，开发命令不生成生产签名。
 
 ## 受控普通命令 / Root

@@ -448,13 +448,10 @@ func (s *Service) checkApproval(ctx context.Context, task Task, scoped ...[]stri
 	if err != nil {
 		return ErrApprovalInvalid
 	}
-	if !approval.Approved() || approval.PlanHash != task.PlanHash {
-		return ErrApprovalInvalid
-	}
 	if approval.ApproverID == task.SubmitterID {
 		return ErrSelfApproval
 	}
-	if s.approvalTTL > 0 && s.now().UTC().After(approval.DecidedAt.Add(s.approvalTTL)) {
+	if !approval.CurrentFor(task, s.now().UTC(), s.approvalTTL) {
 		return ErrApprovalInvalid
 	}
 	ids := taskTargetIDs(task)

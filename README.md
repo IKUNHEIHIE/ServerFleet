@@ -6,6 +6,8 @@ ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Cont
 
 ## 当前集中编码包（未验收）
 
+2026-11-10 R25已集中修复命令策略快照、监督启动窗口、未知mailbox与停机审批期限，并补实际UID1000的跨进程证据。[本轮检查及限制](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CORE-ACCEPTANCE-20261110.md)保留原完整检查失败和受影响复验；缺nginx的组合为环境BLOCKED，最终CI及真实Root/完整产品/双机验收尚未关闭。
+
 2026-11-09 正在 `feature/cloud-v09-code-completion-20261109` 连续补齐代码，起点为已接收 #16/main `9738648`。新增发布、PKI/恢复/备份、可信发行获取、节点独立 CSR/证书、公网签发、统一 DNS 执行/补偿，以及受控命令、节点续传、Controller/Agent 更新和持续恢复隔离等实现已写入。本轮已进行集中检查并定向修复发现的问题，Web 422项、契约、安全扫描及真实双架构候选构建通过；普通用户/真实提权与完整灾备等专项仍有环境阻塞，**完整验收未通过**。预计迁移39项是分支登记，未签名候选不代表可发布。详见[集中检查记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CORE-ACCEPTANCE.md)，不用下方历史CI证明本分支。实际剩余项见[编码进度](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CODE-COMPLETION.md)与[正式界面变化](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/PRODUCT-DELTA.md)。G2、B03—B06 与发布准入继续开放。
 
 2026-11-10在独立 `feature/cloud-public-renewals-20261110` 从原分支最新 `ca309ea` 继续，保留R20—R23及原验收记录；R24新增公开证书续签审批策略，追加第40项迁移，此增量UNTESTED，旧CI不覆盖新代码。

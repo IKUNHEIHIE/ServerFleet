@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
 )
 
@@ -54,7 +55,18 @@ func TestRootCommandAncestorsRequireCanonicalAbsolutePath(t *testing.T) {
 			t.Fatalf("root command accepted noncanonical path %q", path)
 		}
 	}
-	if !rootCommandAncestors("/") {
-		t.Fatal("root-owned immutable filesystem root rejected")
+	info, err := os.Lstat("/")
+	if err != nil {
+		t.Fatal(err)
+	}
+	stat, ok := info.Sys().(*syscall.Stat_t)
+	if !ok {
+		t.Fatal("filesystem root has no Linux ownership metadata")
+	}
+	// User namespaces can expose / as owned by a non-root UID. That root must
+	// be rejected, rather than assuming the host's UID 0 is mapped here.
+	trustedRoot := stat.Uid == 0 && info.Mode().Perm()&0022 == 0
+	if rootCommandAncestors("/") != trustedRoot {
+		t.Fatal("filesystem root acceptance did not follow its actual ownership")
 	}
 }

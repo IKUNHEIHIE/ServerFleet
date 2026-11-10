@@ -80,7 +80,7 @@ func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.Reside
 			return updates.ErrApplyUnknown
 		}
 		approval, e := repo.Approval(ctx, db, t.ID, t.Revision)
-		if e != nil || !approval.Approved() || approval.PlanHash != t.PlanHash || identity.AuthorizeAdministrator(ctx, t.SubmitterID) != nil || identity.AuthorizeAdministrator(ctx, approval.ApproverID) != nil {
+		if e != nil || !approval.CurrentFor(t, time.Now().UTC(), tasks.DefaultApprovalTTL) || identity.AuthorizeAdministrator(ctx, t.SubmitterID) != nil || identity.AuthorizeAdministrator(ctx, approval.ApproverID) != nil {
 			return updates.ErrApplyUnknown
 		}
 		p, e := transport.ParseResidentUpdateParameters([]byte(t.Params))
@@ -88,7 +88,7 @@ func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.Reside
 			return updates.ErrApplyUnknown
 		}
 		if phase == "admit" {
-			if t.Status != tasks.StatusRunning {
+			if t.Status != tasks.StatusRunning || t.Targets[0].State != tasks.TargetDispatched {
 				return updates.ErrApplyUnknown
 			}
 			admitted[i.ExecutionID] = i

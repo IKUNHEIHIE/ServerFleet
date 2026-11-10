@@ -37,7 +37,7 @@ paths:
                         automaticInstallation: {const: false}
         '400': {description: Query or body rejected}
         '403': {description: TLS or administrator authorization denied}
-        '503': {description: Deployment, policy or task state unavailable}
+        '503': {description: 'Deployment, policy or task state unavailable'}
     post:
       operationId: configurePublicRenewalPolicyR24
       summary: Create, disable, configure or adopt a successfully installed successor
@@ -70,8 +70,8 @@ paths:
             application/json:
               schema: {$ref: '#/components/schemas/Policy'}
         '400': {description: Invalid strict JSON or input bounds}
-        '403': {description: Administrator, ownership or CSRF denied}
-        '409': {description: Recovery hold, stale revision, unresolved existing cycle, base proof mismatch, duplicate slot or policy write conflict}
+        '403': {description: 'Administrator, ownership or CSRF denied'}
+        '409': {description: 'Recovery hold, stale revision, unresolved existing cycle, base proof mismatch, duplicate slot or policy write conflict'}
         '503': {description: Signing deployment or current task state unavailable}
 components:
   securitySchemes:

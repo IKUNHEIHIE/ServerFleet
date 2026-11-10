@@ -107,3 +107,5 @@ Typed Agent apply is explicitly enabled by node-owned mailbox configuration and 
 # 2026-11-10 R24 增量登记
 
 公开证书续签策略、system 人工审批签发任务和恢复失效候选见 `revisions/v09-r24-public-renewals.md` 与 `api/openapi/revisions/v09-r24/public-renewals-candidate.yaml`。追加 cx/0020，预计40迁移；普通Web R17三字段路径不变。正式UI/功能文档同步；全部UNTESTED，集中整包验收后再评审，不冻结G2。
+
+R25 核心安全收口：既有R20命令与R22更新/监督接口字段保持，单次已校验profile快照、启动窗口新请求处理、未决mailbox重启拒绝与统一审批时效见[差异](revisions/v09-r25-core-lifecycle.md)。无新增权限/迁移/生成；实际跨进程验证与完整产品边界按本轮记录，不把helper就绪协议当整套产品/真实Root/物理双机验收。

@@ -33,7 +33,9 @@ it("remounts after an interrupted upload and resumes from the server offset, pre
  });
  await waitFor(() => expect(document.querySelector('input[type="file"]')).not.toBeDisabled());
  fireEvent.change(document.querySelector('input[type="file"]')!,{target:{files:[new File([bytes],"resume.bin")]}});
- await screen.findByText(/字节与任务状态未确认/);
+ // Hashing and sending the multi-chunk file precedes this error state. Keep
+ // exact request/offset assertions while allowing bounded shared-worker delay.
+ await screen.findByText(/字节与任务状态未确认/, {}, {timeout:5000});
  expect(first.calls.filter(c=>c.method==="PUT")).toHaveLength(2);
  const creation = first.calls.find(c=>c.method==="POST"&&c.url.endsWith("/uploads"));
  expect(JSON.parse(String(creation?.init?.body)).conflictPolicy).toBe("overwrite");
@@ -46,7 +48,7 @@ it("remounts after an interrupted upload and resumes from the server offset, pre
   "POST /api/v1/nodes/n-1/files/uploads/up-resume/complete": () => jsonResponse({uploadId:"up-resume",status:"dispatching",taskId:"task-resume"},202),
  });
  fireEvent.change(await reselection(),{target:{files:[new File([bytes],"resume.bin")]}});
- await screen.findByText(/已受理进入统一任务队列（任务 task-resume），尚未完成/);
+ await screen.findByText(/已受理进入统一任务队列（任务 task-resume），尚未完成/, {}, {timeout:5000});
  expect(next.calls.filter(c=>c.method==="PUT").map(c=>new URL(c.url,"http://localhost").searchParams.get("offset"))).toEqual([String(UPLOAD_CHUNK_BYTES),String(2*UPLOAD_CHUNK_BYTES)]);
  expect(next.calls.filter(c=>c.method==="POST"&&c.url.endsWith("/complete"))).toHaveLength(1);
  expect(next.calls.some(c=>c.method==="POST"&&c.url.endsWith("/uploads"))).toBe(false);
