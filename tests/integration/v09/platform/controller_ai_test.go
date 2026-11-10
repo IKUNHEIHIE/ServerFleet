@@ -14,6 +14,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 
 	"serverfleet.local/serverfleet/apps/controller/server"
@@ -174,7 +175,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 		t.Fatalf("unexpected security policy: %s", data)
 	}
 
-	// 2. Grant the standard command action on the node, then require approval.
+	// 2. Fixed self-check takes no arbitrary command; a valid call still needs approval.
 	status, data = doReq(admin, "POST", "/api/v1/ai/sessions/"+session.ID+"/grants", map[string]any{
 		"resourceType": "node", "resourceId": nodeID, "allowedActions": []string{"tasks.command"},
 	}, csrf)
@@ -189,10 +190,17 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 	if session2.ScopeRevision != 2 || len(session2.AllowedNodeIDs) != 1 || session2.AllowedNodeIDs[0] != nodeID {
 		t.Fatalf("unexpected granted session: %s", data)
 	}
-
 	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
 		"sessionId": session.ID, "scopeRevision": session2.ScopeRevision, "toolName": "tasks.command",
 		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{"command": "uptime"},
+	}, csrf)
+	if status != http.StatusForbidden || !bytes.Contains(data, []byte("NOT_AUTHORIZED")) {
+		t.Fatalf("arbitrary self-check command accepted = %d: %s", status, data)
+	}
+
+	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
+		"sessionId": session.ID, "scopeRevision": session2.ScopeRevision, "toolName": "tasks.command",
+		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{},
 	}, csrf)
 	if status != http.StatusForbidden {
 		t.Fatalf("execute without approval = %d: %s", status, data)
@@ -202,7 +210,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 	}
 
 	status, data = doReq(admin, "POST", "/api/v1/ai/sessions/"+session.ID+"/approvals", map[string]any{
-		"toolName": "tasks.command", "arguments": map[string]string{"command": "uptime"},
+		"toolName": "tasks.command", "arguments": map[string]string{},
 		"targetNodeIds": []string{nodeID}, "scopeRevision": session2.ScopeRevision,
 	}, csrf)
 	if status != http.StatusCreated {
@@ -236,7 +244,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 
 	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
 		"sessionId": session.ID, "scopeRevision": session2.ScopeRevision, "toolName": "tasks.command",
-		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{"command": "uptime"},
+		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{},
 		"approvalId": approval.ID,
 	}, csrf)
 	if status != http.StatusAccepted {
@@ -254,7 +262,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 	// One-time approval: replaying the same call must fail.
 	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
 		"sessionId": session.ID, "scopeRevision": session2.ScopeRevision, "toolName": "tasks.command",
-		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{"command": "uptime"},
+		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{},
 		"approvalId": approval.ID,
 	}, csrf)
 	if status != http.StatusConflict {
@@ -284,7 +292,8 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 		t.Fatalf("unexpected full access policy: %s", data)
 	}
 
-	// 4. Root shell: full access still requires a fresh human admin approval.
+	// 4. An installed Root profile still requires a fresh human admin approval.
+	rootParameters := map[string]string{"profileId": "approved-status", "policySha256": strings.Repeat("a", 64), "arguments": "[]", "timeoutSeconds": "10"}
 	status, data = doReq(admin, "POST", "/api/v1/ai/sessions/"+session.ID+"/grants", map[string]any{
 		"resourceType": "node", "resourceId": nodeID, "allowedActions": []string{"host.root"},
 	}, csrf)
@@ -295,17 +304,27 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 		ScopeRevision uint64 `json:"scopeRevision"`
 	}
 	decode(t, data, &rootSession)
-
 	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
 		"sessionId": session.ID, "scopeRevision": rootSession.ScopeRevision, "toolName": "host.root",
 		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{"command": "systemctl restart fleet-agent"},
 	}, csrf)
+	if status != http.StatusForbidden || !bytes.Contains(data, []byte("NOT_AUTHORIZED")) {
+		t.Fatalf("arbitrary Root shell accepted = %d: %s", status, data)
+	}
+
+	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
+		"sessionId": session.ID, "scopeRevision": rootSession.ScopeRevision, "toolName": "host.root",
+		"targetNodeIds": []string{nodeID}, "arguments": rootParameters,
+	}, csrf)
 	if status != http.StatusForbidden {
 		t.Fatalf("root execute under full access without approval = %d: %s", status, data)
 	}
+	if !bytes.Contains(data, []byte("APPROVAL_REQUIRED")) {
+		t.Fatalf("Root profile bypassed human approval gate: %s", data)
+	}
 
 	status, data = doReq(admin, "POST", "/api/v1/ai/sessions/"+session.ID+"/approvals", map[string]any{
-		"toolName": "host.root", "arguments": map[string]string{"command": "systemctl restart fleet-agent"},
+		"toolName": "host.root", "arguments": rootParameters,
 		"targetNodeIds": []string{nodeID}, "scopeRevision": rootSession.ScopeRevision,
 	}, csrf)
 	if status != http.StatusCreated {
@@ -348,7 +367,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 	}
 	status, data = doReq(admin, "POST", "/api/v1/ai/tools/execute", map[string]any{
 		"sessionId": session.ID, "scopeRevision": rootSession.ScopeRevision, "toolName": "host.root",
-		"targetNodeIds": []string{nodeID}, "arguments": map[string]string{"command": "systemctl restart fleet-agent"},
+		"targetNodeIds": []string{nodeID}, "arguments": rootParameters,
 		"approvalId": rootApproval.ID,
 	}, csrf)
 	if status != http.StatusAccepted {

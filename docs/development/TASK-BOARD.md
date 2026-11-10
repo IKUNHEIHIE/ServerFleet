@@ -6,6 +6,10 @@
 
 本地固定Go1.27.3、实际UID1000，`go test -race ./internal/updates -run '^TestResidentSupervisorUnhealthyRollbackAndPersistentFloor$' -count=5` PASS（8.670s），gofmt/diff检查通过。仅修改该取消测试与本登记，不改生产安全门/依赖/接口/迁移/CI；完整组合检查由最终head的原生CI完成，结果在PR评论按精确SHA记录，避免为记录结果重触发检查。
 
+9f630d1的完整CI42828605746：dependencies PASS；foundation因旧Wave3 AI管理集成仍向固定自检/受控Root配置传入自由command字符串而FAIL（NOT_AUTHORIZED符合R28参数规则）；Go其余用例和Web422项通过。按R28更新该用例为空参数自检/完整受控Root配置，新增自由command拒绝及有效Root配置仍要求APPROVAL_REQUIRED断言，保留一次性审批、非owner拒绝和独立任务审批检查；不放宽生产实现或删skip旧断言。后续精确head重跑完整CI，不将旧head结果标成通过。
+
+上述Wave3用例本地`go test -race ./tests/integration/v09/platform -run '^TestWave3AIManagementScopeApprovalsAndRootShellGate$' -count=1` PASS（6.817s），仅更新测试与登记；完整组合等待最新head的原生CI。真实模型/节点/Root与产品联调仍由用户进行。
+
 ## 当前：AI运维完整Agent循环（2026-11-10 R28）
 
 用户明确要求完成AI运维完整Agent执行循环。任务V09-CLOUD-AI-LOOP-01 / chatgpt-ai-loop-20261110，从d4f54ba恢复独立ServerFleet-ai / feature/cloud-ai-loop-20261110，单会话主控，不启动其他Agent。允许internal/ai、Controller AI/命令/统一任务授权接缝、正式Web AI及契约/产品/检查记录；复用现有Go/BYOK/统一任务、审批和审计，不引入未准入Runtime、AI直连Agent或Shell，不改旧SQL/生成/原ADR。模型计划、审批等待、真实任务结果、多轮继续、取消/期限/步数和重启UNKNOWN均需实际代码。用户负责联调/bug验证，本轮集中编译/静态后交可审分支，不逐处重复测试。
