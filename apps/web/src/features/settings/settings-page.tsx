@@ -54,6 +54,7 @@ function CredentialEditor({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CredentialMetadata["kind"]>("cloudflare_token");
   const [secret, setSecret] = useState("");
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const [usageScope, setUsageScope] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -62,7 +63,7 @@ function CredentialEditor({
       const response = await credentialsApi.rotate(credential.id, body);
       return response.data;
     }
-    const response = await credentialsApi.create(body);
+    const response = await credentialsApi.create(body, requestKey);
     return response.data;
   });
 
@@ -71,6 +72,7 @@ function CredentialEditor({
     setName(credential?.name ?? "");
     setKind(credential?.kind ?? "cloudflare_token");
     setSecret("");
+    setRequestKey(crypto.randomUUID());
     setUsageScope(credential?.usageScope.join(",") ?? "");
     setExpiresAt(credential?.expiresAt ? credential.expiresAt.slice(0, 16) : "");
     setLocalError(null);

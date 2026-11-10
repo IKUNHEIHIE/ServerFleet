@@ -10,6 +10,8 @@
 
 最终专项`go test -race ./internal/recovery ./internal/tasks ./tests/integration/v09/platform -run TestOffsite|TestIncident|TestR29`三包PASS；新增凭据用途／10分钟租约专项PASS，官方AWS签名向量PASS；staticcheck（显式固定Go PATH）PASS。最终源码继续由远端同head Foundation CI执行完整Go/Web/契约/边界/安全检查，结果在PR评论登记，不以旧检查点绿灯替代新head。
 
+收尾复查发现既有Web凭据创建适配器未发送后端强制的Idempotency-Key，导致新增备份凭据无法通过正式页面保存。此处作为本任务必须修复的凭据装配接缝，允许修改共享endpoints.ts的credentialsApi.create签名及设置页稳定请求编号，补现有设置页断言；不扩展凭据明文读取或未准入轮换端点。
+
 ## 当前：合并开发代码（2026-11-10）
 
 用户明确“开始合并”。V09-CLOUD-MERGE-01 / chatgpt-merge-20261110，单会话总控，允许当前任务分支、PR基线调整、既有实现及检查阻断的必要修复、检查记录与按精确SHA合并main；不直推/强推main、不自我APPROVE，不扩展生产操作。#17精确ca309ea的CI42651887446两job成功，已合入main c88dca45；#18 d4f54ba的CI42788427970因回滚测试重启后立即取消与健康末次核验竞态失败。保留生产UNKNOWN，修正该测试对实际退出/持久锁的核对。#18/#19已转main基线，最新组合9df049e包含全部前置代码；待同head完整检查合格后接收，旧失败不抹去。

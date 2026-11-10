@@ -103,6 +103,7 @@ describe("settings credentials", () => {
       const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/credentials");
       expect(call).toBeDefined();
       expect(JSON.parse(String(call?.init?.body)).secret).toBe("smtp-password-value");
+      expect(new Headers(call?.init?.headers).get("Idempotency-Key")).toMatch(/^[a-zA-Z0-9_.-]{16,128}$/);
     });
     expect(document.body.textContent).not.toContain("smtp-password-value");
 
