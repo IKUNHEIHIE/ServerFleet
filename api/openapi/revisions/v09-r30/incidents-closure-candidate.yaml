@@ -1,0 +1,876 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet evidence-bound human incident closure (additive candidate)
+  version: 0.9.0-r30-candidate
+  description: R30 extends the R29 incident endpoints; original R29 inputs remain archived. This candidate
+    is not G2 freeze or a production acceptance claim.
+servers:
+- url: https://server-fleet.example.invalid
+security:
+- cookieSession: []
+paths:
+  /api/v1/operations/incidents:
+    get:
+      operationId: listOperatorIncidentsR30
+      summary: Filter and page visible incident records
+      description: HTTPS, current human administrator, current runtime authority and current source read permissions
+        are required. Responses are no-store. GET has no body. POST requires current session CSRF, application/json,
+        no query/content-encoding, unique JSON keys, no unknown fields and at most 128 KiB. Default state=active
+        and limit=50 (maximum 100). Stable descending createdAt/id cursor binds caller and filters. Each call
+        scans at most 1000 candidates; an empty visible page can have nextCursor. Do not infer totals. Unknown/repeated/malformed
+        query parameters are rejected.
+      responses:
+        '200':
+          description: Authorized current view.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Incident'
+                    maxItems: 100
+                  nextCursor:
+                    type: string
+                required:
+                - items
+        '400':
+          description: Malformed JSON, query, pagination or unexpected field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current human administrator, source/task authority, evidence-secret filtering or CSRF
+            denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CAS/request/source conflict, unavailable evidence or INCIDENT_CLOSURE_BLOCKED. Read
+            latest detail before retrying; never retry the original execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: state
+        in: query
+        schema:
+          type: string
+          enum:
+          - active
+          - all
+          - open
+          - investigating
+          - review_required
+          - resolved
+          default: active
+      - name: sourceKind
+        in: query
+        schema:
+          type: string
+          enum:
+          - task
+          - ai_run
+      - name: taskId
+        in: query
+        schema:
+          type: string
+          maxLength: 128
+      - name: cursor
+        in: query
+        schema:
+          type: string
+          maxLength: 2048
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 50
+  /api/v1/operations/incidents/sync:
+    post:
+      operationId: syncOperatorIncidentsR30
+      summary: Collect anomalies and recheck closure facts
+      description: HTTPS, current human administrator, current runtime authority and current source read permissions
+        are required. Responses are no-store. GET has no body. POST requires current session CSRF, application/json,
+        no query/content-encoding, unique JSON keys, no unknown fields and at most 128 KiB. Same inert collector
+        runs each minute. observed is the legacy bounded visible collection count (up to 1000), not newly created
+        cases or a global total. Monitor rotates up to 100 review/resolved cases per pass; changed facts reopen
+        investigation and invalidate proposals. No execution or external I/O.
+      responses:
+        '200':
+          description: Authorized current view.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  observed:
+                    type: integer
+                    minimum: 0
+                required:
+                - observed
+        '400':
+          description: Malformed JSON, query, pagination or unexpected field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current human administrator, source/task authority, evidence-secret filtering or CSRF
+            denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CAS/request/source conflict, unavailable evidence or INCIDENT_CLOSURE_BLOCKED. Read
+            latest detail before retrying; never retry the original execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+              required: []
+  /api/v1/operations/incidents/{incidentId}:
+    parameters:
+    - name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    get:
+      operationId: getOperatorIncidentR30
+      summary: Read original observation and current assessment
+      description: HTTPS, current human administrator, current runtime authority and current source read permissions
+        are required. Responses are no-store. GET has no body. POST requires current session CSRF, application/json,
+        no query/content-encoding, unique JSON keys, no unknown fields and at most 128 KiB. Source revision/state
+        progress does not hide a case with the same immutable owner/plan. Current permissions remain mandatory.
+        Private AI messages are never returned. No query.
+      responses:
+        '200':
+          description: Authorized current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '400':
+          description: Malformed JSON, query, pagination or unexpected field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current human administrator, source/task authority, evidence-secret filtering or CSRF
+            denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CAS/request/source conflict, unavailable evidence or INCIDENT_CLOSURE_BLOCKED. Read
+            latest detail before retrying; never retry the original execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/operations/incidents/{incidentId}/actions:
+    parameters:
+    - name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    post:
+      operationId: decideOperatorIncidentR30
+      summary: Record evidence, reconcile, propose or independently review
+      description: HTTPS, current human administrator, current runtime authority and current source read permissions
+        are required. Responses are no-store. GET has no body. POST requires current session CSRF, application/json,
+        no query/content-encoding, unique JSON keys, no unknown fields and at most 128 KiB. open -> claim ->
+        investigating -> record_evidence/link_task/reconcile -> propose -> review_required -> independent approve
+        -> resolved. Pending or unavailable followups block all closure. UNKNOWN/unknown target codes block
+        confirmed outcomes. confirmed_failed may include known failed followups; confirmed_succeeded/no_effect
+        require completed clean followups. Accepted unresolved still needs terminal followups, explicit risk
+        acceptance and fresh containment. Propose and approve both read facts inside the case transaction.
+        New evidence/reconcile invalidates proposal; release/takeover/reopen/restore invalidate the current
+        evidence cycle while preserving the ledger. Journal/request bindings max 200, followups max 20; limits
+        fail closed.
+      responses:
+        '200':
+          description: Authorized current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '400':
+          description: Malformed JSON, query, pagination or unexpected field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current human administrator, source/task authority, evidence-secret filtering or CSRF
+            denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CAS/request/source conflict, unavailable evidence or INCIDENT_CLOSURE_BLOCKED. Read
+            latest detail before retrying; never retry the original execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+  /api/v1/operations/incidents/{incidentId}/evidence:
+    parameters:
+    - name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    get:
+      operationId: listOperatorIncidentEvidenceR30
+      summary: Page immutable evidence across all cycles
+      description: HTTPS, current human administrator, current runtime authority and current source read permissions
+        are required. Responses are no-store. GET has no body. POST requires current session CSRF, application/json,
+        no query/content-encoding, unique JSON keys, no unknown fields and at most 128 KiB. Only optional after
+        is accepted. Forward sequence pagination, 50 per page. nextAfter=0 ends traversal. Notes/references
+        are filtered again on read; task facts require current read permission.
+      responses:
+        '200':
+          description: Authorized current view.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Evidence'
+                    maxItems: 50
+                  nextAfter:
+                    type: integer
+                    minimum: 0
+                required:
+                - items
+                - nextAfter
+        '400':
+          description: Malformed JSON, query, pagination or unexpected field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current human administrator, source/task authority, evidence-secret filtering or CSRF
+            denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CAS/request/source conflict, unavailable evidence or INCIDENT_CLOSURE_BLOCKED. Read
+            latest detail before retrying; never retry the original execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: after
+        in: query
+        schema:
+          type: integer
+          minimum: 0
+          default: 0
+  /api/v1/operations/incidents/{incidentId}/verify-backup:
+    parameters:
+    - name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    post:
+      operationId: verifyOperatorIncidentBackupR30
+      summary: Admit a scoped read-only backup verification task
+      description: 'HTTPS, current human administrator, current runtime authority and current source read permissions
+        are required. Responses are no-store. GET has no body. POST requires current session CSRF, application/json,
+        no query/content-encoding, unique JSON keys, no unknown fields and at most 128 KiB. Assignee investigating
+        a backups.upload incident only. Uses that upload remote record, current configured backup credential/revision
+        and existing unified tasks. Never uploads/deletes/retries the original. Stable requestId binds task
+        idempotency. 202 admits a task; it does not assert verification success. A task admitted before case-link
+        CAS failure is returned with linked=false: save taskId and use link_task after refreshing the case;
+        do not create another task. Inspect the task result and generate a new snapshot before proposing.'
+      responses:
+        '202':
+          description: Authorized current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VerifyAdmission'
+        '400':
+          description: Malformed JSON, query, pagination or unexpected field.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current human administrator, source/task authority, evidence-secret filtering or CSRF
+            denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: CAS/request/source conflict, unavailable evidence or INCIDENT_CLOSURE_BLOCKED. Read
+            latest detail before retrying; never retry the original execution.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: BACKUP_DEPLOYMENT_REQUIRED; backup maintenance has not been configured.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      parameters:
+      - name: X-CSRF-Token
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VerifyInput'
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: __Host-sf_session
+  schemas:
+    Source:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - task
+          - ai_run
+        id:
+          type: string
+        ownerId:
+          type: string
+        revision:
+          type: integer
+        state:
+          type: string
+        taskId:
+          type: string
+        sessionId:
+          type: string
+        action:
+          type: string
+        planDigest:
+          type: string
+        nodeIds:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+          maxLength: 256
+      required:
+      - kind
+      - id
+      - ownerId
+      - revision
+      - state
+      - nodeIds
+    Event:
+      type: object
+      additionalProperties: false
+      properties:
+        sequence:
+          type: integer
+        action:
+          type: string
+        actor:
+          type: string
+        note:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+      - sequence
+      - action
+      - actor
+      - at
+    Proposal:
+      type: object
+      additionalProperties: false
+      properties:
+        outcome:
+          type: string
+        evidence:
+          type: string
+        proposedBy:
+          type: string
+        sourceDigest:
+          type: string
+        at:
+          type: string
+          format: date-time
+        observationDigest:
+          type: string
+        checks:
+          $ref: '#/components/schemas/Checks'
+      required:
+      - outcome
+      - evidence
+      - proposedBy
+      - sourceDigest
+      - at
+      - observationDigest
+      description: New proposals freeze a current observationDigest and Checks. Legacy R29 proposals have an
+        empty observationDigest and no checks; they must be investigated and proposed again before review.
+    Incident:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        revision:
+          type: integer
+        source:
+          $ref: '#/components/schemas/Source'
+        sourceDigest:
+          type: string
+        state:
+          type: string
+          enum:
+          - open
+          - investigating
+          - review_required
+          - resolved
+        assigneeId:
+          type: string
+        resolvedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        followupTaskIds:
+          type: array
+          items:
+            type: string
+          maxItems: 20
+        proposal:
+          $ref: '#/components/schemas/Proposal'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+          maxItems: 200
+        restoreCount:
+          type: integer
+          minimum: 1
+        lastRestoredAt:
+          type: string
+          format: date-time
+        cycle:
+          type: integer
+          minimum: 0
+        observationDigest:
+          type: string
+        resolvedAt:
+          type: string
+          format: date-time
+        assessment:
+          $ref: '#/components/schemas/Assessment'
+      required:
+      - id
+      - revision
+      - source
+      - sourceDigest
+      - state
+      - createdAt
+      - updatedAt
+      - followupTaskIds
+      - events
+      - cycle
+      description: source and sourceDigest are the original immutable observation; assessment.current carries
+        live facts. Listing omits proposal and returns empty events; detail and evidence ledger carry review
+        material. Old duplicates remain historical; new observation deduplicates by kind and execution ID,
+        not source revision.
+    Decision:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRevision:
+          type: integer
+          minimum: 1
+        requestId:
+          type: string
+          maxLength: 128
+        action:
+          type: string
+          enum:
+          - claim
+          - release
+          - take_over
+          - note
+          - propose
+          - approve
+          - reject
+          - reopen
+          - link_task
+          - record_evidence
+          - reconcile
+        note:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        outcome:
+          type: string
+          enum:
+          - confirmed_succeeded
+          - confirmed_failed
+          - confirmed_no_effect
+          - accepted_unresolved
+        followupTaskId:
+          type: string
+        observationDigest:
+          type: string
+          maxLength: 128
+        checks:
+          $ref: '#/components/schemas/Checks'
+        reviewAcknowledged:
+          type: boolean
+        evidenceCategory:
+          type: string
+          enum:
+          - actual_state
+          - execution_log
+          - impact_check
+          - containment
+        evidenceReference:
+          type: string
+          maxLength: 512
+        observedAt:
+          type: string
+          format: date-time
+      required:
+      - expectedRevision
+      - requestId
+      - action
+      - note
+      description: Every action requires note, requestId and expectedRevision. Exact actor/input replay is
+        idempotent. record_evidence additionally requires category, reference and an observedAt no later than
+        now and no older than 24h. reconcile reads server facts and appends an immutable snapshot. propose
+        requires observationDigest and all three checked flags. accepted_unresolved additionally needs unknownAccepted,
+        residualRisk and fresh containment evidence. approve requires reviewAcknowledged=true and the exact
+        proposal observationDigest, by a different currently authorized administrator. Irrelevant action-specific
+        fields are rejected. Linking requires a distinct readable task created after the case, same original
+        resource scope; Controller actions also share resource/action domain and backup upload accepts only
+        verify of that upload record. No action retries or changes original execution.
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+      required:
+      - code
+    Checks:
+      type: object
+      additionalProperties: false
+      properties:
+        actualStateChecked:
+          type: boolean
+        executionLogsChecked:
+          type: boolean
+        impactChecked:
+          type: boolean
+        unknownAccepted:
+          type: boolean
+        residualRisk:
+          type: string
+          maxLength: 2048
+      required:
+      - actualStateChecked
+      - executionLogsChecked
+      - impactChecked
+      - unknownAccepted
+    TaskReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        taskId:
+          type: string
+        revision:
+          type: integer
+          minimum: 0
+        state:
+          type: string
+        action:
+          type: string
+        planDigest:
+          type: string
+        targetType:
+          type: string
+        targetResourceId:
+          type: string
+        targetDigest:
+          type: string
+        targetCount:
+          type: integer
+          minimum: 0
+        results:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        terminal:
+          type: boolean
+      required:
+      - taskId
+      - revision
+      - state
+      - targetCount
+      - results
+      - createdAt
+      - updatedAt
+      - terminal
+      description: Current program-owned task metadata and target-state/result-code counts. No task name, params,
+        message, output or model text. A currently unreadable linked task returns unavailable, terminal=false
+        and empty results. unknown_result_code counts UNKNOWN codes whose target state is not already unknown.
+    Facts:
+      type: object
+      additionalProperties: false
+      properties:
+        source:
+          $ref: '#/components/schemas/Source'
+        sourceTask:
+          $ref: '#/components/schemas/TaskReceipt'
+        followups:
+          type: array
+          items:
+            $ref: '#/components/schemas/TaskReceipt'
+          maxItems: 20
+        manualEvidenceIds:
+          type: array
+          items:
+            type: string
+        evidenceCategories:
+          type: array
+          items:
+            type: string
+        evidenceTimes:
+          type: object
+          additionalProperties:
+            type: string
+            format: date-time
+        cycle:
+          type: integer
+          minimum: 0
+        restoreCount:
+          type: integer
+          minimum: 0
+        digest:
+          type: string
+      required:
+      - source
+      - followups
+      - manualEvidenceIds
+      - evidenceCategories
+      - evidenceTimes
+      - cycle
+      - restoreCount
+      - digest
+    Assessment:
+      type: object
+      additionalProperties: false
+      properties:
+        current:
+          $ref: '#/components/schemas/Facts'
+        sourceChanged:
+          type: boolean
+        factsChanged:
+          type: boolean
+        observationDigest:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        observationFresh:
+          type: boolean
+        needsRecheck:
+          type: boolean
+        blockers:
+          type: array
+          items:
+            type: string
+      required:
+      - current
+      - sourceChanged
+      - factsChanged
+      - observationFresh
+      - needsRecheck
+      - blockers
+      description: Read-time current facts. needsRecheck flags changed facts even before the bounded monitor
+        updates state; sourceChanged compares with immutable original source. Blockers include fresh_reconciliation_required,
+        facts_changed_reconcile_again, evidence_required_<category>, followup_pending_or_unavailable:<taskId>.
+        Manual category TTL is 24h, snapshot TTL 15m. Snapshot expiry alone never reopens a resolved historical
+        attestation.
+    Evidence:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        incidentId:
+          type: string
+        sequence:
+          type: integer
+          minimum: 1
+        kind:
+          type: string
+          enum:
+          - manual
+          - snapshot
+        category:
+          type: string
+          enum:
+          - actual_state
+          - execution_log
+          - impact_check
+          - containment
+        reference:
+          type: string
+          maxLength: 512
+        note:
+          type: string
+          maxLength: 4096
+        actor:
+          type: string
+        observedAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        cycle:
+          type: integer
+          minimum: 0
+        restoreCount:
+          type: integer
+          minimum: 0
+        snapshot:
+          $ref: '#/components/schemas/Facts'
+      required:
+      - id
+      - incidentId
+      - sequence
+      - kind
+      - note
+      - actor
+      - observedAt
+      - createdAt
+      - cycle
+      - restoreCount
+      description: Append-only SHA-256-bound record. Snapshot and entry digests are verified on read. All cycles
+        remain readable subject to current source/task authority; denied task receipts are masked. Reference
+        is an inert identifier, never fetched. No secret URL, URL userinfo, presigned link or private key is
+        accepted.
+    VerifyInput:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRevision:
+          type: integer
+          minimum: 1
+        requestId:
+          type: string
+          pattern: ^[a-zA-Z0-9_-]{1,128}$
+        note:
+          type: string
+          minLength: 1
+          maxLength: 4096
+      required:
+      - expectedRevision
+      - requestId
+      - note
+    VerifyAdmission:
+      type: object
+      additionalProperties: false
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+        linked:
+          type: boolean
+        approvalRequired:
+          type: boolean
+        originalResultPreserved:
+          const: true
+      required:
+      - taskId
+      - status
+      - linked
+      - approvalRequired
+      - originalResultPreserved

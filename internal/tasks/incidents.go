@@ -8,6 +8,7 @@ import (
 	"errors"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 	"unicode/utf8"
 
@@ -48,27 +49,33 @@ type IncidentEvent struct {
 	At       time.Time `json:"at"`
 }
 type IncidentProposal struct {
-	Outcome      string    `json:"outcome"`
-	Evidence     string    `json:"evidence"`
-	ProposedBy   string    `json:"proposedBy"`
-	SourceDigest string    `json:"sourceDigest"`
-	At           time.Time `json:"at"`
+	ObservationDigest string          `json:"observationDigest"`
+	Checks            *IncidentChecks `json:"checks,omitempty"`
+	Outcome           string          `json:"outcome"`
+	Evidence          string          `json:"evidence"`
+	ProposedBy        string          `json:"proposedBy"`
+	SourceDigest      string          `json:"sourceDigest"`
+	At                time.Time       `json:"at"`
 }
 type Incident struct {
-	ID              string            `json:"id"`
-	Revision        uint64            `json:"revision"`
-	Source          IncidentSource    `json:"source"`
-	SourceDigest    string            `json:"sourceDigest"`
-	State           string            `json:"state"`
-	AssigneeID      string            `json:"assigneeId,omitempty"`
-	CreatedAt       time.Time         `json:"createdAt"`
-	UpdatedAt       time.Time         `json:"updatedAt"`
-	Proposal        *IncidentProposal `json:"proposal,omitempty"`
-	ResolvedBy      string            `json:"resolvedBy,omitempty"`
-	FollowupTaskIDs []string          `json:"followupTaskIds"`
-	Events          []IncidentEvent   `json:"events"`
-	RestoreCount    uint64            `json:"restoreCount,omitempty"`
-	LastRestoredAt  *time.Time        `json:"lastRestoredAt,omitempty"`
+	Cycle             uint64              `json:"cycle"`
+	ObservationDigest string              `json:"observationDigest,omitempty"`
+	ResolvedAt        *time.Time          `json:"resolvedAt,omitempty"`
+	Assessment        *IncidentAssessment `json:"assessment,omitempty"`
+	ID                string              `json:"id"`
+	Revision          uint64              `json:"revision"`
+	Source            IncidentSource      `json:"source"`
+	SourceDigest      string              `json:"sourceDigest"`
+	State             string              `json:"state"`
+	AssigneeID        string              `json:"assigneeId,omitempty"`
+	CreatedAt         time.Time           `json:"createdAt"`
+	UpdatedAt         time.Time           `json:"updatedAt"`
+	Proposal          *IncidentProposal   `json:"proposal,omitempty"`
+	ResolvedBy        string              `json:"resolvedBy,omitempty"`
+	FollowupTaskIDs   []string            `json:"followupTaskIds"`
+	Events            []IncidentEvent     `json:"events"`
+	RestoreCount      uint64              `json:"restoreCount,omitempty"`
+	LastRestoredAt    *time.Time          `json:"lastRestoredAt,omitempty"`
 }
 
 // request bindings are persisted separately from the public JSON view.
@@ -77,21 +84,29 @@ type incidentRecord struct {
 	Requests map[string]string
 }
 type IncidentOptions struct {
-	DB             *storage.DB
-	Audit          AuditSink
-	Administrator  func(context.Context, string) error
-	ReadSource     func(context.Context, string, IncidentSource) error
-	ReadFollowup   func(context.Context, string, string, time.Time) error
-	RuntimeCurrent func(context.Context) error
-	Filter         func(string) (string, error)
+	InspectSource    func(context.Context, string, IncidentSource) (IncidentSource, error)
+	InspectTask      func(context.Context, string, string) (IncidentTaskReceipt, error)
+	ValidateFollowup func(context.Context, string, IncidentSource, string) error
+	Now              func() time.Time
+	DB               *storage.DB
+	Audit            AuditSink
+	Administrator    func(context.Context, string) error
+	ReadSource       func(context.Context, string, IncidentSource) error
+	ReadFollowup     func(context.Context, string, string, time.Time) error
+	RuntimeCurrent   func(context.Context) error
+	Filter           func(string) (string, error)
 }
-type IncidentService struct{ o IncidentOptions }
+type IncidentService struct {
+	o           IncidentOptions
+	sweepMu     sync.Mutex
+	sweepCursor string
+}
 
 func NewIncidentService(o IncidentOptions) (*IncidentService, error) {
-	if o.DB == nil || o.Audit == nil || o.Administrator == nil || o.ReadSource == nil || o.ReadFollowup == nil || o.RuntimeCurrent == nil || o.Filter == nil {
+	if o.DB == nil || o.Audit == nil || o.Administrator == nil || o.ReadSource == nil || o.ReadFollowup == nil || o.RuntimeCurrent == nil || o.Filter == nil || o.InspectSource == nil || o.InspectTask == nil || o.ValidateFollowup == nil {
 		return nil, ErrInvalidTask
 	}
-	return &IncidentService{o}, nil
+	return &IncidentService{o: o}, nil
 }
 func incidentDigest(v any) string {
 	b, _ := json.Marshal(v)
@@ -113,17 +128,17 @@ func (s *IncidentService) Observe(ctx context.Context, source IncidentSource) er
 	}
 	digest := incidentDigest(source)
 	id := "inc_" + digest[:40]
-	now := time.Now().UTC()
+	now := s.now()
 	return s.o.DB.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		var existing string
-		e := tx.QueryRow(txCtx, `SELECT id FROM task_incidents WHERE source_key=?`, digest).Scan(&existing)
+		e := tx.QueryRow(txCtx, `SELECT id FROM task_incidents WHERE source_kind=? AND source_id=? LIMIT 1`, source.Kind, source.ID).Scan(&existing)
 		if e == nil {
 			return nil
 		}
 		if !storage.IsNotFound(e) {
 			return e
 		}
-		v := Incident{ID: id, Revision: 1, Source: source, SourceDigest: digest, State: "open", CreatedAt: now, UpdatedAt: now, FollowupTaskIDs: []string{}, Events: []IncidentEvent{{1, "observed", "system", "", now}}}
+		v := Incident{Cycle: 1, ID: id, Revision: 1, Source: source, SourceDigest: digest, State: "open", CreatedAt: now, UpdatedAt: now, FollowupTaskIDs: []string{}, Events: []IncidentEvent{{1, "observed", "system", "", now}}}
 		raw, _ := json.Marshal(incidentRecord{View: v, Requests: map[string]string{}})
 		if _, e = tx.Exec(txCtx, `INSERT INTO task_incidents VALUES(?,?,?,?,?,?,?,?)`, id, digest, 1, raw, storage.EncodeTime(now), source.Kind, source.ID, source.Revision); e != nil {
 			return e
@@ -182,6 +197,22 @@ func (s *IncidentService) Get(ctx context.Context, subject, id string) (Incident
 		if e != nil {
 			return Incident{}, e
 		}
+		if v.Proposal.Checks != nil {
+			checks := *v.Proposal.Checks
+			checks.ResidualRisk, e = s.o.Filter(checks.ResidualRisk)
+			if e != nil {
+				return Incident{}, e
+			}
+			v.Proposal.Checks = &checks
+		}
+	}
+	a, e := s.assessment(ctx, subject, v, s.o.DB)
+	if e != nil {
+		return Incident{}, e
+	}
+	v.Assessment = &a
+	if s.gate(ctx, subject, &v.Source) != nil {
+		return Incident{}, ErrInvalidTask
 	}
 	return v, nil
 }
@@ -220,12 +251,18 @@ func (s *IncidentService) List(ctx context.Context, subject string) ([]Incident,
 }
 
 type IncidentDecision struct {
-	ExpectedRevision uint64 `json:"expectedRevision"`
-	RequestID        string `json:"requestId"`
-	Action           string `json:"action"`
-	Note             string `json:"note"`
-	Outcome          string `json:"outcome,omitempty"`
-	FollowupTaskID   string `json:"followupTaskId,omitempty"`
+	ReviewAcknowledged bool            `json:"reviewAcknowledged,omitempty"`
+	ObservationDigest  string          `json:"observationDigest,omitempty"`
+	Checks             *IncidentChecks `json:"checks,omitempty"`
+	EvidenceCategory   string          `json:"evidenceCategory,omitempty"`
+	EvidenceReference  string          `json:"evidenceReference,omitempty"`
+	ObservedAt         *time.Time      `json:"observedAt,omitempty"`
+	ExpectedRevision   uint64          `json:"expectedRevision"`
+	RequestID          string          `json:"requestId"`
+	Action             string          `json:"action"`
+	Note               string          `json:"note"`
+	Outcome            string          `json:"outcome,omitempty"`
+	FollowupTaskID     string          `json:"followupTaskId,omitempty"`
 }
 
 func (s *IncidentService) Decide(ctx context.Context, subject, id string, in IncidentDecision) (Incident, error) {
@@ -237,6 +274,32 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 		return Incident{}, e
 	}
 	in.Note = note
+	if in.Action != "record_evidence" && (in.EvidenceCategory != "" || in.EvidenceReference != "" || in.ObservedAt != nil) {
+		return Incident{}, ErrInvalidTask
+	}
+	if in.Action != "approve" && in.ReviewAcknowledged {
+		return Incident{}, ErrInvalidTask
+	}
+	if in.Action != "propose" && in.Outcome != "" || in.Action != "link_task" && in.FollowupTaskID != "" {
+		return Incident{}, ErrInvalidTask
+	}
+	if in.Action != "propose" && in.Checks != nil {
+		return Incident{}, ErrInvalidTask
+	}
+	if in.Action != "propose" && in.Action != "approve" && in.ObservationDigest != "" {
+		return Incident{}, ErrInvalidTask
+	}
+	if in.Checks != nil {
+		checks := *in.Checks
+		if len(checks.ResidualRisk) > 2048 || !utf8.ValidString(checks.ResidualRisk) {
+			return Incident{}, ErrInvalidTask
+		}
+		checks.ResidualRisk, e = s.o.Filter(checks.ResidualRisk)
+		if e != nil {
+			return Incident{}, e
+		}
+		in.Checks = &checks
+	}
 	before, e := s.Get(ctx, subject, id)
 	if e != nil {
 		return Incident{}, e
@@ -244,7 +307,7 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 	if e = s.gate(ctx, subject, &before.Source); e != nil {
 		return Incident{}, e
 	}
-	if in.Action == "link_task" && s.o.ReadFollowup(ctx, subject, in.FollowupTaskID, before.CreatedAt) != nil {
+	if in.Action == "link_task" && (s.o.ReadFollowup(ctx, subject, in.FollowupTaskID, before.CreatedAt) != nil || s.o.ValidateFollowup(ctx, subject, before.Source, in.FollowupTaskID) != nil) {
 		return Incident{}, ErrInvalidTask
 	}
 	requestDigest := incidentDigest(struct {
@@ -258,6 +321,12 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			return e
 		}
 		v := r.View
+		if r.Requests == nil {
+			r.Requests = map[string]string{}
+		}
+		if s.gate(txCtx, subject, &v.Source) != nil {
+			return ErrInvalidTask
+		}
 		if old := r.Requests[in.RequestID]; old != "" {
 			if old != requestDigest {
 				return ErrIncidentConflict
@@ -269,6 +338,10 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			return ErrIncidentConflict
 		}
 		switch in.Action {
+		case "record_evidence", "reconcile":
+			if e = s.recordClosureEvidence(txCtx, tx, subject, &v, in); e != nil {
+				return e
+			}
 		case "claim":
 			if v.State != "open" {
 				return ErrIncidentConflict
@@ -281,6 +354,8 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			}
 			v.State = "open"
 			v.AssigneeID = ""
+			v.ObservationDigest = ""
+			v.Cycle++
 		case "take_over":
 			if v.State != "investigating" && v.State != "review_required" {
 				return ErrIncidentConflict
@@ -288,6 +363,8 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			v.State = "investigating"
 			v.AssigneeID = subject
 			v.Proposal = nil
+			v.ObservationDigest = ""
+			v.Cycle++
 		case "note":
 			if v.State == "resolved" {
 				return ErrIncidentConflict
@@ -296,8 +373,11 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			if v.State != "investigating" || v.AssigneeID != subject || !slices.Contains([]string{"confirmed_succeeded", "confirmed_failed", "confirmed_no_effect", "accepted_unresolved"}, in.Outcome) {
 				return ErrIncidentConflict
 			}
+			if e = s.checkClosure(txCtx, subject, v, tx, in.Outcome, in.ObservationDigest, in.Checks); e != nil {
+				return e
+			}
 			v.State = "review_required"
-			v.Proposal = &IncidentProposal{in.Outcome, in.Note, subject, v.SourceDigest, time.Now().UTC()}
+			v.Proposal = &IncidentProposal{Outcome: in.Outcome, Evidence: in.Note, ProposedBy: subject, SourceDigest: v.SourceDigest, At: s.now(), ObservationDigest: in.ObservationDigest, Checks: in.Checks}
 		case "approve":
 			if v.State != "review_required" || v.Proposal == nil || v.Proposal.ProposedBy == subject || v.Proposal.SourceDigest != v.SourceDigest {
 				return ErrIncidentConflict
@@ -305,8 +385,16 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			if s.o.Administrator(txCtx, v.Proposal.ProposedBy) != nil {
 				return ErrIncidentConflict
 			}
+			if !in.ReviewAcknowledged || in.ObservationDigest != v.Proposal.ObservationDigest {
+				return ErrIncidentClosureBlocked
+			}
+			if e = s.checkClosure(txCtx, subject, v, tx, v.Proposal.Outcome, v.Proposal.ObservationDigest, v.Proposal.Checks); e != nil {
+				return e
+			}
 			v.State = "resolved"
 			v.ResolvedBy = subject
+			now := s.now()
+			v.ResolvedAt = &now
 		case "reject":
 			if v.State != "review_required" || v.Proposal == nil || v.Proposal.ProposedBy == subject {
 				return ErrIncidentConflict
@@ -320,17 +408,24 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			v.State = "open"
 			v.ResolvedBy = ""
 			v.AssigneeID = ""
+			v.ResolvedAt = nil
+			v.ObservationDigest = ""
+			v.Cycle++
 			v.Proposal = nil
 		case "link_task":
-			if v.State == "resolved" || !validToken(in.FollowupTaskID, 128) || in.FollowupTaskID == v.Source.TaskID || in.FollowupTaskID == v.Source.ID || len(v.FollowupTaskIDs) >= 20 || slices.Contains(v.FollowupTaskIDs, in.FollowupTaskID) {
+			if v.State != "investigating" || v.AssigneeID != subject || !validToken(in.FollowupTaskID, 128) || in.FollowupTaskID == v.Source.TaskID || in.FollowupTaskID == v.Source.ID || len(v.FollowupTaskIDs) >= 20 || slices.Contains(v.FollowupTaskIDs, in.FollowupTaskID) {
 				return ErrIncidentConflict
 			}
+			if s.o.ReadFollowup(txCtx, subject, in.FollowupTaskID, v.CreatedAt) != nil || s.o.ValidateFollowup(txCtx, subject, v.Source, in.FollowupTaskID) != nil {
+				return ErrInvalidTask
+			}
 			v.FollowupTaskIDs = append(v.FollowupTaskIDs, in.FollowupTaskID)
+			v.ObservationDigest = ""
 		default:
 			return ErrInvalidTask
 		}
 		v.Revision++
-		v.UpdatedAt = time.Now().UTC()
+		v.UpdatedAt = s.now()
 		v.Events = append(v.Events, IncidentEvent{len(v.Events) + 1, in.Action, subject, in.Note, v.UpdatedAt})
 		r.View = v
 		r.Requests[in.RequestID] = requestDigest
@@ -358,11 +453,11 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 	if e = s.gate(ctx, subject, &out.Source); e != nil {
 		return Incident{}, e
 	}
-	return out, nil
+	return s.Get(ctx, subject, id)
 }
 
 func (r *Repo) IncidentSources(ctx context.Context) ([]IncidentSource, error) {
-	rows, e := r.db.Query(ctx, `SELECT t.id FROM tasks t WHERE t.status IN ('unknown','failed','partial_failure','expired') AND NOT EXISTS(SELECT 1 FROM task_incidents i WHERE i.source_kind='task' AND i.source_id=t.id AND i.source_revision=t.revision) ORDER BY t.updated_at DESC,t.id DESC LIMIT 1000`)
+	rows, e := r.db.Query(ctx, `SELECT t.id FROM tasks t WHERE t.status IN ('unknown','failed','partial_failure','expired') AND NOT EXISTS(SELECT 1 FROM task_incidents i WHERE i.source_kind='task' AND i.source_id=t.id ) ORDER BY t.updated_at DESC,t.id DESC LIMIT 1000`)
 	if e != nil {
 		return nil, e
 	}
@@ -426,6 +521,9 @@ func InvalidateRestoredIncidentsTx(ctx context.Context, tx storage.Tx, now time.
 		v.Revision++
 		v.UpdatedAt = now
 		v.FollowupTaskIDs = []string{}
+		v.ResolvedAt = nil
+		v.ObservationDigest = ""
+		v.Cycle++
 		// A full human journal must never make disaster recovery impossible.
 		// Preserve all evidence; the dedicated monotonic restore marker and the
 		// existing reconciliation journal record every invalidation regardless.

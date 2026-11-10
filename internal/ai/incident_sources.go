@@ -30,7 +30,7 @@ func (s *SessionService) OperatorIncidentSources(ctx context.Context) ([]Operato
 					task = v.Steps[len(v.Steps)-1].TaskID
 				}
 				out = append(out, OperatorIncidentSource{r.Scope.SubjectID, session, v.ID, v.State, task, v.StopReason, v.Revision})
-				if len(out) > 1000 {
+				if len(out) > 16000 {
 					return ErrSessionUnavailable
 				}
 			}
@@ -52,4 +52,27 @@ func (s *SessionService) CheckOperatorIncidentSource(ctx context.Context, owner,
 		}
 		return nil
 	})
+}
+
+// Minimal history port: run progression does not make an old case disappear.
+func (s *SessionService) InspectOperatorIncidentSource(ctx context.Context, owner, session, run string) (OperatorIncidentSource, error) {
+	var out OperatorIncidentSource
+	e := s.store.View(ctx, func(raw []byte) error {
+		st, e := decodeSessions(raw)
+		if e != nil {
+			return e
+		}
+		r := st.Sessions[session]
+		a, ok := r.AgentRuns[run]
+		if !ok || r.Scope.SubjectID != owner {
+			return ErrToolDenied
+		}
+		task := ""
+		if len(a.View.Steps) > 0 {
+			task = a.View.Steps[len(a.View.Steps)-1].TaskID
+		}
+		out = OperatorIncidentSource{owner, session, run, a.View.State, task, a.View.StopReason, a.View.Revision}
+		return nil
+	})
+	return out, e
 }

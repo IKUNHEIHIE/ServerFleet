@@ -7,6 +7,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
+	"slices"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,21 +21,10 @@ import (
 
 func (s *Server) setupOperatorIncidents() error {
 	service, e := tasks.NewIncidentService(tasks.IncidentOptions{DB: s.DB, Audit: s.Audit, Administrator: s.Identity.AuthorizeAdministrator, RuntimeCurrent: s.runtimeGate, Filter: operatorEvidence,
+		InspectSource: s.inspectIncidentSource, InspectTask: s.inspectIncidentTask, ValidateFollowup: s.incidentFollowupRelated,
 		ReadSource: func(ctx context.Context, subject string, source tasks.IncidentSource) error {
-			if source.Kind == "task" {
-				t, e := s.Tasks.Get(ctx, source.ID)
-				if e != nil || t.SubmitterID != source.OwnerID || t.Revision != source.Revision || t.PlanHash != source.PlanDigest {
-					return auth.ErrDenied
-				}
-				return (&composedTaskReadGate{identity: s.Identity, tasks: s.TasksRepo}).AuthorizeTaskRead(ctx, subject, t.ID)
-			}
-			if source.Kind != "ai_run" || s.AI == nil || s.AI.CheckOperatorIncidentSource(ctx, source.OwnerID, source.SessionID, source.ID, source.State, source.Revision) != nil {
-				return auth.ErrDenied
-			}
-			if source.TaskID != "" {
-				return (&composedTaskReadGate{identity: s.Identity, tasks: s.TasksRepo}).AuthorizeTaskRead(ctx, subject, source.TaskID)
-			}
-			return nil
+			_, e := s.inspectIncidentSource(ctx, subject, source)
+			return e
 		}, ReadFollowup: func(ctx context.Context, subject, id string, after time.Time) error {
 			t, e := s.Tasks.Get(ctx, id)
 			if e != nil || t.CreatedAt.Before(after) {
@@ -46,9 +39,28 @@ func (s *Server) setupOperatorIncidents() error {
 	s.Incidents = service
 	return nil
 }
+
+var operatorEvidenceURLs = regexp.MustCompile(`(?i)https?://[^\s<>]+`)
+
 func operatorEvidence(text string) (string, error) {
 	if strings.Contains(text, "-----BEGIN") && strings.Contains(text, "PRIVATE KEY-----") {
 		return "", auth.ErrDenied
+	}
+	for _, rawURL := range operatorEvidenceURLs.FindAllString(text, -1) {
+		u, e := url.Parse(rawURL)
+		if e != nil || u.User != nil {
+			return "", auth.ErrDenied
+		}
+		q, e := url.ParseQuery(u.RawQuery)
+		if e != nil {
+			return "", auth.ErrDenied
+		}
+		for key := range q {
+			key = strings.ToLower(key)
+			if slices.Contains([]string{"sig", "signature", "token", "access_token", "secret", "password", "key", "api_key", "x-amz-signature", "x-amz-credential", "x-amz-security-token"}, key) {
+				return "", auth.ErrDenied
+			}
+		}
 	}
 	text = redactAISecrets(text)
 	if strings.Contains(strings.ToLower(text), "x-amz-signature=") {
@@ -86,7 +98,7 @@ func (s *Server) syncOperatorIncidents(ctx context.Context) error {
 			}
 		}
 	}
-	return nil
+	return s.Incidents.RecheckClosures(ctx)
 }
 func (s *Server) runOperatorIncidentMonitor(ctx context.Context) {
 	_ = s.syncOperatorIncidents(ctx)
@@ -136,31 +148,59 @@ func (s *Server) operatorPrincipal(w http.ResponseWriter, r *http.Request) (stri
 }
 func writeOperationsError(w http.ResponseWriter, e error) {
 	status, code := 409, "OPERATION_REJECTED"
+	if errors.Is(e, tasks.ErrIncidentClosureBlocked) {
+		code = "INCIDENT_CLOSURE_BLOCKED"
+	}
 	if errors.Is(e, auth.ErrDenied) {
 		status, code = 403, "NOT_AUTHORIZED"
 	}
 	releaseSourceJSON(w, status, map[string]string{"code": code})
 }
 func (s *Server) registerOperatorIncidentRoutes() {
+	s.registerIncidentClosureRoutes()
 	s.mux.HandleFunc("GET /api/v1/operations/incidents", func(w http.ResponseWriter, r *http.Request) {
 		subject, _, ok := s.operatorPrincipal(w, r)
 		if !ok {
 			return
 		}
-		if r.URL.RawQuery != "" || r.ContentLength != 0 {
+		if r.ContentLength != 0 {
 			releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
 			return
 		}
-		items, e := s.Incidents.List(r.Context(), subject)
-		if e != nil {
-			writeOperationsError(w, e)
+		q, parseErr := url.ParseQuery(r.URL.RawQuery)
+		if parseErr != nil {
+			releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
 			return
 		}
-		for i := range items {
-			items[i].Events = []tasks.IncidentEvent{}
-			items[i].Proposal = nil
+		for key, values := range q {
+			if len(values) != 1 || !slices.Contains([]string{"state", "sourceKind", "taskId", "cursor", "limit"}, key) {
+				releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
+				return
+			}
 		}
-		releaseSourceJSON(w, 200, map[string]any{"items": items})
+		limit := 0
+		if q.Has("limit") {
+			var e error
+			limit, e = strconv.Atoi(q.Get("limit"))
+			if e != nil || limit < 1 {
+				releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
+				return
+			}
+		}
+		page, e := s.Incidents.ListPage(r.Context(), subject, tasks.IncidentListOptions{State: q.Get("state"), Kind: q.Get("sourceKind"), TaskID: q.Get("taskId"), Cursor: q.Get("cursor"), Limit: limit})
+		if e != nil {
+			if errors.Is(e, tasks.ErrInvalidTask) {
+				releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
+			} else {
+				writeOperationsError(w, e)
+			}
+			return
+		}
+		for i := range page.Items {
+			page.Items[i].Events = []tasks.IncidentEvent{}
+			page.Items[i].Proposal = nil
+		}
+		releaseSourceJSON(w, 200, page)
 	})
 	s.mux.HandleFunc("POST /api/v1/operations/incidents/sync", func(w http.ResponseWriter, r *http.Request) {
 		subject, _, ok := s.operatorPrincipal(w, r)

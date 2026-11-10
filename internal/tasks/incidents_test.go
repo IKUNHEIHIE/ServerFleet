@@ -13,7 +13,7 @@ import (
 
 func TestIncidentIndependentDispositionPreservesUnknownAndRestore(t *testing.T) {
 	ctx := context.Background()
-	db := testkit.NewDB(t, IncidentMigrations(), audit.Migrations())
+	db := testkit.NewDB(t, IncidentMigrations(), IncidentEvidenceMigrations(), audit.Migrations())
 	validator, e := audit.NewValidator([]string{ActionIncidentManage}, audit.DefaultLimits())
 	if e != nil {
 		t.Fatal(e)
@@ -26,7 +26,14 @@ func TestIncidentIndependentDispositionPreservesUnknownAndRestore(t *testing.T) 
 	originalState := "unknown"
 	visible := true
 	linked := 0
-	service, e := NewIncidentService(IncidentOptions{DB: db, Audit: recorder, Administrator: func(_ context.Context, id string) error {
+	factTime := time.Now().UTC()
+	service, e := NewIncidentService(IncidentOptions{InspectSource: func(_ context.Context, _ string, source IncidentSource) (IncidentSource, error) { return source, nil }, InspectTask: func(_ context.Context, _ string, id string) (IncidentTaskReceipt, error) {
+		state := "unknown"
+		if id == "fresh-task" {
+			state = "completed"
+		}
+		return IncidentTaskReceipt{TaskID: id, State: state, Revision: 1, Terminal: true, CreatedAt: factTime, UpdatedAt: factTime, Results: map[string]int{}}, nil
+	}, ValidateFollowup: func(context.Context, string, IncidentSource, string) error { return nil }, DB: db, Audit: recorder, Administrator: func(_ context.Context, id string) error {
 		if !admins[id] {
 			return ErrInvalidTask
 		}
@@ -59,7 +66,16 @@ func TestIncidentIndependentDispositionPreservesUnknownAndRestore(t *testing.T) 
 	v := items[0]
 	decide := func(actor, action, request, outcome, followup string, wantErr bool) {
 		t.Helper()
-		next, err := service.Decide(ctx, actor, v.ID, IncidentDecision{ExpectedRevision: v.Revision, RequestID: request, Action: action, Note: "Synthetic independent evidence reference", Outcome: outcome, FollowupTaskID: followup})
+		input := IncidentDecision{ExpectedRevision: v.Revision, RequestID: request, Action: action, Note: "Synthetic independent evidence reference", Outcome: outcome, FollowupTaskID: followup}
+		if action == "propose" {
+			input.ObservationDigest = v.ObservationDigest
+			input.Checks = &IncidentChecks{ActualStateChecked: true, ExecutionLogsChecked: true, ImpactChecked: true}
+		}
+		if action == "approve" && v.Proposal != nil {
+			input.ObservationDigest = v.Proposal.ObservationDigest
+			input.ReviewAcknowledged = true
+		}
+		next, err := service.Decide(ctx, actor, v.ID, input)
 		if wantErr {
 			if err == nil {
 				t.Fatal("unsafe action accepted", action)
@@ -74,13 +90,22 @@ func TestIncidentIndependentDispositionPreservesUnknownAndRestore(t *testing.T) 
 	decide("admin-a", "claim", "claim", "", "", false)
 	claimed := v
 	decide("admin-a", "link_task", "link", "", "fresh-task", false)
+	for _, category := range []string{"actual_state", "execution_log", "impact_check"} {
+		now := time.Now().UTC()
+		next, err := service.Decide(ctx, "admin-a", v.ID, IncidentDecision{ExpectedRevision: v.Revision, RequestID: "evidence-" + category, Action: "record_evidence", Note: "Synthetic documented observation", EvidenceCategory: category, EvidenceReference: "synthetic-log-reference", ObservedAt: &now})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v = next
+	}
+	decide("admin-a", "reconcile", "reconcile", "", "", false)
 	decide("admin-a", "propose", "propose", "confirmed_no_effect", "", false)
 	decide("admin-a", "approve", "self-approve", "", "", true)
 	admins["admin-a"] = false
 	decide("admin-b", "approve", "revoked-proposer", "", "", true)
 	admins["admin-a"] = true
 	decide("admin-b", "approve", "review", "", "", false)
-	if v.State != "resolved" || v.ResolvedBy != "admin-b" || originalState != "unknown" || linked != 1 {
+	if v.State != "resolved" || v.ResolvedBy != "admin-b" || originalState != "unknown" || linked != 2 {
 		t.Fatal(v, originalState, linked)
 	}
 	if _, e = service.Decide(ctx, "admin-a", v.ID, IncidentDecision{ExpectedRevision: claimed.Revision, RequestID: "stale", Action: "note", Note: "stale"}); !errors.Is(e, ErrIncidentConflict) {
