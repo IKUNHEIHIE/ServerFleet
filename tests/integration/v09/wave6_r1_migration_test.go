@@ -48,7 +48,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 		t.Fatal("migration replay changed history", err)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 40 {
+	if err != nil || len(versions) != 42 {
 		t.Fatal(versions, err)
 	}
 	var name, gateways string
@@ -111,7 +111,7 @@ func TestUploadPolicyMigrationUpgradesActual28WithoutReinterpretingQueuedPlans(t
 		t.Fatal(err)
 	}
 	versions, err = storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 40 {
+	if err != nil || len(versions) != 42 {
 		t.Fatalf("upgrade count: %v %v", versions, err)
 	}
 }
