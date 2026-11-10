@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 当前：灾备激活阻断修复（2026-11-10 R26）
+
+用户补充授权后继续V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110，独立原分支从70932d1接续、单会话主控。修复activation/fence固定凭据写入与授权缓存验签/容量边界；新增真实mTLS/离线Root/实际owned进程stop-wait/activation/重启负向组合，完成后仅集中检查受影响包及共享静态规则。R25精确CI已通过，新head独立检查；不访问生产/VPS/真实供应商、不提权、不绕过审批/未知状态，不提前关闭五项。
+
 ## 当前：五项核心能力组合收口（2026-11-10）
 
 用户“继续”；V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110 在独立 feature/cloud-public-renewals-20261110、ServerFleet-resumed，从 c7520ba 接续原五项核心能力。单会话主控允许目录和共享接缝，无其他Agent、生产/VPS/真实外部账号或提权操作。当前实际UID1000，可运行此前受UID0阻挡的普通用户子进程验证。集中修复命令policy双读竞态、启动readiness请求丢失、未决mailbox重启及父进程审批时效，补实际进程/签名/续传/撤权/回滚/隔离回归后组合检查；原失败保留，仅复验受影响部分。R24及原13项提交保持；R25登记差异，无旧SQL/hash或生成改写。交接须有真实检查和可审分支；真实Root/完整双机/外部/G2仍按实证，不冒称全部DONE。

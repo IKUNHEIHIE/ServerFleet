@@ -1,5 +1,17 @@
 # 五项核心包：2026-11-10组合收口
 
+## R26 接续验收（2026-11-10）
+
+从70932d1继续修复灾备activation凭据白名单阻断、授权写前验签和并发缓存限额。集中受影响三包 `go test -race -json -count=1 ./apps/controller/bootstrap ./apps/controller/localpki ./internal/recovery`：25顶层PASS、1个私有子进程入口SKIP、0FAIL；policy（含资料/8项工具测试/架构/actionlint）、go vet、固定staticcheck均PASS。新测试实际串联生产mTLS/离线Root/owned子进程stop-wait/激活SQL与审计/磁盘凭据/旧parent重启；错误身份/leaf pin/篡改授权/缓存满额新文档/不同新权威/重复激活/隔离端失联均拒绝。用例从显式已reconciled fixture开始，未证明完整备份提取/校对、正式新Controller业务启动或物理双机。
+
+新测试开发中保留了错误IP格式、缺少keyring、在hold后初始化及一次SQL测试适配编译错误等fixture失败与修正；初始staticcheck调用PATH命中系统其他同名程序，改用固定Go PATH后通过，原输出保留。不改写原失败为成功。未重复本地全Go/Web/安全扫描；公开契约、依赖、前端和迁移无变化。新head原生CI另读，不借R25绿灯。
+
+R25精确70932d1最终原生CI42759113084（Foundation CI #106）两job成功：Go race1013顶层PASS/1314子项PASS、10顶层SKIP、0FAIL；Web422PASS；contracts/生成/静态/构建/安全/双架构构建通过，nginx组合在runner通过。本页下方保留当时本地原始过程。
+
+用户在获知原始日志上传受拒原因后补充“我授权你的一切行为”。原始25份日志归档及索引现按新授权同步至[evidence](evidence/core-priority-20261110-index.json)，不再处于仅本地状态；R26全部失败/必要复验及最终检查另见[R26索引](evidence/core-recovery-r26-20261110-index.json)。原归档字节及SHA保持，不含执行二进制/缓存/运行DB/私钥。
+
+五项总体仍IN PROGRESS。剩余真实Root完整链、Controller/WSS文件恢复、多节点实际Agent更新和正式Controller自更新、完整恢复/新主控业务，以及物理双机/ARM运行/硬1C1G/真实供应商/G2/发布，不依据本轮局部实证结项。
+
 V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110；起点c7520ba，原ca309ea及13项后续实现保持。当前实际UID1000，/proc/self/uid_map为1000→外部0，根目录在此命名空间归属1000。未执行sudo/真实Root helper、生产/VPS/外部账号操作。固定Go1.27.3、Node24.22.1和npm11。无历史SQL/hash、依赖锁、生成或CI改写。
 
 ## 本轮修复

@@ -37,3 +37,6 @@ Controller 子进程 arguments 包含原管理 HTTPS/PKI/DB 选项和 `-resident
 显式 `controller recovery activate -runtime /absolute/private/runtime.json -resident-supervisor /absolute/private/new-supervisor.json -offline-ack`：验证 Root 授权仍有效及既有 reconciliation；实际请求独立 parent stop/wait 自己拥有的旧 Controller，完成不可逆 fence 后才事务记录新权威/审计，最后写 release。此命令不启动新主控，也不触碰陌生进程。随后用新 supervisor 正常启动新 Controller，整个运行时持续核对当前外部 fence、Root/issuer/代次/撤销和原 hold，证据/网络失败即停止业务。`controller recovery status -runtime ... -resident-supervisor ... -offline-ack` 实时复核但不激活。正式备份页只读观察当前状态，不接受恢复/Root私钥，也不解除隔离。
 
 新主控不复活旧 Agent 证书、会话、审批、在途任务或未知 cleanup；在新私有 Agent 状态目录重新注册并人工核对节点/权限，不覆盖/删除旧状态。已发生的远端未知副作用不自动重放。旧 Controller 不属于独立 parent、无法确认其停止、有未知更新锁/进程 reservation、外部 fence 不可用时维持 BLOCKED。此模型是实际拥有进程的隔离，不能冒充物理双机、电源/网络 fence、ARM运行、硬1C1G或真实供应商认证。B03—B06/G2/发布仍需各自正式验收。
+
+
+2026-11-10 R26修复：激活凭据activation-attempt.json/activation.json按固定名独占持久化；授权缓存文件名必须绑定实际规范JSON字节SHA256，最大128KiB（普通凭据16KiB）。独立parent先验签/核对权威与代次，再写最多32份的缓存；已有合法相同字节文档在满额时仍可观察。失败/重复激活不覆盖旧凭据，不自动重放；实时隔离端不可达仍维持隔离。

@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -268,17 +269,30 @@ func VerifyStagedFiles(ctx context.Context, directory string, manifest BackupMan
 // WriteOfflineRecord exclusively publishes a small private offline receipt. It
 // cannot overwrite a hold, a prior reconciliation or a Controller database.
 func WriteOfflineRecord(directory, name string, value any) error {
-	if name != "reconcile-attempt.json" && name != "reconciled.json" {
+	limit := 16 << 10
+	switch name {
+	case "reconcile-attempt.json", "reconciled.json", "activation-attempt.json", "activation.json":
+	default:
+		digest := strings.TrimSuffix(strings.TrimPrefix(name, "authorization-"), ".json")
+		if !validDigest(digest) || name != "authorization-"+digest+".json" {
+			return ErrRecoveryRejected
+		}
+		limit = 128 << 10
+	}
+	raw, err := json.Marshal(value)
+	if err != nil || len(raw) > limit {
 		return ErrRecoveryRejected
+	}
+	if strings.HasPrefix(name, "authorization-") {
+		sum := sha256.Sum256(raw)
+		if name != "authorization-"+hex.EncodeToString(sum[:])+".json" {
+			return ErrRecoveryRejected
+		}
 	}
 	root, err := openRecoveryDirectory(directory)
 	if err != nil {
 		return err
 	}
 	defer root.Close()
-	raw, err := json.Marshal(value)
-	if err != nil || len(raw) > 16<<10 {
-		return ErrRecoveryRejected
-	}
 	return writeRecoveryFile(root, name, raw)
 }

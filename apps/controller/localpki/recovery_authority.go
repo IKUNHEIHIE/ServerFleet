@@ -178,6 +178,28 @@ func VerifyRecoveryAuthority(rootCertificatePath, documentPath, expectedRootPin 
 // At is for rechecking an already audited activation, using its immutable
 // activation time. Initial emergency authority must always use current time.
 func VerifyRecoveryAuthorityAt(rootCertificatePath, documentPath, expectedRootPin string, at time.Time) (*VerifiedRecoveryAuthority, error) {
+	dir, err := openPrivateDirectory(filepath.Dir(documentPath))
+	if err != nil {
+		return nil, err
+	}
+	defer dir.Close()
+	raw, err := privatePKIRead(dir, filepath.Base(documentPath))
+	if err != nil {
+		return nil, err
+	}
+	return verifyRecoveryAuthorityDocumentAt(rootCertificatePath, raw, expectedRootPin, at)
+}
+
+// VerifyRecoveryAuthorityDocument authenticates a bounded incoming document
+// before the independent parent persists it in its immutable receipt cache.
+func VerifyRecoveryAuthorityDocument(rootCertificatePath string, document []byte, expectedRootPin string) (*VerifiedRecoveryAuthority, error) {
+	return verifyRecoveryAuthorityDocumentAt(rootCertificatePath, document, expectedRootPin, time.Now())
+}
+
+func verifyRecoveryAuthorityDocumentAt(rootCertificatePath string, document []byte, expectedRootPin string, at time.Time) (*VerifiedRecoveryAuthority, error) {
+	if len(document) == 0 || len(document) > 128<<10 {
+		return nil, ErrLocalPKI
+	}
 	root, err := openPrivateDirectory(filepath.Dir(rootCertificatePath))
 	if err != nil {
 		return nil, err
@@ -191,16 +213,7 @@ func VerifyRecoveryAuthorityAt(rootCertificatePath, documentPath, expectedRootPi
 	if err != nil || !anchor.IsCA || anchor.CheckSignatureFrom(anchor) != nil || provisionedDigest(anchor.RawSubjectPublicKeyInfo) != expectedRootPin || at.Before(anchor.NotBefore) || !at.Before(anchor.NotAfter) {
 		return nil, ErrLocalPKI
 	}
-	dir, err := openPrivateDirectory(filepath.Dir(documentPath))
-	if err != nil {
-		return nil, err
-	}
-	defer dir.Close()
-	raw, err = privatePKIRead(dir, filepath.Base(documentPath))
-	if err != nil {
-		return nil, err
-	}
-	d, err := decodeRecoveryAuthority(raw)
+	d, err := decodeRecoveryAuthority(document)
 	if err != nil || d.Payload.RootSPKI != expectedRootPin || !validRecoveryAuthority(d.Payload, at) {
 		return nil, ErrLocalPKI
 	}
@@ -213,5 +226,5 @@ func VerifyRecoveryAuthorityAt(rootCertificatePath, documentPath, expectedRootPi
 	if err != nil || !ecdsa.VerifyASN1(pub, digest[:], signature) {
 		return nil, ErrLocalPKI
 	}
-	return &VerifiedRecoveryAuthority{payload: d.Payload, digest: provisionedDigest(raw)}, nil
+	return &VerifiedRecoveryAuthority{payload: d.Payload, digest: provisionedDigest(document)}, nil
 }

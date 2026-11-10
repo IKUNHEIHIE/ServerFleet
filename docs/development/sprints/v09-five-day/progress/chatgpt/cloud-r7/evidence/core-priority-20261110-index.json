@@ -1,0 +1,177 @@
+{
+  "archive": "core-priority-20261110.zip",
+  "archiveSha256": "ba418a4af7f14dc64335a6f02862c7b651ac7358a8a9e86ed710d81eb0228285",
+  "archiveBytes": 184668,
+  "files": [
+    {
+      "name": "agent-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "agent-recheck.jsonl",
+      "bytes": 11273,
+      "sha256": "f5c5fc41cbd52552fbbe8ce6b4e6ad85593c2183d7ce043c7b57489d1ce89a71"
+    },
+    {
+      "name": "contracts-recheck.log",
+      "bytes": 55576,
+      "sha256": "1d7366c6d0fe2fdde5037ee688d2c4aee737f5e49a0bb86b24a4e1b56b461e7e"
+    },
+    {
+      "name": "contracts-result.json",
+      "bytes": 129,
+      "sha256": "910f3348cf378b8e7c2515983b04672fc200460d92075be465fce010f3b3c45b"
+    },
+    {
+      "name": "contracts.log",
+      "bytes": 5636,
+      "sha256": "d6c993e37368ee73cc2694e9995db38824898b64a32382e7b1044f508737950e"
+    },
+    {
+      "name": "controller-build.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "go-result.json",
+      "bytes": 106,
+      "sha256": "6b9af5dce0678a79b8889c8073cf7c87bf455161344b6659e754a720ce1612ac"
+    },
+    {
+      "name": "go-static.json",
+      "bytes": 454,
+      "sha256": "40e6e444f1e21f59e08a99a2c7316e640d9c89d07df53b738b281d3e67fa6296"
+    },
+    {
+      "name": "go-tests.jsonl",
+      "bytes": 2469499,
+      "sha256": "5b7696866ca1e6cd2119eee7b5016992c92df5e923b630d5f7dd345be2fef780"
+    },
+    {
+      "name": "mod-tidy.log",
+      "bytes": 602,
+      "sha256": "11ca3d29270b132947b22352d980074e1172e8dacfadfbba040dfd18a8db947c"
+    },
+    {
+      "name": "mod-verify.log",
+      "bytes": 21,
+      "sha256": "b4537ed75f533f993f371954de47e42a793b8e5b0587577de7e27fb3e50696bd"
+    },
+    {
+      "name": "modules.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "npm-ci.log",
+      "bytes": 334,
+      "sha256": "adc52f0d776fe58eed0e0fc73612957db3b37a0528f4b0408bc5d0bfe3ad7e04"
+    },
+    {
+      "name": "policy-result.json",
+      "bytes": 126,
+      "sha256": "386e6a3682a1d2db006f351e2e5a8e55a5a2a010afe9a9acfed8649211afc397"
+    },
+    {
+      "name": "policy.log",
+      "bytes": 1320,
+      "sha256": "16d8642d1832e74d742d5e669c64081453763baf21af5d6c450078f1350c4360"
+    },
+    {
+      "name": "r24-lint.log",
+      "bytes": 1008,
+      "sha256": "955c815b3a2cba89411c550e15b50b4567e7e31676824ad7a799cc0683c9bedf"
+    },
+    {
+      "name": "security-result.json",
+      "bytes": 128,
+      "sha256": "2c6d949855895eed21ccb9a28b72809dbbfe079e2e507987ec3d5f74d7d1ab80"
+    },
+    {
+      "name": "security.log",
+      "bytes": 474,
+      "sha256": "934f8dcb9e47cf10fabfa1e3b99aec9b25a6929fe80c3358005c10b7c560919e"
+    },
+    {
+      "name": "staticcheck.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "summary.json",
+      "bytes": 3016,
+      "sha256": "d6625471c5acd9f4770a96d9ac6ec31d814540e016dd330c431cb28263b80b9b"
+    },
+    {
+      "name": "tools-install.log",
+      "bytes": 1725,
+      "sha256": "a1480052d1f92c863ce15253c2745cb307c1885fc305650c572cdc13e59addf6"
+    },
+    {
+      "name": "upload-resume-recheck.log",
+      "bytes": 697,
+      "sha256": "c039f53166483374af2825af620cbd288a9a2f11b19628df981d36df6a36b8ca"
+    },
+    {
+      "name": "vet.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "web-build.log",
+      "bytes": 873,
+      "sha256": "95e950bcaaa1971fe23c705b8275836c0af16fe3e5c8723293fe52cbe4cc807f"
+    },
+    {
+      "name": "web.log",
+      "bytes": 29688,
+      "sha256": "71fa2cb5cc10cf5c2b32bd5845a4e4d850ea5856e1bd4a83c6bb622564a25bad"
+    }
+  ],
+  "summary": {
+    "task": "V09-CLOUD-CODE-COMPLETE-01",
+    "session": "chatgpt-resume-20261110",
+    "at": "2026-11-10T12:51:09.364007+08:00",
+    "baseCommit": "c7520bab968226a246bcf3aec7cb4ed3e0172d8c",
+    "effectiveUid": 1000,
+    "uidMap": "1000          0          1",
+    "filesystemRootUid": 1000,
+    "goVersion": "go version go1.27.3 linux/amd64",
+    "nodeVersion": "v24.22.1",
+    "testedSourcesSha256": {
+      "apps/agent/command_profiles_linux.go": "91673ffb1b623100adbbd406b85128301ba79eb37fba60683206a63df1c69973",
+      "apps/controller/server/resident_authority.go": "9a7ce584d3770796933138fe21f0566d26b156c51e1c71640416a35ad96db340",
+      "internal/tasks/model.go": "5f78fefdc99d9b7d409a4b5a2f0059674c52fbee77fc4c1376b2bf7f1c6ef6f8",
+      "internal/tasks/service.go": "f989ce208eed8e4ee3710298dafd76a8a56ff60133d43d27e6bb61d6b6d0aafe",
+      "internal/tasks/scheduler.go": "6b0e165cd096cdc1dbfd11f57e677ce53996bd157f72282e0db848893ed0d5fa",
+      "internal/updates/resident_supervisor_linux.go": "7b8bfe5fa99b37928d4faa9b1d8058dcfc911eff9abb4a4cbd6c9aa99426ed1f",
+      "apps/agent/command_process_linux_test.go": "4a2b5f515a49e16cf34ca857bff0b39e4e97c8874193e66342da1ed3b8c6d152",
+      "apps/agent/file_resume_process_linux_test.go": "477c84b6905e1b484c142a03524f8438a35c6b8abcc101ebce0a1bcf5ce40aef",
+      "apps/agent/command_paths_linux_test.go": "937fbc9b41369d2e0862201b2f58152f2847b70b777f979049950278dfedadf4",
+      "internal/tasks/approval_current_test.go": "1160df53be46755c77d0a23949720d96350e51d089f04e4c1ede6039b021ea8a",
+      "internal/updates/resident_lifecycle_linux_test.go": "7f464f76885f5ce796017ca2cb7cccf38e240a7f37cf4105ac8ce0213d1dd005",
+      "api/openapi/revisions/v09-r24/public-renewals-candidate.yaml": "5a0d048748b9c3c11f76b36295e74c26f7763f6038fd11a84f629b309f426634",
+      "apps/web/src/features/files/upload-resume-page.test.tsx": "3252661ee9e31d89b70f2bd18fa7bf813b75b054a344a7992f09ea4ca18f5efa"
+    },
+    "status": "IN_PROGRESS_NOT_FULL_PRODUCT_ACCEPTANCE",
+    "fullGo": {
+      "passTopLevel": 1008,
+      "failTopLevel": 2,
+      "skipTopLevel": 13,
+      "exitCode": 1
+    },
+    "originalFailuresRetained": [
+      "Go pinned-command fixture overwrote an executed inode (ETXTBSY); corrected to atomic path replacement and targeted suite passed",
+      "Go actual gateway combination lacks nginx in local PATH (environment BLOCKED)",
+      "Web multi-chunk async assertion timed out; bounded wait corrected without changing request/offset assertions, all 10 file cases passed",
+      "R24 YAML flow descriptions had unquoted commas; quoted and full contract checks passed"
+    ],
+    "scopeLimits": [
+      "No actual privileged command or sudo execution",
+      "Supervisor child fixtures exercise real signed process bytes and lifecycle; do not replace real Controller/Agent full update integration",
+      "File port crosses OS process restarts; does not replace Controller/WSS resume combination",
+      "Trusted fence control stops and waits actual owned child; not physical two-host isolation or external mTLS/Root activation proof"
+    ]
+  }
+}
