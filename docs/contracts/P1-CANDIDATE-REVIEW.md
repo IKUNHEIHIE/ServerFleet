@@ -1,5 +1,7 @@
 # P1 候选契约审查与冲突登记
 
+2026-11-10 [R27可运行核心交付](revisions/v09-r27-usable-core.md)：新增provision/bootstrap-token/release CLI、注册令牌文件、可选controller-ca/Root侧controllerCa、file-deployment显式allowEmpty。REST/Proto/UI字段/40项迁移/权限保持；无G2冻结。必要编译静态与用户手工联调分开，不将待验证混称缺少已实现代码。
+
 2026-11-10 R26安全修复：[离线接管凭据与mTLS隔离](revisions/v09-r26-recovery-activation.md)。R20—R25公开字段/路由、Proto/生成、40项迁移、UI权限保持；无新契约冻结。修复固定激活凭据白名单、授权写前验签和32份缓存上限；当前实际组合范围与缺口明确登记，不关闭G2或五项总验收。
 
 2026-11-08主控R11候选：用户上传三策略/真实回执以及显式bindingVersion=2；新增ds/0043（29项），旧28语义与历史SQL不改。详见[兼容差异](revisions/v09-r11-upload-policies.md)，尚不冻结G2、不关闭P1-C10/发布准入。

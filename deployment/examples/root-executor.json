@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "nodeId": "REPLACE_WITH_ENROLLED_NODE_ID",
+  "profiles": "/etc/serverfleet/root-command-profiles.json",
+  "ledger": "/var/lib/serverfleet-root",
+  "controllerOrigin": "https://fleet.example.com:8443",
+  "rootCertificate": "/etc/serverfleet/agent-root.pem",
+  "controllerCa": "/etc/serverfleet/https-ca.pem",
+  "rootPin": "REPLACE_WITH_OFFLINE_AGENT_ROOT_SPKI_SHA256",
+  "clientCertificate": "/etc/serverfleet/client-chain.pem",
+  "clientKey": "/etc/serverfleet/client-key.pem"
+}

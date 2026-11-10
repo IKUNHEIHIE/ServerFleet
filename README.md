@@ -1,5 +1,7 @@
 # ServerFleet
 
+2026-11-10按用户最新分工，五项核心源码与手工联调分开交付。本分支补本机provision、首次管理员令牌、离线发行签名、安全注册令牌文件、HTTPS/内部身份CA分别信任，以及无节点拒绝式文件配置；构建附完整说明和七种模板。使用入口见[部署与首次使用](deployment/README.md)，变更见[R27](docs/contracts/revisions/v09-r27-usable-core.md)。本轮仅做必要编译/静态，联调和找bug由用户负责；不再将等待手工验证当作缺少已存在代码，也不宣称完整产品已发布。
+
 2026-11-10 R26修复会阻断真实灾备激活的离线凭据白名单，并将Root授权验签移至缓存写入前，严格限制新增缓存。新增真实mTLS/离线签名/owned进程隔离/激活落库/旧parent重启组合。R25精确70932d1的CI42759113084已成功（Go1013顶层PASS、10SKIP、0FAIL，Web422PASS）；这份旧CI不覆盖R26。见[修复与实证边界](docs/contracts/revisions/v09-r26-recovery-activation.md)。五项整体、正式产品组合和发布准入仍未结项。
 
 ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Controller、独立 Agent 和 React + TypeScript Web 管理台组成。Controller 统一管理节点、权限、任务、审批与审计；Agent 主动通过 WSS + mTLS 接入，Web 仅调用 Controller 的 REST/SSE。

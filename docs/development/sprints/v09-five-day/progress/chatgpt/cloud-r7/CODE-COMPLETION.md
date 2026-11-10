@@ -1,5 +1,7 @@
 # V09-CLOUD-CODE-COMPLETE-01
 
+2026-11-10 R27按用户最新要求交付可运行代码：五项核心已有正式源码和入口；新增provision、独立parent/slot/start/用户service、初始化DB/schema、首次setup token及本机刷新、离线发行keygen/sign、安全注册令牌文件、HTTPS与内部身份Root分别配置、拒绝式无节点文件注册表。构建附说明和七种模板。只做必要编译/静态，无新增或执行联调套件，用户负责联调/bug验证；不宣称生产、真实Root或完整灾备已验收。
+
 2026-11-10 R26从70932d1继续，修复真实灾备激活必定被旧凭据白名单拒绝的接缝，并在写授权缓存前验签/限额。新增真实离线Root+mTLS+owned进程fence+激活审计/权威事务+重启组合，起点是显式reconciled fixture，不冒充完整stage/reconcile/正式Controller业务/物理双机。R25同head CI42759113084已成功；新head另验，五项总体仍IN PROGRESS。
 
 2026-11-10 R25五项核心收口：普通命令单次policy快照、parent启动窗口请求不丢失、未知mailbox重启拒绝、Controller停机交接统一审批期限/版本/独立身份。实际UID1000下新增跨进程前缀恢复/并发拒绝、pinned命令+mTLS撤权、实际签名子程序更新/回滚/重启及持久fence通过；修复R24 YAML六项struct错误。本地全Go原1008PASS/2FAIL/13SKIP保留；fixture错误修正后Agent定向11项通过，另一失败缺nginx明确ENV BLOCKED。Web421PASS/1FAIL原记录保留，受影响10项复验及build通过；契约/policy/静态/安全均通过。真实Root/正式更新与恢复全产品组合/浏览器/物理双机仍未证明，不把helper证据扩大成全部DONE。详见CORE-ACCEPTANCE-20261110.md；原始证据因自动审批未授权共享而仅本地保留，远端只提交检查摘要和源码，最终同head CI另行核对。

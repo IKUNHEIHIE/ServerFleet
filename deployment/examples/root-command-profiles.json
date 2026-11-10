@@ -1,0 +1,1 @@
+{"version":1,"nodeId":"REPLACE_WITH_ENROLLED_NODE_ID","profiles":[{"id":"root-disk-usage","executable":"/usr/bin/df","sha256":"REPLACE_WITH_ACTUAL_EXECUTABLE_SHA256","directory":"/var/lib/serverfleet-root","prefixArguments":["-h"],"maximumArguments":0,"maximumSeconds":10}]}

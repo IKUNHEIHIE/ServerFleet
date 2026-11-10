@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "nodeId": "REPLACE_WITH_ENROLLED_NODE_ID",
+  "sudoExecutable": "/usr/bin/sudo",
+  "sudoSha256": "REPLACE_WITH_ACTUAL_SUDO_SHA256",
+  "helperExecutable": "/usr/local/libexec/serverfleet-agent-root",
+  "helperSha256": "REPLACE_WITH_INSTALLED_HELPER_SHA256",
+  "rootConfiguration": "/etc/serverfleet/root-executor.json",
+  "policySha256": "REPLACE_WITH_ROOT_COMMAND_POLICY_SHA256"
+}
