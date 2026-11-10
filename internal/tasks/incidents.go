@@ -128,7 +128,7 @@ func (s *IncidentService) Observe(ctx context.Context, source IncidentSource) er
 	}
 	digest := incidentDigest(source)
 	id := "inc_" + digest[:40]
-	now := time.Now().UTC()
+	now := s.now()
 	return s.o.DB.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		var existing string
 		e := tx.QueryRow(txCtx, `SELECT id FROM task_incidents WHERE source_kind=? AND source_id=? LIMIT 1`, source.Kind, source.ID).Scan(&existing)
@@ -196,6 +196,14 @@ func (s *IncidentService) Get(ctx context.Context, subject, id string) (Incident
 		v.Proposal.Evidence, e = s.o.Filter(v.Proposal.Evidence)
 		if e != nil {
 			return Incident{}, e
+		}
+		if v.Proposal.Checks != nil {
+			checks := *v.Proposal.Checks
+			checks.ResidualRisk, e = s.o.Filter(checks.ResidualRisk)
+			if e != nil {
+				return Incident{}, e
+			}
+			v.Proposal.Checks = &checks
 		}
 	}
 	a, e := s.assessment(ctx, subject, v, s.o.DB)
@@ -417,7 +425,7 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 			return ErrInvalidTask
 		}
 		v.Revision++
-		v.UpdatedAt = time.Now().UTC()
+		v.UpdatedAt = s.now()
 		v.Events = append(v.Events, IncidentEvent{len(v.Events) + 1, in.Action, subject, in.Note, v.UpdatedAt})
 		r.View = v
 		r.Requests[in.RequestID] = requestDigest

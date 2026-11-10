@@ -4,13 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/recovery"
 	"serverfleet.local/serverfleet/internal/tasks"
-	"strconv"
-	"strings"
-	"unicode/utf8"
 )
 
 func operatorReason(v string) string {
@@ -127,7 +129,11 @@ func (s *Server) registerIncidentClosureRoutes() {
 		if !ok {
 			return
 		}
-		q := r.URL.Query()
+		q, parseErr := url.ParseQuery(r.URL.RawQuery)
+		if parseErr != nil {
+			releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
+			return
+		}
 		if r.ContentLength != 0 || len(q) > 1 || len(q["after"]) > 1 || len(q) == 1 && !q.Has("after") {
 			releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
 			return

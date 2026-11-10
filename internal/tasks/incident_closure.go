@@ -53,6 +53,9 @@ func OperatorTaskReceipt(t Task) IncidentTaskReceipt {
 	for _, v := range t.Targets {
 		targets = append(targets, target{v.NodeID, v.State, v.Code})
 		results[string(v.State)]++
+		if v.Code == NodeResultUnknown && v.State != TargetUnknown {
+			results["unknown_result_code"]++
+		}
 	}
 	return IncidentTaskReceipt{t.ID, t.Revision, string(t.Status), t.ActionID, t.PlanHash, t.TargetType, t.TargetResourceID, incidentDigest(targets), len(targets), results, t.CreatedAt, t.UpdatedAt, t.Status.Terminal()}
 }
@@ -255,16 +258,17 @@ func (s *IncidentService) checkClosure(ctx context.Context, subject string, v In
 		return ErrIncidentClosureBlocked
 	}
 	uncertain := false
+	unsuccessful := false
 	for _, task := range a.Current.Followups {
-		if task.State != "completed" {
-			uncertain = true
-		}
+		unclear := !task.Terminal || task.State == "unknown" || task.Results["unknown"] > 0 || task.Results["pending"] > 0 || task.Results["dispatched"] > 0 || task.Results["unknown_result_code"] > 0
+		uncertain = uncertain || unclear
+		unsuccessful = unsuccessful || task.State != "completed" || unclear || task.Results["failed"] > 0 || task.Results["timed_out"] > 0
 	}
 	if outcome == "accepted_unresolved" {
 		if !checks.UnknownAccepted || strings.TrimSpace(checks.ResidualRisk) == "" || !slices.Contains(a.Current.EvidenceCategories, "containment") || s.now().Sub(a.Current.EvidenceTimes["containment"]) > IncidentManualEvidenceTTL {
 			return ErrIncidentClosureBlocked
 		}
-	} else if uncertain || checks.UnknownAccepted || checks.ResidualRisk != "" {
+	} else if (outcome == "confirmed_failed" && uncertain) || (outcome != "confirmed_failed" && unsuccessful) || checks.UnknownAccepted || checks.ResidualRisk != "" {
 		return ErrIncidentClosureBlocked
 	}
 	return nil
@@ -506,6 +510,9 @@ func (s *IncidentService) ListPage(ctx context.Context, subject string, o Incide
 	}
 	binding := incidentDigest([]string{subject, o.State, o.Kind, o.TaskID})
 	cursor := incidentCursor{At: "9999-12-31T23:59:59.999999999Z", ID: strings.Repeat("z", 128), Binding: binding}
+	if len(o.Cursor) > 2048 {
+		return out, ErrInvalidTask
+	}
 	if o.Cursor != "" {
 		raw, e := base64.RawURLEncoding.DecodeString(o.Cursor)
 		if e != nil || len(raw) > 1024 || json.Unmarshal(raw, &cursor) != nil || cursor.Binding != binding || !validToken(cursor.ID, 128) {

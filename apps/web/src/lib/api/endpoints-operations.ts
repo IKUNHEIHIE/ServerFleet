@@ -18,18 +18,27 @@ export const backupMaintenanceApi = {
   preview: () => apiClient.request<CleanupPlan>(`${backup}/maintenance/cleanup-preview`, { method: "POST", body: {} }),
   cleanup: (planDigest: string, idempotencyKey: string) => apiClient.request<OperationTask>(`${backup}/maintenance/cleanup`, { method: "POST", body: { planDigest, idempotencyKey } }),
 };
+export interface IncidentChecks { actualStateChecked: boolean; executionLogsChecked: boolean; impactChecked: boolean; unknownAccepted: boolean; residualRisk?: string }
+export interface IncidentTaskReceipt { taskId: string; revision: number; state: string; action?: string; targetCount: number; results: Readonly<Record<string, number>>; terminal: boolean; updatedAt: string }
+export interface IncidentFacts { source: OperatorIncident["source"]; sourceTask?: IncidentTaskReceipt; followups: readonly IncidentTaskReceipt[]; manualEvidenceIds: readonly string[]; evidenceCategories: readonly string[]; digest: string; cycle: number; restoreCount: number }
+export interface IncidentAssessment { current: IncidentFacts; sourceChanged: boolean; factsChanged: boolean; observationDigest?: string; observedAt?: string; observationFresh: boolean; needsRecheck: boolean; blockers: readonly string[] }
+export interface IncidentEvidence { id: string; incidentId: string; sequence: number; kind: "manual" | "snapshot"; category?: string; reference?: string; note: string; actor: string; observedAt: string; createdAt: string; cycle: number; restoreCount: number; snapshot?: IncidentFacts }
+export interface IncidentQuery { state?: string; sourceKind?: string; taskId?: string; cursor?: string; limit?: number }
 export interface OperatorIncident {
+ cycle?: number; observationDigest?: string; resolvedAt?: string; assessment?: IncidentAssessment;
   id: string; revision: number; sourceDigest: string; state: "open" | "investigating" | "review_required" | "resolved";
   source: { kind: string; id: string; ownerId: string; revision: number; state: string; taskId?: string; sessionId?: string; action?: string; nodeIds: readonly string[]; reason?: string };
   assigneeId?: string; resolvedBy?: string; createdAt: string; updatedAt: string; followupTaskIds: readonly string[];
-  proposal?: { outcome: string; evidence: string; proposedBy: string; sourceDigest: string; at: string };
+  proposal?: { outcome: string; evidence: string; proposedBy: string; sourceDigest: string; at: string; observationDigest?: string; checks?: IncidentChecks };
   events: readonly { sequence: number; action: string; actor: string; note?: string; at: string }[];
 }
-export type IncidentAction = "claim" | "release" | "take_over" | "note" | "propose" | "approve" | "reject" | "reopen" | "link_task";
-export interface IncidentDecision { expectedRevision: number; requestId: string; action: IncidentAction; note: string; outcome?: string; followupTaskId?: string }
+export type IncidentAction = "claim" | "release" | "take_over" | "note" | "propose" | "approve" | "reject" | "reopen" | "link_task" | "record_evidence" | "reconcile";
+export interface IncidentDecision { reviewAcknowledged?: boolean; expectedRevision: number; requestId: string; action: IncidentAction; note: string; outcome?: string; followupTaskId?: string; observationDigest?: string; checks?: IncidentChecks; evidenceCategory?: string; evidenceReference?: string; observedAt?: string }
 const incidents = "/api/v1/operations/incidents";
 export const incidentsApi = {
-  list: (signal?: AbortSignal) => apiClient.request<{ items: readonly OperatorIncident[] }>(incidents, { signal }),
+  list: (signal?: AbortSignal, query: IncidentQuery = {}) => apiClient.request<{ items: readonly OperatorIncident[]; nextCursor?: string }>(incidents, { signal, query: { ...query } }),
+ evidence: (id: string, after = 0, signal?: AbortSignal) => apiClient.request<{ items: readonly IncidentEvidence[]; nextAfter: number }>(`${incidents}/${encodeURIComponent(id)}/evidence`, { signal, query: after ? { after } : undefined }),
+ verifyBackup: (id: string, body: { expectedRevision: number; requestId: string; note: string }) => apiClient.request<{ taskId: string; status: string; linked: boolean; originalResultPreserved: true }>(`${incidents}/${encodeURIComponent(id)}/verify-backup`, { method: "POST", body }),
   get: (id: string, signal?: AbortSignal) => apiClient.request<OperatorIncident>(`${incidents}/${encodeURIComponent(id)}`, { signal }),
   sync: () => apiClient.request<{ observed: number }>(`${incidents}/sync`, { method: "POST", body: {} }),
   decide: (id: string, body: IncidentDecision) => apiClient.request<OperatorIncident>(`${incidents}/${encodeURIComponent(id)}/actions`, { method: "POST", body }),

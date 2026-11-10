@@ -1,5 +1,7 @@
 # ServerFleet
 
+2026-11-11 R30补齐异常／UNKNOWN人工处置闭环：结构化证据、当前事实快照、后续任务结果阻断、独立复核、结案依据变化自动重新核查，以及备份上传只读核验任务入口。使用见[人工处置闭环](docs/development/INCIDENT-CLOSURE.md)，产品与API变化见[R30](docs/contracts/revisions/v09-r30-incident-closure.md)。人工结论保留原UNKNOWN；真实环境联调仍由用户进行。
+
 2026-11-10 R29新增加密备份自动异地上传（S3兼容／WebDAV）、保留周期／独立审批清理和统一异常人工处置。正式页面入口在备份页与任务中心，配置及完整流程见[备份与人工处置](docs/development/BACKUP-OPERATIONS.md)，产品/API变更见[R29](docs/contracts/revisions/v09-r29/CHANGELOG.md)。清理保留独立审批，人工结案不改写原UNKNOWN；真实存储与节点联调由用户进行。
 
 2026-11-10 R28补齐AI运维执行循环：模型选工具、当前资源与审批校验、统一任务提交、真实结果回传、继续规划和最终答复，新增正式Web「Agent运行」页签、取消及显式重启恢复入口。使用见[AI运维循环](docs/development/AI-AGENT-LOOP.md)，产品/API同步见[R28](docs/contracts/revisions/v09-r28-ai-agent-loop.md)。真实模型与节点联调由用户进行，代码交付不替代完整发布验收。

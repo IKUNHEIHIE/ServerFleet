@@ -381,7 +381,7 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		"reason":     "self approve attempt",
 	}, adminLogin.CSRF, "")
 	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("self-approval status = %d, want 439", resp.StatusCode)
+		t.Fatalf("self-approval status = %d, want 409", resp.StatusCode)
 	}
 
 	// Second user logs in and approves
@@ -464,7 +464,7 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		},
 	}, adminLogin.CSRF, "")
 	if resp.StatusCode != http.StatusBadRequest {
-		t.Fatalf("invalid command preview = %d, want 430: %s", resp.StatusCode, data)
+		t.Fatalf("invalid command preview = %d, want 400: %s", resp.StatusCode, data)
 	}
 
 	// Task executions endpoint

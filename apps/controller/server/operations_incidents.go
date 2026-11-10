@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -37,9 +39,28 @@ func (s *Server) setupOperatorIncidents() error {
 	s.Incidents = service
 	return nil
 }
+
+var operatorEvidenceURLs = regexp.MustCompile(`(?i)https?://[^\s<>]+`)
+
 func operatorEvidence(text string) (string, error) {
 	if strings.Contains(text, "-----BEGIN") && strings.Contains(text, "PRIVATE KEY-----") {
 		return "", auth.ErrDenied
+	}
+	for _, rawURL := range operatorEvidenceURLs.FindAllString(text, -1) {
+		u, e := url.Parse(rawURL)
+		if e != nil || u.User != nil {
+			return "", auth.ErrDenied
+		}
+		q, e := url.ParseQuery(u.RawQuery)
+		if e != nil {
+			return "", auth.ErrDenied
+		}
+		for key := range q {
+			key = strings.ToLower(key)
+			if slices.Contains([]string{"sig", "signature", "token", "access_token", "secret", "password", "key", "api_key", "x-amz-signature", "x-amz-credential", "x-amz-security-token"}, key) {
+				return "", auth.ErrDenied
+			}
+		}
 	}
 	text = redactAISecrets(text)
 	if strings.Contains(strings.ToLower(text), "x-amz-signature=") {
@@ -146,7 +167,11 @@ func (s *Server) registerOperatorIncidentRoutes() {
 			releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
 			return
 		}
-		q := r.URL.Query()
+		q, parseErr := url.ParseQuery(r.URL.RawQuery)
+		if parseErr != nil {
+			releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
+			return
+		}
 		for key, values := range q {
 			if len(values) != 1 || !slices.Contains([]string{"state", "sourceKind", "taskId", "cursor", "limit"}, key) {
 				releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
@@ -164,7 +189,11 @@ func (s *Server) registerOperatorIncidentRoutes() {
 		}
 		page, e := s.Incidents.ListPage(r.Context(), subject, tasks.IncidentListOptions{State: q.Get("state"), Kind: q.Get("sourceKind"), TaskID: q.Get("taskId"), Cursor: q.Get("cursor"), Limit: limit})
 		if e != nil {
-			writeOperationsError(w, e)
+			if errors.Is(e, tasks.ErrInvalidTask) {
+				releaseSourceJSON(w, 400, map[string]string{"code": "INVALID_REQUEST"})
+			} else {
+				writeOperationsError(w, e)
+			}
 			return
 		}
 		for i := range page.Items {

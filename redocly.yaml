@@ -79,3 +79,6 @@ apis:
 
   v09-r29-operations:
     root: api/openapi/revisions/v09-r29/operations-candidate.yaml
+
+  v09-r30-incident-closure:
+    root: api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml
