@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -55,6 +56,29 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 	for _, name := range []string{"update-lock.json", "supervisor-reservation.json", "fenced-intent.json"} {
 		if _, e = root.Lstat(name); !errors.Is(e, os.ErrNotExist) {
 			return ErrUpdateBusy
+		}
+	}
+	// A parent can die after claiming the mailbox but before creating the slot
+	// lock. That claim is still an unresolved update, never an initial-start
+	// authorization for a new parent.
+	if _, e := os.Lstat(filepath.Join(c.Mailbox, "update-active.json")); !errors.Is(e, os.ErrNotExist) {
+		return ErrUpdateBusy
+	}
+	mailbox, e := os.OpenRoot(c.Mailbox)
+	if e != nil {
+		return e
+	}
+	defer mailbox.Close()
+	seen := map[string]bool{}
+	// Snapshot BEFORE the child starts. Requests created during its initial
+	// readiness are new work and must not be mistaken for pre-restart requests.
+	initial, e := os.ReadDir(c.Mailbox)
+	if e != nil || len(initial) > 1024 {
+		return ErrUpdateBusy
+	}
+	for _, f := range initial {
+		if strings.HasSuffix(f.Name(), ".request.json") {
+			seen[f.Name()] = true
 		}
 	}
 	installed := c.Initial
@@ -142,28 +166,12 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 		}
 		defer closeFence()
 	}
-	mailbox, e := os.OpenRoot(c.Mailbox)
-	if e != nil {
-		return e
-	}
-	defer mailbox.Close()
 	operationLocked := false
 	defer func() {
 		if operationLocked {
 			operationMu.Unlock()
 		}
 	}()
-	seen := map[string]bool{}
-	// Existing requests on supervisor startup are ambiguous: never replay them.
-	initial, e := os.ReadDir(c.Mailbox)
-	if e != nil {
-		return e
-	}
-	for _, f := range initial {
-		if strings.HasSuffix(f.Name(), ".request.json") {
-			seen[f.Name()] = true
-		}
-	}
 	ticker := time.NewTicker(250 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -192,7 +200,7 @@ func RunResidentSupervisor(ctx context.Context, c ResidentSupervisorConfig, h Re
 			var request transport.ResidentUpdateIntent
 			d := json.NewDecoder(bytesReader(raw))
 			d.DisallowUnknownFields()
-			if d.Decode(&request) != nil || !request.Valid(time.Now()) || request.NodeID != c.NodeID || name != request.ExecutionID+".request.json" {
+			if d.Decode(&request) != nil || d.Decode(&struct{}{}) != io.EOF || !request.Valid(time.Now()) || request.NodeID != c.NodeID || name != request.ExecutionID+".request.json" {
 				return ErrArtifactRejected
 			}
 			p, e := transport.ParseResidentUpdateParameters([]byte(request.Parameters))

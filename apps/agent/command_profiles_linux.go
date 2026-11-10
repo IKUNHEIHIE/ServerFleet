@@ -121,34 +121,30 @@ func registeredCommands(filename, node string) (agentAction, error) {
 	if err != nil {
 		return agentAction{}, err
 	}
-	validate := func(raw []byte) error {
+	resolve := func(raw []byte) (commandProfile, transport.CommandParameters, error) {
 		params, err := transport.ParseCommandParameters(raw)
 		if err != nil || params.PolicySHA256 != digest {
-			return errExecutionRejected
+			return commandProfile{}, params, errExecutionRejected
 		}
 		policy, current, err := loadCommandProfiles(filename, node, false)
 		if err != nil || current != digest {
-			return errExecutionRejected
+			return commandProfile{}, params, errExecutionRejected
 		}
 		for _, profile := range policy.Profiles {
 			if profile.ID == params.ProfileID && len(params.Arguments) <= profile.MaximumArguments && params.TimeoutSeconds <= profile.MaximumSeconds {
-				return nil
+				return profile, params, nil
 			}
 		}
-		return errExecutionRejected
+		return commandProfile{}, params, errExecutionRejected
 	}
-	return agentAction{Validate: validate, Run: func(ctx context.Context, raw []byte) executionResult {
-		if validate(raw) != nil {
+	return agentAction{Validate: func(raw []byte) error { _, _, err := resolve(raw); return err }, Run: func(ctx context.Context, raw []byte) executionResult {
+		// Execute the SAME policy snapshot whose digest and bounds were checked.
+		// A second unchecked read after validation could select a changed program.
+		profile, params, err := resolve(raw)
+		if err != nil {
 			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
 		}
-		params, _ := transport.ParseCommandParameters(raw)
-		policy, _, _ := loadCommandProfiles(filename, node, false)
-		for _, profile := range policy.Profiles {
-			if profile.ID == params.ProfileID {
-				return runPinnedCommand(ctx, profile, params.Arguments, params.TimeoutSeconds, false)
-			}
-		}
-		return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
+		return runPinnedCommand(ctx, profile, params.Arguments, params.TimeoutSeconds, false)
 	}}, nil
 }
 func runPinnedCommand(ctx context.Context, profile commandProfile, arguments []string, seconds int, root bool) executionResult {

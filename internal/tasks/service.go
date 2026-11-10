@@ -21,6 +21,7 @@ import (
 )
 
 const (
+	DefaultApprovalTTL     = 30 * time.Minute
 	ActionSubmit           = "tasks.submit"
 	ActionApprove          = "tasks.approve"
 	ActionRevise           = "tasks.revise"
@@ -148,7 +149,7 @@ func NewService(options Options) (*Service, error) {
 	}
 	approvalTTL := options.ApprovalTTL
 	if approvalTTL == 0 {
-		approvalTTL = 30 * time.Minute
+		approvalTTL = DefaultApprovalTTL
 	}
 	unstartedTTL := options.UnstartedTTL
 	if unstartedTTL == 0 {

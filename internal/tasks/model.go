@@ -121,6 +121,13 @@ type Approval struct {
 
 func (a Approval) Approved() bool { return a.Decision == "approved" }
 
+// CurrentFor is the shared immutable approval/time binding used both by the
+// running scheduler and by the external parent while its Controller is down.
+// Current approver/submitter permissions must still be checked by the caller.
+func (a Approval) CurrentFor(task Task, now time.Time, ttl time.Duration) bool {
+	return a.Approved() && a.TaskID == task.ID && a.Revision == task.Revision && a.PlanHash == task.PlanHash && a.ApproverID != "" && a.ApproverID != task.SubmitterID && !a.DecidedAt.IsZero() && !now.IsZero() && !a.DecidedAt.After(now) && (ttl <= 0 || !now.After(a.DecidedAt.Add(ttl)))
+}
+
 // Event is one ordered SSE event. Payload is a small JSON object without secrets.
 type Event struct {
 	Seq     int64

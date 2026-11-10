@@ -1,12 +1,20 @@
 # ServerFleet
 
+2026-11-10按用户最新分工，五项核心源码与手工联调分开交付。本分支补本机provision、首次管理员令牌、离线发行签名、安全注册令牌文件、HTTPS/内部身份CA分别信任，以及无节点拒绝式文件配置；构建附完整说明和七种模板。使用入口见[部署与首次使用](deployment/README.md)，变更见[R27](docs/contracts/revisions/v09-r27-usable-core.md)。本轮仅做必要编译/静态，联调和找bug由用户负责；不再将等待手工验证当作缺少已存在代码，也不宣称完整产品已发布。
+
+2026-11-10 R26修复会阻断真实灾备激活的离线凭据白名单，并将Root授权验签移至缓存写入前，严格限制新增缓存。新增真实mTLS/离线签名/owned进程隔离/激活落库/旧parent重启组合。R25精确70932d1的CI42759113084已成功（Go1013顶层PASS、10SKIP、0FAIL，Web422PASS）；这份旧CI不覆盖R26。见[修复与实证边界](docs/contracts/revisions/v09-r26-recovery-activation.md)。五项整体、正式产品组合和发布准入仍未结项。
+
 ServerFleet 是面向自托管环境的服务器集群管理项目，由 Go Controller、独立 Agent 和 React + TypeScript Web 管理台组成。Controller 统一管理节点、权限、任务、审批与审计；Agent 主动通过 WSS + mTLS 接入，Web 仅调用 Controller 的 REST/SSE。
 
 项目目前处于 **v0.9 功能集成与发布验收阶段**。G0 产品与 G1 架构已确认；G2、完整产品验收和发布准入尚未关闭。以下“已接收”指已审查的实现及其验证范围，不等于全部功能已达到生产发布条件。
 
 ## 当前集中编码包（未验收）
 
+2026-11-10 R25已集中修复命令策略快照、监督启动窗口、未知mailbox与停机审批期限，并补实际UID1000的跨进程证据。[本轮检查及限制](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CORE-ACCEPTANCE-20261110.md)保留原完整检查失败和受影响复验；缺nginx的组合为环境BLOCKED，最终CI及真实Root/完整产品/双机验收尚未关闭。
+
 2026-11-09 正在 `feature/cloud-v09-code-completion-20261109` 连续补齐代码，起点为已接收 #16/main `9738648`。新增发布、PKI/恢复/备份、可信发行获取、节点独立 CSR/证书、公网签发、统一 DNS 执行/补偿，以及受控命令、节点续传、Controller/Agent 更新和持续恢复隔离等实现已写入。本轮已进行集中检查并定向修复发现的问题，Web 422项、契约、安全扫描及真实双架构候选构建通过；普通用户/真实提权与完整灾备等专项仍有环境阻塞，**完整验收未通过**。预计迁移39项是分支登记，未签名候选不代表可发布。详见[集中检查记录](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CORE-ACCEPTANCE.md)，不用下方历史CI证明本分支。实际剩余项见[编码进度](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/CODE-COMPLETION.md)与[正式界面变化](docs/development/sprints/v09-five-day/progress/chatgpt/cloud-r7/PRODUCT-DELTA.md)。G2、B03—B06 与发布准入继续开放。
+
+2026-11-10在独立 `feature/cloud-public-renewals-20261110` 从原分支最新 `ca309ea` 继续，保留R20—R23及原验收记录；R24新增公开证书续签审批策略，追加第40项迁移，此增量UNTESTED，旧CI不覆盖新代码。
 
 ## 已核验的产品基线
 

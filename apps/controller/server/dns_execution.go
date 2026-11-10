@@ -33,7 +33,7 @@ func (m *publicCertificateExecution) inspectionExecution(authority string, worke
 	}}, nil
 }
 func (m *publicCertificateExecution) validExecutionTask(ctx context.Context, t tasks.Task) bool {
-	if t.Source != "web" || t.ScopeRevision != 0 || t.PluginID != "" {
+	if (t.Source != "web" && !(t.Source == "system" && t.ActionID == actionPublicCertificateIssue)) || t.ScopeRevision != 0 || t.PluginID != "" {
 		return false
 	}
 	switch t.ActionID {

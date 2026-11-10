@@ -1,5 +1,15 @@
 # V09-CLOUD-CODE-COMPLETE-01
 
+2026-11-10 R27按用户最新要求交付可运行代码：五项核心已有正式源码和入口；新增provision、独立parent/slot/start/用户service、初始化DB/schema、首次setup token及本机刷新、离线发行keygen/sign、安全注册令牌文件、HTTPS与内部身份Root分别配置、拒绝式无节点文件注册表。构建附说明和七种模板。只做必要编译/静态，无新增或执行联调套件，用户负责联调/bug验证；不宣称生产、真实Root或完整灾备已验收。
+
+2026-11-10 R26从70932d1继续，修复真实灾备激活必定被旧凭据白名单拒绝的接缝，并在写授权缓存前验签/限额。新增真实离线Root+mTLS+owned进程fence+激活审计/权威事务+重启组合，起点是显式reconciled fixture，不冒充完整stage/reconcile/正式Controller业务/物理双机。R25同head CI42759113084已成功；新head另验，五项总体仍IN PROGRESS。
+
+2026-11-10 R25五项核心收口：普通命令单次policy快照、parent启动窗口请求不丢失、未知mailbox重启拒绝、Controller停机交接统一审批期限/版本/独立身份。实际UID1000下新增跨进程前缀恢复/并发拒绝、pinned命令+mTLS撤权、实际签名子程序更新/回滚/重启及持久fence通过；修复R24 YAML六项struct错误。本地全Go原1008PASS/2FAIL/13SKIP保留；fixture错误修正后Agent定向11项通过，另一失败缺nginx明确ENV BLOCKED。Web421PASS/1FAIL原记录保留，受影响10项复验及build通过；契约/policy/静态/安全均通过。真实Root/正式更新与恢复全产品组合/浏览器/物理双机仍未证明，不把helper证据扩大成全部DONE。详见CORE-ACCEPTANCE-20261110.md；原始证据因自动审批未授权共享而仅本地保留，远端只提交检查摘要和源码，最终同head CI另行核对。
+
+2026-11-10 接替卡住的原对话，当前唯一会话 chatgpt-resume-20261110。先找到本地2d36f9d，后核对远端发现13项后续提交，完整按原Git SHA验证导入最新ca309ea到独立 `feature/cloud-public-renewals-20261110` / `/workspace/scratch/897097efd359/ServerFleet-resumed`；保留原分支、R20—R23及原验收记录；未启动其他 Agent，没有访问生产/VPS/真实供应商。
+
+新增 R24 公开证书续签审批策略：只有 clean issued + 同节点/CSR/密钥/链摘要成功安装回执可登记，1—60天窗口、每节点槽唯一、owner/CAS；后台只生成确定性幂等统一 system 修改任务，仍强制人工审批及每次I/O复权。提交/绑定缺口只找回同任务，失败/取消/过期/UNKNOWN不自动重试；停用即时阻止后续签发调用，独立已知TXT cleanup仍可在原claim门下核对。新链安装后手动接续下一周期，网关发布另行确认。恢复reconciliation停用全部策略并提版本。正式Web/API/产品文档同步，追加cx/0020，预计40迁移；新增CAS/槽位/审计回滚/恢复失效测试源码但未运行。仅gofmt及源码复核，仍UNTESTED，不建PR或跑CI冒称整包完成。余项包含续签安装/发布编排、未知人工恢复、备份异地/保留，以及R20—R23已有实现仍需的普通UID/真实提权、实际更新/恢复/浏览器组合验收；保持原B03—B06/G2/发布开放。
+
 会话chatgpt-takeover-01；起点main9738648ecdf44546e4a2d3503f8c9b862c8a5cb3；集中编码分支feature/cloud-v09-code-completion-20261109。用户要求整包编码后统一大验收；本目录后续实现目前UNTESTED，不能引用旧CI证明新代码可用。未启动其他Agent或访问生产/外部供应商。
 
 已写代码：任务绑定HTTP路由字节探针、多网关/逆序补偿；离线Root/在线Intermediate显式PKI配置；真实Controller权威的本地统一任务目标（不伪装成Agent）；受控一致SQLite快照、七项固定私有材料和age流式密文、离线恢复密钥challenge确认、管理员密文列表/下载/校验、每日仅提交统一任务的备份生产器。追加cx/0011_encrypted_backups、cx/0012_recovery_revocations、cx/0013_recovery_reconciliation，当时预计正式迁移32项，旧SQL/hash不改。恢复/fence、保留/异地存储和其他未接通项继续实现；不能据此关闭B03—B06/G2/发布。

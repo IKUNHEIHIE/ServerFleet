@@ -16,6 +16,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
@@ -109,6 +110,7 @@ func serveRecoveryFence(ctx context.Context, c updates.ResidentSupervisorConfig,
 	if !roots.AppendCertsFromPEM(rootsPEM) {
 		return nil, recovery.ErrRecoveryRejected
 	}
+	var cacheMu sync.Mutex
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		reject := func() { http.Error(w, "recovery fence rejected", http.StatusForbidden) }
 		if r.Method != "POST" || (r.URL.Path != "/v1/fence" && r.URL.Path != "/v1/fence/current") || r.URL.RawQuery != "" || r.TLS == nil || r.TLS.Version < tls.VersionTLS13 || len(r.TLS.VerifiedChains) == 0 || len(r.TLS.PeerCertificates) == 0 || recoveryDigest(r.TLS.PeerCertificates[0].Raw) != f.ClientCertificateSHA256 || r.Header.Get("Content-Type") != "application/json" {
@@ -137,35 +139,41 @@ func serveRecoveryFence(ctx context.Context, c updates.ResidentSupervisorConfig,
 		var record updates.ResidentFenceRecord
 		var fenceErr error
 		if r.URL.Path == "/v1/fence" {
-			entries, e := os.ReadDir(f.AuthorizationDirectory)
-			if e != nil || len(entries) > 32 {
-				reject()
-				return
-			} // bound the authenticated immutable-document cache
 			if len(call.Authorization) == 0 || call.Request != nil {
 				reject()
 				return
 			}
-			path := filepath.Join(f.AuthorizationDirectory, "authorization-"+recoveryDigest(call.Authorization)+".json")
-			// The directory is provisioned privately by the operator. No request path.
-			if _, e := os.Lstat(path); errors.Is(e, os.ErrNotExist) {
-				if recovery.WriteOfflineRecord(f.AuthorizationDirectory, filepath.Base(path), json.RawMessage(call.Authorization)) != nil {
-					reject()
-					return
-				}
-			}
-			saved, e := recovery.ReadPrivateFile(path, 128<<10)
-			if e != nil || !bytes.Equal(saved, call.Authorization) {
-				reject()
-				return
-			}
-			authority, e := localpki.VerifyRecoveryAuthority(f.RootCertificate, path, f.RootPin)
+			authority, e := localpki.VerifyRecoveryAuthorityDocument(f.RootCertificate, call.Authorization, f.RootPin)
 			if e != nil {
 				reject()
 				return
 			}
 			p := authority.Payload()
 			if p.OldAuthorityID != c.NodeID || p.TrustGeneration < f.MinimumTrustGeneration {
+				reject()
+				return
+			}
+			path := filepath.Join(f.AuthorizationDirectory, "authorization-"+recoveryDigest(call.Authorization)+".json")
+			// The directory is provisioned privately by the operator. No request path.
+			cacheMu.Lock()
+			cacheErr := func() error {
+				if _, e := os.Lstat(path); errors.Is(e, os.ErrNotExist) {
+					entries, e := os.ReadDir(f.AuthorizationDirectory)
+					if e != nil || len(entries) >= 32 {
+						return recovery.ErrRecoveryRejected
+					}
+					if e = recovery.WriteOfflineRecord(f.AuthorizationDirectory, filepath.Base(path), json.RawMessage(call.Authorization)); e != nil {
+						return e
+					}
+				}
+				saved, e := recovery.ReadPrivateFile(path, 128<<10)
+				if e != nil || !bytes.Equal(saved, call.Authorization) {
+					return recovery.ErrRecoveryRejected
+				}
+				return nil
+			}()
+			cacheMu.Unlock()
+			if cacheErr != nil {
 				reject()
 				return
 			}

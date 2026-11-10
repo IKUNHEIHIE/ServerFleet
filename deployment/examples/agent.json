@@ -1,0 +1,24 @@
+{
+  "format": 1,
+  "component": "agent",
+  "directory": "/home/serverfleet/runtime-agent",
+  "artifact": "/home/serverfleet/release/linux-amd64/agent",
+  "manifest": "/home/serverfleet/release/linux-amd64/agent.manifest.json",
+  "supervisorExecutable": "/home/serverfleet/release/linux-amd64/controller",
+  "rootCertificate": "/home/serverfleet/trust/https-ca.pem",
+  "rootPin": "REPLACE_WITH_OFFLINE_AGENT_ROOT_SPKI_SHA256",
+  "controllerOrigin": "https://fleet.example.com:8443",
+  "controllerAddresses": [
+    "192.0.2.10"
+  ],
+  "releaseKeys": {
+    "release-2026": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY"
+  },
+  "agent": {
+    "nodeId": "REPLACE_WITH_ENROLLED_NODE_ID",
+    "identityDir": "/home/serverfleet/identity",
+    "name": "node-01",
+    "fileRoot": "/home/serverfleet/files",
+    "certificateRoot": "/home/serverfleet/website-keys"
+  }
+}

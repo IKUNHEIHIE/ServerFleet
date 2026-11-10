@@ -1,0 +1,1 @@
+{"version":1,"nodeId":"REPLACE_WITH_ENROLLED_NODE_ID","profiles":[{"id":"uptime","executable":"/usr/bin/uptime","sha256":"REPLACE_WITH_ACTUAL_EXECUTABLE_SHA256","directory":"/home/serverfleet","prefixArguments":[],"maximumArguments":0,"maximumSeconds":10}]}

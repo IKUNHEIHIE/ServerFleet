@@ -58,6 +58,15 @@ function copyWeb(source, target, relative = "", limits = { bytes: 0, files: 0 })
   }
 }
 try {
+  const deploymentDirectory = path.join(output, "deployment");
+  mkdirSync(deploymentDirectory, { mode: 0o700 });
+  mkdirSync(path.join(deploymentDirectory, "examples"), { mode: 0o700 });
+  for (const name of ["README.md", "examples/controller.json", "examples/agent.json", "examples/file-deployment.json", "examples/command-profiles.json", "examples/root-command-profiles.json", "examples/root-executor.json", "examples/root-helper-registration.json"]) {
+    const source = path.join(root, "deployment", name), stat = lstatSync(source);
+    if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size <= 0 || stat.size > (64 << 10)) throw new Error("Invalid deployment documentation or example");
+    writeFileSync(path.join(deploymentDirectory, name), readFileSync(source), { mode: 0o600, flag: "wx" });
+    record(path.posix.join("deployment", name));
+  }
   execute(npm, ["run", "build", "--workspace", "@serverfleet/web"]);
   for (const arch of ["amd64", "arm64"]) {
     const directory = path.join(output, `linux-${arch}`); mkdirSync(directory, { mode: 0o700 });

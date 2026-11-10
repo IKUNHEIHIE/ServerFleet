@@ -1,10 +1,26 @@
 # 任务登记板
 
+## 当前：核心可运行代码交付（2026-11-10 R27）
+
+用户明确“我自己联调和找bug吧，先把完整的、可使用的代码搞出来”，随后要求继续。V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110，单会话主控，从9e96f47恢复独立ServerFleet-usable / feature/cloud-usable-core-20261110；完整源码按Git SHA恢复，新增代码先分批保存远端。允许核心模块/CLI/构建/配置/产品契约接缝，补可运行部署/初始化/签名/分别信任与空表启动，只做必要编译/静态后交付。用户接手实际联调和bug验证；不新增验收套件，不因待验证继续冒称缺少已实现源码；不改原审批、SQL历史或秘密/生产边界。
+
+## 当前：灾备激活阻断修复（2026-11-10 R26）
+
+用户补充授权后继续V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110，独立原分支从70932d1接续、单会话主控。修复activation/fence固定凭据写入与授权缓存验签/容量边界；新增真实mTLS/离线Root/实际owned进程stop-wait/activation/重启负向组合，完成后仅集中检查受影响包及共享静态规则。R25精确CI已通过，新head独立检查；不访问生产/VPS/真实供应商、不提权、不绕过审批/未知状态，不提前关闭五项。
+
+## 当前：五项核心能力组合收口（2026-11-10）
+
+用户“继续”；V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110 在独立 feature/cloud-public-renewals-20261110、ServerFleet-resumed，从 c7520ba 接续原五项核心能力。单会话主控允许目录和共享接缝，无其他Agent、生产/VPS/真实外部账号或提权操作。当前实际UID1000，可运行此前受UID0阻挡的普通用户子进程验证。集中修复命令policy双读竞态、启动readiness请求丢失、未决mailbox重启及父进程审批时效，补实际进程/签名/续传/撤权/回滚/隔离回归后组合检查；原失败保留，仅复验受影响部分。R24及原13项提交保持；R25登记差异，无旧SQL/hash或生成改写。交接须有真实检查和可审分支；真实Root/完整双机/外部/G2仍按实证，不冒称全部DONE。
+
 ## 当前优先子包：五项核心能力（2026-11-09）
 
 用户明确要求先完成 Controller 自身更新、远程 Agent 批次更新、实际灾备接管、Agent 执行端完整续传、普通命令与受控提权。沿用 V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01、当前集中编码分支和唯一目录，起点 2d36f9d；五项已有源码与产品入口，已执行集中检查并修复发现的问题；Web422/契约/安全/双架构候选构建通过，普通UID与新功能专项/完整灾备仍BLOCKED或待证；仍IN PROGRESS，完整验收未通过。R20—R23 含受控命令、节点确认前缀恢复、Controller/Agent 独立监督更新、实际拥有进程 fence 与新权威激活（预计39项迁移）。主控继续单写既有允许模块及必要受控 CLI/Web/独立候选/追加迁移，不启动其他 Agent，不访问生产/VPS/真实供应商或执行提权。普通/root 能力必须明确配置，Root 必须真人管理员当前审批；恢复释放必须实际验证 fence，不能用自称已隔离的布尔值/文档代替。先连续编码，完成整包后一次集中验收，任何环境硬依赖保留 BLOCKED，不把代码提交当作五项 DONE。
 
 ## 当前：集中完成全部剩余代码（2026-11-09）
+
+## 当前：集中完成全部剩余代码（2026-11-10恢复接手）
+
+用户要求接替共享对话 `6af2951c-bef4-83ee-914a-5be9ac5e8426`。先恢复本地2d36f9d，随后核对远端发现13项后续提交；已完整校验原始Git对象并在独立 `feature/cloud-public-renewals-20261110` / `ServerFleet-resumed` 从最新ca309ea整合，原分支和历史保持。唯一会话chatgpt-resume-20261110继续单写，无其他Agent。R24新增公开证书续签审批策略/正式Web/API/恢复失效，追加cx/0020、预计40迁移，此增量UNTESTED。R20—R23原源码、39项迁移及历史CI/验收记录保留，新代码不借旧结果标PASS。
 
 用户最新要求：先集中写完代码，再统一一次大体验收；后续收尾由用户另行交DeepSeek，不自动派发。V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01；feature/cloud-v09-code-completion-20261109 / ServerFleet-completion；IN PROGRESS。唯一基线main9738648ecdf44546e4a2d3503f8c9b862c8a5cb3（#16接收；精确head c07bd976，CI42487322510 success，Go987顶层/1309子项PASS、7SKIP、0FAIL，Web422PASS）。环境重建后从私库重新clone，不复用旧Windows目录/秘密。
 

@@ -9,6 +9,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/url"
@@ -92,6 +93,12 @@ func (m *publicCertificateExecution) current(ctx context.Context, scope *publicC
 			return auth.ErrDenied
 		}
 	} else {
+		if scope.task.Source == "system" && !scope.cleanup {
+			var p map[string]string
+			if json.Unmarshal([]byte(scope.task.Params), &p) != nil || m.renewalTaskCurrent(ctx, scope.task, p) != nil {
+				return auth.ErrDenied
+			}
+		}
 		csrID, zoneID, e := m.requestParams(scope.task)
 		if e != nil || zoneID != scope.zoneID {
 			return auth.ErrDenied
@@ -115,7 +122,7 @@ func (m *publicCertificateExecution) credentialGate(ctx context.Context, op auth
 	scope.mu.Lock()
 	bound, active := scope.leases[op.OperationID]
 	scope.mu.Unlock()
-	if !active || bound != op || op.SubjectID != scope.task.SubmitterID || op.CredentialID != m.o.DNSCredentialID || op.ExpectedRevision != m.o.DNSCredentialRevision || op.Module != "dns" || op.Source != "web" || op.Action != "use" || op.PlanDigest != scope.task.PlanHash || op.ChangeID != "" {
+	if !active || bound != op || op.SubjectID != scope.task.SubmitterID || op.CredentialID != m.o.DNSCredentialID || op.ExpectedRevision != m.o.DNSCredentialRevision || op.Module != "dns" || op.Source != scope.task.Source || op.Action != "use" || op.PlanDigest != scope.task.PlanHash || op.ChangeID != "" {
 		return auth.ErrDenied
 	}
 	return m.current(ctx, scope)
@@ -134,7 +141,7 @@ func (m *publicCertificateExecution) borrowDNS(ctx context.Context, use dns.Secr
 	if _, err := rand.Read(nonce[:]); err != nil {
 		return err
 	}
-	op := auth.CredentialOperation{SubjectID: scope.task.SubmitterID, CredentialID: m.o.DNSCredentialID, Module: "dns", Source: "web", OperationID: "acme-dns-" + hex.EncodeToString(nonce[:]), PlanDigest: scope.task.PlanHash, Action: "use", ExpectedRevision: m.o.DNSCredentialRevision}
+	op := auth.CredentialOperation{SubjectID: scope.task.SubmitterID, CredentialID: m.o.DNSCredentialID, Module: "dns", Source: scope.task.Source, OperationID: "acme-dns-" + hex.EncodeToString(nonce[:]), PlanDigest: scope.task.PlanHash, Action: "use", ExpectedRevision: m.o.DNSCredentialRevision}
 	scope.mu.Lock()
 	scope.leases[op.OperationID] = op
 	scope.mu.Unlock()

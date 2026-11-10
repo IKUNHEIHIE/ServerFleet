@@ -58,6 +58,17 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 	if err != nil || pin != request.RootPin {
 		return result, errAgentConnect
 	}
+	tlsPin := pin
+	if request.ControllerCA != "" {
+		ca, e := readAgentFile(request.ControllerCA, 16<<10)
+		if e != nil {
+			return result, errAgentConnect
+		}
+		roots, tlsPin, e = parseAgentConnectionRoot(ca)
+		if e != nil {
+			return result, errAgentConnect
+		}
+	}
 	endpoint, err := parseAgentLinkEndpoint(request.ControllerURL)
 	if err != nil {
 		return result, errAgentConnect
@@ -81,7 +92,7 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 			return nil
 		},
 		func(ctx context.Context, certificate tls.Certificate) error {
-			linkErr = runOneShotLink(ctx, request, endpoint, roots, pin, certificate, facts, &result)
+			linkErr = runOneShotLink(ctx, request, endpoint, roots, tlsPin, certificate, facts, &result)
 			return linkErr
 		})
 	if err != nil {

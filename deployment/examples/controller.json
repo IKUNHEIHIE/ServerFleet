@@ -1,0 +1,29 @@
+{
+  "format": 1,
+  "component": "controller",
+  "directory": "/home/serverfleet/runtime-controller",
+  "artifact": "/home/serverfleet/release/linux-amd64/controller",
+  "manifest": "/home/serverfleet/release/linux-amd64/controller.manifest.json",
+  "supervisorExecutable": "/home/serverfleet/release/linux-amd64/controller",
+  "rootCertificate": "/home/serverfleet/trust/https-ca.pem",
+  "rootPin": "REPLACE_WITH_OFFLINE_AGENT_ROOT_SPKI_SHA256",
+  "controllerOrigin": "https://fleet.example.com:8443",
+  "controllerAddresses": [
+    "192.0.2.10"
+  ],
+  "releaseKeys": {
+    "release-2026": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY"
+  },
+  "controllerArguments": [
+    "-listen",
+    "0.0.0.0:8443",
+    "-agent-pki-dir",
+    "/home/serverfleet/pki",
+    "-tls-cert",
+    "/home/serverfleet/tls/fullchain.pem",
+    "-tls-key",
+    "/home/serverfleet/tls/private-key.pem",
+    "-web-dir",
+    "/home/serverfleet/release/linux-amd64/web"
+  ]
+}

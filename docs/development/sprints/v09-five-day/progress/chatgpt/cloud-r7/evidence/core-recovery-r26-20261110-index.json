@@ -1,0 +1,35 @@
+{
+  "sourceHeadBefore": "70932d1880e9f8e95210dfde48fb879df1b4caa1",
+  "validation": {
+    "command": "go test -race -json -count=1 ./apps/controller/bootstrap ./apps/controller/localpki ./internal/recovery",
+    "topPassed": 25,
+    "topSkipped": 1,
+    "failed": 0,
+    "skipReason": "private helper subprocess only",
+    "policy": "pass",
+    "vet": "pass",
+    "staticcheck": "pass after correcting PATH; original failed invocation retained"
+  },
+  "scope": "Synthetic already-reconciled boundary; production mTLS/offline Root/actual owned child/activate/SQL/audit/restart. Not full archive extraction, formal Controller product startup or physical two-host proof.",
+  "files": {
+    "activation-boundary.jsonl": "36b9b96533eb6ecd53c011eae83e43315be0e701a66f573125da6b3128d0635d",
+    "activation-composition-recheck.jsonl": "6265bf55f21899c301c48949b94a782dbc272d03af60d1fc517733f0856affe7",
+    "activation-final-fixture.jsonl": "fbe94660734475e1b84beb089fa72c57400567b4bc5a2b100bc4ea933cb8e0b3",
+    "activation-keyring-recheck.jsonl": "54a727f6ea5407c6b30044f5c3862633d0123bc3f8aae1b52691ae623a989b8d",
+    "activation-recheck.jsonl": "aa542c66343868bcbd6cd286b2aa071ee56f3288f1222c86391293298a8f09ed",
+    "final-race.jsonl": "f1ebdda19565ef61d567f3b22dbd5a191085d8b27304fc299b17fa03f26fbc61",
+    "policy.log": "b1f3b4e50175e03fd3a25ba09e3c9efd762cd6bd25bc52a3b284a9aadbab4a2c",
+    "recovery-tests.jsonl": "d2345fa44db08c56ca0ca4f123561d70ddfd0116fc45ed1a50ec7113a7c70bfd",
+    "staticcheck-recheck.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "staticcheck.log": "bb8095639024bfc1c952df74b1488895fc0a499b3d6deec000e52f4d5089fc74",
+    "vet.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "sources": {
+    "apps/controller/bootstrap/recovery_fence.go": "5a23925c47686443122881ca031c88e5ddd0337aa22fb2851fce11fb62d77447",
+    "apps/controller/bootstrap/recovery_activation_linux_test.go": "3be3b51f938ba2cad216be17cf929f1934ad9382fca8652e3cebb548b9ee1df3",
+    "apps/controller/localpki/recovery_authority.go": "1870ce1807bfaf2a6db87fd39f3434d322086b67214b49234b920cbaf6123c13",
+    "internal/recovery/restore_bundle.go": "7dead735c1a6d2d1e01f893a00446cd201c92598c751db59c7346b0cf0f9a76b",
+    "internal/recovery/offline_record_linux_test.go": "5a8e1c4062a3cbbfd6508a41370eb837e52f55277c645c7b10073b5f17569341"
+  },
+  "archiveSHA256": "d58d93bec9a8b8c22077d13139ddb4f388dfa47e143e0711ea7fae41ecedb07b"
+}

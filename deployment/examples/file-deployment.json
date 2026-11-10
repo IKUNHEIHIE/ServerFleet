@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "spoolDir": "/home/serverfleet/runtime-controller/file-spool",
+  "nodeRoots": [
+    {
+      "nodeId": "REPLACE_WITH_ENROLLED_NODE_ID",
+      "logicalRoot": "/files"
+    }
+  ]
+}

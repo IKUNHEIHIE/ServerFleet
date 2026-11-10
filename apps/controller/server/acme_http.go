@@ -40,6 +40,7 @@ func publicCertificateBody(w http.ResponseWriter, r *http.Request, max int64) (m
 	return fields, true
 }
 func (s *Server) registerPublicCertificateRoutes() {
+	s.registerPublicRenewalRoutes()
 	s.registerDNSProviderTaskRoutes()
 	s.mux.HandleFunc("GET /api/v1/certificates/public-profile", func(w http.ResponseWriter, r *http.Request) {
 		id, _, err := s.authenticateIdentity(r)

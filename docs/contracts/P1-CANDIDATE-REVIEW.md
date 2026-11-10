@@ -1,5 +1,9 @@
 # P1 候选契约审查与冲突登记
 
+2026-11-10 [R27可运行核心交付](revisions/v09-r27-usable-core.md)：新增provision/bootstrap-token/release CLI、注册令牌文件、可选controller-ca/Root侧controllerCa、file-deployment显式allowEmpty。REST/Proto/UI字段/40项迁移/权限保持；无G2冻结。必要编译静态与用户手工联调分开，不将待验证混称缺少已实现代码。
+
+2026-11-10 R26安全修复：[离线接管凭据与mTLS隔离](revisions/v09-r26-recovery-activation.md)。R20—R25公开字段/路由、Proto/生成、40项迁移、UI权限保持；无新契约冻结。修复固定激活凭据白名单、授权写前验签和32份缓存上限；当前实际组合范围与缺口明确登记，不关闭G2或五项总验收。
+
 2026-11-08主控R11候选：用户上传三策略/真实回执以及显式bindingVersion=2；新增ds/0043（29项），旧28语义与历史SQL不改。详见[兼容差异](revisions/v09-r11-upload-policies.md)，尚不冻结G2、不关闭P1-C10/发布准入。
 
 2026-11-04主控增量：AM-02首审A4的独立新增候选位于`api/openapi/revisions/v09-r9/file-distributions-candidate.yaml`，覆盖5条冻结多目标分发路由、202/task绑定、逐目标投影、取消与400/404/409/422/503等错误语义。新候选由主控协调随#11返修提出，Redocly独立登记；现有3原候选、R8、Proto/gen及兼容基线不变。它不批准完整持久续传、不冻结G2，P1-C10/资料与发布缺口仍OPEN。
@@ -103,3 +107,9 @@ Typed Agent apply is explicitly enabled by node-owned mailbox configuration and 
 ### R23 — owned-process fence and explicit recovered authority (candidate / UNTESTED)
 
 [差异](revisions/v09-r23-recovery-authority.md)。新 cx/0019（预计 39 项）记录不可省略的 supervisor 权威绑定、恢复激活与历史；Root 签名 + 独立 mTLS parent 实际 stop/wait + 当前 nonce 观察后才能释放 hold。每个 runtime gate 持续复核，未知锁/不可用保持隔离；不等于物理 fence/双机认证。Controller 替换维护门与私有 parent readiness 分离；远程 Agent 终态只接受实际 supervisor 提交。代码阶段仍 UNTESTED，原始材料/旧迁移与生成保持，B03—B06/G2/发布未关闭。
+
+# 2026-11-10 R24 增量登记
+
+公开证书续签策略、system 人工审批签发任务和恢复失效候选见 `revisions/v09-r24-public-renewals.md` 与 `api/openapi/revisions/v09-r24/public-renewals-candidate.yaml`。追加 cx/0020，预计40迁移；普通Web R17三字段路径不变。正式UI/功能文档同步；全部UNTESTED，集中整包验收后再评审，不冻结G2。
+
+R25 核心安全收口：既有R20命令与R22更新/监督接口字段保持，单次已校验profile快照、启动窗口新请求处理、未决mailbox重启拒绝与统一审批时效见[差异](revisions/v09-r25-core-lifecycle.md)。无新增权限/迁移/生成；实际跨进程验证与完整产品边界按本轮记录，不把helper就绪协议当整套产品/真实Root/物理双机验收。

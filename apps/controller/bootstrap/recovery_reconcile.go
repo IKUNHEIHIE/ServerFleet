@@ -135,6 +135,9 @@ func reconcileStagedBackup(ctx context.Context, directory, authorityPath, newPKI
 		if e := recovery.SuspendRestoredResidentAuthorityTx(txCtx, tx, p.OldAuthorityID, p.NewAuthorityID); e != nil {
 			return e
 		}
+		if e := certificates.InvalidateRestoredRenewalsTx(txCtx, tx, now); e != nil {
+			return e
+		}
 		if e := recovery.RecordReconciliationTx(txCtx, tx, receipt); e != nil {
 			return e
 		}

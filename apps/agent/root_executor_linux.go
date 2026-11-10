@@ -42,6 +42,7 @@ type rootExecutorConfiguration struct {
 	Ledger            string `json:"ledger"`
 	ControllerOrigin  string `json:"controllerOrigin"`
 	RootCertificate   string `json:"rootCertificate"`
+	ControllerCA      string `json:"controllerCa,omitempty"`
 	RootPin           string `json:"rootPin"`
 	ClientCertificate string `json:"clientCertificate"`
 	ClientKey         string `json:"clientKey"`
@@ -308,6 +309,16 @@ func rootAdmissionClient(cfg rootExecutorConfiguration) (*http.Client, string, e
 	pool, pin, err := parseAgentConnectionRoot(root)
 	if err != nil || pin != cfg.RootPin {
 		return nil, "", errExecutionRejected
+	}
+	if cfg.ControllerCA != "" {
+		raw, e := readCommandPrivateFile(cfg.ControllerCA, 16<<10, true)
+		if e != nil {
+			return nil, "", e
+		}
+		pool, _, e = parseAgentConnectionRoot(raw)
+		if e != nil {
+			return nil, "", errExecutionRejected
+		}
 	}
 	certRaw, err := readCommandPrivateFile(cfg.ClientCertificate, 32<<10, true)
 	if err != nil {

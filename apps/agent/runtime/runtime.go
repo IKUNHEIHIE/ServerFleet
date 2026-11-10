@@ -44,6 +44,7 @@ type Status struct {
 
 // EnrollRequest is one explicit enrollment attempt with resolved inputs.
 type EnrollRequest struct {
+	ControllerCA    string
 	ControllerURL   string
 	EnrollToken     string
 	StateDir        string
@@ -61,6 +62,7 @@ type EnrollResult struct {
 
 // ConnectRequest is one controlled single-shot link attempt with resolved inputs.
 type ConnectRequest struct {
+	ControllerCA    string
 	ControllerURL   string
 	StateDir        string
 	RootPin         string
@@ -112,8 +114,10 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	stateDir := flags.String("state-dir", "", "local Agent identity directory (absolute)")
 	rootPin := flags.String("root-pin", "", "trusted local Agent root SPKI SHA-256 (64 hex)")
 	rootCert := flags.String("root-cert", "", "local Agent root certificate PEM path (also derives -root-pin)")
+	controllerCA := flags.String("controller-ca", "", "optional separately trusted HTTPS root; identity remains pinned by -root-pin")
 	controllerURL := flags.String("controller-url", "", "Controller https or wss origin, e.g. https://controller.example")
 	enrollToken := flags.String("enroll-token", "", "one-time enrollment token")
+	enrollTokenFile := flags.String("enroll-token-file", "", "private enrollment token file (Linux; avoids secrets in process arguments)")
 	connectOnce := flags.Bool("connect-once", false, "open one controlled WSS+mTLS connection, sample once and exit")
 	serve := flags.Bool("serve", false, "maintain WSS+mTLS with bounded reconnect; stop with SIGTERM")
 	fileRoot := flags.String("file-root", "", "explicit private Linux file root (enables reviewed files.transfer.v1 profile)")
@@ -135,6 +139,24 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		return 2
 	}
 	if *rootHelper != "" && (!filepath.IsAbs(*rootHelper) || !(*serve || *connectOnce)) {
+		return 2
+	}
+	if *enrollTokenFile != "" {
+		if *enrollToken != "" {
+			fmt.Fprintln(stderr, "agent: choose one enrollment token source")
+			return 2
+		}
+		token, err := readEnrollmentTokenFile(*enrollTokenFile)
+		if err != nil {
+			fmt.Fprintln(stderr, "agent: enrollment token file is invalid or not private")
+			return 2
+		}
+		*enrollToken = token
+	}
+	if *controllerCA != "" && !filepath.IsAbs(*controllerCA) {
+		return 2
+	}
+	if *updateMailbox != "" && (!filepath.IsAbs(*updateMailbox) || !(*serve || *connectOnce)) {
 		return 2
 	}
 	if *commandProfiles != "" && (!filepath.IsAbs(*commandProfiles) || !(*serve || *connectOnce)) {
@@ -202,7 +224,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			fmt.Fprintln(stderr, "agent: persistent connection unavailable")
 			return 1
 		}
-		if err := deps.Serve(ctx, ConnectRequest{ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, UpdateMailbox: *updateMailbox, RootHelper: *rootHelper, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
+		if err := deps.Serve(ctx, ConnectRequest{ControllerCA: *controllerCA, ControllerURL: origin, StateDir: *stateDir, RootPin: resolvedPin, RootCertificate: *rootCert, NodeName: strings.TrimSpace(*nodeName), AgentVersion: *agentVersion, Persistent: true, CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, UpdateMailbox: *updateMailbox, RootHelper: *rootHelper, FileRoot: *fileRoot, GatewayPrefix: *gatewayPrefix, NginxBinary: *nginxBinary}); err != nil {
 			fmt.Fprintln(stderr, "agent: persistent connection stopped; reconnect budget exhausted or local state invalid")
 			return 1
 		}
@@ -230,6 +252,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			return 2
 		}
 		result, err := deps.Enroll(ctx, EnrollRequest{
+			ControllerCA:    *controllerCA,
 			ControllerURL:   origin,
 			EnrollToken:     *enrollToken,
 			StateDir:        *stateDir,
@@ -266,6 +289,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 			return 2
 		}
 		result, err := deps.Connect(ctx, ConnectRequest{
+			ControllerCA:    *controllerCA,
 			FileRoot:        *fileRoot,
 			CertificateRoot: *certificateRoot, CertificateCA: *certificateCA, CommandProfiles: *commandProfiles, UpdateMailbox: *updateMailbox, RootHelper: *rootHelper,
 			ControllerURL:   origin,

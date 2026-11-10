@@ -24,6 +24,7 @@ import (
 )
 
 type publicCertificateExecution struct {
+	renewals                            publicRenewalState
 	publicationDNSLocks                 [64]sync.Mutex
 	s                                   *Server
 	authorityID                         string
@@ -111,7 +112,10 @@ func (m *publicCertificateExecution) taskScope(t tasks.Task, zone string) *publi
 }
 func (m *publicCertificateExecution) requestParams(t tasks.Task) (string, string, error) {
 	var p map[string]string
-	if t.ActionID != actionPublicCertificateIssue || t.Source != "web" || t.ScopeRevision != 0 || t.PluginID != "" || t.OperationClass != tasks.OperationClassModifying || !t.ApprovalRequired || len(t.Targets) != 1 || json.Unmarshal([]byte(t.Params), &p) != nil || len(p) != 3 || p["profileSha256"] != m.profileSHA || !deploymentID.MatchString(p["csrTaskId"]) || !deploymentID.MatchString(p["zoneId"]) {
+	if t.ActionID != actionPublicCertificateIssue || t.ScopeRevision != 0 || t.PluginID != "" || t.OperationClass != tasks.OperationClassModifying || !t.ApprovalRequired || len(t.Targets) != 1 || json.Unmarshal([]byte(t.Params), &p) != nil || p["profileSha256"] != m.profileSHA || !deploymentID.MatchString(p["csrTaskId"]) || !deploymentID.MatchString(p["zoneId"]) {
+		return "", "", certificates.ErrACMEConfig
+	}
+	if !(t.Source == string(audit.SourceWeb) && len(p) == 3 || t.Source == string(audit.SourceSystem) && len(p) == 6 && deploymentID.MatchString(p["renewalId"]) && deploymentID.MatchString(p["previousOrderTaskId"]) && p["renewalRevision"] != "") {
 		return "", "", certificates.ErrACMEConfig
 	}
 	return p["csrTaskId"], p["zoneId"], nil
@@ -161,7 +165,7 @@ func (m *publicCertificateExecution) Execute(ctx context.Context, t tasks.Task) 
 		if err := certificates.ReservePublicOrderTx(ctx, tx, order); err != nil {
 			return err
 		}
-		return m.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: t.SubmitterID, Action: actionPublicCertificateIssue, Result: "allowed", RequestID: t.RequestID, TaskID: t.ID, NodeIDs: []string{csr.NodeID}, Source: audit.SourceWeb, ReasonCode: "public_certificate_order_reserved", At: order.UpdatedAt})
+		return m.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: t.SubmitterID, Action: actionPublicCertificateIssue, Result: "allowed", RequestID: t.RequestID, TaskID: t.ID, NodeIDs: []string{csr.NodeID}, Source: audit.Source(t.Source), ReasonCode: "public_certificate_order_reserved", At: order.UpdatedAt})
 	})
 	if err != nil {
 		return result(tasks.NodeResultUnknown, "certificate reservation outcome unknown; no automatic replay")
@@ -249,7 +253,7 @@ func (p *trackedCertificateChallenges) persist(ctx context.Context) error {
 		if err := certificates.ObservePublicOrderChallengesTx(ctx, tx, p.scope.task.ID, p.scope.task.PlanHash, records); err != nil {
 			return err
 		}
-		return p.manager.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: p.scope.task.SubmitterID, Action: actionPublicCertificateIssue, Result: "allowed", RequestID: p.scope.task.RequestID, TaskID: p.scope.task.ID, Source: audit.SourceWeb, ReasonCode: "dns_challenge_observation", At: time.Now().UTC()})
+		return p.manager.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: p.scope.task.SubmitterID, Action: actionPublicCertificateIssue, Result: "allowed", RequestID: p.scope.task.RequestID, TaskID: p.scope.task.ID, Source: audit.Source(p.scope.task.Source), ReasonCode: "dns_challenge_observation", At: time.Now().UTC()})
 	})
 }
 func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, order certificates.PublicOrder, issued *certificates.ACMEIssued, issueErr error, tracked *trackedCertificateChallenges) (map[string]tasks.WorkerResult, error) {
@@ -299,7 +303,7 @@ func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, o
 		if code == tasks.NodeResultSucceeded {
 			result = "success"
 		}
-		return m.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: t.SubmitterID, Action: actionPublicCertificateIssue, Result: result, RequestID: t.RequestID, TaskID: t.ID, NodeIDs: []string{order.NodeID}, Source: audit.SourceWeb, ReasonCode: "public_order_terminal_observed", At: order.UpdatedAt})
+		return m.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: t.SubmitterID, Action: actionPublicCertificateIssue, Result: result, RequestID: t.RequestID, TaskID: t.ID, NodeIDs: []string{order.NodeID}, Source: audit.Source(t.Source), ReasonCode: "public_order_terminal_observed", At: order.UpdatedAt})
 	})
 	if err != nil {
 		code = tasks.NodeResultUnknown

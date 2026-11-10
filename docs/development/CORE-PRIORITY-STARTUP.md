@@ -1,5 +1,9 @@
 # 五项核心功能：部署接线与验证边界
 
+2026-11-10实际运行先看[部署说明](../../deployment/README.md)。controller provision生成普通用户独立parent/slot/mailbox、真实schema/start/service及Controller私有setup token，bootstrap-token仅刷新未初始化库的10分钟令牌。release keygen/sign用于离线发行签名；Agent使用-enroll-token-file，HTTPS根可-controller-ca（Root broker为controllerCa）分别配置，内部身份-root-pin保持。无节点初装生成allowEmpty:true的拒绝式文件注册表，注册后填原文件并重启同一parent。五项源码与手工联调验收分别交付，本轮只编译/静态。
+
+2026-11-10 R25补充：parent在启动child前冻结已有请求，readiness期间新请求正常处理；遗留mailbox/update-active.json与slot update-lock同样阻止重启，不自行删除。Controller停机交接沿用统一任务的独立审批/版本/计划和默认30分钟期限；普通命令只用同一次已校验profile快照。细则见 `../contracts/revisions/v09-r25-core-lifecycle.md`，启动字段和Root权限保持。
+
 2026-11-09；V09-CLOUD-CODE-COMPLETE-01 / chatgpt-takeover-01。本页说明集中编码分支的真实入口，验收记录另行补入。**未运行验证不能当可部署证明；未操作生产、VPS 或真实外部账号。** 固定 Go1.27.3、Node24.22.1、npm11；普通 Linux UID，私有目录0700/文件0600，无符号链接/硬链接，不从 Windows 搬运行材料。实际签名和部署由操作员预置，开发命令不生成生产签名。
 
 ## 受控普通命令 / Root
@@ -35,3 +39,6 @@ Controller 子进程 arguments 包含原管理 HTTPS/PKI/DB 选项和 `-resident
 显式 `controller recovery activate -runtime /absolute/private/runtime.json -resident-supervisor /absolute/private/new-supervisor.json -offline-ack`：验证 Root 授权仍有效及既有 reconciliation；实际请求独立 parent stop/wait 自己拥有的旧 Controller，完成不可逆 fence 后才事务记录新权威/审计，最后写 release。此命令不启动新主控，也不触碰陌生进程。随后用新 supervisor 正常启动新 Controller，整个运行时持续核对当前外部 fence、Root/issuer/代次/撤销和原 hold，证据/网络失败即停止业务。`controller recovery status -runtime ... -resident-supervisor ... -offline-ack` 实时复核但不激活。正式备份页只读观察当前状态，不接受恢复/Root私钥，也不解除隔离。
 
 新主控不复活旧 Agent 证书、会话、审批、在途任务或未知 cleanup；在新私有 Agent 状态目录重新注册并人工核对节点/权限，不覆盖/删除旧状态。已发生的远端未知副作用不自动重放。旧 Controller 不属于独立 parent、无法确认其停止、有未知更新锁/进程 reservation、外部 fence 不可用时维持 BLOCKED。此模型是实际拥有进程的隔离，不能冒充物理双机、电源/网络 fence、ARM运行、硬1C1G或真实供应商认证。B03—B06/G2/发布仍需各自正式验收。
+
+
+2026-11-10 R26修复：激活凭据activation-attempt.json/activation.json按固定名独占持久化；授权缓存文件名必须绑定实际规范JSON字节SHA256，最大128KiB（普通凭据16KiB）。独立parent先验签/核对权威与代次，再写最多32份的缓存；已有合法相同字节文档在满额时仍可观察。失败/重复激活不覆盖旧凭据，不自动重放；实时隔离端不可达仍维持隔离。
