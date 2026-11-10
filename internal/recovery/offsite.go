@@ -215,7 +215,7 @@ func (m *BackupMaintenance) RemoteRecords(ctx context.Context, subject string) (
 	if m.manager.authorizeRead(ctx, subject) != nil {
 		return nil, ErrBackupUnavailable
 	}
-	rows, e := m.manager.o.DB.Query(ctx, `SELECT payload FROM cx_backup_remote_objects WHERE state<>'deleted' ORDER BY id LIMIT 10000`)
+	rows, e := m.manager.o.DB.Query(ctx, `SELECT payload FROM cx_backup_remote_objects WHERE state<>'deleted' ORDER BY id LIMIT 10001`)
 	if e != nil {
 		return nil, e
 	}
@@ -231,6 +231,9 @@ func (m *BackupMaintenance) RemoteRecords(ctx context.Context, subject string) (
 			return nil, ErrBackupUnavailable
 		}
 		out = append(out, r)
+	}
+	if len(out) > 10000 {
+		return nil, ErrBackupUnavailable
 	}
 	return out, rows.Err()
 }
@@ -361,6 +364,8 @@ func (m *BackupMaintenance) TaskParameters(ctx context.Context, subject, action,
 	return params, nil
 }
 func (m *BackupMaintenance) Execute(ctx context.Context, t tasks.Task) (map[string]tasks.WorkerResult, error) {
+	ctx, stop := context.WithTimeout(ctx, 10*time.Minute)
+	defer stop()
 	result := func(code tasks.NodeResultCode, message string) (map[string]tasks.WorkerResult, error) {
 		return map[string]tasks.WorkerResult{t.TargetResourceID: {Code: code, Message: message}}, nil
 	}
@@ -470,17 +475,9 @@ func (m *BackupMaintenance) AutomaticWork(ctx context.Context) (BackupPolicy, []
 	}
 	work := []map[string]string{}
 	if p.AutoUpload && p.Destination != nil {
-		backups, e := m.manager.List(ctx, p.OwnerID)
+		backups, e := m.inventory(ctx, p.OwnerID)
 		if e != nil {
 			return p, nil, e
-		}
-		remote, e := m.RemoteRecords(ctx, p.OwnerID)
-		if e != nil {
-			return p, nil, e
-		}
-		seen := map[string]bool{}
-		for _, r := range remote {
-			seen[r.BackupID+destinationHash(r.Destination)] = true
 		}
 		for _, b := range backups {
 			if len(work) >= 5 {
@@ -494,7 +491,12 @@ func (m *BackupMaintenance) AutomaticWork(ctx context.Context) (BackupPolicy, []
 			if err != nil {
 				return p, nil, err
 			}
-			if b.Kind == "full" && b.Status == "ready" && source.Status == tasks.StatusCompleted && local.State == "present" && !seen[b.ID+destinationHash(*p.Destination)] {
+			var existing string
+			lookupErr := m.manager.o.DB.QueryRow(ctx, `SELECT id FROM cx_backup_remote_objects WHERE backup_id=? AND destination_sha256=?`, b.ID, destinationHash(*p.Destination)).Scan(&existing)
+			if lookupErr != nil && !storage.IsNotFound(lookupErr) {
+				return p, nil, lookupErr
+			}
+			if b.Kind == "full" && b.Status == "ready" && source.Status == tasks.StatusCompleted && local.State == "present" && storage.IsNotFound(lookupErr) {
 				params, e := m.TaskParameters(ctx, p.OwnerID, ActionBackupUpload, b.ID)
 				if e == nil {
 					params["_action"] = ActionBackupUpload
@@ -517,14 +519,12 @@ func (m *BackupMaintenance) AutomaticWork(ctx context.Context) (BackupPolicy, []
 func InvalidateRestoredBackupPolicyTx(ctx context.Context, tx storage.Tx) error {
 	var raw []byte
 	e := tx.QueryRow(ctx, `SELECT payload FROM cx_backup_policy WHERE id='current'`).Scan(&raw)
-	if storage.IsNotFound(e) {
-		return nil
-	}
-	if e != nil {
-		return e
-	}
 	var p BackupPolicy
-	if json.Unmarshal(raw, &p) != nil {
+	if storage.IsNotFound(e) {
+		p = BackupPolicy{IntervalHours: 24, LocalDays: 7, LocalKeep: 3, RemoteDays: 30, RemoteKeep: 7, RequireVerifiedRemote: true}
+	} else if e != nil {
+		return e
+	} else if json.Unmarshal(raw, &p) != nil {
 		return ErrRecoveryRejected
 	}
 	p.ScheduledBackups = false
@@ -533,7 +533,7 @@ func InvalidateRestoredBackupPolicyTx(ctx context.Context, tx storage.Tx) error 
 	p.Revision++
 	p.UpdatedAt = time.Now().UTC()
 	raw, _ = json.Marshal(p)
-	_, e = tx.Exec(ctx, `UPDATE cx_backup_policy SET revision=?,payload=? WHERE id='current'`, p.Revision, raw)
+	_, e = tx.Exec(ctx, `INSERT INTO cx_backup_policy VALUES('current',?,?) ON CONFLICT(id) DO UPDATE SET revision=excluded.revision,payload=excluded.payload`, p.Revision, raw)
 	return e
 }
 
@@ -554,3 +554,12 @@ func maintenanceResult(t tasks.Task, code tasks.NodeResultCode, message string) 
 }
 
 var _ tasks.Worker = (*BackupMaintenance)(nil)
+
+// Fail closed rather than silently treating an incomplete inventory as all copies.
+func (m *BackupMaintenance) inventory(ctx context.Context, subject string) ([]BackupMetadata, error) {
+	v, e := m.manager.listMetadata(ctx, subject, 10001)
+	if e != nil || len(v) > 10000 {
+		return nil, ErrBackupUnavailable
+	}
+	return v, nil
+}

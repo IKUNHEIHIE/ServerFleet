@@ -52,7 +52,7 @@ func bindingAAD(binding credentialBinding, keyID string) ([]byte, error) {
 		return nil, ErrInvalidCheck
 	}
 	switch binding.Purpose {
-	case "ai-byok", "dns-provider", "smtp-password", "qqbot-secret", "xray-user", "xray-reality":
+	case "ai-byok", "dns-provider", "smtp-password", "qqbot-secret", "backup-storage", "xray-user", "xray-reality":
 	default:
 		return nil, ErrDenied
 	}

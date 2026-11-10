@@ -91,7 +91,7 @@ func publicRemoteIP(ip netip.Addr) bool {
 	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.IsLoopback() || ip.IsLinkLocalUnicast() || ip.IsUnspecified() {
 		return false
 	}
-	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "2001::/32", "2002::/16", "64:ff9b::/96"} {
+	for _, cidr := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "192.0.2.0/24", "198.18.0.0/15", "198.51.100.0/24", "203.0.113.0/24", "240.0.0.0/4", "2001:db8::/32", "2001::/32", "2002::/16", "64:ff9b::/96", "64:ff9b:1::/48"} {
 		if netip.MustParsePrefix(cidr).Contains(ip) {
 			return false
 		}
@@ -274,7 +274,15 @@ func (s *remoteStore) request(ctx context.Context, method string, o RemoteObject
 	return response, nil
 }
 func strongRemoteETag(s string) bool {
-	return len(s) >= 2 && len(s) <= 256 && s[0] == '"' && s[len(s)-1] == '"' && !strings.HasPrefix(s, "W/") && !strings.ContainsAny(s, "\r\n\x00")
+	if len(s) < 2 || len(s) > 256 || s[0] != '"' || s[len(s)-1] != '"' {
+		return false
+	}
+	for _, c := range []byte(s[1 : len(s)-1]) {
+		if c < 0x21 || c == 0x22 || c == 0x7f {
+			return false
+		}
+	}
+	return true
 }
 func (s *remoteStore) put(ctx context.Context, o RemoteObject, input io.Reader) (RemoteObject, error) {
 	r, e := s.request(ctx, http.MethodPut, o, &offsiteReader{r: io.LimitReader(input, o.Bytes+1), gate: s.gate})

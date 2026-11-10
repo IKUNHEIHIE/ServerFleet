@@ -461,10 +461,13 @@ func (m *BackupManager) authorizeRead(ctx context.Context, subject string) error
 	return m.o.Authorize(ctx, subject)
 }
 func (m *BackupManager) List(ctx context.Context, subject string) ([]BackupMetadata, error) {
+	return m.listMetadata(ctx, subject, 1000)
+}
+func (m *BackupManager) listMetadata(ctx context.Context, subject string, limit int) ([]BackupMetadata, error) {
 	if err := m.authorizeRead(ctx, subject); err != nil {
 		return nil, err
 	}
-	rows, err := m.o.DB.Query(ctx, `SELECT id,task_id,kind,status,sha256,bytes,created_at,updated_at,recipient_fingerprint,remote_status,error_code FROM cx_recovery_backups ORDER BY created_at DESC,id DESC LIMIT 1000`)
+	rows, err := m.o.DB.Query(ctx, `SELECT id,task_id,kind,status,sha256,bytes,created_at,updated_at,recipient_fingerprint,remote_status,error_code FROM cx_recovery_backups ORDER BY created_at DESC,id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}

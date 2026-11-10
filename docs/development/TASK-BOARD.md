@@ -4,6 +4,12 @@
 
 用户明确完成这两项。V09-CLOUD-OPS-01 / chatgpt-ops-20261110，单会话主控，从main b49afc80按完整Git树恢复独立ServerFleet-ops / feature/cloud-backup-resolution-20261110，原目录保留。允许internal/recovery、tasks、ai必要观察端口、auth备份存储凭据用途、Controller受控装配、正式Web备份/任务/凭据及独立契约/产品/追加迁移/检查；不改历史SQL/原始资料/生成/锁/已批准ADR。实现密文真实远程存储、自动任务与保留预览/保护/删除回执，以及异常统一收件箱/认领/证据/复核/后续任务关联，原UNKNOWN和审批不可复活或改写成功。所有执行经统一任务/当前权限/审计，生产凭据/外部供应商由用户配置，合成专项验证。集中功能包后做必要检查，不逐处重跑全套；远端检查点与PR交付，已授权按精确head检查通过后合并，不自我APPROVE/直推main/强推。
 
+代码已实现并保存远端检查点73d1138，正式Web入口、S3/WebDAV密文条件上传／读回验证、当前凭据租约、保留预览／独立审批／真实删除、人工处置独立复核和恢复失效均已装配。只追加cx/0021、cx/0022，组合42迁移，无依赖／历史SQL／生成文件漂移。使用见[BACKUP-OPERATIONS](BACKUP-OPERATIONS.md)，产品/API见[R29](../contracts/revisions/v09-r29/CHANGELOG.md)。
+
+本地集中检查：npm ci和固定工具安装完成；Web类型／424项测试／构建PASS，policy／contracts／security PASS（npm audit 0，govulncheck未发现漏洞）；受影响包go vet通过。SQLite人工处置、真实本地TLS S3/WebDAV条件传输及删除、SSRF／秘密歧义、保留／下载／固定清单／重启UNKNOWN专项通过；Controller HTTP曾因测试缺少初始化幂等头失败，修正测试；再发现新增凭据用途未进入AEAD许可清单，补齐生产用途后HTTP和凭据专项PASS。不删除旧失败记录或放宽认证。补备份10分钟有界租约、官方AWS签名向量、真实副本最少数量及满事件恢复保护后，最终精确head交原生CI全套核验；只以该head的CI证明组合验收。真实供应商／VPS／离线恢复联调仍由用户完成。
+
+最终专项`go test -race ./internal/recovery ./internal/tasks ./tests/integration/v09/platform -run TestOffsite|TestIncident|TestR29`三包PASS；新增凭据用途／10分钟租约专项PASS，官方AWS签名向量PASS；staticcheck（显式固定Go PATH）PASS。最终源码继续由远端同head Foundation CI执行完整Go/Web/契约/边界/安全检查，结果在PR评论登记，不以旧检查点绿灯替代新head。
+
 ## 当前：合并开发代码（2026-11-10）
 
 用户明确“开始合并”。V09-CLOUD-MERGE-01 / chatgpt-merge-20261110，单会话总控，允许当前任务分支、PR基线调整、既有实现及检查阻断的必要修复、检查记录与按精确SHA合并main；不直推/强推main、不自我APPROVE，不扩展生产操作。#17精确ca309ea的CI42651887446两job成功，已合入main c88dca45；#18 d4f54ba的CI42788427970因回滚测试重启后立即取消与健康末次核验竞态失败。保留生产UNKNOWN，修正该测试对实际退出/持久锁的核对。#18/#19已转main基线，最新组合9df049e包含全部前置代码；待同head完整检查合格后接收，旧失败不抹去。

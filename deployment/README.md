@@ -105,3 +105,7 @@ serverfleet ALL=(root) NOPASSWD: /usr/local/libexec/serverfleet-agent-root root-
 可选feed字段为`{"origin":"https://releases.example.com","addresses":["192.0.2.20"],"rootCertificate":"/private/feed-ca.pem"}`；路径/releases/{component}/linux/{architecture}/{version}/{manifest.json,signature.bin,artifact}，无代理/重定向/DNS回退。初装即需灾备隔离端时，Controller JSON根增加fenceConfiguration指向原私有fence服务配置，生成器冻结SHA；完整字段和恢复流程见仓库docs/development/CORE-PRIORITY-STARTUP.md。不要在绑定后随意改supervisor策略。
 
 代码与联调验收分别交付。准备命令不访问网络，运行后的任务继续受权限、独立审批、审计、签名、防降级、UNKNOWN不重放及实时隔离门约束；真实提权/供应商/故障/物理双机验证由操作者执行。
+
+## 异地备份与人工处置
+
+R29支持在正式备份页配置S3兼容／WebDAV HTTPS密文上传、定时备份和保留清理。先配置上述加密备份部署与离线密钥确认，再添加 `backup_storage_secret` 凭据（模块 `backups`）；策略只保存引用。详见[操作说明](../docs/development/BACKUP-OPERATIONS.md)。自动清理选项创建独立审批任务；UNKNOWN操作通过只读核验与任务中心人工处置闭环，不自动重试。

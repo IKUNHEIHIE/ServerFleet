@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -22,8 +21,9 @@ const ActionIncidentManage = "operations.incidents.manage"
 
 func IncidentMigrations() []storage.Migration {
 	return []storage.Migration{{Version: "cx/0022_operator_incidents", Name: "immutable anomaly sources and audited human dispositions", Statements: []string{
-		`CREATE TABLE task_incidents(id TEXT PRIMARY KEY,source_key TEXT NOT NULL UNIQUE,revision INTEGER NOT NULL,payload BLOB NOT NULL CHECK(length(payload)<=131072),created_at TEXT NOT NULL)`,
+		`CREATE TABLE task_incidents(id TEXT PRIMARY KEY,source_key TEXT NOT NULL UNIQUE,revision INTEGER NOT NULL,payload BLOB NOT NULL CHECK(length(payload)<=131072),created_at TEXT NOT NULL,source_kind TEXT NOT NULL,source_id TEXT NOT NULL,source_revision INTEGER NOT NULL)`,
 		`CREATE INDEX task_incidents_created ON task_incidents(created_at,id)`,
+		`CREATE INDEX task_incidents_source ON task_incidents(source_kind,source_id,source_revision)`,
 	}}}
 }
 
@@ -55,20 +55,20 @@ type IncidentProposal struct {
 	At           time.Time `json:"at"`
 }
 type Incident struct {
-	ID                string            `json:"id"`
-	Revision          uint64            `json:"revision"`
-	Source            IncidentSource    `json:"source"`
-	SourceDigest      string            `json:"sourceDigest"`
-	State             string            `json:"state"`
-	AssigneeID        string            `json:"assigneeId,omitempty"`
-	CreatedAt         time.Time         `json:"createdAt"`
-	UpdatedAt         time.Time         `json:"updatedAt"`
-	Proposal          *IncidentProposal `json:"proposal,omitempty"`
-	ResolvedBy        string            `json:"resolvedBy,omitempty"`
-	FollowupTaskIDs   []string          `json:"followupTaskIds"`
-	Events            []IncidentEvent   `json:"events"`
-	LastRequestID     string            `json:"-"`
-	LastRequestDigest string            `json:"-"`
+	ID              string            `json:"id"`
+	Revision        uint64            `json:"revision"`
+	Source          IncidentSource    `json:"source"`
+	SourceDigest    string            `json:"sourceDigest"`
+	State           string            `json:"state"`
+	AssigneeID      string            `json:"assigneeId,omitempty"`
+	CreatedAt       time.Time         `json:"createdAt"`
+	UpdatedAt       time.Time         `json:"updatedAt"`
+	Proposal        *IncidentProposal `json:"proposal,omitempty"`
+	ResolvedBy      string            `json:"resolvedBy,omitempty"`
+	FollowupTaskIDs []string          `json:"followupTaskIds"`
+	Events          []IncidentEvent   `json:"events"`
+	RestoreCount    uint64            `json:"restoreCount,omitempty"`
+	LastRestoredAt  *time.Time        `json:"lastRestoredAt,omitempty"`
 }
 
 // request bindings are persisted separately from the public JSON view.
@@ -125,7 +125,7 @@ func (s *IncidentService) Observe(ctx context.Context, source IncidentSource) er
 		}
 		v := Incident{ID: id, Revision: 1, Source: source, SourceDigest: digest, State: "open", CreatedAt: now, UpdatedAt: now, FollowupTaskIDs: []string{}, Events: []IncidentEvent{{1, "observed", "system", "", now}}}
 		raw, _ := json.Marshal(incidentRecord{View: v, Requests: map[string]string{}})
-		if _, e = tx.Exec(txCtx, `INSERT INTO task_incidents VALUES(?,?,?,?,?)`, id, digest, 1, raw, storage.EncodeTime(now)); e != nil {
+		if _, e = tx.Exec(txCtx, `INSERT INTO task_incidents VALUES(?,?,?,?,?,?,?,?)`, id, digest, 1, raw, storage.EncodeTime(now), source.Kind, source.ID, source.Revision); e != nil {
 			return e
 		}
 		return s.o.Audit.AppendTx(txCtx, tx, audit.Event{SubjectID: source.OwnerID, Action: ActionIncidentManage, Result: "success", RequestID: id, TaskID: source.TaskID, Source: audit.SourceSystem, ReasonCode: "anomaly_observed_no_execution", At: now})
@@ -189,7 +189,7 @@ func (s *IncidentService) List(ctx context.Context, subject string) ([]Incident,
 	if e := s.gate(ctx, subject, nil); e != nil {
 		return nil, e
 	}
-	rows, e := s.o.DB.Query(ctx, `SELECT id FROM task_incidents ORDER BY created_at DESC,id DESC LIMIT 1000`)
+	rows, e := s.o.DB.Query(ctx, `SELECT id FROM task_incidents ORDER BY (json_extract(CAST(payload AS TEXT),'$.View.state')='resolved') ASC,created_at DESC,id DESC LIMIT 1000`)
 	if e != nil {
 		return nil, e
 	}
@@ -335,7 +335,7 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 		r.View = v
 		r.Requests[in.RequestID] = requestDigest
 		raw, e := json.Marshal(r)
-		if e != nil || len(raw) > 128<<10 {
+		if e != nil || len(raw) > 120<<10 {
 			return ErrInvalidTask
 		}
 		result, e := tx.Exec(txCtx, `UPDATE task_incidents SET revision=?,payload=? WHERE id=? AND revision=?`, v.Revision, raw, id, in.ExpectedRevision)
@@ -362,7 +362,7 @@ func (s *IncidentService) Decide(ctx context.Context, subject, id string, in Inc
 }
 
 func (r *Repo) IncidentSources(ctx context.Context) ([]IncidentSource, error) {
-	rows, e := r.db.Query(ctx, `SELECT id FROM tasks WHERE status IN ('unknown','failed','partial_failure','expired') ORDER BY updated_at DESC,id DESC LIMIT 1000`)
+	rows, e := r.db.Query(ctx, `SELECT t.id FROM tasks t WHERE t.status IN ('unknown','failed','partial_failure','expired') AND NOT EXISTS(SELECT 1 FROM task_incidents i WHERE i.source_kind='task' AND i.source_id=t.id AND i.source_revision=t.revision) ORDER BY t.updated_at DESC,t.id DESC LIMIT 1000`)
 	if e != nil {
 		return nil, e
 	}
@@ -426,10 +426,14 @@ func InvalidateRestoredIncidentsTx(ctx context.Context, tx storage.Tx, now time.
 		v.Revision++
 		v.UpdatedAt = now
 		v.FollowupTaskIDs = []string{}
-		if len(v.Events) >= 200 {
-			return fmt.Errorf("%w: incident journal full", ErrInvalidTask)
+		// A full human journal must never make disaster recovery impossible.
+		// Preserve all evidence; the dedicated monotonic restore marker and the
+		// existing reconciliation journal record every invalidation regardless.
+		v.RestoreCount++
+		v.LastRestoredAt = &now
+		if len(v.Events) < 200 {
+			v.Events = append(v.Events, IncidentEvent{len(v.Events) + 1, "restore_invalidated", "system", "Old human decisions are historical; fresh review required.", now})
 		}
-		v.Events = append(v.Events, IncidentEvent{len(v.Events) + 1, "restore_invalidated", "system", "Old human decisions are historical; fresh review required.", now})
 		r.Requests = map[string]string{}
 		raw, e := json.Marshal(r)
 		if e != nil {

@@ -60,7 +60,7 @@ func cleanupCandidateKey(c CleanupCandidate) string {
 func (m *BackupMaintenance) cleanupCandidates(ctx context.Context, subject string, p BackupPolicy, now time.Time) ([]CleanupCandidate, []CleanupProtection, error) {
 	candidates := []CleanupCandidate{}
 	protected := []CleanupProtection{}
-	backups, e := m.manager.List(ctx, subject)
+	backups, e := m.inventory(ctx, subject)
 	if e != nil {
 		return nil, nil, e
 	}
@@ -98,8 +98,12 @@ func (m *BackupMaintenance) cleanupCandidates(ctx context.Context, subject strin
 			continue
 		}
 		rank := localRanks[b.RecipientFingerprint]
-		if b.Status == "ready" && source.Status == tasks.StatusCompleted && local.State == "present" {
-			localRanks[b.RecipientFingerprint]++
+		intact := true
+		if b.Status == "ready" && source.Status == tasks.StatusCompleted && local.State == "present" && rank < p.LocalKeep {
+			intact = m.localCopyIntact(ctx, subject, b)
+			if intact {
+				localRanks[b.RecipientFingerprint]++
+			}
 		}
 		reason := ""
 		switch {
@@ -107,6 +111,8 @@ func (m *BackupMaintenance) cleanupCandidates(ctx context.Context, subject strin
 			reason = "pinned"
 		case b.Status != "ready" || source.Status != tasks.StatusCompleted:
 			reason = "source_result_unresolved"
+		case !intact:
+			reason = "minimum_copy_missing_or_corrupt"
 		case local.State != "present":
 			reason = "local_state_unresolved"
 		case m.manager.activeCipher(b.ID):
@@ -147,7 +153,12 @@ func (m *BackupMaintenance) cleanupCandidates(ctx context.Context, subject strin
 		}
 		remotes = append(remotes, remoteCandidate{r, b, local, task})
 	}
-	sort.Slice(remotes, func(i, j int) bool { return remotes[i].backup.CreatedAt.After(remotes[j].backup.CreatedAt) })
+	sort.Slice(remotes, func(i, j int) bool {
+		if remotes[i].backup.CreatedAt.Equal(remotes[j].backup.CreatedAt) {
+			return remotes[i].backup.ID > remotes[j].backup.ID
+		}
+		return remotes[i].backup.CreatedAt.After(remotes[j].backup.CreatedAt)
+	})
 	remoteRanks := map[string]int{}
 	for _, item := range remotes {
 		r, b, local := item.record, item.backup, item.local
@@ -341,6 +352,9 @@ func (m *BackupMaintenance) executeCleanup(ctx context.Context, t tasks.Task, pa
 						return e
 					}
 					defer store.client.CloseIdleConnections()
+					if err := m.verifyRemoteFloor(bctx, t, p, candidate, store); err != nil {
+						return err
+					}
 					return store.remove(bctx, r.Object)
 				})
 			}
@@ -502,4 +516,65 @@ func (m *BackupMaintenance) remoteCompleted(ctx context.Context, r BackupRemoteR
 	}
 	t, e := m.o.ReadTask(ctx, r.VerifiedTaskID)
 	return e == nil && t.Status == tasks.StatusCompleted && (t.ActionID == ActionBackupUpload || t.ActionID == ActionBackupRemoteVerify)
+}
+
+// The count floor must represent real surviving bytes, not just old metadata.
+// Only the newest protected local floor is hashed; expired candidate bytes are
+// checked again immediately before their own exact-file deletion.
+func (m *BackupMaintenance) localCopyIntact(ctx context.Context, subject string, b BackupMetadata) bool {
+	info, e := m.manager.root.Lstat(b.ID + ".age")
+	if e != nil || !privateRecoveryInfo(info, false) || info.Size() != b.Bytes {
+		return false
+	}
+	f, e := m.manager.root.Open(b.ID + ".age")
+	if e != nil {
+		return false
+	}
+	defer f.Close()
+	opened, e := f.Stat()
+	if e != nil || !os.SameFile(info, opened) {
+		return false
+	}
+	h := sha256.New()
+	n, e := io.Copy(h, &offsiteReader{r: io.LimitReader(f, b.Bytes+1), gate: func() error { return m.manager.authorizeRead(ctx, subject) }})
+	return e == nil && n == b.Bytes && hex.EncodeToString(h.Sum(nil)) == b.SHA256
+}
+
+// This runs inside the approved cleanup task's borrowed credential scope. A
+// fresh full read proves at least RemoteKeep newer same-recipient copies exist
+// before an old remote version is removed. Missing/corrupt floor => no delete.
+func (m *BackupMaintenance) verifyRemoteFloor(ctx context.Context, t tasks.Task, p BackupPolicy, c CleanupCandidate, store *remoteStore) error {
+	candidate, e := m.manager.Get(ctx, t.SubmitterID, c.BackupID)
+	if e != nil {
+		return e
+	}
+	records, e := m.RemoteRecords(ctx, t.SubmitterID)
+	if e != nil {
+		return e
+	}
+	count := 0
+	for _, r := range records {
+		if r.ID == c.RemoteID || r.State != "verified" || p.Destination == nil || destinationHash(r.Destination) != destinationHash(*p.Destination) || !m.remoteCompleted(ctx, r) {
+			continue
+		}
+		b, e := m.manager.Get(ctx, t.SubmitterID, r.BackupID)
+		if e != nil {
+			return e
+		}
+		if b.RecipientFingerprint != candidate.RecipientFingerprint || b.Status != "ready" || b.CreatedAt.Before(candidate.CreatedAt) || b.CreatedAt.Equal(candidate.CreatedAt) && b.ID <= candidate.ID {
+			continue
+		}
+		original, e := m.o.ReadTask(ctx, b.TaskID)
+		if e != nil || original.Status != tasks.StatusCompleted {
+			continue
+		}
+		if _, e = store.verify(ctx, r.Object); e != nil {
+			continue
+		}
+		count++
+		if count >= p.RemoteKeep {
+			return nil
+		}
+	}
+	return ErrRemoteUnknown
 }

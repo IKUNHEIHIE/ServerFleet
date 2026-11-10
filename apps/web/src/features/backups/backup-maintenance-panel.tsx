@@ -100,7 +100,7 @@ function MaintenanceContent() {
       ]} />}
       <DataTable caption="异地密文回执" rows={data.remoteObjects} rowKey={r => r.id} columns={[
         { key: "backup", header: "备份", render: r => <span className="break-all text-xs">{r.backupId}</span> },
-        { key: "state", header: "结果", render: r => `${r.state}${r.errorCode ? ` · ${r.errorCode}` : ""}` },
+        { key: "state", header: "结果", render: r => <span>{r.state}{r.errorCode ? ` · ${r.errorCode}` : ""} · <a className="underline" href={`#/tasks/${encodeURIComponent(r.verifiedTaskId ?? r.taskId)}`}>核对任务结果</a></span> },
         { key: "object", header: "远端对象", render: r => <span className="break-all text-xs">{r.object.key}</span> },
         { key: "verify", header: "核验", render: r => <Button size="sm" disabled={locked || !data.policy.destination} onClick={() => void action.run("verify", r.id)}>只读核验异地副本</Button> },
       ]} />
