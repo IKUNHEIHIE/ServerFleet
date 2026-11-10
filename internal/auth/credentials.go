@@ -107,6 +107,8 @@ func credentialPurpose(kind string) (string, string, error) {
 		return "qqbot-secret", "qqbot", nil
 	case "ai_api_key":
 		return "ai-byok", "ai", nil
+	case "backup_storage_secret":
+		return "backup-storage", "backups", nil
 	default:
 		return "", "", ErrDenied
 	}
@@ -506,7 +508,14 @@ func (v *CredentialService) UseForService(ctx context.Context, op CredentialOper
 			err = ErrCredentialUseUnknown
 		}
 	}()
-	useCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	loanTimeout := 30 * time.Second
+	// Backup transfer is bounded but may stream a full encrypted bundle. This
+	// exception applies only to the registered backup module, with current
+	// operation authorization before/after the loan and per-chunk service gates.
+	if op.Module == "backups" {
+		loanTimeout = 10 * time.Minute
+	}
+	useCtx, cancel := context.WithTimeout(ctx, loanTimeout)
 	defer cancel()
 	if consume(useCtx, plaintext) != nil || useCtx.Err() != nil {
 		return ErrCredentialUseUnknown

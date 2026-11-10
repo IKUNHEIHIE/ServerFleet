@@ -22,6 +22,7 @@ const KIND_LABEL: Record<CredentialMetadata["kind"], string> = {
   smtp_password: "SMTP 密码/授权码",
   qqbot_secret: "QQ Bot AppSecret",
   ai_api_key: "AI 模型 Key",
+  backup_storage_secret: "备份存储秘密",
   other: "其他",
 };
 
@@ -53,6 +54,7 @@ function CredentialEditor({
   const [name, setName] = useState("");
   const [kind, setKind] = useState<CredentialMetadata["kind"]>("cloudflare_token");
   const [secret, setSecret] = useState("");
+  const [requestKey, setRequestKey] = useState(() => crypto.randomUUID());
   const [usageScope, setUsageScope] = useState("");
   const [expiresAt, setExpiresAt] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
@@ -61,7 +63,7 @@ function CredentialEditor({
       const response = await credentialsApi.rotate(credential.id, body);
       return response.data;
     }
-    const response = await credentialsApi.create(body);
+    const response = await credentialsApi.create(body, requestKey);
     return response.data;
   });
 
@@ -70,6 +72,7 @@ function CredentialEditor({
     setName(credential?.name ?? "");
     setKind(credential?.kind ?? "cloudflare_token");
     setSecret("");
+    setRequestKey(crypto.randomUUID());
     setUsageScope(credential?.usageScope.join(",") ?? "");
     setExpiresAt(credential?.expiresAt ? credential.expiresAt.slice(0, 16) : "");
     setLocalError(null);
@@ -131,6 +134,7 @@ function CredentialEditor({
             </Select>
           )}
         </Field>
+        {kind === "backup_storage_secret" ? <Notice tone="info" title="备份存储凭据格式">使用范围填 backups。秘密值填写紧凑 JSON：S3 为 {'{"accessKeyId":"…","secretAccessKey":"…"}'}；WebDAV 为 {'{"username":"…","password":"…"}'}。只通过 HTTPS 保存，不回显。</Notice> : null}
         <Field label="秘密值" hint="仅提交，不回显；轮换时也需要重新输入。">
           {ids => (
             <TextInput
@@ -143,7 +147,7 @@ function CredentialEditor({
             />
           )}
         </Field>
-        <Field label="允许使用的模块" hint="逗号分隔；由服务端校验最小权限。例如 dns,smtp,qqbot,ai。">
+        <Field label="允许使用的模块" hint="逗号分隔；由服务端校验最小权限。例如 dns,smtp,qqbot,ai,backups。">
           {ids => <TextInput id={ids.inputId} value={usageScope} onChange={event => setUsageScope(event.target.value)} />}
         </Field>
         <Field label="到期时间（可选）">

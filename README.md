@@ -1,5 +1,7 @@
 # ServerFleet
 
+2026-11-10 R29新增加密备份自动异地上传（S3兼容／WebDAV）、保留周期／独立审批清理和统一异常人工处置。正式页面入口在备份页与任务中心，配置及完整流程见[备份与人工处置](docs/development/BACKUP-OPERATIONS.md)，产品/API变更见[R29](docs/contracts/revisions/v09-r29/CHANGELOG.md)。清理保留独立审批，人工结案不改写原UNKNOWN；真实存储与节点联调由用户进行。
+
 2026-11-10 R28补齐AI运维执行循环：模型选工具、当前资源与审批校验、统一任务提交、真实结果回传、继续规划和最终答复，新增正式Web「Agent运行」页签、取消及显式重启恢复入口。使用见[AI运维循环](docs/development/AI-AGENT-LOOP.md)，产品/API同步见[R28](docs/contracts/revisions/v09-r28-ai-agent-loop.md)。真实模型与节点联调由用户进行，代码交付不替代完整发布验收。
 
 2026-11-10按用户最新分工，五项核心源码与手工联调分开交付。本分支补本机provision、首次管理员令牌、离线发行签名、安全注册令牌文件、HTTPS/内部身份CA分别信任，以及无节点拒绝式文件配置；构建附完整说明和七种模板。使用入口见[部署与首次使用](deployment/README.md)，变更见[R27](docs/contracts/revisions/v09-r27-usable-core.md)。本轮仅做必要编译/静态，联调和找bug由用户负责；不再将等待手工验证当作缺少已存在代码，也不宣称完整产品已发布。

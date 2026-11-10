@@ -63,12 +63,18 @@ type BackupDeploymentOptions struct {
 }
 
 type BackupManager struct {
-	o     BackupDeploymentOptions
-	mu    sync.Mutex
-	root  *os.Root
-	stage *os.Root
+	o           BackupDeploymentOptions
+	mu          sync.Mutex
+	root        *os.Root
+	stage       *os.Root
+	maintenance *BackupMaintenance
+	readersMu   sync.Mutex
+	readers     map[*os.File]string
 }
 type BackupMetadata struct {
+	LocalStatus          string    `json:"localStatus,omitempty"`
+	Pinned               bool      `json:"pinned"`
+	LocalRevision        uint64    `json:"localRevision"`
 	ID                   string    `json:"id"`
 	TaskID               string    `json:"taskId"`
 	Kind                 string    `json:"kind"`
@@ -172,6 +178,9 @@ func (m *BackupManager) gate(ctx context.Context, t tasks.Task) error {
 	if m == nil || ctx == nil || ctx.Err() != nil || m.o.RuntimeCurrent(ctx) != nil || m.o.Authorize(ctx, t.SubmitterID) != nil || m.o.ValidateConfiguration(ctx) != nil {
 		return ErrBackupUnavailable
 	}
+	if t.Source == "system" && m.maintenance != nil && m.maintenance.ScheduledCurrent(ctx, t) != nil {
+		return ErrBackupUnavailable
+	}
 	current, err := m.o.TaskCurrent(ctx, t.ID, t.PlanHash)
 	if err != nil || current.TargetType != tasks.TargetTypeController || current.TargetResourceID != m.o.AuthorityID || current.ActionID != t.ActionID {
 		return ErrBackupUnavailable
@@ -194,7 +203,11 @@ func (m *BackupManager) Execute(ctx context.Context, t tasks.Task) (map[string]t
 		return result(tasks.NodeResultFailed, "backup authorization unavailable"), nil
 	}
 	var params map[string]string
-	if json.Unmarshal([]byte(t.Params), &params) != nil || len(params) != 2 || params["recipientFingerprint"] != m.RecipientFingerprint() || params["kind"] != "full" && params["kind"] != "key_challenge" {
+	expectedFields := 2
+	if t.Source == "system" && m.maintenance != nil {
+		expectedFields = 3
+	}
+	if json.Unmarshal([]byte(t.Params), &params) != nil || len(params) != expectedFields || params["recipientFingerprint"] != m.RecipientFingerprint() || params["kind"] != "full" && params["kind"] != "key_challenge" {
 		return result(tasks.NodeResultFailed, "backup plan binding rejected"), nil
 	}
 	kind := params["kind"]
@@ -448,10 +461,13 @@ func (m *BackupManager) authorizeRead(ctx context.Context, subject string) error
 	return m.o.Authorize(ctx, subject)
 }
 func (m *BackupManager) List(ctx context.Context, subject string) ([]BackupMetadata, error) {
+	return m.listMetadata(ctx, subject, 1000)
+}
+func (m *BackupManager) listMetadata(ctx context.Context, subject string, limit int) ([]BackupMetadata, error) {
 	if err := m.authorizeRead(ctx, subject); err != nil {
 		return nil, err
 	}
-	rows, err := m.o.DB.Query(ctx, `SELECT id,task_id,kind,status,sha256,bytes,created_at,updated_at,recipient_fingerprint,remote_status,error_code FROM cx_recovery_backups ORDER BY created_at DESC,id DESC LIMIT 1000`)
+	rows, err := m.o.DB.Query(ctx, `SELECT id,task_id,kind,status,sha256,bytes,created_at,updated_at,recipient_fingerprint,remote_status,error_code FROM cx_recovery_backups ORDER BY created_at DESC,id DESC LIMIT ?`, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -476,8 +492,16 @@ func (m *BackupManager) List(ctx context.Context, subject string) ([]BackupMetad
 	if rows.Err() != nil {
 		return nil, rows.Err()
 	}
+	rows.Close()
 	if err = m.authorizeRead(ctx, subject); err != nil {
 		return nil, err
+	}
+	if m.maintenance != nil {
+		for i := range out {
+			if err = m.maintenance.enrich(ctx, &out[i]); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return out, nil
 }
@@ -505,6 +529,11 @@ func (m *BackupManager) Get(ctx context.Context, subject, id string) (BackupMeta
 	if err != nil {
 		return value, err
 	}
+	if m.maintenance != nil {
+		if err = m.maintenance.enrich(ctx, &value); err != nil {
+			return value, err
+		}
+	}
 	return value, nil
 }
 func (m *BackupManager) OpenCipher(ctx context.Context, subject, requestID, id string) (*os.File, BackupMetadata, error) {
@@ -513,6 +542,9 @@ func (m *BackupManager) OpenCipher(ctx context.Context, subject, requestID, id s
 		return nil, value, err
 	}
 	if value.Status != "ready" || !validDigest(value.SHA256) || value.Bytes <= 0 || value.Bytes > MaxBackupBundleBytes {
+		return nil, value, ErrBackupUnavailable
+	}
+	if value.LocalStatus != "" && value.LocalStatus != "present" {
 		return nil, value, ErrBackupUnavailable
 	}
 	var name string
@@ -573,8 +605,48 @@ func (m *BackupManager) OpenCipher(ctx context.Context, subject, requestID, id s
 	if err = m.authorizeRead(ctx, subject); err != nil {
 		return nil, value, err
 	}
+	if err = m.trackCipher(ctx, file, id); err != nil {
+		return nil, value, err
+	}
 	ok = true
 	return file, value, nil
+}
+
+func (m *BackupManager) trackCipher(ctx context.Context, file *os.File, id string) error {
+	m.readersMu.Lock()
+	defer m.readersMu.Unlock()
+	if m.maintenance != nil {
+		local, e := m.maintenance.LocalState(ctx, id)
+		if e != nil || local.State != "present" {
+			return ErrBackupUnavailable
+		}
+	}
+	if m.readers == nil {
+		m.readers = map[*os.File]string{}
+	}
+	for f := range m.readers {
+		if _, e := f.Stat(); e != nil {
+			delete(m.readers, f)
+		}
+	}
+	m.readers[file] = id
+	return nil
+}
+func (m *BackupManager) activeCipher(id string) bool {
+	m.readersMu.Lock()
+	defer m.readersMu.Unlock()
+	return m.activeCipherLocked(id)
+}
+func (m *BackupManager) activeCipherLocked(id string) bool {
+	active := false
+	for f, key := range m.readers {
+		if _, e := f.Stat(); e != nil {
+			delete(m.readers, f)
+		} else if key == id {
+			active = true
+		}
+	}
+	return active
 }
 func (m *BackupManager) ConfirmRecoveryKey(ctx context.Context, subject, requestID, challengeID, proof string) error {
 	if err := m.authorizeRead(ctx, subject); err != nil {

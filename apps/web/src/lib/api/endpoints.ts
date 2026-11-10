@@ -420,7 +420,7 @@ export const credentialsApi = {
     secret: string;
     usageScope: readonly string[];
     expiresAt?: string;
-  }) => apiClient.request<CredentialMetadata>("/api/v1/credentials", { method: "POST", body }),
+  }, requestKey: string = idempotencyKey("credential-create")) => apiClient.request<CredentialMetadata>("/api/v1/credentials", { method: "POST", body, idempotencyKey: requestKey }),
   references: (credentialId: string, signal?: AbortSignal) =>
     apiClient.request<{ ok: boolean }>(`/api/v1/credentials/${encodeURIComponent(credentialId)}/references`, { signal }),
   rotate: (credentialId: string, body: { name: string; kind: string; secret: string; usageScope: readonly string[]; expiresAt?: string }) =>

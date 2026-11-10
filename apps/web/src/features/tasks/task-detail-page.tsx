@@ -1,3 +1,4 @@
+import { IncidentPanel } from "./incident-panel";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -132,6 +133,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
 
   return (
     <div className="space-y-5">
+      <IncidentPanel key={`incidents:${session.viewEpoch}`} taskId={taskId} />
       <PageHeader
         title={current ? `任务 ${current.taskId}` : "任务详情"}
         description="任务状态、目标快照、审批、逐节点执行与 SSE 事件。取消不冒充回滚；未知结果不自动重跑。"

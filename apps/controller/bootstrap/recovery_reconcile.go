@@ -123,6 +123,12 @@ func reconcileStagedBackup(ctx context.Context, directory, authorityPath, newPKI
 		if e := tasks.InvalidateRestoredTasksTx(txCtx, tx, now); e != nil {
 			return e
 		}
+		if e := tasks.InvalidateRestoredIncidentsTx(txCtx, tx, now); e != nil {
+			return e
+		}
+		if e := recovery.InvalidateRestoredBackupPolicyTx(txCtx, tx); e != nil {
+			return e
+		}
 		// Revoke union, including all identities in the old snapshot. No node can
 		// be resurrected using an old certificate or a restored enrollment token.
 		serials := append(append([]string{}, manifest.Snapshot.RevokedSerials...), p.RevokedSerials...)

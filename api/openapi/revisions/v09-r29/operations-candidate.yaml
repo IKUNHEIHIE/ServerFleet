@@ -1,0 +1,1140 @@
+openapi: 3.1.0
+info:
+  title: Server Fleet backup maintenance and unified human disposition (additive candidate)
+  version: 0.9.0-r29-candidate
+servers:
+- url: https://server-fleet.example.invalid
+security:
+- cookieSession: []
+paths:
+  /api/v1/backups/maintenance:
+    get:
+      operationId: getBackupMaintenanceR29
+      summary: Read backup maintenance policy and operation receipts
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. GET is read-only and accepts no
+        body. Latest 10000 active remote receipts; inventory beyond this bound fails
+        closed. Latest 200 cleanup receipts.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Maintenance'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/backups/maintenance/policy:
+    put:
+      operationId: configureBackupMaintenanceR29
+      summary: Save bounded backup and retention policy
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. CAS revision.
+        Owner/revision/time are server-owned and must be omitted from input policy.
+        Saving changes the policy owner to the caller. S3 path-style or WebDAV HTTPS
+        public endpoint; private IPs, proxies and redirects rejected. Credential kind
+        backup_storage_secret, module backups, exact current credential revision.
+        scheduleCleanup creates an independently approved task; it never authorizes
+        unattended deletes.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Policy'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                expectedRevision:
+                  type: integer
+                  minimum: 0
+                policy:
+                  $ref: '#/components/schemas/PolicyInput'
+              required:
+              - expectedRevision
+              - policy
+  /api/v1/backups/{backupId}/remote-upload:
+    parameters:
+    - name: backupId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    post:
+      operationId: uploadBackupRemoteR29
+      summary: Submit encrypted backup upload
+      description: 'HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. Full ready
+        backup with completed source task only. Conditional PUT (If-None-Match: *),
+        full ciphertext read-back SHA256, durable intent before I/O. Existing intent
+        never replayed, including after restart. No plaintext or recovery keys.'
+      responses:
+        '202':
+          description: Task admitted; execution result remains authoritative.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskAdmission'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: &id001
+              type: object
+              additionalProperties: false
+              properties:
+                idempotencyKey:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+              required:
+              - idempotencyKey
+  /api/v1/backups/remotes/{remoteId}/verify:
+    parameters:
+    - name: remoteId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    post:
+      operationId: verifyBackupRemoteR29
+      summary: Submit a fresh read-only remote verification
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. Reconcile
+        an UNKNOWN upload with a fresh typed read-only task. Reuses immutable location/key/digest,
+        current policy credential. The original task remains UNKNOWN. A newly completed
+        verification may release that remote copy from retention quarantine.
+      responses:
+        '202':
+          description: Task admitted; execution result remains authoritative.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskAdmission'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: *id001
+  /api/v1/backups/maintenance/cleanup-preview:
+    post:
+      operationId: previewBackupCleanupR29
+      summary: Freeze retention candidates and protection reasons
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. Plan digest
+        binds owner, policy revision, UTC day and exact candidate list; expires after
+        24h. Bounded 100 candidates. Counts and age both protect copies by recipient
+        and destination; protects pinned/unresolved/in-use copies. Same-plan remote
+        copy protecting local deletion is retained.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CleanupPlan'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+  /api/v1/backups/maintenance/cleanup:
+    post:
+      operationId: submitBackupCleanupR29
+      summary: Submit an independently approved frozen cleanup task
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. Modifying
+        action; unified independent current administrator approval required. Rechecks
+        every candidate. Changes are skipped; uncertain effects become UNKNOWN without
+        replay. Exact remote object verification plus ETag If-Match and versionId
+        delete, then GET404. Local deletion uses exact inode and durable intent, no
+        active readers. Ready/completed private staging residues can be removed; unknown
+        staging is quarantined.
+      responses:
+        '202':
+          description: Task admitted; execution result remains authoritative.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TaskAdmission'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                planDigest:
+                  type: string
+                  pattern: ^[a-f0-9]{64}$
+                idempotencyKey:
+                  type: string
+                  minLength: 1
+                  maxLength: 128
+              required:
+              - planDigest
+              - idempotencyKey
+  /api/v1/backups/{backupId}/protection:
+    parameters:
+    - name: backupId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    post:
+      operationId: protectBackupR29
+      summary: Pin or release a backup against retention
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. CAS metadata
+        plus audit. Does not mutate ciphertext or original execution result. Secret-like
+        evidence is redacted or rejected.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocalState'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties:
+                expectedRevision:
+                  type: integer
+                  minimum: 0
+                pinned: &id002
+                  type: boolean
+                note:
+                  type: string
+                  minLength: 1
+                  maxLength: 512
+              required:
+              - expectedRevision
+              - pinned
+              - note
+  /api/v1/operations/incidents:
+    get:
+      operationId: listOperatorIncidentsR29
+      summary: Read unified task and AI anomalies
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. GET is read-only and accepts no
+        body. Latest 1000 current visible cases. List omits proposal and includes
+        empty events; fetch detail for evidence/history. Original task failed/partial_failure/unknown/expired
+        and AI failed/unknown/limit_reached. AI operational identifiers only, no private
+        conversation or model output.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Incident'
+                    maxItems: 1000
+                required:
+                - items
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/operations/incidents/sync:
+    post:
+      operationId: syncOperatorIncidentsR29
+      summary: Collect current anomalies without execution
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. Same inert
+        collector also runs every minute. Does not retry, approve, resume or change
+        source work.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: false
+                properties:
+                  observed:
+                    type: integer
+                required:
+                - observed
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              properties: {}
+  /api/v1/operations/incidents/{incidentId}:
+    parameters:
+    - name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    get:
+      operationId: getOperatorIncidentR29
+      summary: Read an authorized anomaly and immutable human history
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. GET is read-only and accepts no
+        body. Current source identity/revision/digest and current read authority required.
+        Evidence filtered again on read.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/operations/incidents/{incidentId}/actions:
+    parameters:
+    - name: incidentId
+      in: path
+      required: true
+      schema:
+        type: string
+        maxLength: 128
+    post:
+      operationId: decideOperatorIncidentR29
+      summary: Record a CAS-bound human disposition
+      description: HTTPS, current human administrator and current runtime authority
+        required. No query. Responses are no-store. Mutations require the current
+        session CSRF token and a unique-key JSON body of at most 128 KiB. Mandatory
+        evidence note and requestId input binding; exact replay idempotent. open ->
+        claim -> investigating -> propose -> review_required -> independent approve
+        -> resolved. reject resumes investigation; release, take_over and reopen are
+        audited. Approver differs from proposer and proposer must still be administrator.
+        link_task requires a readable distinct task created after observation and
+        grants no approval. Human confirmed_succeeded is an attestation, never rewrites
+        machine results. Max 200 journal entries/20 followups; full journals fail
+        closed. Restore invalidates decisions and automatic policy, preserves prior
+        evidence. Original UNKNOWN never automatically retried.
+      responses:
+        '200':
+          description: Authoritative current view.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Incident'
+        '400':
+          description: Invalid body or parameters.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current administrator, source or CSRF denied.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Revision, policy, source, request binding or task conflict.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Backup deployment or runtime unavailable.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Decision'
+components:
+  securitySchemes:
+    cookieSession:
+      type: apiKey
+      in: cookie
+      name: sf_session
+  schemas:
+    Destination:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - s3
+          - webdav
+        endpoint:
+          type: string
+          format: uri
+          maxLength: 2048
+        bucket:
+          type: string
+        region:
+          type: string
+        prefix:
+          type: string
+          maxLength: 512
+        credentialRef:
+          type: string
+          maxLength: 128
+        credentialRevision:
+          type: integer
+          minimum: 1
+      required:
+      - kind
+      - endpoint
+      - prefix
+      - credentialRef
+      - credentialRevision
+    PolicyInput:
+      type: object
+      additionalProperties: false
+      properties:
+        scheduledBackups: *id002
+        intervalHours: &id003
+          type: integer
+          minimum: 1
+          maximum: 168
+        autoUpload: *id002
+        scheduleCleanup: *id002
+        localDays: &id004
+          type: integer
+          minimum: 1
+          maximum: 3650
+        localKeep: &id005
+          type: integer
+          minimum: 1
+          maximum: 1000
+        remoteDays: &id006
+          type: integer
+          minimum: 1
+          maximum: 3650
+        remoteKeep: &id007
+          type: integer
+          minimum: 1
+          maximum: 1000
+        requireVerifiedRemote: *id002
+        destination: &id008
+          $ref: '#/components/schemas/Destination'
+      required:
+      - localKeep
+      - scheduleCleanup
+      - requireVerifiedRemote
+      - intervalHours
+      - remoteKeep
+      - remoteDays
+      - localDays
+      - autoUpload
+      - scheduledBackups
+    Policy:
+      type: object
+      additionalProperties: false
+      properties:
+        scheduledBackups: *id002
+        intervalHours: *id003
+        autoUpload: *id002
+        scheduleCleanup: *id002
+        localDays: *id004
+        localKeep: *id005
+        remoteDays: *id006
+        remoteKeep: *id007
+        requireVerifiedRemote: *id002
+        destination: *id008
+        revision:
+          type: integer
+          minimum: 0
+        ownerId:
+          type: string
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - localKeep
+      - scheduleCleanup
+      - requireVerifiedRemote
+      - intervalHours
+      - remoteKeep
+      - remoteDays
+      - localDays
+      - autoUpload
+      - scheduledBackups
+      - revision
+      - ownerId
+      - updatedAt
+    RemoteObject:
+      type: object
+      additionalProperties: false
+      properties:
+        key:
+          type: string
+        sha256:
+          type: string
+          pattern: ^[a-f0-9]{64}$
+        bytes:
+          type: integer
+          minimum: 1
+        etag:
+          type: string
+        versionId:
+          type: string
+      required:
+      - key
+      - sha256
+      - bytes
+    Remote:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        backupId:
+          type: string
+        taskId:
+          type: string
+        verifiedTaskId:
+          type: string
+        state:
+          type: string
+          enum:
+          - uploading
+          - verified
+          - deleting
+          - deleted
+          - unknown
+        destination:
+          $ref: '#/components/schemas/Destination'
+        object:
+          $ref: '#/components/schemas/RemoteObject'
+        updatedAt:
+          type: string
+          format: date-time
+        errorCode:
+          type: string
+      required:
+      - id
+      - backupId
+      - taskId
+      - state
+      - destination
+      - object
+      - updatedAt
+    Candidate:
+      type: object
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+          enum:
+          - local
+          - remote
+          - staging
+        backupId:
+          type: string
+        remoteId:
+          type: string
+        sha256:
+          type: string
+        bytes:
+          type: integer
+        localRevision:
+          type: integer
+        object:
+          $ref: '#/components/schemas/RemoteObject'
+      required:
+      - scope
+      - backupId
+      - sha256
+      - bytes
+      - localRevision
+    Protection:
+      type: object
+      additionalProperties: false
+      properties:
+        scope:
+          type: string
+        backupId:
+          type: string
+        reason:
+          type: string
+      required:
+      - scope
+      - backupId
+      - reason
+    CleanupPlan:
+      type: object
+      additionalProperties: false
+      properties:
+        digest:
+          type: string
+        ownerId:
+          type: string
+        policyRevision:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        expiresAt:
+          type: string
+          format: date-time
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/Candidate'
+          maxItems: 100
+        protected:
+          type: array
+          items:
+            $ref: '#/components/schemas/Protection'
+          maxItems: 1000
+        approvalRequired:
+          const: true
+      required:
+      - digest
+      - ownerId
+      - policyRevision
+      - createdAt
+      - expiresAt
+      - candidates
+      - protected
+      - approvalRequired
+    CleanupReceipt:
+      type: object
+      additionalProperties: false
+      properties:
+        taskId:
+          type: string
+        planDigest:
+          type: string
+        state:
+          type: string
+        at:
+          type: string
+          format: date-time
+        items:
+          type: array
+          items:
+            type: object
+            additionalProperties: false
+            properties:
+              candidate:
+                $ref: '#/components/schemas/Candidate'
+              state:
+                type: string
+              reason:
+                type: string
+            required:
+            - candidate
+            - state
+          maxItems: 100
+      required:
+      - taskId
+      - planDigest
+      - state
+      - at
+      - items
+    Maintenance:
+      type: object
+      additionalProperties: false
+      properties:
+        policy:
+          $ref: '#/components/schemas/Policy'
+        remoteObjects:
+          type: array
+          items:
+            $ref: '#/components/schemas/Remote'
+          maxItems: 10000
+        cleanupReceipts:
+          type: array
+          items:
+            $ref: '#/components/schemas/CleanupReceipt'
+          maxItems: 200
+      required:
+      - policy
+      - remoteObjects
+      - cleanupReceipts
+    TaskAdmission:
+      type: object
+      additionalProperties: false
+      properties:
+        taskId:
+          type: string
+        status:
+          type: string
+        planHash:
+          type: string
+        approvalRequired: *id002
+      required:
+      - taskId
+      - status
+      - planHash
+      - approvalRequired
+    LocalState:
+      type: object
+      additionalProperties: false
+      properties:
+        backupId:
+          type: string
+        state:
+          type: string
+        pinned: *id002
+        note:
+          type: string
+        revision:
+          type: integer
+        taskId:
+          type: string
+      required:
+      - backupId
+      - state
+      - pinned
+      - note
+      - revision
+    Source:
+      type: object
+      additionalProperties: false
+      properties:
+        kind:
+          type: string
+          enum:
+          - task
+          - ai_run
+        id:
+          type: string
+        ownerId:
+          type: string
+        revision:
+          type: integer
+        state:
+          type: string
+        taskId:
+          type: string
+        sessionId:
+          type: string
+        action:
+          type: string
+        planDigest:
+          type: string
+        nodeIds:
+          type: array
+          items:
+            type: string
+        reason:
+          type: string
+          maxLength: 256
+      required:
+      - kind
+      - id
+      - ownerId
+      - revision
+      - state
+      - nodeIds
+    Event:
+      type: object
+      additionalProperties: false
+      properties:
+        sequence:
+          type: integer
+        action:
+          type: string
+        actor:
+          type: string
+        note:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+      - sequence
+      - action
+      - actor
+      - at
+    Proposal:
+      type: object
+      additionalProperties: false
+      properties:
+        outcome:
+          type: string
+        evidence:
+          type: string
+        proposedBy:
+          type: string
+        sourceDigest:
+          type: string
+        at:
+          type: string
+          format: date-time
+      required:
+      - outcome
+      - evidence
+      - proposedBy
+      - sourceDigest
+      - at
+    Incident:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: string
+        revision:
+          type: integer
+        source:
+          $ref: '#/components/schemas/Source'
+        sourceDigest:
+          type: string
+        state:
+          type: string
+          enum:
+          - open
+          - investigating
+          - review_required
+          - resolved
+        assigneeId:
+          type: string
+        resolvedBy:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        followupTaskIds:
+          type: array
+          items:
+            type: string
+          maxItems: 20
+        proposal:
+          $ref: '#/components/schemas/Proposal'
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/Event'
+          maxItems: 200
+        restoreCount:
+          type: integer
+          minimum: 1
+        lastRestoredAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - revision
+      - source
+      - sourceDigest
+      - state
+      - createdAt
+      - updatedAt
+      - followupTaskIds
+      - events
+    Decision:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRevision:
+          type: integer
+          minimum: 1
+        requestId:
+          type: string
+          maxLength: 128
+        action:
+          type: string
+          enum:
+          - claim
+          - release
+          - take_over
+          - note
+          - propose
+          - approve
+          - reject
+          - reopen
+          - link_task
+        note:
+          type: string
+          minLength: 1
+          maxLength: 4096
+        outcome:
+          type: string
+          enum:
+          - confirmed_succeeded
+          - confirmed_failed
+          - confirmed_no_effect
+          - accepted_unresolved
+        followupTaskId:
+          type: string
+      required:
+      - expectedRevision
+      - requestId
+      - action
+      - note
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+      required:
+      - code

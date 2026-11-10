@@ -208,3 +208,31 @@ func TestCredentialProviderCompletionAuditFailureAndActionBinding(t *testing.T) 
 		t.Fatal("same key bypassed per-key budget with alias")
 	}
 }
+
+func TestCredentialBackupPurposeAndBoundedLoan(t *testing.T) {
+	ctx := context.Background()
+	v, _, _, session := credentialFixture(t)
+	meta, e := v.Create(ctx, session.Secret, session.CSRF, CredentialInput{Name: "Synthetic backup", Kind: "backup_storage_secret", Secret: `{"username":"synthetic","password":"synthetic-backup-secret"}`, UsageScope: []string{"backups"}})
+	if e != nil {
+		t.Fatal(e)
+	}
+	op := credentialOp(session, meta, "backup-loan-test", "use")
+	op.Module = "backups"
+	if e = v.UseForService(ctx, op, func(c context.Context, b []byte) error {
+		deadline, ok := c.Deadline()
+		if !ok || time.Until(deadline) < 9*time.Minute || time.Until(deadline) > 10*time.Minute {
+			t.Error("backup loan not bounded to transfer window")
+		}
+		if !bytes.Contains(b, []byte("synthetic-backup-secret")) {
+			t.Error("wrong purpose binding")
+		}
+		return nil
+	}); e != nil {
+		t.Fatal(e)
+	}
+	op.OperationID = "cross-purpose"
+	op.Module = "ai"
+	if e = v.UseForService(ctx, op, func(context.Context, []byte) error { t.Fatal("cross-purpose loan admitted"); return nil }); e != ErrDenied {
+		t.Fatal(e)
+	}
+}

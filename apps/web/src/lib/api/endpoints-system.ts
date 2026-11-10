@@ -29,6 +29,9 @@ export const recoveryApi = {
 };
 
 export interface EncryptedBackupRecord {
+  readonly localStatus?: string;
+  readonly pinned?: boolean;
+  readonly localRevision?: number;
   readonly id: string;
   readonly taskId: string;
   readonly kind: "full" | "key_challenge";

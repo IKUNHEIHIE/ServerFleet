@@ -37,7 +37,14 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 			old = append(old, filtered)
 		}
 	}
-	if total != 40 {
+	legacyCount := 0
+	for _, group := range old {
+		legacyCount += len(group)
+	}
+	if legacyCount != 21 {
+		t.Fatal("historical fixture is not actual adopted21", legacyCount)
+	}
+	if total != 42 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)
@@ -150,7 +157,7 @@ func TestR2RestoredControllerRequiresOfflineReleaseAndLiveRuntimeGuard(t *testin
 // accepted 29-version baseline. Historical SQL/checksums are left unchanged.
 func completionOnlyMigration(v string) bool {
 	switch v {
-	case "cx/0011_encrypted_backups", "cx/0012_recovery_revocations", "cx/0013_recovery_reconciliation", "cx/0014_release_acquisition", "cx/0015_agent_certificate_csr", "cx/0016_node_certificate_chains", "cx/0017_node_certificate_sets", "cx/0018_public_certificate_orders", "cx/0019_controller_supervision", "ds/0082_publishing_dns_tasks":
+	case "cx/0011_encrypted_backups", "cx/0012_recovery_revocations", "cx/0013_recovery_reconciliation", "cx/0014_release_acquisition", "cx/0015_agent_certificate_csr", "cx/0016_node_certificate_chains", "cx/0017_node_certificate_sets", "cx/0018_public_certificate_orders", "cx/0019_controller_supervision", "cx/0020_public_certificate_renewals", "cx/0021_backup_maintenance", "cx/0022_operator_incidents", "ds/0082_publishing_dns_tasks":
 		return true
 	}
 	return false

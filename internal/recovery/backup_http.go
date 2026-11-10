@@ -77,7 +77,16 @@ func (h *BackupHTTP) list(w http.ResponseWriter, r *http.Request) {
 		writeRecoveryProblem(w, 503, "BACKUP_SOURCE_UNAVAILABLE")
 		return
 	}
-	writeRecoveryJSON(w, 200, map[string]any{"items": values, "recipientFingerprint": h.o.Manager.RecipientFingerprint(), "recoveryKeyConfirmed": confirmed, "automaticBackupsConfigured": h.o.Manager.o.AutomaticConfigured})
+	automatic := h.o.Manager.o.AutomaticConfigured
+	if h.o.Manager.maintenance != nil {
+		p, e := h.o.Manager.maintenance.Policy(r.Context(), p.SubjectID)
+		if e != nil {
+			writeRecoveryProblem(w, 503, "BACKUP_SOURCE_UNAVAILABLE")
+			return
+		}
+		automatic = p.ScheduledBackups
+	}
+	writeRecoveryJSON(w, 200, map[string]any{"items": values, "recipientFingerprint": h.o.Manager.RecipientFingerprint(), "recoveryKeyConfirmed": confirmed, "automaticBackupsConfigured": automatic})
 }
 func (h *BackupHTTP) create(w http.ResponseWriter, r *http.Request) { h.submit(w, r, "full") }
 func (h *BackupHTTP) challenge(w http.ResponseWriter, r *http.Request) {

@@ -177,6 +177,8 @@ type Server struct {
 	UpdatesHTTP          *updates.HTTP
 	RecoveryHTTP         *recovery.HTTP
 	Backups              *recovery.BackupManager
+	BackupMaintenance    *recovery.BackupMaintenance
+	Incidents            *tasks.IncidentService
 	BackupHTTP           *recovery.BackupHTTP
 	backupAutomaticOwner string
 
@@ -254,6 +256,8 @@ func Migrations() [][]storage.Migration {
 		publishing.TargetMigrations(),
 		publishing.DNSBatchMigrations(),
 		recovery.Migrations(),
+		recovery.OffsiteMigrations(),
+		tasks.IncidentMigrations(),
 		transport.RecoveryMigrations(),
 		transport.CertificateCSRMigrations(),
 		transport.CertificateChainMigrations(),
@@ -325,6 +329,8 @@ func AuditActions() []string {
 		"enrollment.list",
 		"agent.revoke",
 		"ai.sessions.create",
+		tasks.ActionIncidentManage,
+		recovery.ActionBackupPolicy, recovery.ActionBackupProtect, recovery.ActionBackupRemoteVerify,
 		"ai.runs.create",
 		"ai.runs.advance",
 		"ai.tools.submitted",
@@ -688,6 +694,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	credentialsService, err := auth.NewPersistentCredentialService(
 		ctx, identityService, keyDir,
 		func(ctx context.Context, op auth.CredentialOperation) error {
+			if op.Module == "backups" && s != nil {
+				return s.backupCredentialGate(ctx, op)
+			}
 			if publicCertificates != nil && op.Module == "dns" {
 				return publicCertificates.credentialGate(ctx, op)
 			}
@@ -961,6 +970,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	aiConversation = s.AIConversation
+	if err := s.setupOperatorIncidents(); err != nil {
+		return cleanup(err)
+	}
 	if err := s.setupPlugins(cfg); err != nil {
 		return cleanup(err)
 	}
@@ -1210,9 +1222,13 @@ func (s *Server) startTaskScheduler() {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()
 		}
-		if s.Backups != nil && s.backupAutomaticOwner != "" {
+		if s.Backups != nil {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runBackupSchedule(ctx) }()
+		}
+		if s.Incidents != nil {
+			workers.Add(1)
+			go func() { defer workers.Done(); s.runOperatorIncidentMonitor(ctx) }()
 		}
 		if s.PublicCertificates != nil {
 			workers.Add(1)
@@ -1313,6 +1329,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) registerRoutes() error {
+	s.registerOperatorIncidentRoutes()
+	s.registerBackupMaintenanceRoutes()
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave5"})
