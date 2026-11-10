@@ -186,6 +186,13 @@ func (b *PersistentGenerationBudget) Admit(ctx context.Context, r GenerationRequ
 	for _, m := range r.Messages {
 		input += uint64(len(m.RedactedContent))
 	}
+	if r.Agent != nil {
+		b, e := json.Marshal(r.Agent)
+		if e != nil {
+			return ErrToolDenied
+		}
+		input += uint64(len(b))
+	}
 	err = b.store.Update(ctx, func(raw []byte) ([]byte, []GenerationBudgetAudit, error) {
 		s, err := decodeBudget(raw)
 		if err != nil {

@@ -459,7 +459,8 @@ func (h *ManagementHTTP) executeTool(w http.ResponseWriter, r *http.Request) {
 		"accepted":         true,
 		"validatedNodeIds": append([]string{}, body.TargetNodeIDs...),
 		"operation":        body.ToolName,
-		"state":            "queued",
+		"state":            result.State,
+		"observation":      result.Observation,
 		"scopeRevision":    body.ScopeRevision,
 	})
 }

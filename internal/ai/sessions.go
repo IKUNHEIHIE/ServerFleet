@@ -64,6 +64,7 @@ type SessionView struct {
 	ApprovalPolicy ApprovalPolicy  `json:"approvalPolicy"`
 }
 type sessionRecord struct {
+	AgentRuns    map[string]agentRunRecord `json:",omitempty"`
 	Scope        Scope
 	Grants       map[string]ResourceGrant
 	Approvals    map[string]approvalRecord `json:",omitempty"`
@@ -158,6 +159,9 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 			return nil, ErrSessionUnavailable
 		}
 		if validateConversation(id, record.Conversation) != nil {
+			return nil, ErrSessionUnavailable
+		}
+		if validateAgentRuns(id, record) != nil {
 			return nil, ErrSessionUnavailable
 		}
 		groups := map[string]bool{}

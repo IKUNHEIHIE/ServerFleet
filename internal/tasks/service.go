@@ -88,6 +88,7 @@ type NodeLookup interface {
 
 // Options configures the unified task service.
 type Options struct {
+	TaskCurrent         func(context.Context, Task) error
 	ControllerExecution *ControllerExecution
 	DB                  *storage.DB
 	Repo                *Repo
@@ -108,6 +109,7 @@ type Options struct {
 }
 
 type Service struct {
+	taskCurrent     func(context.Context, Task) error
 	controller      *ControllerExecution
 	runtimeGate     func(context.Context) error
 	db              *storage.DB
@@ -185,6 +187,7 @@ func NewService(options Options) (*Service, error) {
 		return nil, err
 	}
 	return &Service{
+		taskCurrent: options.TaskCurrent,
 		runtimeGate: options.RuntimeGate, controller: controller,
 		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
 		dispatcher: options.Dispatcher, approvals: options.Approvals, nodes: options.Nodes, now: now,
@@ -275,8 +278,12 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 		return Task{}, fmt.Errorf("%w: plugin id is required", ErrInvalidTask)
 	}
 	admission := Task{ActionID: request.ActionID, TargetType: targetType, TargetResourceID: request.TargetResourceID, ScopeRevision: request.ScopeRevision, PluginID: request.PluginID, Source: string(source), OperationClass: request.OperationClass, Targets: []Target{{NodeID: snapshot.IDs()[0]}}}
+	admission.SubmitterID, admission.Params, admission.IdempotencyKey = request.SubjectID, params, request.IdempotencyKey
 	if targetType != TargetTypeController {
-		admission.Targets = nil
+		admission.Targets = make([]Target, len(snapshot.IDs()))
+		for i, id := range snapshot.IDs() {
+			admission.Targets[i] = Target{NodeID: id}
+		}
 	}
 	if err := s.authorizeForTask(ctx, admission, request.SubjectID, request.ActionID, request.RequestID, snapshot.IDs(), "task_submit"); err != nil {
 		return Task{}, err

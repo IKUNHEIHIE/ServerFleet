@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 当前：AI运维完整Agent循环（2026-11-10 R28）
+
+用户明确要求完成AI运维完整Agent执行循环。任务V09-CLOUD-AI-LOOP-01 / chatgpt-ai-loop-20261110，从d4f54ba恢复独立ServerFleet-ai / feature/cloud-ai-loop-20261110，单会话主控，不启动其他Agent。允许internal/ai、Controller AI/命令/统一任务授权接缝、正式Web AI及契约/产品/检查记录；复用现有Go/BYOK/统一任务、审批和审计，不引入未准入Runtime、AI直连Agent或Shell，不改旧SQL/生成/原ADR。模型计划、审批等待、真实任务结果、多轮继续、取消/期限/步数和重启UNKNOWN均需实际代码。用户负责联调/bug验证，本轮集中编译/静态后交可审分支，不逐处重复测试。
+
 ## 当前：核心可运行代码交付（2026-11-10 R27）
 
 用户明确“我自己联调和找bug吧，先把完整的、可使用的代码搞出来”，随后要求继续。V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110，单会话主控，从9e96f47恢复独立ServerFleet-usable / feature/cloud-usable-core-20261110；完整源码按Git SHA恢复，新增代码先分批保存远端。允许核心模块/CLI/构建/配置/产品契约接缝，补可运行部署/初始化/签名/分别信任与空表启动，只做必要编译/静态后交付。用户接手实际联调和bug验证；不新增验收套件，不因待验证继续冒称缺少已实现源码；不改原审批、SQL历史或秘密/生产边界。

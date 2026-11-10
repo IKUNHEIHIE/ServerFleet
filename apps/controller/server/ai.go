@@ -14,6 +14,7 @@ import (
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
+	"serverfleet.local/serverfleet/internal/transport"
 )
 
 func (s *Server) setupAI(cfg Config) error {
@@ -22,9 +23,11 @@ func (s *Server) setupAI(cfg Config) error {
 		return err
 	}
 	tools := []ai.RegisteredTool{
-		{Definition: ai.ToolDefinition{ID: "host.root", RootShell: true, RequiresHuman: true}, Canonicalize: canonicalToolParameters},
+		{Definition: ai.ToolDefinition{ID: "nodes.read", ReadOnly: true, AutoAllowed: true}, Canonicalize: canonicalEmptyAIParameters},
+		{Definition: ai.ToolDefinition{ID: transport.CommandCapability, RequiresHuman: true}, Canonicalize: canonicalAIProfile},
+		{Definition: ai.ToolDefinition{ID: "host.root", RootShell: true, RequiresHuman: true}, Canonicalize: canonicalAIProfile},
 		{Definition: ai.ToolDefinition{ID: "host.patch"}, Canonicalize: canonicalToolParameters},
-		{Definition: ai.ToolDefinition{ID: "tasks.command"}, Canonicalize: canonicalToolParameters},
+		{Definition: ai.ToolDefinition{ID: "tasks.command", ReadOnly: true, AutoAllowed: true}, Canonicalize: canonicalEmptyAIParameters},
 	}
 	sessions, err := ai.NewSessionService(store, s.aiSessionAccess, s.aiAuthority, tools)
 	if err != nil {
@@ -91,6 +94,15 @@ func (s *Server) setupAI(cfg Config) error {
 	s.AIMessagesHTTP = messages
 	s.AIEventsHTTP = events
 	s.AIManagement = management
+	loop, err := ai.NewAgentLoop(sessions, conversation, ai.AgentLoopConfig{Execute: s.aiExecuteTool, ReadTask: s.aiAgentReadTask, CancelTask: s.aiAgentCancelTask})
+	if err != nil {
+		return err
+	}
+	s.AIAgent = loop
+	s.AIAgentHTTP, err = ai.NewAgentHTTP(loop, s.aiActorContext, s.aiCommitGate)
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -251,6 +263,14 @@ func (s *Server) aiExecuteTool(ctx context.Context, request ai.ToolExecutionRequ
 	if !ok || actor.SubjectID == "" {
 		return ai.ToolExecutionResult{}, ai.ErrToolDenied
 	}
+	if request.InvocationID != "" {
+		if s.AI == nil || s.AI.CheckAgentTask(ctx, ai.AgentTaskBinding{Key: request.InvocationID, SubjectID: actor.SubjectID, Action: request.ToolID, Parameters: string(request.Parameters), ScopeRevision: request.ScopeRevision, NodeIDs: request.NodeIDs}) != nil {
+			return ai.ToolExecutionResult{}, ai.ErrToolDenied
+		}
+	}
+	if request.ToolID == "nodes.read" {
+		return s.aiInspectNodes(ctx, request)
+	}
 	class := tasks.OperationClassModifying
 	switch {
 	case request.RootShell:
@@ -259,6 +279,8 @@ func (s *Server) aiExecuteTool(ctx context.Context, request ai.ToolExecutionRequ
 		class = tasks.OperationClassStandard
 	}
 	task, err := s.Tasks.Submit(ctx, tasks.SubmitRequest{
+		IdempotencyKey:  request.InvocationID,
+		RequireApproval: request.ToolID == transport.CommandCapability || request.ToolID == transport.RootCommandCapability,
 		SubjectID:       actor.SubjectID,
 		RequestID:       newRequestID(),
 		Name:            "ai " + request.ToolID,

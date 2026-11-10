@@ -311,6 +311,7 @@ func (s *SessionService) Execute(ctx context.Context, sessionID string, input To
 		}
 	}
 	result, err := executor(ctx, ToolExecutionRequest{
+		InvocationID:  agentInvocationFromContext(ctx),
 		SessionID:     sessionID,
 		ToolID:        tool.Definition.ID,
 		NodeIDs:       slices.Clone(assessment.Call.NodeIDs),
@@ -324,7 +325,24 @@ func (s *SessionService) Execute(ctx context.Context, sessionID string, input To
 		}
 		return ToolExecutionResult{}, ErrExecutionUnavailable
 	}
-	if result.TaskID == "" || result.State == "" {
+	if result.State == "" || result.TaskID == "" && (!tool.Definition.ReadOnly || result.State != "completed" || len(result.Observation) == 0 || len(result.Observation) > 32<<10 || !json.Valid(result.Observation)) || result.TaskID != "" && len(result.Observation) != 0 {
+		return ToolExecutionResult{}, ErrExecutionUnavailable
+	}
+	err = s.change(ctx, func(st *sessionState, now time.Time) error {
+		if _, e := s.recheck(ctx, actor, "ai.tools.execute", sessionID, true); e != nil {
+			return e
+		}
+		record := st.Sessions[sessionID]
+		if record.Closed || record.Scope.Revision != input.ScopeRevision {
+			return ErrScopeConflict
+		}
+		action := "ai.tools.submitted"
+		if result.TaskID == "" {
+			action = "ai.tools.observed"
+		}
+		return s.audit(st, record, action, now)
+	})
+	if err != nil {
 		return ToolExecutionResult{}, ErrExecutionUnavailable
 	}
 	return result, nil

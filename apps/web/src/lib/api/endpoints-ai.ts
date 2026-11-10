@@ -19,6 +19,51 @@ import type {
   PluginRepository,
 } from "./dto";
 
+export type AgentRunState = "queued" | "thinking" | "waiting_approval" | "submitting" | "waiting_task" | "canceling" | "completed" | "failed" | "canceled" | "unknown" | "limit_reached";
+export interface AgentStep {
+  readonly number: number;
+  readonly state: AgentRunState;
+  readonly toolName?: string;
+  readonly nodeIds: readonly string[];
+  readonly parameters?: Readonly<Record<string, string>>;
+  readonly approvalId?: string;
+  readonly taskId?: string;
+  readonly taskState?: string;
+  readonly result?: string;
+  readonly messageId?: string;
+  readonly startedAt: string;
+}
+export interface AgentRun {
+  readonly id: string;
+  readonly sessionId: string;
+  readonly goal: string;
+  readonly state: AgentRunState;
+  readonly driverActive: boolean;
+  readonly revision: number;
+  readonly scopeRevision: number;
+  readonly maxSteps: number;
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly steps: readonly AgentStep[];
+  readonly finalText?: string;
+  readonly stopReason?: string;
+}
+export interface AgentRunInput {
+  readonly goal: string;
+  readonly clientRunId: string;
+  readonly scopeRevision: number;
+  readonly maxSteps: number;
+  readonly timeoutSeconds: number;
+}
+const runsPath = (sessionId: string) => `/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/runs`;
+export const aiAgentApi = {
+  list: (sessionId: string, signal?: AbortSignal) => apiClient.request<{ items: readonly AgentRun[] }>(runsPath(sessionId), { signal }),
+  create: (sessionId: string, body: AgentRunInput) => apiClient.request<AgentRun>(runsPath(sessionId), { method: "POST", body }),
+  get: (sessionId: string, runId: string, signal?: AbortSignal) => apiClient.request<AgentRun>(`${runsPath(sessionId)}/${encodeURIComponent(runId)}`, { signal }),
+  advance: (sessionId: string, runId: string, expectedRevision: number) => apiClient.request<AgentRun>(`${runsPath(sessionId)}/${encodeURIComponent(runId)}/advance`, { method: "POST", body: { expectedRevision } }),
+  cancel: (sessionId: string, runId: string, expectedRevision: number) => apiClient.request<AgentRun>(`${runsPath(sessionId)}/${encodeURIComponent(runId)}/cancel`, { method: "POST", body: { expectedRevision } }),
+};
+
 export const aiApi = {
   createSession: () => apiClient.request<AISession>("/api/v1/ai/sessions", { method: "POST", body: {} }),
   getSession: (sessionId: string, signal?: AbortSignal) =>
