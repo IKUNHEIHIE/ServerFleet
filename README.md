@@ -1,5 +1,7 @@
 # ServerFleet
 
+2026-11-10 R28补齐AI运维执行循环：模型选工具、当前资源与审批校验、统一任务提交、真实结果回传、继续规划和最终答复，新增正式Web「Agent运行」页签、取消及显式重启恢复入口。使用见[AI运维循环](docs/development/AI-AGENT-LOOP.md)，产品/API同步见[R28](docs/contracts/revisions/v09-r28-ai-agent-loop.md)。真实模型与节点联调由用户进行，代码交付不替代完整发布验收。
+
 2026-11-10按用户最新分工，五项核心源码与手工联调分开交付。本分支补本机provision、首次管理员令牌、离线发行签名、安全注册令牌文件、HTTPS/内部身份CA分别信任，以及无节点拒绝式文件配置；构建附完整说明和七种模板。使用入口见[部署与首次使用](deployment/README.md)，变更见[R27](docs/contracts/revisions/v09-r27-usable-core.md)。本轮仅做必要编译/静态，联调和找bug由用户负责；不再将等待手工验证当作缺少已存在代码，也不宣称完整产品已发布。
 
 2026-11-10 R26修复会阻断真实灾备激活的离线凭据白名单，并将Root授权验签移至缓存写入前，严格限制新增缓存。新增真实mTLS/离线签名/owned进程隔离/激活落库/旧parent重启组合。R25精确70932d1的CI42759113084已成功（Go1013顶层PASS、10SKIP、0FAIL，Web422PASS）；这份旧CI不覆盖R26。见[修复与实证边界](docs/contracts/revisions/v09-r26-recovery-activation.md)。五项整体、正式产品组合和发布准入仍未结项。

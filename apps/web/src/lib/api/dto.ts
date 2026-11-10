@@ -829,6 +829,7 @@ export interface AIExecuteResult {
 }
 
 export interface AIMessage {
+	readonly agentRunId?: string;
   readonly messageId: string;
   readonly sessionId: string;
   readonly role: "user" | "assistant" | "tool";

@@ -32,6 +32,7 @@ import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 import { useEventStream } from "@/lib/sse/use-event-stream";
 import type { SSEEvent } from "@/lib/sse/event-stream";
+import { AgentRunPanel } from "./agent-run-panel";
 
 const MODE_LABEL: Record<AIApprovalMode, string> = {
   per_action: "每次审批",
@@ -748,7 +749,7 @@ function ApprovalsPanel({
 
 export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
   const appSession = useSession();
-  const [tab, setTab] = useState<"grants" | "policy" | "approval" | "chat">("grants");
+  const [tab, setTab] = useState<"grants" | "policy" | "approval" | "chat" | "agent">("grants");
   const [events, setEvents] = useState<readonly AIStreamEvent[]>([]);
   const [streamError, setStreamError] = useState<unknown>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -949,11 +950,14 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
               onChange={setTab}
               tabs={[
                 { id: "grants", label: "资源授权" },
+                { id: "agent", label: "Agent 运行" },
                 { id: "policy", label: "审批策略" },
                 { id: "approval", label: "工具审批" },
                 { id: "chat", label: "消息与审批审计" },
               ]}
             />
+
+            {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} /> : null}
 
             {tab === "grants" ? (
               <div className="space-y-5">
@@ -999,7 +1003,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                         )}
                       </Field>
                     </div>
-                    <Field label="允许动作（逗号分隔）" hint="例如 nodes.read,metrics.read,tasks.execute；最终取用户权限交集。">
+                    <Field label="允许动作（逗号分隔）" hint="Agent工具：nodes.read（状态）、tasks.command（自检）、tasks.exec.v1（普通配置）、host.root（受控Root配置）；最终取用户权限交集。">
                       {ids => <TextInput id={ids.inputId} value={actions} onChange={event => setActions(event.target.value)} />}
                     </Field>
                     <Button type="submit" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse}>添加授权</Button>
@@ -1078,7 +1082,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                             <p className="text-xs text-muted-foreground">{message.role} · {formatDateTime(message.createdAt) ?? "—"}</p>
                             <p className="mt-1 whitespace-pre-wrap">{message.redactedContent ?? "服务端未返回内容"}</p>
                             {message.taskIds?.length ? <p className="mt-1 text-xs">任务：{message.taskIds.join("、")}</p> : null}
-                            {message.role === "user" ? (
+                            {message.role === "user" && !message.agentRunId ? (
                               <div className="mt-2">
                                 <Button
                                   type="button"

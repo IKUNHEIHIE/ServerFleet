@@ -23,6 +23,7 @@ type MessageInput struct {
 	ScopeRevision   uint64 `json:"scopeRevision"`
 }
 type Message struct {
+	AgentRunID      string    `json:"agentRunId,omitempty"`
 	MessageID       string    `json:"messageId"`
 	SessionID       string    `json:"sessionId"`
 	Role            string    `json:"role"`
@@ -43,6 +44,7 @@ type ModelProfile struct {
 	Revision                 uint64
 }
 type GenerationRequest struct {
+	Agent                                        *agentPrompt `json:",omitempty"`
 	SubjectID, SessionID, MessageID, OperationID string
 	ScopeRevision                                uint64
 	Profile                                      ModelProfile
@@ -56,8 +58,9 @@ type ConversationConfig struct {
 	// and before provider/reader disclosure. There is no default pass-through.
 	Filter func(context.Context, SessionView, string, string) (string, error)
 	// Generate is a program-registered provider bridge. It borrows BYOK via the
-	// credential service using OperationID, and honors ctx. Output is text only;
-	// it cannot supply authoritative task IDs or run tools. Tool execution must
+	// credential service using OperationID, and honors ctx. Ordinary chat is
+	// text only; the private Agent prompt permits typed function proposals, never
+	// authoritative task IDs or execution. Tool execution must
 	// separately use AssessTool and the sole task/approval/audit path.
 	Generate func(context.Context, GenerationRequest, func(string) error) error
 }
@@ -66,6 +69,7 @@ type ConversationService struct {
 	config   ConversationConfig
 }
 type generationRecord struct {
+	AgentRunID                            string `json:",omitempty"`
 	ClientID, IdempotencyKey, InputSHA256 string
 	ScopeRevision                         uint64
 	Profile                               ModelProfile
@@ -98,13 +102,16 @@ func validateConversation(id string, c *conversationRecord) error {
 	}
 	messages := map[string]Message{}
 	for _, m := range c.Messages {
-		if !exactID(m.MessageID) || m.SessionID != id || !validMessageContent(m.RedactedContent) || m.CreatedAt.IsZero() || len(m.TaskIDs) != 0 || m.Role != "user" && m.Role != "assistant" || messages[m.MessageID].MessageID != "" {
+		if !exactID(m.MessageID) || m.SessionID != id || m.AgentRunID != "" && !exactID(m.AgentRunID) || !validMessageContent(m.RedactedContent) || m.CreatedAt.IsZero() || len(m.TaskIDs) != 0 || m.Role != "user" && m.Role != "assistant" || messages[m.MessageID].MessageID != "" {
 			return ErrSessionUnavailable
 		}
 		messages[m.MessageID] = m
 	}
 	clients, keys, responses := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	for messageID, run := range c.Runs {
+		if run.AgentRunID != messages[messageID].AgentRunID || run.AgentRunID != "" && !exactID(run.AgentRunID) {
+			return ErrSessionUnavailable
+		}
 		digest, err := hex.DecodeString(run.InputSHA256)
 		if messages[messageID].Role != "user" || !exactID(run.ClientID) || !exactID(run.IdempotencyKey) || clients[run.ClientID] || keys[run.IdempotencyKey] || run.ScopeRevision == 0 || !validModelProfile(run.Profile) || err != nil || len(digest) != 32 || hex.EncodeToString(digest) != run.InputSHA256 {
 			return ErrSessionUnavailable
@@ -119,7 +126,7 @@ func validateConversation(id string, c *conversationRecord) error {
 				return ErrSessionUnavailable
 			}
 		case "succeeded":
-			if messages[run.ResponseID].Role != "assistant" || responses[run.ResponseID] {
+			if messages[run.ResponseID].Role != "assistant" || messages[run.ResponseID].AgentRunID != run.AgentRunID || responses[run.ResponseID] {
 				return ErrSessionUnavailable
 			}
 			responses[run.ResponseID] = true
@@ -258,9 +265,17 @@ func (c *ConversationService) Submit(ctx context.Context, id, idempotencyKey str
 		if err != nil {
 			return err
 		}
-		out = Message{messageID, id, "user", text, now, []string{}}
+		agentRun := ""
+		if p, ok := ctx.Value(agentPromptKey{}).(*agentPrompt); ok {
+			a, exists := r.AgentRuns[p.RunID]
+			if !exists || a.View.State != "thinking" || a.PlanningSHA != agentHash(p) || a.View.ScopeRevision != input.ScopeRevision {
+				return ErrToolDenied
+			}
+			agentRun = p.RunID
+		}
+		out = Message{AgentRunID: agentRun, MessageID: messageID, SessionID: id, Role: "user", RedactedContent: text, CreatedAt: now, TaskIDs: []string{}}
 		conversation.Messages = append(conversation.Messages, out)
-		conversation.Runs[messageID] = generationRecord{ClientID: input.ClientMessageID, IdempotencyKey: idempotencyKey, InputSHA256: hash, ScopeRevision: input.ScopeRevision, Profile: profile, State: "queued"}
+		conversation.Runs[messageID] = generationRecord{AgentRunID: agentRun, ClientID: input.ClientMessageID, IdempotencyKey: idempotencyKey, InputSHA256: hash, ScopeRevision: input.ScopeRevision, Profile: profile, State: "queued"}
 		if appendMessageEvent(conversation, id, "ai.message.created", messageID, "queued", now) != nil {
 			return ErrSessionUnavailable
 		}
@@ -345,6 +360,12 @@ func (c *ConversationService) Messages(ctx context.Context, id string, after int
 		return nil, err
 	}
 	for i, m := range out {
+		// Opaque provider continuation items stay private. A reader sees the run
+		// reference, not native planning JSON or encrypted reasoning blobs.
+		if m.AgentRunID != "" {
+			out[i].RedactedContent = "Agent 运行 " + m.AgentRunID + "：请在 Agent 运行页签查看步骤和结果。"
+			continue
+		}
 		out[i].RedactedContent, err = c.filter(ctx, view, m.Role, m.RedactedContent)
 		out[i].TaskIDs = []string{}
 		if err != nil {
@@ -400,6 +421,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		return Message{}, err
 	}
 	request := GenerationRequest{SubjectID: actor.SubjectID, SessionID: id, MessageID: messageID, OperationID: "ai-generation-" + messageID, ScopeRevision: view.ScopeRevision, Profile: profile}
+	if prompt, ok := ctx.Value(agentPromptKey{}).(*agentPrompt); ok {
+		request.Agent = cloneAgentPrompt(prompt)
+	}
 	reserved := false
 	defer func() {
 		if recover() != nil {
@@ -421,6 +445,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if !exists {
 			return ErrToolDenied
 		}
+		if request.Agent == nil && run.AgentRunID != "" || request.Agent != nil && run.AgentRunID != request.Agent.RunID {
+			return ErrToolDenied
+		}
 		if run.State == "generating" || run.State == "unknown" {
 			return ErrGenerationUnknown
 		}
@@ -439,6 +466,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 				break
 			}
 			prior := r.Conversation.Runs[message.MessageID]
+			if request.Agent != nil || prior.AgentRunID != "" {
+				continue
+			}
 			if prior.State == "generating" || prior.State == "queued" {
 				return ErrScopeConflict
 			}
@@ -485,6 +515,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	}
 	var output bytes.Buffer
 	check := func() error {
+		if request.Agent != nil && c.checkAgentGeneration(bounded, request) != nil {
+			return ErrToolDenied
+		}
 		if _, err := c.sessions.recheck(bounded, actor, "ai.messages.generate", id, false); err != nil {
 			return err
 		}
@@ -556,7 +589,10 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if err != nil {
 			return err
 		}
-		out = Message{responseID, id, "assistant", text, now, []string{}}
+		if request.Agent != nil && agentGenerationCurrent(r, request, now) != nil {
+			return ErrToolDenied
+		}
+		out = Message{AgentRunID: run.AgentRunID, MessageID: responseID, SessionID: id, Role: "assistant", RedactedContent: text, CreatedAt: now, TaskIDs: []string{}}
 		r.Conversation.Messages = append(r.Conversation.Messages, out)
 		run.State, run.ResponseID = "succeeded", responseID
 		r.Conversation.Runs[messageID] = run

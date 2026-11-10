@@ -88,6 +88,9 @@ func (c *ConversationService) CheckCredentialOperation(ctx context.Context, op a
 		if !exists || run.State != "generating" || run.ScopeRevision != r.ScopeRevision || run.Profile != r.Profile || o.closed.Load() {
 			return ErrToolDenied
 		}
+		if r.Agent != nil && agentGenerationCurrent(record, r, time.Now().UTC()) != nil {
+			return ErrToolDenied
+		}
 		return nil
 	})
 	if err != nil || ctx.Err() != nil || o.closed.Load() {

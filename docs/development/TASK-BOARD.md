@@ -1,5 +1,21 @@
 # 任务登记板
 
+## 当前：合并开发代码（2026-11-10）
+
+用户明确“开始合并”。V09-CLOUD-MERGE-01 / chatgpt-merge-20261110，单会话总控，允许当前任务分支、PR基线调整、既有实现及检查阻断的必要修复、检查记录与按精确SHA合并main；不直推/强推main、不自我APPROVE，不扩展生产操作。#17精确ca309ea的CI42651887446两job成功，已合入main c88dca45；#18 d4f54ba的CI42788427970因回滚测试重启后立即取消与健康末次核验竞态失败。保留生产UNKNOWN，修正该测试对实际退出/持久锁的核对。#18/#19已转main基线，最新组合9df049e包含全部前置代码；待同head完整检查合格后接收，旧失败不抹去。
+
+本地固定Go1.27.3、实际UID1000，`go test -race ./internal/updates -run '^TestResidentSupervisorUnhealthyRollbackAndPersistentFloor$' -count=5` PASS（8.670s），gofmt/diff检查通过。仅修改该取消测试与本登记，不改生产安全门/依赖/接口/迁移/CI；完整组合检查由最终head的原生CI完成，结果在PR评论按精确SHA记录，避免为记录结果重触发检查。
+
+9f630d1的完整CI42828605746：dependencies PASS；foundation因旧Wave3 AI管理集成仍向固定自检/受控Root配置传入自由command字符串而FAIL（NOT_AUTHORIZED符合R28参数规则）；Go其余用例和Web422项通过。按R28更新该用例为空参数自检/完整受控Root配置，新增自由command拒绝及有效Root配置仍要求APPROVAL_REQUIRED断言，保留一次性审批、非owner拒绝和独立任务审批检查；不放宽生产实现或删skip旧断言。后续精确head重跑完整CI，不将旧head结果标成通过。
+
+上述Wave3用例本地`go test -race ./tests/integration/v09/platform -run '^TestWave3AIManagementScopeApprovalsAndRootShellGate$' -count=1` PASS（6.817s），仅更新测试与登记；完整组合等待最新head的原生CI。真实模型/节点/Root与产品联调仍由用户进行。
+
+## 当前：AI运维完整Agent循环（2026-11-10 R28）
+
+用户明确要求完成AI运维完整Agent执行循环。任务V09-CLOUD-AI-LOOP-01 / chatgpt-ai-loop-20261110，从d4f54ba恢复独立ServerFleet-ai / feature/cloud-ai-loop-20261110，单会话主控，不启动其他Agent。允许internal/ai、Controller AI/命令/统一任务授权接缝、正式Web AI及契约/产品/检查记录；复用现有Go/BYOK/统一任务、审批和审计，不引入未准入Runtime、AI直连Agent或Shell，不改旧SQL/生成/原ADR。模型计划、审批等待、真实任务结果、多轮继续、取消/期限/步数和重启UNKNOWN均需实际代码。用户负责联调/bug验证，本轮集中编译/静态后交可审分支，不逐处重复测试。
+
+本包代码已完成：四个固定真实工具、原生函数结果续传、有界后台驱动、两层审批/任务绑定、当前资源门、取消、显式恢复及正式Web；检查/使用见[AI-AGENT-LOOP](AI-AGENT-LOOP.md)，接口/产品同步R28。已保存f3806ae远端代码检查点，收尾追加恢复/披露规则与文档。状态CODE COMPLETE / 待用户联调与PR接收；不把源码/合成专项当作真实模型、节点、Root或发布准入。
+
 ## 当前：核心可运行代码交付（2026-11-10 R27）
 
 用户明确“我自己联调和找bug吧，先把完整的、可使用的代码搞出来”，随后要求继续。V09-CLOUD-CODE-COMPLETE-01 / chatgpt-resume-20261110，单会话主控，从9e96f47恢复独立ServerFleet-usable / feature/cloud-usable-core-20261110；完整源码按Git SHA恢复，新增代码先分批保存远端。允许核心模块/CLI/构建/配置/产品契约接缝，补可运行部署/初始化/签名/分别信任与空表启动，只做必要编译/静态后交付。用户接手实际联调和bug验证；不新增验收套件，不因待验证继续冒称缺少已实现源码；不改原审批、SQL历史或秘密/生产边界。

@@ -69,6 +69,11 @@ func (s *Service) controllerRule(t Task) (ControllerAction, error) {
 	return rule, nil
 }
 func (s *Service) authorizeForTask(ctx context.Context, t Task, subjectID, action, requestID string, ids []string, reason string) error {
+	if s.taskCurrent != nil && reason != "task_cancel" {
+		if err := s.taskCurrent(ctx, t); err != nil {
+			return err
+		}
+	}
 	if t.TargetType != TargetTypeController {
 		return s.authorize(ctx, subjectID, action, requestID, ids, reason)
 	}

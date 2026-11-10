@@ -281,9 +281,33 @@ func TestResidentSupervisorUnhealthyRollbackAndPersistentFloor(t *testing.T) {
 		t.Fatal("rollback lowered high water", string(raw), e)
 	}
 	stop()
-	ctx, stop, _ = startResidentLifecycle(t, f)
-	residentReady(t, ctx, f)
-	stop()
+	// The callback publishes readiness BEFORE Health's final authority check.
+	// Cancel immediately after this restart observation deliberately races that
+	// check: UNKNOWN remains correct, but shutdown must still stop/wait the owned
+	// child and clear its reservation. Do not mistake callback delivery for a
+	// completed parent health check or relax the production cancellation gate.
+	restartCtx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+	defer cancel()
+	restartDone := make(chan error, 1)
+	go func() { restartDone <- RunResidentSupervisor(restartCtx, f.c, f.h) }()
+	restarted := residentReady(t, restartCtx, f)
+	cancel()
+	select {
+	case e := <-restartDone:
+		if !errors.Is(e, context.Canceled) && !errors.Is(e, ErrApplyUnknown) {
+			t.Fatal("restart cancellation outcome", e)
+		}
+	case <-time.After(8 * time.Second):
+		t.Fatal("restarted parent failed to stop its child")
+	}
+	if e := syscall.Kill(restarted.PID, 0); !errors.Is(e, syscall.ESRCH) {
+		t.Fatal("restarted child did not exit after cancellation", e)
+	}
+	for _, p := range []string{filepath.Join(f.c.Directory, "supervisor-reservation.json"), filepath.Join(f.c.Directory, "update-lock.json"), filepath.Join(f.c.Mailbox, "update-active.json")} {
+		if _, e := os.Lstat(p); !errors.Is(e, os.ErrNotExist) {
+			t.Fatal("restart cancellation left unresolved ownership or update", p, e)
+		}
+	}
 }
 
 func TestResidentSupervisorBlocksUnresolvedMailboxBeforeStartingChild(t *testing.T) {

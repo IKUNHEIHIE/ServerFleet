@@ -80,6 +80,12 @@ func generationDigest(r GenerationRequest) (string, error) {
 	if len(r.Messages)%2 != 1 || last.Role != "user" || last.MessageID != r.MessageID || size > 256000 {
 		return "", ErrToolDenied
 	}
+	if r.Agent != nil {
+		b, e := json.Marshal(r.Agent)
+		if e != nil || validateAgentPrompt(r.Agent) != nil || size+len(b) > 256000 {
+			return "", ErrToolDenied
+		}
+	}
 	raw, err := json.Marshal(r)
 	if err != nil {
 		return "", ErrToolDenied
@@ -206,8 +212,9 @@ func decodeProviderText(raw []byte, model string) (string, error) {
 }
 
 // Generate borrows BYOK through the persistent credential use fence. Provider
-// I/O is text-only; the final text is emitted ONCE, after post-use authorization
-// and credential/audit checks succeed. Model output never grants execution.
+// I/O returns ordinary text or a privately bound typed Agent proposal. Output
+// is emitted ONCE after post-use authorization and credential/audit checks.
+// Model output never grants execution.
 func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, emit func(string) error) (result error) {
 	if p == nil || p.credentials == nil || p.resolve == nil || p.client == nil || ctx == nil || ctx.Err() != nil || emit == nil {
 		return ErrModelUnavailable
@@ -238,7 +245,14 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		}
 		input = append(input, item)
 	}
-	body, err := json.Marshal(map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": p.stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": ProviderMaxOutputTokens})
+	stream := p.stream && r.Agent == nil
+	payload := map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": ProviderMaxOutputTokens}
+	if r.Agent != nil {
+		if err := agentProviderPayload(payload, r.Agent); err != nil {
+			return err
+		}
+	}
+	body, err := json.Marshal(payload)
 	if err != nil || len(body) > 512<<10 {
 		return ErrToolDenied
 	}
@@ -261,7 +275,7 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		defer request.Header.Del("Authorization")
 		request.Header.Set("Content-Type", "application/json")
 		request.Header.Set("Accept", "application/json")
-		if p.stream {
+		if stream {
 			request.Header.Set("Accept", "text/event-stream")
 		}
 		response, err := p.client.Do(request)
@@ -273,10 +287,10 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 			return ErrGenerationUnknown
 		}
 		media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-		if err != nil || (!p.stream && media != "application/json") || (p.stream && media != "text/event-stream") || response.ContentLength > 1<<20 {
+		if err != nil || (!stream && media != "application/json") || (stream && media != "text/event-stream") || response.ContentLength > 1<<20 {
 			return ErrGenerationUnknown
 		}
-		if p.stream {
+		if stream {
 			text, err = decodeProviderStream(ctx, response.Body, r.Profile.Model)
 		} else {
 			raw, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
@@ -284,7 +298,11 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 			if readErr != nil {
 				return ErrGenerationUnknown
 			}
-			text, err = decodeProviderText(raw, r.Profile.Model)
+			if r.Agent != nil {
+				text, err = decodeAgentDecision(raw, r.Profile.Model, r.Agent)
+			} else {
+				text, err = decodeProviderText(raw, r.Profile.Model)
+			}
 		}
 		if err != nil || strings.Contains(text, string(secret)) {
 			text = ""

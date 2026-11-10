@@ -156,6 +156,8 @@ type Server struct {
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
 	AI               *ai.SessionService
+	AIAgent          *ai.AgentLoop
+	AIAgentHTTP      *ai.AgentHTTP
 	AIBudget         *ai.PersistentGenerationBudget
 	AIConversation   *ai.ConversationService
 	AIRuntime        *ai.BYOKRuntime
@@ -323,6 +325,10 @@ func AuditActions() []string {
 		"enrollment.list",
 		"agent.revoke",
 		"ai.sessions.create",
+		"ai.runs.create",
+		"ai.runs.advance",
+		"ai.tools.submitted",
+		"ai.tools.observed",
 		"ai.sessions.read",
 		"ai.sessions.grant",
 		"ai.sessions.revoke",
@@ -503,6 +509,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	var s *Server
 	cleanup := func(cause error) (*Server, error) {
+		if s != nil && s.AIAgent != nil {
+			s.AIAgent.Close()
+		}
 		if s != nil && s.AIRuntime != nil {
 			s.AIRuntime.Close()
 		}
@@ -925,6 +934,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	tasksService, err := tasks.NewService(tasks.Options{
+		TaskCurrent:         s.aiTaskCurrent,
 		ControllerExecution: controllerExecution,
 		RuntimeGate:         runtimeGate,
 		Workers:             workers,
@@ -1234,6 +1244,9 @@ func (s *Server) Close() error {
 		}
 		s.runCancel = nil
 	}
+	if s.AIAgent != nil {
+		s.AIAgent.Close()
+	}
 	if s.AIRuntime != nil {
 		s.AIRuntime.Close()
 	}
@@ -1497,6 +1510,11 @@ func (s *Server) registerEnrollmentRoutes() {
 }
 
 func (s *Server) registerAIRoutes() {
+	if s.AIAgentHTTP != nil {
+		for _, pattern := range []string{"GET /api/v1/ai/sessions/{sessionId}/runs", "POST /api/v1/ai/sessions/{sessionId}/runs", "GET /api/v1/ai/sessions/{sessionId}/runs/{runId}", "POST /api/v1/ai/sessions/{sessionId}/runs/{runId}/advance", "POST /api/v1/ai/sessions/{sessionId}/runs/{runId}/cancel"} {
+			s.mux.Handle(pattern, s.AIAgentHTTP)
+		}
+	}
 	if s.AIManagement != nil {
 		for _, pattern := range []string{
 			"GET /api/v1/ai/security-policy",
