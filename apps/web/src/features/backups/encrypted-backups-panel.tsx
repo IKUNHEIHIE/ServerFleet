@@ -50,8 +50,8 @@ export function EncryptedBackupsPanel() {
       {page.state.status === "error" ? <Notice tone="error" title="加密备份不可用">{describeApiError(page.state.error)}<Button size="sm" onClick={page.reload}>重新读取</Button></Notice> : null}
       {page.state.status === "ready" && page.state.refreshError ? <Notice tone="warning" title="刷新失败">{describeApiError(page.state.refreshError)}</Notice> : null}
       {data ? <>
-        {!data.items.some(item => item.kind === "full" && item.remoteStatus === "uploaded") ? <Notice tone="warning" title="尚无已确认的异地备份">本机副本仅是缓存。请将加密备份下载并安全转移到另一处设备；下载和密文校验仍不能证明实际恢复成功。</Notice> : null}
-        {!data.automaticBackupsConfigured ? <Notice tone="warning" title="每日自动备份尚未配置">当前可手动备份。管理员需在启动配置指定自动备份的当前授权身份；系统不会自行借用其他管理员身份。</Notice> : null}
+        {!data.items.some(item => item.kind === "full" && ["uploaded", "verified"].includes(item.remoteStatus)) ? <Notice tone="warning" title="尚无已确认的异地备份">本机副本仅是缓存。可在“异地备份与保留清理”中配置自动上传，或下载并安全转移到另一处设备；下载和密文校验仍不能证明实际恢复成功。</Notice> : null}
+        {!data.automaticBackupsConfigured ? <Notice tone="warning" title="每日自动备份尚未配置">当前可手动备份。管理员可在下方备份策略中启用定时备份；系统使用保存策略的当前授权身份。</Notice> : null}
         <p className="text-sm">公开接收方指纹：<span className="break-all font-mono text-xs">{data.recipientFingerprint}</span></p>
         <p className="text-sm">离线恢复密钥：{data.recoveryKeyConfirmed ? "已通过解密确认" : "尚未确认"}</p>
         <div className="flex flex-wrap gap-2">
@@ -68,7 +68,7 @@ export function EncryptedBackupsPanel() {
           { key: "createdAt", header: "创建时间", render: item => formatDateTime(item.createdAt) ?? "—" },
           { key: "bytes", header: "密文字节", render: item => item.bytes.toLocaleString() },
           { key: "sha256", header: "密文摘要", render: item => <span className="break-all font-mono text-xs">{item.sha256 ?? "未生成"}</span> },
-          { key: "download", header: "操作", render: item => item.status === "ready" ? <a className="underline" href={`/api/v1/backups/${encodeURIComponent(item.id)}/download`} download>下载密文</a> : "不可下载" },
+          { key: "download", header: "操作", render: item => item.status === "ready" && (!item.localStatus || item.localStatus === "present") ? <a className="underline" href={`/api/v1/backups/${encodeURIComponent(item.id)}/download`} download>下载密文</a> : "不可下载" },
         ]} />}
       </> : null}
       <form onSubmit={confirmKey} className="space-y-3 rounded-lg border p-4">

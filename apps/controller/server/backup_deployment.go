@@ -12,6 +12,7 @@ import (
 	"net"
 	"net/url"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/localpki"
@@ -204,10 +205,23 @@ func (s *Server) setupEncryptedBackups(ctx context.Context, cfg Config, workers 
 	}
 	s.Backups = manager
 	s.backupAutomaticOwner = d.AutomaticOwnerID
+	maintenance, e := recovery.NewBackupMaintenance(recovery.BackupMaintenanceOptions{Manager: manager, DefaultOwnerID: d.AutomaticOwnerID, CredentialCurrent: s.backupCredentialCurrent, Borrow: s.borrowBackupCredential, ReadTask: func(ctx context.Context, id string) (tasks.Task, error) {
+		if s.Tasks == nil {
+			return tasks.Task{}, tasks.ErrInvalidTask
+		}
+		return s.Tasks.Get(ctx, id)
+	}})
+	if e != nil {
+		return nil, e
+	}
+	s.BackupMaintenance = maintenance
 	workers[recovery.ActionCreateBackup] = manager
 	workers[recovery.ActionRecoveryKeyChallenge] = manager
-	return &tasks.ControllerExecution{AuthorityID: material.AuthorityID, Actions: map[string]tasks.ControllerAction{recovery.ActionCreateBackup: {AllowSystem: d.AutomaticOwnerID != ""}, recovery.ActionRecoveryKeyChallenge: {}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
-		if action != recovery.ActionCreateBackup && action != recovery.ActionRecoveryKeyChallenge {
+	for _, action := range []string{recovery.ActionBackupUpload, recovery.ActionBackupRemoteVerify, recovery.ActionBackupRetention} {
+		workers[action] = maintenance
+	}
+	return &tasks.ControllerExecution{AuthorityID: material.AuthorityID, Actions: map[string]tasks.ControllerAction{recovery.ActionCreateBackup: {AllowSystem: true}, recovery.ActionRecoveryKeyChallenge: {}, recovery.ActionBackupUpload: {AllowSystem: true}, recovery.ActionBackupRemoteVerify: {}, recovery.ActionBackupRetention: {AllowSystem: true, RequireApproval: true}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
+		if action != recovery.ActionCreateBackup && action != recovery.ActionRecoveryKeyChallenge && action != recovery.ActionBackupUpload && action != recovery.ActionBackupRemoteVerify && action != recovery.ActionBackupRetention {
 			return auth.ErrDenied
 		}
 		return s.Identity.AuthorizeAdministrator(ctx, subject)
@@ -223,12 +237,21 @@ func (s *Server) submitBackup(ctx context.Context, p recovery.Principal, kind, k
 	} else if kind != "full" {
 		return tasks.Task{}, tasks.ErrInvalidTask
 	}
-	return s.Tasks.SubmitController(ctx, tasks.SubmitRequest{SubjectID: p.SubjectID, RequestID: p.RequestID, Name: name, ActionID: action, OperationClass: tasks.OperationClassStandard, Params: map[string]string{"kind": kind, "recipientFingerprint": s.Backups.RecipientFingerprint()}, IdempotencyKey: backupTaskKey(kind, key), Source: source})
+	params := map[string]string{"kind": kind, "recipientFingerprint": s.Backups.RecipientFingerprint()}
+	if source == audit.SourceSystem {
+		policy, e := s.BackupMaintenance.Policy(ctx, p.SubjectID)
+		if e != nil || !policy.ScheduledBackups || policy.OwnerID != p.SubjectID {
+			return tasks.Task{}, auth.ErrDenied
+		}
+		params["policyRevision"] = strconv.FormatUint(policy.Revision, 10)
+	}
+	return s.Tasks.SubmitController(ctx, tasks.SubmitRequest{SubjectID: p.SubjectID, RequestID: p.RequestID, Name: name, ActionID: action, OperationClass: tasks.OperationClassStandard, Params: params, IdempotencyKey: backupTaskKey(kind, key), Source: source})
 }
 
 // This loop only produces durable unified tasks. It cannot read plaintext,
 // encrypt, upload, or retry an UNKNOWN task outside the normal worker gates.
 func (s *Server) runBackupSchedule(ctx context.Context) {
+	s.backupScheduleTick(ctx)
 	ticker := time.NewTicker(time.Minute)
 	defer ticker.Stop()
 	for {
@@ -236,15 +259,7 @@ func (s *Server) runBackupSchedule(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			if s.Backups == nil || s.backupAutomaticOwner == "" || s.runtimeGate(ctx) != nil {
-				continue
-			}
-			confirmed, err := s.Backups.KeyConfirmed(ctx)
-			if err != nil || !confirmed {
-				continue
-			}
-			day := time.Now().UTC().Format("2006-01-02")
-			_, _ = s.submitBackup(ctx, recovery.Principal{SubjectID: s.backupAutomaticOwner, RequestID: "backup-daily-" + day}, "full", "daily-"+day, audit.SourceSystem)
+			s.backupScheduleTick(ctx)
 		}
 	}
 }

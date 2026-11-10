@@ -1,3 +1,4 @@
+import { IncidentPanel } from "./incident-panel";
 import { CommandProfilePanel } from "./command-profile-panel";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { navigate } from "@/app/router";
@@ -287,6 +288,7 @@ export function TasksPage() {
 
   return (
     <div className="space-y-5">
+      <IncidentPanel key={`incidents:${session.viewEpoch}`} />
       <CommandProfilePanel key={session.viewEpoch} />
       <PageHeader
         title="批量任务"

@@ -107,6 +107,8 @@ func credentialPurpose(kind string) (string, string, error) {
 		return "qqbot-secret", "qqbot", nil
 	case "ai_api_key":
 		return "ai-byok", "ai", nil
+	case "backup_storage_secret":
+		return "backup-storage", "backups", nil
 	default:
 		return "", "", ErrDenied
 	}

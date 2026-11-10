@@ -1,0 +1,443 @@
+package tasks
+
+import (
+	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"slices"
+	"strings"
+	"time"
+	"unicode/utf8"
+
+	"serverfleet.local/serverfleet/internal/audit"
+	"serverfleet.local/serverfleet/internal/storage"
+)
+
+var ErrIncidentConflict = errors.New("tasks: incident revision or source conflict")
+
+const ActionIncidentManage = "operations.incidents.manage"
+
+func IncidentMigrations() []storage.Migration {
+	return []storage.Migration{{Version: "cx/0022_operator_incidents", Name: "immutable anomaly sources and audited human dispositions", Statements: []string{
+		`CREATE TABLE task_incidents(id TEXT PRIMARY KEY,source_key TEXT NOT NULL UNIQUE,revision INTEGER NOT NULL,payload BLOB NOT NULL CHECK(length(payload)<=131072),created_at TEXT NOT NULL)`,
+		`CREATE INDEX task_incidents_created ON task_incidents(created_at,id)`,
+	}}}
+}
+
+type IncidentSource struct {
+	Kind       string   `json:"kind"`
+	ID         string   `json:"id"`
+	OwnerID    string   `json:"ownerId"`
+	Revision   uint64   `json:"revision"`
+	State      string   `json:"state"`
+	TaskID     string   `json:"taskId,omitempty"`
+	SessionID  string   `json:"sessionId,omitempty"`
+	Action     string   `json:"action,omitempty"`
+	PlanDigest string   `json:"planDigest,omitempty"`
+	NodeIDs    []string `json:"nodeIds"`
+	Reason     string   `json:"reason,omitempty"`
+}
+type IncidentEvent struct {
+	Sequence int       `json:"sequence"`
+	Action   string    `json:"action"`
+	Actor    string    `json:"actor"`
+	Note     string    `json:"note,omitempty"`
+	At       time.Time `json:"at"`
+}
+type IncidentProposal struct {
+	Outcome      string    `json:"outcome"`
+	Evidence     string    `json:"evidence"`
+	ProposedBy   string    `json:"proposedBy"`
+	SourceDigest string    `json:"sourceDigest"`
+	At           time.Time `json:"at"`
+}
+type Incident struct {
+	ID                string            `json:"id"`
+	Revision          uint64            `json:"revision"`
+	Source            IncidentSource    `json:"source"`
+	SourceDigest      string            `json:"sourceDigest"`
+	State             string            `json:"state"`
+	AssigneeID        string            `json:"assigneeId,omitempty"`
+	CreatedAt         time.Time         `json:"createdAt"`
+	UpdatedAt         time.Time         `json:"updatedAt"`
+	Proposal          *IncidentProposal `json:"proposal,omitempty"`
+	ResolvedBy        string            `json:"resolvedBy,omitempty"`
+	FollowupTaskIDs   []string          `json:"followupTaskIds"`
+	Events            []IncidentEvent   `json:"events"`
+	LastRequestID     string            `json:"-"`
+	LastRequestDigest string            `json:"-"`
+}
+
+// request bindings are persisted separately from the public JSON view.
+type incidentRecord struct {
+	View     Incident
+	Requests map[string]string
+}
+type IncidentOptions struct {
+	DB             *storage.DB
+	Audit          AuditSink
+	Administrator  func(context.Context, string) error
+	ReadSource     func(context.Context, string, IncidentSource) error
+	ReadFollowup   func(context.Context, string, string, time.Time) error
+	RuntimeCurrent func(context.Context) error
+	Filter         func(string) (string, error)
+}
+type IncidentService struct{ o IncidentOptions }
+
+func NewIncidentService(o IncidentOptions) (*IncidentService, error) {
+	if o.DB == nil || o.Audit == nil || o.Administrator == nil || o.ReadSource == nil || o.ReadFollowup == nil || o.RuntimeCurrent == nil || o.Filter == nil {
+		return nil, ErrInvalidTask
+	}
+	return &IncidentService{o}, nil
+}
+func incidentDigest(v any) string {
+	b, _ := json.Marshal(v)
+	h := sha256.Sum256(b)
+	return hex.EncodeToString(h[:])
+}
+func incidentAnomaly(state string) bool {
+	return slices.Contains([]string{"unknown", "failed", "partial_failure", "partially_failed", "expired", "limit_reached"}, state)
+}
+func validIncidentSource(s IncidentSource) bool {
+	return (s.Kind == "task" || s.Kind == "ai_run") && validToken(s.ID, 128) && validToken(s.OwnerID, 128) && s.Revision > 0 && incidentAnomaly(s.State) && len(s.NodeIDs) <= 1000 && len(s.Reason) <= 256
+}
+
+// Observe is an inert program-owned monitor port. It records facts, never
+// authorizes/retries tasks, assigns a human decision or changes original results.
+func (s *IncidentService) Observe(ctx context.Context, source IncidentSource) error {
+	if !validIncidentSource(source) || s.o.RuntimeCurrent(ctx) != nil {
+		return ErrInvalidTask
+	}
+	digest := incidentDigest(source)
+	id := "inc_" + digest[:40]
+	now := time.Now().UTC()
+	return s.o.DB.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		var existing string
+		e := tx.QueryRow(txCtx, `SELECT id FROM task_incidents WHERE source_key=?`, digest).Scan(&existing)
+		if e == nil {
+			return nil
+		}
+		if !storage.IsNotFound(e) {
+			return e
+		}
+		v := Incident{ID: id, Revision: 1, Source: source, SourceDigest: digest, State: "open", CreatedAt: now, UpdatedAt: now, FollowupTaskIDs: []string{}, Events: []IncidentEvent{{1, "observed", "system", "", now}}}
+		raw, _ := json.Marshal(incidentRecord{View: v, Requests: map[string]string{}})
+		if _, e = tx.Exec(txCtx, `INSERT INTO task_incidents VALUES(?,?,?,?,?)`, id, digest, 1, raw, storage.EncodeTime(now)); e != nil {
+			return e
+		}
+		return s.o.Audit.AppendTx(txCtx, tx, audit.Event{SubjectID: source.OwnerID, Action: ActionIncidentManage, Result: "success", RequestID: id, TaskID: source.TaskID, Source: audit.SourceSystem, ReasonCode: "anomaly_observed_no_execution", At: now})
+	})
+}
+func (s *IncidentService) gate(ctx context.Context, subject string, source *IncidentSource) error {
+	if ctx == nil || ctx.Err() != nil || s.o.RuntimeCurrent(ctx) != nil || s.o.Administrator(ctx, subject) != nil {
+		return ErrInvalidTask
+	}
+	if source != nil && s.o.ReadSource(ctx, subject, *source) != nil {
+		return ErrInvalidTask
+	}
+	return nil
+}
+func decodeIncident(raw []byte) (incidentRecord, error) {
+	var r incidentRecord
+	if len(raw) > 128<<10 || json.Unmarshal(raw, &r) != nil || !validToken(r.View.ID, 128) || r.View.Revision == 0 || !validIncidentSource(r.View.Source) || r.View.SourceDigest != incidentDigest(r.View.Source) || len(r.View.Events) > 200 || len(r.Requests) > 200 {
+		return r, ErrInvalidTask
+	}
+	return r, nil
+}
+func (s *IncidentService) getRecord(ctx context.Context, q storage.Queryer, id string) (incidentRecord, error) {
+	if !validToken(id, 128) {
+		return incidentRecord{}, ErrInvalidTask
+	}
+	var raw []byte
+	if e := q.QueryRow(ctx, `SELECT payload FROM task_incidents WHERE id=?`, id).Scan(&raw); e != nil {
+		return incidentRecord{}, e
+	}
+	return decodeIncident(raw)
+}
+func (s *IncidentService) Get(ctx context.Context, subject, id string) (Incident, error) {
+	if e := s.gate(ctx, subject, nil); e != nil {
+		return Incident{}, e
+	}
+	r, e := s.getRecord(ctx, s.o.DB, id)
+	if e != nil {
+		return Incident{}, e
+	}
+	if e = s.gate(ctx, subject, &r.View.Source); e != nil {
+		return Incident{}, e
+	}
+	v := r.View
+	for i := range v.Events {
+		if v.Events[i].Note != "" {
+			v.Events[i].Note, e = s.o.Filter(v.Events[i].Note)
+			if e != nil {
+				return Incident{}, e
+			}
+		}
+	}
+	if v.Proposal != nil {
+		v.Proposal.Evidence, e = s.o.Filter(v.Proposal.Evidence)
+		if e != nil {
+			return Incident{}, e
+		}
+	}
+	return v, nil
+}
+func (s *IncidentService) List(ctx context.Context, subject string) ([]Incident, error) {
+	if e := s.gate(ctx, subject, nil); e != nil {
+		return nil, e
+	}
+	rows, e := s.o.DB.Query(ctx, `SELECT id FROM task_incidents ORDER BY created_at DESC,id DESC LIMIT 1000`)
+	if e != nil {
+		return nil, e
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if e = rows.Scan(&id); e != nil {
+			rows.Close()
+			return nil, e
+		}
+		ids = append(ids, id)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	out := []Incident{}
+	for _, id := range ids {
+		v, e := s.Get(ctx, subject, id)
+		if e == nil {
+			out = append(out, v)
+		} else if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+	}
+	return out, nil
+}
+
+type IncidentDecision struct {
+	ExpectedRevision uint64 `json:"expectedRevision"`
+	RequestID        string `json:"requestId"`
+	Action           string `json:"action"`
+	Note             string `json:"note"`
+	Outcome          string `json:"outcome,omitempty"`
+	FollowupTaskID   string `json:"followupTaskId,omitempty"`
+}
+
+func (s *IncidentService) Decide(ctx context.Context, subject, id string, in IncidentDecision) (Incident, error) {
+	if !validToken(in.RequestID, 128) || in.ExpectedRevision == 0 || len(in.Note) > 4096 || !utf8.ValidString(in.Note) || strings.TrimSpace(in.Note) == "" {
+		return Incident{}, ErrInvalidTask
+	}
+	note, e := s.o.Filter(in.Note)
+	if e != nil {
+		return Incident{}, e
+	}
+	in.Note = note
+	before, e := s.Get(ctx, subject, id)
+	if e != nil {
+		return Incident{}, e
+	}
+	if e = s.gate(ctx, subject, &before.Source); e != nil {
+		return Incident{}, e
+	}
+	if in.Action == "link_task" && s.o.ReadFollowup(ctx, subject, in.FollowupTaskID, before.CreatedAt) != nil {
+		return Incident{}, ErrInvalidTask
+	}
+	requestDigest := incidentDigest(struct {
+		Actor string
+		Input IncidentDecision
+	}{subject, in})
+	var out Incident
+	e = s.o.DB.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		r, e := s.getRecord(txCtx, tx, id)
+		if e != nil {
+			return e
+		}
+		v := r.View
+		if old := r.Requests[in.RequestID]; old != "" {
+			if old != requestDigest {
+				return ErrIncidentConflict
+			}
+			out = v
+			return nil
+		}
+		if v.Revision != in.ExpectedRevision || v.SourceDigest != before.SourceDigest || len(v.Events) >= 200 || len(r.Requests) >= 200 {
+			return ErrIncidentConflict
+		}
+		switch in.Action {
+		case "claim":
+			if v.State != "open" {
+				return ErrIncidentConflict
+			}
+			v.State = "investigating"
+			v.AssigneeID = subject
+		case "release":
+			if v.State != "investigating" || v.AssigneeID != subject {
+				return ErrIncidentConflict
+			}
+			v.State = "open"
+			v.AssigneeID = ""
+		case "take_over":
+			if v.State != "investigating" && v.State != "review_required" {
+				return ErrIncidentConflict
+			}
+			v.State = "investigating"
+			v.AssigneeID = subject
+			v.Proposal = nil
+		case "note":
+			if v.State == "resolved" {
+				return ErrIncidentConflict
+			}
+		case "propose":
+			if v.State != "investigating" || v.AssigneeID != subject || !slices.Contains([]string{"confirmed_succeeded", "confirmed_failed", "confirmed_no_effect", "accepted_unresolved"}, in.Outcome) {
+				return ErrIncidentConflict
+			}
+			v.State = "review_required"
+			v.Proposal = &IncidentProposal{in.Outcome, in.Note, subject, v.SourceDigest, time.Now().UTC()}
+		case "approve":
+			if v.State != "review_required" || v.Proposal == nil || v.Proposal.ProposedBy == subject || v.Proposal.SourceDigest != v.SourceDigest {
+				return ErrIncidentConflict
+			}
+			if s.o.Administrator(txCtx, v.Proposal.ProposedBy) != nil {
+				return ErrIncidentConflict
+			}
+			v.State = "resolved"
+			v.ResolvedBy = subject
+		case "reject":
+			if v.State != "review_required" || v.Proposal == nil || v.Proposal.ProposedBy == subject {
+				return ErrIncidentConflict
+			}
+			v.State = "investigating"
+			v.Proposal = nil
+		case "reopen":
+			if v.State != "resolved" {
+				return ErrIncidentConflict
+			}
+			v.State = "open"
+			v.ResolvedBy = ""
+			v.AssigneeID = ""
+			v.Proposal = nil
+		case "link_task":
+			if v.State == "resolved" || !validToken(in.FollowupTaskID, 128) || in.FollowupTaskID == v.Source.TaskID || in.FollowupTaskID == v.Source.ID || len(v.FollowupTaskIDs) >= 20 || slices.Contains(v.FollowupTaskIDs, in.FollowupTaskID) {
+				return ErrIncidentConflict
+			}
+			v.FollowupTaskIDs = append(v.FollowupTaskIDs, in.FollowupTaskID)
+		default:
+			return ErrInvalidTask
+		}
+		v.Revision++
+		v.UpdatedAt = time.Now().UTC()
+		v.Events = append(v.Events, IncidentEvent{len(v.Events) + 1, in.Action, subject, in.Note, v.UpdatedAt})
+		r.View = v
+		r.Requests[in.RequestID] = requestDigest
+		raw, e := json.Marshal(r)
+		if e != nil || len(raw) > 128<<10 {
+			return ErrInvalidTask
+		}
+		result, e := tx.Exec(txCtx, `UPDATE task_incidents SET revision=?,payload=? WHERE id=? AND revision=?`, v.Revision, raw, id, in.ExpectedRevision)
+		if e != nil {
+			return e
+		}
+		n, e := result.RowsAffected()
+		if e != nil || n != 1 {
+			return ErrIncidentConflict
+		}
+		if e = s.o.Audit.AppendTx(txCtx, tx, audit.Event{SubjectID: subject, Action: ActionIncidentManage, Result: "success", RequestID: in.RequestID, TaskID: v.Source.TaskID, NodeIDs: append([]string{}, v.Source.NodeIDs...), Source: audit.SourceWeb, ReasonCode: "manual_" + in.Action + "_original_result_preserved", At: v.UpdatedAt}); e != nil {
+			return e
+		}
+		out = v
+		return nil
+	})
+	if e != nil {
+		return Incident{}, e
+	}
+	if e = s.gate(ctx, subject, &out.Source); e != nil {
+		return Incident{}, e
+	}
+	return out, nil
+}
+
+func (r *Repo) IncidentSources(ctx context.Context) ([]IncidentSource, error) {
+	rows, e := r.db.Query(ctx, `SELECT id FROM tasks WHERE status IN ('unknown','failed','partial_failure','expired') ORDER BY updated_at DESC,id DESC LIMIT 1000`)
+	if e != nil {
+		return nil, e
+	}
+	ids := []string{}
+	for rows.Next() {
+		var id string
+		if e = rows.Scan(&id); e != nil {
+			rows.Close()
+			return nil, e
+		}
+		ids = append(ids, id)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return nil, e
+	}
+	out := []IncidentSource{}
+	for _, id := range ids {
+		t, e := r.Get(ctx, id)
+		if e != nil {
+			return nil, e
+		}
+		if incidentAnomaly(string(t.Status)) {
+			out = append(out, IncidentSource{Kind: "task", ID: t.ID, OwnerID: t.SubmitterID, Revision: t.Revision, State: string(t.Status), TaskID: t.ID, Action: t.ActionID, PlanDigest: t.PlanHash, NodeIDs: taskTargetIDs(t), Reason: t.FailureReason})
+		}
+	}
+	return out, nil
+}
+func InvalidateRestoredIncidentsTx(ctx context.Context, tx storage.Tx, now time.Time) error {
+	rows, e := tx.Query(ctx, `SELECT id,payload FROM task_incidents`)
+	if e != nil {
+		return e
+	}
+	records := []incidentRecord{}
+	for rows.Next() {
+		var id string
+		var raw []byte
+		if e = rows.Scan(&id, &raw); e != nil {
+			rows.Close()
+			return e
+		}
+		r, e := decodeIncident(raw)
+		if e != nil {
+			rows.Close()
+			return e
+		}
+		records = append(records, r)
+	}
+	e = rows.Err()
+	rows.Close()
+	if e != nil {
+		return e
+	}
+	for _, r := range records {
+		v := &r.View
+		v.State = "open"
+		v.AssigneeID = ""
+		v.Proposal = nil
+		v.ResolvedBy = ""
+		v.Revision++
+		v.UpdatedAt = now
+		v.FollowupTaskIDs = []string{}
+		if len(v.Events) >= 200 {
+			return fmt.Errorf("%w: incident journal full", ErrInvalidTask)
+		}
+		v.Events = append(v.Events, IncidentEvent{len(v.Events) + 1, "restore_invalidated", "system", "Old human decisions are historical; fresh review required.", now})
+		r.Requests = map[string]string{}
+		raw, e := json.Marshal(r)
+		if e != nil {
+			return e
+		}
+		if _, e = tx.Exec(ctx, `UPDATE task_incidents SET revision=?,payload=? WHERE id=?`, v.Revision, raw, v.ID); e != nil {
+			return e
+		}
+	}
+	return nil
+}

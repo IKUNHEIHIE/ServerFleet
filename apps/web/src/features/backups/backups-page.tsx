@@ -1,3 +1,4 @@
+import { BackupMaintenancePanel } from "./backup-maintenance-panel";
 import { useState, type FormEvent } from "react";
 import { RecoveryAuthorityPanel } from "./recovery-authority-panel";
 import { EncryptedBackupsPanel } from "./encrypted-backups-panel";
@@ -139,6 +140,7 @@ export function BackupsPage() {
       />
       <RecoveryAuthorityPanel key={`authority:${session.viewEpoch}`} />
       <EncryptedBackupsPanel key={session.viewEpoch} />
+      <BackupMaintenancePanel key={`maintenance:${session.viewEpoch}`} />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
 

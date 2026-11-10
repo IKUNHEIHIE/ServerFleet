@@ -309,7 +309,7 @@ export interface TrafficRisk {
 export interface CredentialMetadata {
   readonly id: string;
   readonly name: string;
-  readonly kind: "cloudflare_token" | "smtp_password" | "qqbot_secret" | "ai_api_key" | "other";
+  readonly kind: "cloudflare_token" | "smtp_password" | "qqbot_secret" | "ai_api_key" | "backup_storage_secret" | "other";
   readonly status: "unverified" | "valid" | "invalid" | "expired" | "revoked";
   readonly usageScope: readonly string[];
   readonly references?: readonly string[];
