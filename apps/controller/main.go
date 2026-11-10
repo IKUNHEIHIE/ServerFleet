@@ -24,6 +24,24 @@ import (
 var controllerBuildVersion = "0.9.0-dev"
 
 func main() {
+	if len(os.Args) > 1 && (os.Args[1] == "provision" || os.Args[1] == "bootstrap-token" || os.Args[1] == "release") {
+		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer stop()
+		var err error
+		switch os.Args[1] {
+		case "provision":
+			err = bootstrap.RunProvisionCommand(ctx, os.Args[2:], os.Stdout, os.Stderr)
+		case "bootstrap-token":
+			err = bootstrap.RunBootstrapTokenCommand(ctx, os.Args[2:], os.Stdout, os.Stderr)
+		case "release":
+			err = bootstrap.RunReleaseCommand(ctx, os.Args[2:], os.Stdout, os.Stderr)
+		}
+		if err != nil {
+			log.Print(err)
+			os.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) > 1 && os.Args[1] == "supervise" {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

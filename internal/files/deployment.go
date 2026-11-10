@@ -16,9 +16,10 @@ type rootRegistration struct {
 	LogicalRoot string `json:"logicalRoot"`
 }
 type rootRegistry struct {
-	Version   int                `json:"version"`
-	SpoolDir  string             `json:"spoolDir"`
-	NodeRoots []rootRegistration `json:"nodeRoots"`
+	Version    int                `json:"version"`
+	AllowEmpty bool               `json:"allowEmpty,omitempty"`
+	SpoolDir   string             `json:"spoolDir"`
+	NodeRoots  []rootRegistration `json:"nodeRoots"`
 }
 
 // LoadDeployment reads a startup-only administrator provisioned registry. It
@@ -75,7 +76,7 @@ func parseDeployment(raw []byte) (*RootPathMapper, string, error) {
 	decoder = json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
 	var cfg rootRegistry
-	if decoder.Decode(&cfg) != nil || cfg.Version != 1 || !filepath.IsAbs(cfg.SpoolDir) || len(cfg.NodeRoots) == 0 || len(cfg.NodeRoots) > 1000 {
+	if decoder.Decode(&cfg) != nil || cfg.Version != 1 || !filepath.IsAbs(cfg.SpoolDir) || len(cfg.NodeRoots) == 0 && !cfg.AllowEmpty || len(cfg.NodeRoots) > 1000 {
 		return nil, "", ErrDeploymentConfig
 	}
 	roots := map[string]string{}
@@ -84,6 +85,14 @@ func parseDeployment(raw []byte) (*RootPathMapper, string, error) {
 			return nil, "", ErrDeploymentConfig
 		}
 		roots[entry.NodeID] = entry.LogicalRoot
+	}
+	// Explicit fresh-install mode grants no node/path authority. Keep the
+	// generic mapper's empty-map rejection and the legacy default unchanged.
+	if len(roots) == 0 && cfg.AllowEmpty {
+		if CheckExecutionSpool(cfg.SpoolDir) != nil {
+			return nil, "", ErrDeploymentConfig
+		}
+		return &RootPathMapper{roots: roots}, cfg.SpoolDir, nil
 	}
 	mapper, err := NewRootPathMapper(roots)
 	if err != nil || CheckExecutionSpool(cfg.SpoolDir) != nil {

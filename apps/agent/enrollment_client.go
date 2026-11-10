@@ -29,6 +29,7 @@ type agentEnrollmentConfig struct {
 	// Public Root certificate and origin MUST come from independent trusted
 	// installation input. Neither a response nor a redirect can supply them.
 	Origin, RootCertificatePEM string
+	ControllerCAPEM            string
 	Current                    func(context.Context) error
 }
 type agentEnrollmentObservation struct {
@@ -65,6 +66,19 @@ func newAgentEnrollmentClient(identity *agentIdentityStore, cfg agentEnrollmentC
 	}
 	roots := x509.NewCertPool()
 	roots.AddCert(root)
+	// The explicit HTTPS trust root does not replace the independently pinned
+	// internal identity Root checked again by identity.Accept.
+	tlsPin := hex.EncodeToString(pin[:])
+	if cfg.ControllerCAPEM != "" {
+		if len(cfg.ControllerCAPEM) > 16<<10 {
+			return nil, errAgentEnrollment
+		}
+		var e error
+		roots, tlsPin, e = parseAgentConnectionRoot([]byte(cfg.ControllerCAPEM))
+		if e != nil {
+			return nil, errAgentEnrollment
+		}
+	}
 	tlsConfig := &tls.Config{MinVersion: tls.VersionTLS13, RootCAs: roots, ServerName: u.Hostname(), VerifyConnection: func(state tls.ConnectionState) error {
 		// VerifyConnection runs before HandshakeComplete becomes true.
 		if state.Version < tls.VersionTLS13 || state.ServerName != u.Hostname() || len(state.VerifiedChains) == 0 {
@@ -75,7 +89,7 @@ func newAgentEnrollmentClient(identity *agentIdentityStore, cfg agentEnrollmentC
 				return errAgentEnrollment
 			}
 			verifiedPin := sha256.Sum256(chain[len(chain)-1].RawSubjectPublicKeyInfo)
-			if verifiedPin != pin {
+			if hex.EncodeToString(verifiedPin[:]) != tlsPin {
 				return errAgentEnrollment
 			}
 		}

@@ -69,7 +69,15 @@ func agentEnrollOnce(ctx context.Context, request agentruntime.EnrollRequest) (a
 	if _, err := store.Prepare(ctx, request.AgentVersion); err != nil {
 		return agentruntime.EnrollResult{}, errAgentEnrollment
 	}
+	var controllerCA []byte
+	if request.ControllerCA != "" {
+		controllerCA, err = readAgentFile(request.ControllerCA, 16<<10)
+		if err != nil {
+			return agentruntime.EnrollResult{}, errAgentEnrollment
+		}
+	}
 	client, err := newAgentEnrollmentClient(store, agentEnrollmentConfig{
+		ControllerCAPEM:    string(controllerCA),
 		Origin:             request.ControllerURL,
 		RootCertificatePEM: string(rootPEM),
 		Current:            func(context.Context) error { return nil },
