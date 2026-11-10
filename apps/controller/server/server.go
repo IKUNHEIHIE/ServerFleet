@@ -43,6 +43,7 @@ import (
 
 // Config configures the composed Controller management runtime.
 type Config struct {
+	InstallationCatalog       *InstallationCatalog
 	WebDirectory              string
 	DBPath                    string
 	CredentialKeyDir          string
@@ -259,6 +260,8 @@ func Migrations() [][]storage.Migration {
 		recovery.OffsiteMigrations(),
 		tasks.IncidentMigrations(),
 		tasks.IncidentEvidenceMigrations(),
+		certificates.RenewalDeliveryMigrations(),
+		publishing.CertificateReplacementMigrations(),
 		transport.RecoveryMigrations(),
 		transport.CertificateCSRMigrations(),
 		transport.CertificateChainMigrations(),
@@ -1197,6 +1200,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Certificates = certificatesService
 	s.Publishing = publishingService
 	s.mux = http.NewServeMux()
+	s.registerInstallationCatalogRoutes(cfg.InstallationCatalog)
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
 	}

@@ -20,7 +20,10 @@ const actionPublicRenewalConfigure = "certificates.public.renewal.configure"
 // All scheduling and policy writes use the same lock. This prevents a local
 // disable/adopt racing task submission. Execution independently reads the policy
 // at every provider I/O; locking alone is never treated as authorization.
-type publicRenewalState struct{ mu sync.Mutex }
+type publicRenewalState struct {
+	mu             sync.Mutex
+	deliveryCursor int
+}
 
 func renewalTaskKey(p certificates.PublicRenewal) string {
 	return "cert-renew-" + backupTaskKey("cycle", p.ID+":"+strconv.FormatUint(p.Revision, 10)+":"+p.OrderTaskID)
@@ -88,6 +91,7 @@ func (m *publicCertificateExecution) auditRenewal(ctx context.Context, tx storag
 }
 
 func (s *Server) registerPublicRenewalRoutes() {
+	s.registerRenewalDeliveryRoutes()
 	s.mux.HandleFunc("GET /api/v1/certificates/public-renewals", func(w http.ResponseWriter, r *http.Request) {
 		id, _, err := s.authenticateIdentity(r)
 		if r.TLS == nil || err != nil || s.Identity.AuthorizeAdministrator(r.Context(), id.SubjectID) != nil {
@@ -130,7 +134,9 @@ func (s *Server) registerPublicRenewalRoutes() {
 					state = "issuance_completed_installation_required"
 				}
 			}
-			items = append(items, map[string]any{"policy": p, "state": state, "dueAt": p.NotAfter.Add(-time.Duration(p.RenewBeforeDays) * 24 * time.Hour), "approvalRequired": true, "automaticInstallation": false})
+			delivery, e := certificates.ReadRenewalDelivery(r.Context(), s.DB, p.ID)
+			automatic := e == nil && delivery.Enabled
+			items = append(items, map[string]any{"policy": p, "state": state, "dueAt": p.NotAfter.Add(-time.Duration(p.RenewBeforeDays) * 24 * time.Hour), "approvalRequired": true, "automaticInstallation": automatic})
 		}
 		releaseSourceJSON(w, 200, map[string]any{"items": items})
 	})
@@ -243,7 +249,7 @@ func (s *Server) savePublicRenewal(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) runPublicRenewalSchedule(ctx context.Context) {
-	ticker := time.NewTicker(time.Minute)
+	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 	for {
 		select {
@@ -252,6 +258,7 @@ func (s *Server) runPublicRenewalSchedule(ctx context.Context) {
 		case <-ticker.C:
 			cycle, cancel := context.WithTimeout(ctx, 30*time.Second)
 			s.schedulePublicRenewals(cycle, time.Now().UTC())
+			s.driveRenewalDeliveries(cycle)
 			cancel()
 		}
 	}

@@ -23,6 +23,7 @@ import (
 
 // Options are the Controller CLI flags.
 type Options struct {
+	InstallationCatalog   string
 	ShowVersion           bool
 	WebDirectory          string
 	Listen                string
@@ -64,6 +65,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.AgentAuthority, "agent-authority", "", "Agent-facing authority host:port (default: derived from -listen)")
 	flags.StringVar(&options.AgentServerName, "agent-server-name", "", "Agent TLS server name (default: host of -agent-authority)")
 	flags.StringVar(&options.CredentialKeyDir, "credential-key-dir", "", "private credential key directory (default: credential-keys beside -db)")
+	flags.StringVar(&options.InstallationCatalog, "installation-catalog", "", "private public-only one-click installation distribution catalog")
 	flags.StringVar(&options.WebDirectory, "web-dir", "", "private built console directory (requires management HTTPS mode)")
 	flags.StringVar(&options.FileDeployment, "file-deployment", "", "private startup node-root registry (Linux; requires management TLS mode)")
 	flags.StringVar(&options.GatewayDeployment, "gateway-deployment", "", "private startup gateway nginx/certificate path registry (requires -file-deployment)")
@@ -304,8 +306,16 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 			return nil, material, recovery.ErrQuarantined
 		}
 	}
+	var installationCatalog *server.InstallationCatalog
+	if options.InstallationCatalog != "" {
+		installationCatalog, err = server.LoadInstallationCatalog(options.InstallationCatalog, options.Origin, options.AgentRootPin)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
 	composed, err := server.New(ctx, server.Config{
-		RecoveryLatch: restoredLatch, RecoveryCleanup: recoveryCleanup,
+		InstallationCatalog: installationCatalog,
+		RecoveryLatch:       restoredLatch, RecoveryCleanup: recoveryCleanup,
 		ResidentSupervisor: resident, BuildVersion: options.BuildVersion,
 		ACMEDeployment: acmeDeployment,
 		ReleaseSource:  releaseSource, ControllerAuthorityID: material.AuthorityID,

@@ -536,13 +536,19 @@ func (h *gatewayTaskHost) execute(ctx context.Context, plan publishing.Plan, req
 		if err := h.registry.register(planned); err != nil {
 			return "", err
 		}
-		defer h.registry.drop(task.ID)
+		if !publishing.NonBlockingTaskObservation(ctx) {
+			defer h.registry.drop(task.ID)
+		}
 	}
 	if h.onSubmitted != nil {
 		h.onSubmitted(task.ID)
 	}
 	if task.Status == tasks.StatusCompleted {
+		h.registry.drop(task.ID)
 		return task.ID, gatewayCompleted(task)
+	}
+	if publishing.NonBlockingTaskObservation(ctx) && !task.Status.Terminal() {
+		return task.ID, publishing.ErrStageAwaitingTask
 	}
 	return h.wait(ctx, task.ID, task.Status)
 }
