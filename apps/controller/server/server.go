@@ -258,6 +258,7 @@ func Migrations() [][]storage.Migration {
 		recovery.Migrations(),
 		recovery.OffsiteMigrations(),
 		tasks.IncidentMigrations(),
+		tasks.IncidentEvidenceMigrations(),
 		transport.RecoveryMigrations(),
 		transport.CertificateCSRMigrations(),
 		transport.CertificateChainMigrations(),
