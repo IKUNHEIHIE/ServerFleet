@@ -17,7 +17,9 @@ func installationDownloadFile(context.Context, *http.Client, string, *os.Root, i
 }
 func installationServicePreflight(context.Context) error            { return errInstallation }
 func installationUserService(context.Context, string, string) error { return errInstallation }
-func installationReadToken() ([]byte, error)                        { return nil, errInstallation }
+func installationReadToken(context.Context) ([]byte, error)         { return nil, errInstallation }
 func runSystemInstallation(context.Context, string, string, bool, io.Writer, io.Writer) error {
 	return errInstallation
 }
+
+func installationProcessMatches(int, string) bool { return false }

@@ -4,6 +4,8 @@
 
 V09-CLOUD-RENEWAL-INSTALL-01 / chatgpt-delivery-20261111，主控单会话，从main b3d13b77建立独立ServerFleet-delivery / feature/cloud-renewal-install-20261111。用户明确完成续签安装发布编排及哪吒式一键安装。允许certificates/Controller证书、网关/发布必要接缝、bootstrap/Agent安装接入、Web证书/添加节点、scripts/deployment/独立R31产品API/追加迁移/必要检查与发布构建元数据；不启其他Agent、不改旧43迁移SQL/checksum、不引入Runtime/第三方依赖，不触碰生产/VPS/真实供应商/离线Root私钥。保持统一任务、当前权限、独立修改审批、审计和UNKNOWN不重放；首次信任必须HTTPS与外部核对的公开签名密钥/Root pin。离线Root流程不在线自动化。集中编码和专项负向后同head完整CI，主控按既有授权expected-SHA合并，停止条件为两项源码、页面、文档、检查、PR与合并完成。
 
+R31 实现检查点 b7f2c0a 已保存在任务分支。续接环境恢复后核对原树 4be2a899，重建未提交的测试/文档与恢复入口。专项真实 HTTPS/签名/SQLite/CSRF、确定性后继与不重放测试通过；首次专项发现私有测试目录权限与界面夹具结构错误，已修正；旧发布回滚兼容查询转义错误已修复并全包 race 复验通过。安装专项、HTTP专项与Web五项全部通过，安全扫描无漏洞；完整构建/契约及精确 head CI 随后登记 PR 评论。真实 systemd/root、供应商及跨节点联调仍由用户负责。此前 Redocly 遥测被自动审批阻止；现显式关闭 CLI/SDK 两层遥测及 DO_NOT_TRACK，保留全部检查门。
+
 ## 当前：异常／UNKNOWN人工处置完整闭环（2026-11-11 R30）
 
 V09-CLOUD-INCIDENT-CLOSURE-01 / chatgpt-incident-20261111，主控单会话，从main5e9acae建立独立ServerFleet-incidents / feature/cloud-incident-closure-20261111。环境中断后按Git对象摘要从main恢复全量源码，树81306c68已核对，旧目录不修改。用户明确要求完整闭环。允许internal/tasks证据／快照／后续任务结果／复核阻断与重新核查、AI最小事实端口、Controller及备份只读核验接缝、Web任务面板/API适配、独立R30产品/接口、追加迁移与必要回归。保持统一权限、任务、独立审批及审计；不改原执行结果、不重放UNKNOWN、不加执行通道、第三方依赖或Runtime，不访问生产/VPS/供应商。

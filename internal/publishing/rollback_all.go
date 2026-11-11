@@ -25,9 +25,6 @@ func (s *Service) RollbackAllDetail(ctx context.Context, subjectID, requestID, p
 // later call resumes from the first remaining stage. It never rewrites a stage
 // summary, so a DNS TTL or resolver cache is not claimed to be instantly reverted.
 func (s *Service) RollbackAll(ctx context.Context, subjectID, requestID, planID string) (Plan, error) {
-	if s.isCertificateReplacement(ctx, planID) {
-		return Plan{}, ErrStageNotRollable
-	}
 	if err := s.requireRequest(requestID); err != nil {
 		return Plan{}, err
 	}
@@ -48,6 +45,10 @@ func (s *Service) RollbackAll(ctx context.Context, subjectID, requestID, planID 
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, group.NodeIDs, "publishing_rollback_all"); err != nil {
 		return Plan{}, err
 	}
+	if s.isCertificateReplacement(ctx, planID) {
+		return Plan{}, ErrStageNotRollable
+	}
+
 	for _, stage := range stages {
 		if stage.Status == StageRunning {
 			return plan, ErrStageAlreadyRunning

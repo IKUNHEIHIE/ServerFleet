@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"slices"
@@ -50,7 +51,7 @@ func (s *Server) deliveryReference(ctx context.Context, p certificates.PublicRen
 	return false
 }
 func (s *Server) deliveryPublication(ctx context.Context, p certificates.PublicRenewal, id string) (publishing.Plan, error) {
-	plan, _, e := s.Publishing.Get(ctx, p.OwnerID, id)
+	plan, e := s.Publishing.LatestCertificatePlan(ctx, p.OwnerID, id)
 	if e != nil || plan.Status != publishing.PlanCompleted || !plan.TargetsPersisted || !plan.HTTPS || !certificateMatchesDomain(p.Domain, plan.Domain) || !s.deliveryReference(ctx, p, plan.CertificateID) {
 		return plan, publishing.ErrProductionTarget
 	}
@@ -63,6 +64,10 @@ func (s *Server) saveDelivery(ctx context.Context, d *certificates.RenewalDelive
 	if d.Cycle != nil {
 		d.Cycle.UpdatedAt = d.UpdatedAt
 	}
+	source := audit.SourceSystem
+	if reason == "renewal_delivery_configured_by_web" {
+		source = audit.SourceWeb
+	}
 	e := s.DB.InTx(ctx, func(c context.Context, tx storage.Tx) error {
 		if e := certificates.SaveRenewalDeliveryTx(c, tx, *d, expected); e != nil {
 			return e
@@ -71,7 +76,7 @@ func (s *Server) saveDelivery(ctx context.Context, d *certificates.RenewalDelive
 		if d.Cycle != nil {
 			taskID = d.Cycle.InstallTaskID
 		}
-		return s.Audit.AppendTx(c, tx, audit.Event{SubjectID: d.OwnerID, Action: actionPublicRenewalConfigure, Result: "success", RequestID: "renew-delivery-" + backupTaskKey("audit", d.PolicyID+":"+d.UpdatedAt.Format(time.RFC3339Nano)), TaskID: taskID, Source: audit.SourceSystem, ReasonCode: reason, At: d.UpdatedAt})
+		return s.Audit.AppendTx(c, tx, audit.Event{SubjectID: d.OwnerID, Action: actionPublicRenewalConfigure, Result: "success", RequestID: "renew-delivery-" + backupTaskKey("audit", d.PolicyID+":"+d.UpdatedAt.Format(time.RFC3339Nano)), TaskID: taskID, Source: source, ReasonCode: reason, At: d.UpdatedAt})
 	})
 	if e != nil {
 		d.Revision = expected
@@ -79,6 +84,7 @@ func (s *Server) saveDelivery(ctx context.Context, d *certificates.RenewalDelive
 	return e
 }
 func (s *Server) registerRenewalDeliveryRoutes() {
+	s.registerRenewalRecoveryRoute()
 	s.mux.HandleFunc("GET /api/v1/certificates/public-renewals/{policyId}/delivery", func(w http.ResponseWriter, r *http.Request) {
 		subject, _, ok := s.operatorPrincipal(w, r)
 		if !ok {
@@ -106,9 +112,11 @@ func (s *Server) registerRenewalDeliveryRoutes() {
 			return
 		}
 		receipts := []tasks.IncidentTaskReceipt{}
+		seenReceipts := map[string]bool{}
 		if d.Cycle != nil {
-			for _, id := range []string{d.Cycle.IssueTaskID, d.Cycle.InstallTaskID} {
-				if id != "" {
+			for _, id := range []string{d.Cycle.IssueTaskID, d.Cycle.InstallTaskID, d.Cycle.RecoveredOrderTaskID, d.Cycle.RecoveredInstallTaskID} {
+				if id != "" && !seenReceipts[id] {
+					seenReceipts[id] = true
 					v, e := s.inspectIncidentTask(r.Context(), subject, id)
 					if e != nil {
 						writeOperationsError(w, auth.ErrDenied)
@@ -179,17 +187,22 @@ func (s *Server) registerRenewalDeliveryRoutes() {
 				writeOperationsError(w, auth.ErrDenied)
 				return
 			}
-			if d.Cycle != nil && d.Cycle.State != "completed" && d.Cycle.PolicyRevision == p.Revision {
+			if d.Cycle != nil && (d.Cycle.State != "completed" && d.Cycle.State != "recovered") && d.Cycle.PolicyRevision == p.Revision {
 				writeOperationsError(w, tasks.ErrIncidentConflict)
 				return
 			}
 			seen := map[string]bool{}
 			for _, id := range in.PublicationIDs {
-				if seen[id] {
+				plan, lookupErr := s.deliveryPublication(r.Context(), p, id)
+				if lookupErr != nil {
+					writeOperationsError(w, lookupErr)
+					return
+				}
+				if seen[plan.ID] {
 					writeOperationsError(w, tasks.ErrInvalidTask)
 					return
 				}
-				seen[id] = true
+				seen[plan.ID] = true
 				if _, e = s.deliveryPublication(r.Context(), p, id); e != nil {
 					writeOperationsError(w, e)
 					return
@@ -284,7 +297,7 @@ func (s *Server) driveRenewalDeliveries(ctx context.Context) {
 		if _, e = s.deliveryPolicy(ctx, p.OwnerID, p.ID); e != nil {
 			continue
 		}
-		if d.Cycle != nil && d.Cycle.PolicyRevision == p.Revision && (d.Cycle.State == "blocked" || d.Cycle.State == "completed") {
+		if d.Cycle != nil && d.Cycle.PolicyRevision == p.Revision && (d.Cycle.State == "blocked" || d.Cycle.State == "completed" || d.Cycle.State == "recovered") {
 			continue
 		}
 		if d.Cycle == nil || d.Cycle.IssueTaskID != p.TaskID {
@@ -292,11 +305,19 @@ func (s *Server) driveRenewalDeliveries(ctx context.Context) {
 			valid := true
 			for _, id := range d.PublicationIDs {
 				plan, e := s.deliveryPublication(ctx, p, id)
+				if errors.Is(e, publishing.ErrStageAwaitingTask) {
+					valid = false
+					c = nil
+					break
+				}
 				if e != nil {
 					valid = false
 					break
 				}
-				c.Publications = append(c.Publications, certificates.RenewalPublication{BaseID: id, ID: "renew-pub-" + backupTaskKey("publication", c.ID+":"+id), PreviousCertificateID: plan.CertificateID})
+				c.Publications = append(c.Publications, certificates.RenewalPublication{BaseID: plan.ID, ID: "renew-pub-" + backupTaskKey("publication", c.ID+":"+plan.ID), PreviousCertificateID: plan.CertificateID})
+			}
+			if c == nil {
+				continue
 			}
 			d.Cycle = c
 			if !valid {
@@ -320,6 +341,10 @@ func (s *Server) advanceRenewalDelivery(ctx context.Context, p certificates.Publ
 		c.ErrorCode = code
 		_ = s.saveDelivery(ctx, d, "renewal_delivery_stopped_no_replay")
 	}
+	if c.ID != "renew-cycle-"+backupTaskKey("delivery", p.ID+":"+p.TaskID) {
+		block("CYCLE_PROOF_MISMATCH")
+		return
+	}
 	issue, e := s.Tasks.Get(ctx, c.IssueTaskID)
 	if e != nil {
 		block("ISSUANCE_UNAVAILABLE")
@@ -332,8 +357,16 @@ func (s *Server) advanceRenewalDelivery(ctx context.Context, p certificates.Publ
 		block("ISSUANCE_FAILED_OR_UNKNOWN")
 		return
 	}
+	var issueParams map[string]string
+	if issue.SubmitterID != p.OwnerID || issue.ActionID != actionPublicCertificateIssue || json.Unmarshal([]byte(issue.Params), &issueParams) != nil || s.PublicCertificates.renewalTaskCurrent(ctx, issue, issueParams) != nil {
+		block("ISSUANCE_TASK_MISMATCH")
+		return
+	}
 	order, e := certificates.ReadPublicOrder(ctx, s.DB, issue.ID)
-	if e != nil || order.Status != "issued" || len(order.PendingCleanup) > 0 || order.ErrorCode != "" || order.CSRTaskID != p.CSRTaskID || order.NodeID != p.NodeID || order.Domain != p.Domain || order.KeyRef != p.KeyRef || !order.NotAfter.After(p.NotAfter) {
+	if e == nil && len(order.PendingCleanup) > 0 {
+		return
+	}
+	if e != nil || order.Status != "issued" || order.PlanSHA256 != issue.PlanHash || order.ProfileSHA256 != p.ProfileSHA256 || order.ProfileSHA256 != s.PublicCertificates.profileSHA || order.ZoneID != p.ZoneID || !order.NotAfter.After(time.Now()) || len(order.PendingCleanup) > 0 || order.ErrorCode != "" || order.CSRTaskID != p.CSRTaskID || order.NodeID != p.NodeID || order.Domain != p.Domain || order.KeyRef != p.KeyRef || !order.NotAfter.After(p.NotAfter) {
 		block("ISSUANCE_PROOF_MISMATCH")
 		return
 	}

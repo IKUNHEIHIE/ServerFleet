@@ -1,3 +1,4 @@
+import { RenewalRecoveryPanel } from "./renewal-recovery-panel";
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { Button } from "@/components/ui/button";
@@ -12,10 +13,10 @@ import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
 interface Publication { readonly baseId: string; readonly id: string; readonly certificateId?: string }
-interface Cycle { readonly id: string; readonly policyRevision: number; readonly issueTaskId: string; readonly installTaskId?: string; readonly state: string; readonly errorCode?: string; readonly publications: readonly Publication[]; readonly updatedAt: string }
+interface Cycle { readonly id: string; readonly policyRevision: number; readonly issueTaskId: string; readonly installTaskId?: string; readonly state: string; readonly errorCode?: string; readonly recoveredOrderTaskId?: string; readonly recoveredInstallTaskId?: string; readonly recoveryNote?: string; readonly previousErrorCode?: string; readonly recoveryIncidentIds?: readonly string[]; readonly recoveryPublicationIds?: readonly string[]; readonly publications: readonly Publication[]; readonly updatedAt: string }
 interface Delivery { readonly policyId: string; readonly revision: number; readonly enabled: boolean; readonly publicationIds: readonly string[]; readonly cycle?: Cycle }
 interface View { readonly delivery: Delivery; readonly history: readonly Cycle[]; readonly tasks: readonly IncidentTaskReceipt[] }
-const states: Record<string, string> = { issuance: "等待签发完成", installation: "等待证书安装审批与结果", publication: "等待网关审批、发布与 HTTPS 核验", completed: "已安装、发布并接续下一周期", blocked: "已停止，等待人工核查" };
+const states: Record<string, string> = { issuance: "等待签发完成", installation: "等待证书安装审批与结果", publication: "等待网关审批、发布与 HTTPS 核验", completed: "已安装、发布并接续下一周期", blocked: "已停止，等待人工核查", recovered: "已采用人工修复的成功结果" };
 function DeliveryContent({ policy, onChanged }: { readonly policy: PublicRenewalPolicy; readonly onChanged: () => void }) {
  const session = useSession(); const path = `/api/v1/certificates/public-renewals/${encodeURIComponent(policy.id)}/delivery`;
  const page = useResource(`renewal-delivery:${session.viewEpoch}:${policy.id}:${policy.revision}`, signal => apiClient.request<View>(path, { signal }).then(r => r.data), { refreshIntervalMs: 10_000 });
@@ -35,7 +36,9 @@ function DeliveryContent({ policy, onChanged }: { readonly policy: PublicRenewal
   {d ? <><p>后续编排：{d.enabled ? "已启用" : "未启用"}</p><Field label="需要更新的现有发布计划 ID" hint="每行一个，最多8个；应为已完成、使用本策略证书的 HTTPS 发布。留空仅安装并接续策略。">{a => <TextArea id={a.inputId} value={value} rows={3} disabled={locked} onChange={e => setDraft(e.target.value)} />}</Field>
    {!valid ? <p role="alert">请填写最多8个不重复的有效发布计划 ID。</p> : null}
    <div className="flex gap-2"><Button disabled={locked || !valid || !policy.enabled} loading={save.pending} onClick={() => void update(true)}>启用或保存安装发布编排</Button><Button disabled={locked || !d.enabled} onClick={() => void update(false)}>停用后续编排</Button><Button onClick={page.reload}>刷新编排进度</Button></div>
-   {d.cycle ? <Notice tone={d.cycle.state === "blocked" ? "warning" : "info"} title={states[d.cycle.state] ?? d.cycle.state}>{d.cycle.errorCode ? <p>{d.cycle.errorCode}。请到任务中心查看异常与人工处置，禁止盲目重试原操作。</p> : null}<p>更新时间 {formatDateTime(d.cycle.updatedAt)}</p>{d.cycle.publications.map(p => <p key={p.id}>发布 <a className="underline" href={`#/publishing/${encodeURIComponent(p.id)}`}>{p.id}</a> · 原计划 {p.baseId}</p>)}</Notice> : <p>等待本周期的续签任务；无需手工复制证书公链。</p>}
+   {d.cycle ? <Notice tone={d.cycle.state === "blocked" ? "warning" : "info"} title={states[d.cycle.state] ?? d.cycle.state}>{d.cycle.errorCode ? <p>{d.cycle.errorCode}。请到任务中心查看异常与人工处置，禁止盲目重试原操作。</p> : null}<p>更新时间 {formatDateTime(d.cycle.updatedAt)}</p>{d.cycle.publications.map(p => <p key={p.id}>发布 <a className="underline" href="#/publishing">{p.id}</a> · 原计划 {p.baseId}</p>)}</Notice> : <p>等待本周期的续签任务；无需手工复制证书公链。</p>}
+   {d.cycle?.state === "blocked" ? <RenewalRecoveryPanel policyId={policy.id} policyRevision={policy.revision} deliveryRevision={d.revision} onChanged={() => { page.reload(); onChanged(); }} /> : null}
+   {d.cycle?.state === "recovered" ? <p>采用签发 {d.cycle.recoveredOrderTaskId} · 安装 {d.cycle.recoveredInstallTaskId}。{d.cycle.recoveryNote}</p> : null}
    <DataTable caption="编排关联任务与审批" rows={view?.tasks ?? []} rowKey={t => t.taskId} columns={[{ key: "id", header: "任务", render: t => <a className="underline" href={`#/tasks/${encodeURIComponent(t.taskId)}`}>{t.taskId}</a> }, { key: "action", header: "步骤", render: t => t.action }, { key: "state", header: "实际状态", render: t => t.state }]} />
    {view?.history.length ? <details><summary>历史周期（最近50次）</summary>{view.history.map(c => <p key={c.id}>{states[c.state] ?? c.state} · {formatDateTime(c.updatedAt)} · {c.id}</p>)}</details> : null}
   </> : null}

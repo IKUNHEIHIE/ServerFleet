@@ -23,14 +23,20 @@ type RenewalPublication struct {
 	CertificateID         string `json:"certificateId,omitempty"`
 }
 type RenewalDeliveryCycle struct {
-	ID             string               `json:"id"`
-	PolicyRevision uint64               `json:"policyRevision"`
-	IssueTaskID    string               `json:"issueTaskId"`
-	InstallTaskID  string               `json:"installTaskId,omitempty"`
-	State          string               `json:"state"`
-	ErrorCode      string               `json:"errorCode,omitempty"`
-	Publications   []RenewalPublication `json:"publications"`
-	UpdatedAt      time.Time            `json:"updatedAt"`
+	RecoveredOrderTaskID   string               `json:"recoveredOrderTaskId,omitempty"`
+	RecoveredInstallTaskID string               `json:"recoveredInstallTaskId,omitempty"`
+	RecoveryIncidentIDs    []string             `json:"recoveryIncidentIds,omitempty"`
+	RecoveryPublicationIDs []string             `json:"recoveryPublicationIds,omitempty"`
+	RecoveryNote           string               `json:"recoveryNote,omitempty"`
+	PreviousErrorCode      string               `json:"previousErrorCode,omitempty"`
+	ID                     string               `json:"id"`
+	PolicyRevision         uint64               `json:"policyRevision"`
+	IssueTaskID            string               `json:"issueTaskId"`
+	InstallTaskID          string               `json:"installTaskId,omitempty"`
+	State                  string               `json:"state"`
+	ErrorCode              string               `json:"errorCode,omitempty"`
+	Publications           []RenewalPublication `json:"publications"`
+	UpdatedAt              time.Time            `json:"updatedAt"`
 }
 
 func RenewalDeliveryMigrations() []storage.Migration {
@@ -48,13 +54,13 @@ func ReadRenewalDelivery(ctx context.Context, q storage.Queryer, id string) (Ren
 	if e != nil {
 		return d, e
 	}
-	if len(raw) > 32768 || json.Unmarshal(raw, &d) != nil || d.PolicyID != id || d.OwnerID != owner || d.Revision != revision || revision == 0 || len(d.PublicationIDs) > 8 {
+	if len(raw) > 32768 || json.Unmarshal(raw, &d) != nil || d.PolicyID != id || d.OwnerID != owner || d.Revision != revision || revision == 0 || revision > 1<<53-1 || len(d.PublicationIDs) > 8 {
 		return RenewalDelivery{}, ErrInvalidInput
 	}
 	return d, nil
 }
 func SaveRenewalDeliveryTx(ctx context.Context, tx storage.Tx, d RenewalDelivery, expected uint64) error {
-	if !validInputToken(d.PolicyID, 128) || !validInputToken(d.OwnerID, 128) || d.Revision != expected+1 || len(d.PublicationIDs) > 8 || d.UpdatedAt.IsZero() {
+	if !validInputToken(d.PolicyID, 128) || !validInputToken(d.OwnerID, 128) || d.Revision != expected+1 || d.Revision > 1<<53-1 || len(d.PublicationIDs) > 8 || d.UpdatedAt.IsZero() {
 		return ErrInvalidInput
 	}
 	for _, id := range d.PublicationIDs {

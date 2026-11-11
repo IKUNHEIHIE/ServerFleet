@@ -9,8 +9,10 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"encoding/pem"
+	"net"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"time"
 
@@ -71,8 +73,22 @@ func LoadInstallationCatalog(filename, origin, pin string) (*InstallationCatalog
 	}
 	decoder = json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	if decoder.Decode(&c) != nil || c.Format != 1 || c.ControllerOrigin != origin || c.RootPin != pin || !installationRoot(c.IdentityRootPEM, pin) || !installationRoot(c.HTTPSRootPEM, "") || !installationRoot(c.Source.RootPEM, "") || !installationHTTPSURL(c.Source.Origin) || !transport.FileID(c.Source.Version) || !transport.FileID(c.Source.KeyID) || c.Source.MinimumSequence == 0 || len(c.ControllerAddresses) == 0 || len(c.ControllerAddresses) > 8 || len(c.Source.Addresses) == 0 || len(c.Source.Addresses) > 8 || len(c.Bootstrap) != 2 {
+	if decoder.Decode(&c) != nil || c.Format != 1 || c.ControllerOrigin != origin || c.RootPin != pin || !installationRoot(c.IdentityRootPEM, pin) || !installationRoot(c.HTTPSRootPEM, "") || !installationRoot(c.Source.RootPEM, "") || !installationHTTPSURL(c.Source.Origin) || !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(c.Source.Version) || len(c.Source.Version) > 64 || !transport.FileID(c.Source.KeyID) || c.Source.MinimumSequence == 0 || c.Source.MinimumSequence > 1<<53-1 || len(c.ControllerAddresses) == 0 || len(c.ControllerAddresses) > 8 || len(c.Source.Addresses) == 0 || len(c.Source.Addresses) > 8 || len(c.Bootstrap) != 2 {
 		return nil, ErrGatewayDeployment
+	}
+	u, _ := url.Parse(c.Source.Origin)
+	if u == nil || u.Path != "" || c.Source.Origin != "https://"+u.Host {
+		return nil, ErrGatewayDeployment
+	}
+	for _, addresses := range [][]string{c.Source.Addresses, c.ControllerAddresses} {
+		seen := map[string]bool{}
+		for _, address := range addresses {
+			ip := net.ParseIP(address)
+			if ip == nil || ip.String() != address || ip.IsUnspecified() || ip.IsMulticast() || seen[address] {
+				return nil, ErrGatewayDeployment
+			}
+			seen[address] = true
+		}
 	}
 	key, e := base64.StdEncoding.Strict().DecodeString(c.Source.PublicKey)
 	if e != nil || len(key) != ed25519.PublicKeySize {

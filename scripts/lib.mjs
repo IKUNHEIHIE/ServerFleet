@@ -18,6 +18,10 @@ export const env = {
   GOPATH: path.join(root, ".cache/gopath"),
   GOTOOLCHAIN: "local",
   NO_COLOR: "1",
+  // The Redocly SDK has a separate telemetry switch from the CLI.
+  REDOCLY_TELEMETRY: "off",
+  REDOCLY_SDK_TELEMETRY: "off",
+  DO_NOT_TRACK: "1",
 };
 
 export function run(command, args, { name = path.basename(command), allowFailure = false, ...options } = {}) {

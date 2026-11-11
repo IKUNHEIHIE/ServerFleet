@@ -136,6 +136,9 @@ func (s *Server) registerPublicRenewalRoutes() {
 			}
 			delivery, e := certificates.ReadRenewalDelivery(r.Context(), s.DB, p.ID)
 			automatic := e == nil && delivery.Enabled
+			if e == nil && delivery.Cycle != nil {
+				state = "renewal_delivery_" + delivery.Cycle.State
+			}
 			items = append(items, map[string]any{"policy": p, "state": state, "dueAt": p.NotAfter.Add(-time.Duration(p.RenewBeforeDays) * 24 * time.Hour), "approvalRequired": true, "automaticInstallation": automatic})
 		}
 		releaseSourceJSON(w, 200, map[string]any{"items": items})

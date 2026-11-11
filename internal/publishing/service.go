@@ -485,9 +485,6 @@ func (s *Service) Rollback(ctx context.Context, subjectID, requestID, planID str
 	if err := s.requireRequest(requestID); err != nil {
 		return Plan{}, err
 	}
-	if s.isCertificateReplacement(ctx, planID) {
-		return Plan{}, ErrStageNotRollable
-	}
 	normalized, err := normalizeStageKind(kind)
 	if err != nil {
 		return Plan{}, err
@@ -509,6 +506,10 @@ func (s *Service) Rollback(ctx context.Context, subjectID, requestID, planID str
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, group.NodeIDs, "publishing_rollback"); err != nil {
 		return Plan{}, err
 	}
+	if s.isCertificateReplacement(ctx, planID) {
+		return Plan{}, ErrStageNotRollable
+	}
+
 	index := -1
 	for stageIndex := range stages {
 		if stages[stageIndex].Kind == normalized {

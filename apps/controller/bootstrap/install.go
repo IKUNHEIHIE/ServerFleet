@@ -86,7 +86,7 @@ func installationReadConfig(filename string) (installationDocument, []byte, erro
 	if e != nil || strictProvisionJSON(raw, &d) != nil || d.Format != 1 || !filepath.IsAbs(d.Directory) || filepath.Clean(d.Directory) != d.Directory || !regexpProvisionPath(d.Directory) || d.Provision.Component != "controller" && d.Provision.Component != "agent" || d.ServiceMode != "user" && d.ServiceMode != "external" || d.WaitSeconds < 10 || d.WaitSeconds > 600 || !transport.FileDigest(d.Provision.RootPin) {
 		return d, nil, errInstallation
 	}
-	if d.Source.MinimumSequence == 0 || !transport.FileID(d.Source.KeyID) || len(d.Source.Addresses) < 1 || len(d.Source.Addresses) > 8 {
+	if d.Source.MinimumSequence == 0 || d.Source.MinimumSequence > 1<<53-1 || !transport.FileID(d.Source.KeyID) || len(d.Source.Addresses) < 1 || len(d.Source.Addresses) > 8 {
 		return d, nil, errInstallation
 	}
 	u, e := url.Parse(d.Source.Origin)
@@ -94,7 +94,7 @@ func installationReadConfig(filename string) (installationDocument, []byte, erro
 		return d, nil, errInstallation
 	}
 	key, e := base64.StdEncoding.Strict().DecodeString(d.Source.PublicKey)
-	if e != nil || len(key) != ed25519.PublicKeySize || !transport.FileID(d.Source.Version) {
+	if e != nil || len(key) != ed25519.PublicKeySize || !installationVersionPattern.MatchString(d.Source.Version) || len(d.Source.Version) > 64 {
 		return d, nil, errInstallation
 	}
 	if d.Provision.Directory != "" || d.Provision.Artifact != "" || d.Provision.Manifest != "" || d.Provision.SupervisorExecutable != "" || d.Provision.Feed != nil {
@@ -148,9 +148,14 @@ func RunInstallCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 	if *checkOnly {
 		return json.NewEncoder(stdout).Encode(map[string]any{"state": "PREFLIGHT_OK", "architecture": runtime.GOARCH, "component": d.Provision.Component, "changesMade": false})
 	}
-	root, e := openProvisionPrivateDirectory(d.Directory)
-	if os.IsNotExist(e) {
+	_, statErr := os.Lstat(d.Directory)
+	var root *os.Root
+	if os.IsNotExist(statErr) {
 		root, e = newProvisionDirectory(d.Directory)
+	} else if statErr != nil {
+		return statErr
+	} else {
+		root, e = openProvisionPrivateDirectory(d.Directory)
 	}
 	if e != nil {
 		return e
@@ -169,6 +174,16 @@ func RunInstallCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 		}
 	} else if !os.IsNotExist(e) {
 		return e
+	} else {
+		entries, err := os.ReadDir(d.Directory)
+		if err != nil {
+			return err
+		}
+		for _, entry := range entries {
+			if entry.Name() != "install.lock" {
+				return errInstallation
+			}
+		}
 	}
 
 	if *verifyHealth {
@@ -278,6 +293,9 @@ func RunInstallCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 		if e = installationDownloadFile(ctx, client, d.Source.Origin+prefix+file.Path, release, file); e != nil {
 			return e
 		}
+	}
+	if e = validateInstallationComponents(filepath.Join(d.Directory, "release"), manifest); e != nil {
+		return e
 	}
 	provision.Artifact = filepath.Join(d.Directory, "release", provision.Component)
 	provision.Manifest = provision.Artifact + ".manifest.json"
@@ -410,7 +428,7 @@ func installationEnroll(ctx context.Context, d installationDocument, p provision
 	if d.EnrollmentTokenFile == "" {
 		d.EnrollmentTokenFile = filepath.Join(d.Directory, "enroll-token.txt")
 		if _, e := root.Lstat("enroll-token.txt"); os.IsNotExist(e) {
-			token, e := installationReadToken()
+			token, e := installationReadToken(ctx)
 			if e != nil {
 				return "", e
 			}
@@ -483,6 +501,10 @@ func installationEnroll(ctx context.Context, d installationDocument, p provision
 	}
 }
 func installationWaitHealth(ctx context.Context, directory, version, node string, wait time.Duration) error {
+	c, e := updates.LoadResidentSupervisor(filepath.Join(directory, "supervisor.json"))
+	if e != nil || c.Initial.Version != version || c.NodeID != node {
+		return errInstallation
+	}
 	deadline := time.Now().Add(wait)
 	for time.Now().Before(deadline) {
 		raw, e := recovery.ReadPrivateFile(filepath.Join(directory, "health/ready.json"), 8192)
@@ -493,7 +515,17 @@ func installationWaitHealth(ctx context.Context, directory, version, node string
 			ObservedAt                  time.Time
 		}
 		if e == nil && json.Unmarshal(raw, &v) == nil && v.Version == version && v.PID > 1 && len(v.Nonce) == 32 && !v.ObservedAt.After(time.Now()) && time.Since(v.ObservedAt) < 3*time.Second && (node == "" || v.NodeID == node && v.ConnectionID != "") {
-			return nil
+			if installationProcessMatches(v.PID, c.Initial.SHA256) {
+				if c.Component != "controller" {
+					return nil
+				}
+				probe, cancel := context.WithTimeout(ctx, 2*time.Second)
+				e = controllerResidentReady(c)(probe, c.Initial, updates.OwnedProcessObservation{PID: v.PID, Nonce: v.Nonce, StartedAt: v.ObservedAt.Add(-time.Second)})
+				cancel()
+				if e == nil {
+					return nil
+				}
+			}
 		}
 		select {
 		case <-ctx.Done():

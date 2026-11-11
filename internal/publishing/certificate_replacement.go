@@ -116,5 +116,50 @@ func NonBlockingTaskObservation(ctx context.Context) bool {
 // safe inverse. Rotation failures require inspection or a new approved rotation.
 func (s *Service) isCertificateReplacement(ctx context.Context, id string) bool {
 	var v string
-	return s.db.QueryRow(ctx, `SELECT plan_id FROM publishing_certificate_replacements WHERE plan_id=?`, id).Scan(&v) == nil
+	e := s.db.QueryRow(ctx, `SELECT plan_id FROM publishing_certificate_replacements WHERE plan_id=? OR base_plan_id=? LIMIT 1`, id, id).Scan(&v)
+	if e == nil {
+		return true
+	}
+	if storage.IsNotFound(e) {
+		return false
+	}
+	var table string
+	if err := s.db.QueryRow(ctx, `SELECT name FROM sqlite_master WHERE type='table' AND name='publishing_certificate_replacements'`).Scan(&table); storage.IsNotFound(err) {
+		var count int
+		if s.db.QueryRow(ctx, `SELECT count(*) FROM schema_migrations WHERE version=?`, "ds/0083_certificate_replacements").Scan(&count) != nil {
+			return true
+		}
+		return count > 0
+	}
+	return true
+}
+
+// Follow completed successors; node renewals wait for a pending rotation.
+func (s *Service) LatestCertificatePlan(ctx context.Context, subject, id string) (Plan, error) {
+	for n := 0; n < 256; n++ {
+		p, _, e := s.Get(ctx, subject, id)
+		if e != nil {
+			return Plan{}, e
+		}
+		var next string
+		e = s.db.QueryRow(ctx, `SELECT plan_id FROM publishing_certificate_replacements WHERE base_plan_id=?`, id).Scan(&next)
+		if storage.IsNotFound(e) {
+			return p, nil
+		}
+		if e != nil {
+			return Plan{}, e
+		}
+		p, _, e = s.Get(ctx, subject, next)
+		if e != nil {
+			return Plan{}, e
+		}
+		if p.Status == PlanQueued || p.Status == PlanRunning {
+			return Plan{}, ErrStageAwaitingTask
+		}
+		if p.Status != PlanCompleted {
+			return Plan{}, ErrProductionTarget
+		}
+		id = next
+	}
+	return Plan{}, ErrProductionTarget
 }

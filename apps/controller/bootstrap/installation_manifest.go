@@ -32,13 +32,15 @@ type installationManifest struct {
 	Files        []installationFile `json:"files"`
 }
 
+var installationVersionPattern = regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`)
+
 const installationSignatureDomain = "serverfleet.installation.v1\x00"
 
 func validInstallationManifest(m installationManifest, architecture string) bool {
 	if architecture != "amd64" && architecture != "arm64" {
 		return false
 	}
-	if m.Format != 1 || m.OS != "linux" || m.Architecture != architecture || !regexp.MustCompile(`^[0-9]+\.[0-9]+\.[0-9]+$`).MatchString(m.Version) || m.Sequence == 0 || m.Sequence > 1<<53-1 || len(m.Files) < 5 || len(m.Files) > 1024 {
+	if m.Format != 1 || m.OS != "linux" || m.Architecture != architecture || !installationVersionPattern.MatchString(m.Version) || len(m.Version) > 64 || m.Sequence == 0 || m.Sequence > 1<<53-1 || len(m.Files) < 5 || len(m.Files) > 1024 {
 		return false
 	}
 	seen := map[string]bool{}
@@ -75,7 +77,7 @@ func packageInstallation(ctx context.Context, source, output, keyFile, keyID str
 		return errProvision
 	}
 	var m installationManifest
-	if strictProvisionJSON(raw, &m) != nil || !validInstallationManifest(m, runtime.GOARCH) && !validInstallationManifest(m, "arm64") && !validInstallationManifest(m, "amd64") || filepath.Base(output) != m.Version {
+	if strictProvisionJSON(raw, &m) != nil || !validInstallationManifest(m, runtime.GOARCH) && !validInstallationManifest(m, "arm64") && !validInstallationManifest(m, "amd64") || filepath.Base(output) != m.Architecture || filepath.Base(filepath.Dir(output)) != m.Version {
 		return errProvision
 	}
 	encoded, e := recovery.ReadPrivateFile(keyFile, 4096)
@@ -133,9 +135,23 @@ func packageInstallation(ctx context.Context, source, output, keyFile, keyID str
 			}
 		}
 	}
+	if e = validateInstallationComponents(output, m); e != nil {
+		return e
+	}
+	signature := ed25519.Sign(canonical, append([]byte(installationSignatureDomain), raw...))
+	if e = provisionWrite(root, "installation.signature", signature, 0600); e != nil {
+		return e
+	}
+	if e = provisionWrite(root, "installation.manifest.json", raw, 0600); e != nil {
+		return e
+	}
+	return json.NewEncoder(stdout).Encode(map[string]any{"state": "SIGNED_INSTALLATION_NOT_DEPLOYED", "version": m.Version, "architecture": m.Architecture, "keyId": keyID, "directory": output})
+}
+
+func validateInstallationComponents(directory string, m installationManifest) error {
 	// The per-component manifest and binary must agree with the signed bundle.
 	for _, component := range []string{"controller", "agent"} {
-		b, e := recovery.ReadPrivateFile(filepath.Join(output, component+".manifest.json"), 16384)
+		b, e := recovery.ReadPrivateFile(filepath.Join(directory, component+".manifest.json"), 16384)
 		var release updates.ReleaseManifest
 		if e != nil || strictProvisionJSON(b, &release) != nil || release.Format != 1 || release.OS != m.OS || release.Architecture != m.Architecture || release.Component != component || release.Version != m.Version || release.Sequence != m.Sequence {
 			return errProvision
@@ -150,12 +166,5 @@ func packageInstallation(ctx context.Context, source, output, keyFile, keyID str
 			return errProvision
 		}
 	}
-	signature := ed25519.Sign(canonical, append([]byte(installationSignatureDomain), raw...))
-	if e = provisionWrite(root, "installation.signature", signature, 0600); e != nil {
-		return e
-	}
-	if e = provisionWrite(root, "installation.manifest.json", raw, 0600); e != nil {
-		return e
-	}
-	return json.NewEncoder(stdout).Encode(map[string]any{"state": "SIGNED_INSTALLATION_NOT_DEPLOYED", "version": m.Version, "architecture": m.Architecture, "keyId": keyID, "directory": output})
+	return nil
 }

@@ -3,7 +3,6 @@
 package bootstrap
 
 import (
-	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
@@ -19,6 +18,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"serverfleet.local/serverfleet/internal/recovery"
@@ -162,38 +162,58 @@ func installationUserService(ctx context.Context, directory, component string) e
 	}
 	return installationSystemctl(ctx, true, "enable", "--now", name)
 }
-func installationReadToken() ([]byte, error) {
-	tty, e := os.OpenFile("/dev/tty", os.O_RDWR, 0)
+func installationReadToken(ctx context.Context) ([]byte, error) {
+	tty, e := os.OpenFile("/dev/tty", os.O_RDWR|syscall.O_NONBLOCK, 0)
 	if e != nil {
 		return nil, errors.New("private token file required when no interactive terminal is available")
 	}
 	defer tty.Close()
 	var old syscall.Termios
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, tty.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&old))); errno != 0 {
+	if _, _, n := syscall.Syscall(syscall.SYS_IOCTL, tty.Fd(), syscall.TCGETS, uintptr(unsafe.Pointer(&old))); n != 0 {
 		return nil, errInstallation
 	}
 	next := old
 	next.Lflag &^= syscall.ECHO
-	if _, _, errno := syscall.Syscall(syscall.SYS_IOCTL, tty.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(&next))); errno != 0 {
+	if _, _, n := syscall.Syscall(syscall.SYS_IOCTL, tty.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(&next))); n != 0 {
 		return nil, errInstallation
 	}
 	defer func() {
 		_, _, _ = syscall.Syscall(syscall.SYS_IOCTL, tty.Fd(), syscall.TCSETS, uintptr(unsafe.Pointer(&old)))
+		_, _ = fmt.Fprintln(tty)
 	}()
 	_, _ = fmt.Fprint(tty, "Paste the one-time enrollment token (hidden): ")
-	raw, e := bufio.NewReader(io.LimitReader(tty, 4097)).ReadBytes('\n')
-	_, _ = fmt.Fprintln(tty)
-	if e != nil || len(raw) > 4096 {
-		return nil, errInstallation
+	raw := []byte{}
+	buf := make([]byte, 256)
+	for {
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+		n, e := syscall.Read(int(tty.Fd()), buf)
+		if n > 0 {
+			raw = append(raw, buf[:n]...)
+			if len(raw) > 4096 {
+				return nil, errInstallation
+			}
+			if bytes.ContainsRune(raw, '\n') {
+				raw = bytes.TrimSpace(raw)
+				if len(raw) < 16 {
+					return nil, errInstallation
+				}
+				return raw, nil
+			}
+		}
+		if e != nil && e != syscall.EAGAIN && e != syscall.EINTR {
+			return nil, errInstallation
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+		}
 	}
-	raw = bytes.TrimSpace(raw)
-	if len(raw) < 16 {
-		return nil, errInstallation
-	}
-	return raw, nil
 }
 func runSystemInstallation(ctx context.Context, config, name string, check bool, stdout, stderr io.Writer) error {
-	if os.Geteuid() != 0 || len(name) < 3 || len(name) > 32 || name == "root" {
+	if os.Geteuid() != 0 || len(name) < 3 || len(name) > 32 || name[0] < 'a' || name[0] > 'z' || name == "root" {
 		return errors.New("-system-user requires root and an explicit dedicated account")
 	}
 	for _, r := range name {
@@ -249,14 +269,18 @@ func runSystemInstallation(ctx context.Context, config, name string, check bool,
 		return errInstallation
 	}
 	anchor := "/var/lib/serverfleet-installers"
-	if e = os.Mkdir(anchor, 0711); e != nil && !os.IsExist(e) {
+	if e = os.Mkdir(anchor, 0711); e == nil {
+		if e = os.Chmod(anchor, 0711); e != nil {
+			return e
+		}
+	} else if !os.IsExist(e) {
 		return e
 	}
 	anchorInfo, e := os.Lstat(anchor)
 	if e != nil || !anchorInfo.IsDir() || anchorInfo.Mode().Perm() != 0711 || anchorInfo.Sys().(*syscall.Stat_t).Uid != 0 {
 		return errInstallation
 	}
-	inputs := filepath.Join(anchor, name)
+	inputs := filepath.Join(anchor, name+"-"+d.Provision.Component)
 	if e = os.Mkdir(inputs, 0700); e == nil {
 		if e = os.Chown(inputs, int(uid), int(gid)); e != nil {
 			return e
@@ -312,7 +336,7 @@ func runSystemInstallation(ctx context.Context, config, name string, check bool,
 			if d.EnrollmentTokenFile != "" {
 				token, e = recovery.ReadPrivateFile(d.EnrollmentTokenFile, 4096)
 			} else {
-				token, e = installationReadToken()
+				token, e = installationReadToken(ctx)
 			}
 			if e != nil {
 				return e
@@ -377,7 +401,8 @@ func runSystemInstallation(ctx context.Context, config, name string, check bool,
 	}
 	defer unitDir.Close()
 	if i, e := unitDir.Lstat(unitName); e == nil {
-		if !i.Mode().IsRegular() || i.Mode().Perm() != 0644 {
+		st, ok := i.Sys().(*syscall.Stat_t)
+		if !i.Mode().IsRegular() || i.Mode().Perm() != 0644 || !ok || st.Uid != 0 || st.Nlink != 1 {
 			return errInstallation
 		}
 		old, e := unitDir.ReadFile(unitName)
@@ -387,6 +412,10 @@ func runSystemInstallation(ctx context.Context, config, name string, check bool,
 	} else if os.IsNotExist(e) {
 		f, e := unitDir.OpenFile(unitName, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0644)
 		if e != nil {
+			return e
+		}
+		if e = f.Chmod(0644); e != nil {
+			f.Close()
 			return e
 		}
 		_, we := f.Write(unit)
@@ -412,4 +441,18 @@ func runSystemInstallation(ctx context.Context, config, name string, check bool,
 		return errInstallation
 	}
 	return nil
+}
+
+func installationProcessMatches(pid int, digest string) bool {
+	if pid <= 1 || syscall.Kill(pid, 0) != nil {
+		return false
+	}
+	f, e := os.Open("/proc/" + strconv.Itoa(pid) + "/exe")
+	if e != nil {
+		return false
+	}
+	defer f.Close()
+	h := sha256.New()
+	n, e := io.Copy(h, io.LimitReader(f, (256<<20)+1))
+	return e == nil && n > 0 && n <= 256<<20 && hex.EncodeToString(h.Sum(nil)) == digest
 }

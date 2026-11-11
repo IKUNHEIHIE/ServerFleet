@@ -111,3 +111,7 @@ serverfleet ALL=(root) NOPASSWD: /usr/local/libexec/serverfleet-agent-root root-
 ## 异地备份与人工处置
 
 R29支持在正式备份页配置S3兼容／WebDAV HTTPS密文上传、定时备份和保留清理。先配置上述加密备份部署与离线密钥确认，再添加 `backup_storage_secret` 凭据（模块 `backups`）；策略只保存引用。详见[操作说明](../docs/development/BACKUP-OPERATIONS.md)。自动清理选项创建独立审批任务；UNKNOWN操作通过只读核验与任务中心人工处置闭环，不自动重试。
+
+## R31 安装与证书编排
+
+[可信一键安装与发行](INSTALL.md)包括两种架构、服务账户、签名清单、接入审批与续装。[续签安装发布](../docs/development/RENEWAL-DELIVERY.md)包括真实回执、HTTPS核验、后继发布与人工修复采用。当前迁移总数45，历史SQL不变。

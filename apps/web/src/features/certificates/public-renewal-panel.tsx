@@ -13,6 +13,7 @@ import { RenewalDeliveryPanel } from "./renewal-delivery-panel";
 
 const validID = (value: string) => /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 const stateLabels: Record<string, string> = {
+  renewal_delivery_issuance: "等待续签签发", renewal_delivery_installation: "等待安装审批与结果", renewal_delivery_publication: "等待发布与 HTTPS 核验", renewal_delivery_blocked: "编排停止，需人工处置", renewal_delivery_completed: "本周期已安装发布", renewal_delivery_recovered: "已采用人工修复结果",
   scheduled: "等待续签窗口", disabled: "已停用", configuration_changed: "签发配置已变化，调度暂停",
   awaiting_approval: "等待人工审批", queued: "等待执行", running: "签发中", cancelling: "取消中",
   completed: "签发任务完成", issuance_completed_installation_required: "新证书已签发，等待安装和接续",
@@ -23,7 +24,7 @@ const stateLabels: Record<string, string> = {
 export function PublicRenewalPanel() {
   const session = useSession();
   const allowed = session.can("certificates.public.issue") || session.can("settings.manage");
-  const policies = useResource(`public-renewals:${session.viewEpoch}`, signal => publicRenewalsApi.list(signal).then(response => response.data), { enabled: allowed });
+  const policies = useResource(`public-renewals:${session.viewEpoch}`, signal => publicRenewalsApi.list(signal).then(response => response.data), { enabled: allowed, refreshIntervalMs: 10_000 });
   const save = useAction((body: Parameters<typeof publicRenewalsApi.save>[0]) => publicRenewalsApi.save(body));
   const [selected, setSelected] = useState<PublicRenewalPolicy | null>(null);
   const [order, setOrder] = useState("");

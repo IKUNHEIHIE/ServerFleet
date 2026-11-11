@@ -33,7 +33,7 @@ function InstallationContent() {
   {page.state.status === "loading" ? <p role="status">正在读取可信安装信息…</p> : null}
   {page.state.status === "error" ? <Notice tone="error" title="安装信息不可用">{describeApiError(page.state.error)}<Button onClick={page.reload}>重试读取安装信息</Button></Notice> : null}
   {data && !data.available ? <Notice tone="warning" title="尚未配置可信安装分发">管理员需按部署说明配置 installation-catalog，提供签名安装包、安装器摘要及公开信任材料。</Notice> : null}
-  {data?.catalog ? <><Notice tone="info" title="在目标节点以 root 运行一次">安装器会创建专用普通用户、校验签名、注册服务并等待接入审批。短期令牌会在终端隐藏输入；命令中不包含令牌。发行版本 {data.catalog.source.version}。</Notice>
+  {data?.catalog ? <><Notice tone="info" title="在目标节点以 root 运行一次">安装器会创建专用普通用户、校验签名、注册服务并等待接入审批。短期令牌会在终端隐藏输入；命令中不包含令牌。发行版本 {data.catalog.source.version}。<p>内部 Root CA 指纹：<code>{data.catalog.rootPin}</code>。首次安装前请与管理员离线提供的指纹核对。</p></Notice>
    <Field label="专用服务账户">{ids => <TextInput id={ids.inputId} value={user} maxLength={32} onChange={e => setUser(e.target.value)} />}</Field>
    <Field label="安装节点名称">{ids => <TextInput id={ids.inputId} value={name} maxLength={128} onChange={e => setName(e.target.value)} />}</Field>
    {!valid ? <p role="alert">账户须为3—32位小写字母、数字、横杠或下划线并以字母开头；请填写有效节点名称。</p> : null}
