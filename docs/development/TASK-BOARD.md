@@ -1,5 +1,10 @@
 # 任务登记板
 
+## 当前：首个正式版 README（2026-11-12 R35）
+
+V09-CLOUD-README-01 / chatgpt-readme-20261112，主控单会话，从PR25/mainc045e7f建立独立ServerFleet-readme / docs/first-release-readme-20261112。用户明确将当前版定位为首个正式版并更新README。允许README及本任务登记：按既有版本号v0.9.0重写首发介绍、功能、构建/部署、文档导航与已知限制；不更改程序/接口/锁/迁移/原始资料，不创建tag、GitHub Release或冒称发行包已签名发布。不把版本命名视为Xray/Bearer已装配、完整G2或真实环境验收完成。核对链接/构建参数与内容差异，保留代码基线CI范围；按精确head检查/COMMENT审查及expected-SHA正常合并，停止于文档接收。
+
+
 ## 当前：全仓审计、现行文档与结构整理（2026-11-12 R34）
 
 V09-CLOUD-AUDIT-01 / chatgpt-audit-20261112，主控单会话；从已合入PR24/main8aa1ac0建立独立ServerFleet-audit / chore/cloud-audit-20261112。用户明确授权代码审计、完善功能/API文档、优化目录结构、清理死代码。允许全仓生产源码审查及必要修复/同包拆分、内部无引用代码清理、现行产品/接口/结构/审计文档和防漂移检查；共享结构由主控协调。不启动其他Agent，不改原始资料/已批准ADR/历史迁移SQL/checksum/Proto字段号/生成/依赖锁，不删除历史证据/候选/可选插件或未准入功能，不引入新Runtime/第三方依赖或访问真实VPS/供应商。
