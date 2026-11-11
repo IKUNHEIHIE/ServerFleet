@@ -109,6 +109,10 @@ func TestFormalConsolePreservesAPIAndLiveQuarantineGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer s.Close()
+	// This routing fixture replaces the private gate below. Join the scheduler
+	// first; production gate callbacks remain immutable after construction.
+	s.runCancel()
+	<-s.runDone
 	root := httptest.NewRecorder()
 	s.ServeHTTP(root, httptest.NewRequest("GET", "/", nil))
 	if root.Code != 200 || !bytes.Contains(root.Body.Bytes(), []byte(`id="root"`)) {
