@@ -1,47 +1,43 @@
 # 依赖与接口规则
 
-`dependencies.json` 是 Go 包导入白名单，与 MODULE-OWNERSHIP 的允许依赖一致。`go test ./tests/architecture` 解析所有 apps/controller、apps/agent、internal、gen、tests Go 文件；越界模块、未登记的本地目录、核心导入可选插件/测试包均失败。子目录继承所属模块权限；不根据同名前缀误放行。只有 storage 可导入 `database/sql`。Go 编译器检查实际包循环依赖。
+2026-11-12 R34。`dependencies.json`是实际Go包导入白名单，`go test ./tests/architecture`验证以下apps/internal/gen/tests根及子目录；编译器另外检查循环依赖。下表从当前清单整理，历史文档中的26项迁移/空壳/旧依赖描述不代表当前实现。
 
 | 调用方 | 允许的跨模块方向 |
 |---|---|
-| Controller 组合入口 | 各 internal 模块、gen |
-| Agent | transport、gen |
-| tasks | auth、nodes、audit、transport、storage |
-| plugins 平台 | auth、tasks、audit、storage |
-| nodes | auth、audit、storage |
-| auth | audit、storage |
-| transport | audit、storage、gen |
-| audit | storage |
-| storage / gen | 无领域反向依赖 |
+| `apps/controller` | `internal/auth`、`internal/nodes`、`internal/tasks`、`internal/audit`、`internal/plugins`、`internal/transport`、`internal/storage`、`internal/ai`、`internal/workflows`、`internal/updates`、`internal/recovery`、`internal/files`、`internal/monitoring`、`internal/notifications`、`internal/quota`、`internal/dns`、`internal/certificates`、`internal/gateway`、`internal/servicegroups`、`internal/publishing`、`gen/go` |
+| `apps/agent` | `internal/transport`、`gen/go`、`internal/netprobe` |
+| `internal/auth` | `internal/audit`、`internal/storage` |
+| `internal/nodes` | `internal/auth`、`internal/audit`、`internal/storage` |
+| `internal/tasks` | `internal/auth`、`internal/nodes`、`internal/audit`、`internal/transport`、`internal/storage`、`internal/servicegroups` |
+| `internal/audit` | `internal/storage` |
+| `internal/plugins` | `internal/auth`、`internal/tasks`、`internal/audit`、`internal/storage` |
+| `internal/transport` | `internal/audit`、`internal/storage`、`gen/go`、`internal/netprobe` |
+| `internal/netprobe` | 无领域反向依赖 |
+| `internal/storage` | 无领域反向依赖 |
+| `internal/ai` | `internal/auth`、`internal/tasks`、`internal/nodes`、`internal/servicegroups`、`internal/audit`、`internal/storage` |
+| `internal/workflows` | `internal/auth`、`internal/tasks`、`internal/nodes`、`internal/notifications`、`internal/audit`、`internal/storage` |
+| `internal/updates` | `internal/transport`、`internal/auth`、`internal/tasks`、`internal/nodes`、`internal/audit`、`internal/storage` |
+| `internal/recovery` | `internal/auth`、`internal/nodes`、`internal/tasks`、`internal/audit`、`internal/storage` |
+| `internal/files` | `internal/auth`、`internal/nodes`、`internal/tasks`、`internal/audit`、`internal/storage` |
+| `internal/monitoring` | `internal/auth`、`internal/nodes`、`internal/notifications`、`internal/audit`、`internal/storage`、`internal/netprobe` |
+| `internal/notifications` | `internal/auth`、`internal/audit`、`internal/storage` |
+| `internal/quota` | `internal/auth`、`internal/nodes`、`internal/notifications`、`internal/audit`、`internal/storage` |
+| `internal/dns` | `internal/auth`、`internal/tasks`、`internal/audit`、`internal/storage` |
+| `internal/certificates` | `internal/auth`、`internal/nodes`、`internal/tasks`、`internal/dns`、`internal/audit`、`internal/storage` |
+| `internal/gateway` | `internal/auth`、`internal/nodes`、`internal/tasks`、`internal/servicegroups`、`internal/certificates`、`internal/audit`、`internal/storage` |
+| `internal/servicegroups` | `internal/auth`、`internal/nodes`、`internal/audit`、`internal/storage` |
+| `internal/publishing` | `internal/auth`、`internal/tasks`、`internal/nodes`、`internal/servicegroups`、`internal/gateway`、`internal/dns`、`internal/certificates`、`internal/audit`、`internal/storage` |
+| `gen/go` | 无领域反向依赖 |
+| `tests` | `apps/controller`、`apps/agent`、`internal/auth`、`internal/nodes`、`internal/tasks`、`internal/audit`、`internal/plugins`、`internal/transport`、`internal/storage`、`internal/ai`、`internal/workflows`、`internal/updates`、`internal/recovery`、`internal/files`、`internal/monitoring`、`internal/notifications`、`internal/quota`、`internal/dns`、`internal/certificates`、`internal/gateway`、`internal/servicegroups`、`internal/publishing`、`gen/go` |
 
-传输层收到事件时，通过上层组合注入的回调/适配端口交给 tasks/nodes；不得反向 import 业务包造成环。跨模块只能调用 owner 审查的端口，禁止取得其数据库表/内部 map 或绕过服务直接执行。业务模型由领域拥有；storage 管连接/事务/迁移机制，公共schema和迁移编号需要集成审查。P1未建立业务数据库是历史阶段；当前SQLite业务schema已落地，正式26项迁移的既有SQL/hash不可改写，新增版本须独立审查/升级验证。
+## 不可变边界
 
-Web 仅消费 Controller REST/SSE；API DTO 将来由契约适配层转换成 ViewModel。测试 fixture/mock 只能出现在 test 或 `*.test.*`；生产不得导入这些目录。`npm run check:policy` 包含前端 import 边界检查。TypeScript strict + Vite build 检查类型/模块可构建性。
+- 只有storage持有database/sql；领域拥有模型/schema，Controller只负责经审查的组合端口。Controller跨域查询/任务/身份适配在同包composition_*文件，拆文件不扩张权限。
+- Agent允许transport/gen及纯标准库netprobe，不导入Controller业务/DB；Web仅Controller REST/SSE。核心不能导入plugins/xray-manager、test/mock/fixture或参考资料。
+- transport通过上层注入回调交给任务/节点等业务；updates→transport只消费公开typed监督交接。netprobe没有业务或数据库依赖，不是插件运行时。
+- 子目录继承所属模块权限，不按相似前缀或`internal/*`通配放行。静态导入不证明运行时授权、SSRF、任务/凭据安全或沙箱隔离。
+- 当前正式49迁移，旧SQL/checksum不可改；追加需独立审查。公共端口、外部契约或依赖调整登记contract/integration差异，不能为消循环搬入通用大包或取消规则。
 
-检查能力有限：静态 import 检查不能证明运行时 RBAC、网络安全、SQL 正确性或插件沙箱隔离。真实安全验收仍需负向测试与审查；禁止把通过 import 检查当成已实现授权。
+## 维护
 
-公共端口、外部契约或依赖图调整必须走 `contract/...` / `integration/...`，列出调用方、兼容性、迁移、测试与回退。实现者不能以修复循环依赖为由把所有类型搬进公共“大杂烩”包或取消规则。
-
-## 完整v0.9五日包的增量登记
-
-总控在integration/v09-five-day-dispatch为三个复合实施包提前登记以下新域。仅新增允许的静态import边，不实现授权/任务/供应商，也不批准G2或运行时；不改Agent直连或storage反向边。
-
-| 新调用域 | 允许跨域（其余拒绝） |
-|---|---|
-| ai | auth、tasks、nodes、servicegroups、audit、storage |
-| workflows | auth、tasks、nodes、notifications、audit、storage |
-| updates、recovery | auth、tasks、nodes、audit、storage |
-| files | auth、tasks、nodes、audit、storage |
-| monitoring、quota | auth、nodes、notifications、audit、storage |
-| notifications | auth、audit、storage |
-| dns | auth、tasks、audit、storage |
-| certificates | auth、tasks、nodes、dns、audit、storage |
-| gateway | auth、tasks、nodes、servicegroups、certificates、audit、storage |
-| servicegroups | auth、nodes、audit、storage |
-| publishing | auth、tasks、nodes、servicegroups、gateway、dns、certificates、audit、storage |
-
-Controller组合入口和tests增加对上述域的显式允许；tasks增加servicegroups用于目标快照；没有`internal/*`通配放行。实际策略测试覆盖正常任务/组合方向及AI/文件直连transport、Agent导入业务、storage反向、核心导入可选Xray、未登记相似前缀等拒绝。撤回本次新方向需与相应业务调用一起协调，不删除旧限制或生成基线。
-
-2026-11-09 主控 R22 候选：updates → transport 仅消费 ResidentUpdateIntent 的公开 typed 交接格式；无 transport 反向依赖或 Agent 导入 updates/数据库。独立监督进程在 Controller 组合入口装配真实 owner Repo/Identity gate，禁止借此创建 Web/AI 直连执行旁路。
-
-2026-11-11 R33：主控协调新增std-only internal/netprobe，供monitoring与Agent复用现有HTTP/TCP/TLS/SSRF实现；transport仅依赖其公开类型和校验。显式边登记dependencies.json；不增加Agent到业务域/数据库依赖，不引入插件Runtime或第三方包。
+修改方向时同时审查调用方/数据归属/鉴权与兼容；更新JSON和本文，再跑架构负向、受影响包及完整检查。R34没有改变允许边或导入业务到Agent。接口生成/索引由固定工具生成，原始候选和生成文件不可手改；真实安全验收仍需对应负向和实机证据。

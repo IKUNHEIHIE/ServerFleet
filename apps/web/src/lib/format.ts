@@ -11,10 +11,6 @@ export function formatDateTime(value: string | null | undefined): string | null 
   );
 }
 
-export function formatDate(value: string | null | undefined): string | null {
-  const full = formatDateTime(value);
-  return full ? full.slice(0, 10) : null;
-}
 
 export function formatBytes(value: number | null | undefined): string | null {
   if (value === null || value === undefined || !Number.isFinite(value) || value < 0) return null;
@@ -39,14 +35,7 @@ export function formatDuration(seconds: number | null | undefined): string | nul
   return `${hours} 小时 ${minutes % 60} 分`;
 }
 
-export function formatCount(value: number | null | undefined): string {
-  return value === null || value === undefined || !Number.isFinite(value) ? "—" : String(value);
-}
 
 export function truncate(value: string, max = 80): string {
   return value.length > max ? `${value.slice(0, max)}…` : value;
-}
-
-export function isoNow(): string {
-  return new Date().toISOString();
 }

@@ -13,7 +13,7 @@ function goFiles(dir) {
 const suites = {
   policy() {
     run(process.execPath, ["scripts/verify-source.mjs"], { name: "source-integrity" });
-    run(process.execPath, ["--test", "scripts/contracts.test.mjs", "scripts/git-policy.test.mjs", "scripts/worktree.test.mjs", "scripts/web-boundaries.test.mjs"], { name: "tooling-tests" });
+    run(process.execPath, ["--test", "scripts/contracts.test.mjs", "scripts/api-docs.test.mjs", "scripts/git-policy.test.mjs", "scripts/worktree.test.mjs", "scripts/web-boundaries.test.mjs"], { name: "tooling-tests" });
     run(process.execPath, ["scripts/web-boundaries.mjs"], { name: "web-boundaries" });
     run(process.execPath, ["scripts/git-policy.mjs"], { name: "git-policy" });
     run(go, ["test", "./tests/architecture"], { name: "module-boundaries" });
@@ -23,6 +23,7 @@ const suites = {
   contracts() {
     run(process.execPath, ["scripts/verify-source.mjs"], { name: "source-integrity" });
     run(process.execPath, ["scripts/contracts.mjs"], { name: "openapi-structure" });
+    run(process.execPath, ["scripts/api-docs.mjs", "--check"], { name: "api-documentation-index" });
     tool("redocly", ["lint", "--format=summary"], { name: "openapi-lint" });
     tool("buf", ["lint"], { name: "protobuf-lint" });
     tool("buf", ["format", "--diff", "--exit-code"], { name: "protobuf-format" });

@@ -1,6 +1,4 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
-import type { ApiError } from "@/lib/api/errors";
 import type { ResourceState } from "@/lib/data/use-resource";
 import { EmptyState, ErrorPanel, LoadingPanel } from "./feedback";
 
@@ -37,40 +35,5 @@ export function AsyncPanel<T>({
       ) : null}
       {children(state.data)}
     </>
-  );
-}
-
-export function InlineError({ error }: { readonly error: ApiError | null }) {
-  if (!error) return null;
-  return (
-    <p role="alert" className="text-sm font-medium text-destructive">
-      {error.code ? `${error.code} · ` : ""}
-      {error.kind === "forbidden" ? "服务端拒绝了此操作。" : "操作未完成，请检查输入或稍后重试。"}
-      {error.requestId ? <span className="ml-1 font-normal text-muted-foreground">请求 {error.requestId}</span> : null}
-    </p>
-  );
-}
-
-export function FieldErrorList({ error }: { readonly error: ApiError | null }) {
-  if (!error || error.fieldErrors.length === 0) return null;
-  return (
-    <ul role="alert" className="space-y-1 text-xs text-destructive">
-      {error.fieldErrors.map(issue => (
-        <li key={`${issue.pointer}-${issue.message}`}>
-          <span className="font-mono">{issue.pointer}</span>: {issue.message}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function StatusDot({ tone = "neutral", label }: { readonly tone?: "green" | "amber" | "red" | "neutral"; readonly label: string }) {
-  const color =
-    tone === "green" ? "bg-emerald-500" : tone === "amber" ? "bg-amber-500" : tone === "red" ? "bg-destructive" : "bg-muted-foreground/60";
-  return (
-    <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs">
-      <span aria-hidden="true" className={cn("size-2 rounded-full", color)} />
-      {label}
-    </span>
   );
 }

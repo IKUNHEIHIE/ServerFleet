@@ -82,8 +82,3 @@ export function matchPath(pattern: string, path: string): Match | null {
   }
   return { params };
 }
-
-export function useSearchParams(): URLSearchParams {
-  const location = useLocation();
-  return new URLSearchParams(location.search);
-}

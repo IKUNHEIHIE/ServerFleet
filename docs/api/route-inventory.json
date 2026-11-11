@@ -1,0 +1,5595 @@
+{
+  "formatVersion": 1,
+  "scope": "Static Go Handle/HandleFunc registrations, literal route ranges and Patterns returns; declarations include conditional and unavailable profiles. See README.md for non-ServeMux protocol handlers and runtime gates.",
+  "candidateOrder": "redocly.yaml registration order; matches are references, not proof that legacy schemas describe the current implementation",
+  "routes": [
+    {
+      "method": "DELETE",
+      "path": "/api/v1/ai/sessions/{sessionId}/grants/{grantId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/grants/{grantId}",
+          "operationId": "revokeAIResourceGrant"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/sessions/{sessionId}",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/sessions/{sessionId}",
+          "operationId": "revokeOwnSession"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/sessions/{sessionId}",
+          "operationId": "revokeOwnSession"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/auth/tokens/{tokenId}",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/auth/tokens/{tokenId}",
+          "operationId": "revokeRestrictedTokenR34"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/availability-monitors/{monitorId}",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "deleteAvailabilityMonitor08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "deleteBackgroundMonitor"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "deleteBackgroundMonitor"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/dns/zones/{zoneId}/records/{recordId}",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/zones/{zoneId}/records/{recordId}",
+          "operationId": "deleteDNSRecord"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/gateway-routes/{routeId}",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateway-routes/{routeId}",
+          "operationId": "deleteGatewayRoute"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/groups/{groupId}",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups/{groupId}",
+          "operationId": "deleteNodeGroup"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/plugins/xray-manager/users/{userId}",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users/{userId}",
+          "operationId": "xrayDeleteUser"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users/{userId}",
+          "operationId": "xrayDeleteUser"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/plugins/{pluginId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/{pluginId}",
+          "operationId": "uninstallPlugin"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/resource-grants/{grantId}",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/resource-grants/{grantId}",
+          "operationId": "revokeResourceGrant"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/resource-grants/{grantId}",
+          "operationId": "revokeResourceGrant"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
+      "path": "/api/v1/service-groups/{serviceGroupId}",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups/{serviceGroupId}",
+          "operationId": "deleteServiceGroup"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/model-settings",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/model_settings_http.go",
+          "owner": "NewModelSettingsHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r6/ai-candidate.yaml",
+          "path": "/api/v1/ai/model-settings",
+          "operationId": "getAIModelSettingsR6"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/model-settings/{profileId}/budget",
+      "declarations": [
+        {
+          "source": "apps/controller/server/ai_budget_http.go",
+          "owner": "RegisterAIBudgetRoutes"
+        },
+        {
+          "source": "internal/ai/budget_http.go",
+          "owner": "NewBudgetHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/ai-budget-candidate.yaml",
+          "path": "/api/v1/ai/model-settings/{profileId}/budget",
+          "operationId": "getOwnerAIBudgetR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/security-policy",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/security-policy",
+          "operationId": "getAISecurityPolicy"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/sessions/{sessionId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}",
+          "operationId": "getAISession"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/sessions/{sessionId}/approval-policy",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/approval-policy",
+          "operationId": "getAISessionApprovalPolicy"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/sessions/{sessionId}/events",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/message_events_http.go",
+          "owner": "NewMessageEventsHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/events",
+          "operationId": "streamAISessionEventsG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/events",
+          "operationId": "streamAISessionEventsG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/sessions/{sessionId}/messages",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/messages_http.go",
+          "owner": "NewMessagesHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/messages",
+          "operationId": "listAISessionMessagesG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/messages",
+          "operationId": "listAISessionMessagesG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/sessions/{sessionId}/runs",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/agent_http.go",
+          "owner": "NewAgentHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/runs",
+          "operationId": "listAIAgentRunsR28"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/agent_http.go",
+          "owner": "NewAgentHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}",
+          "operationId": "getAIAgentRunR28"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audit/events",
+      "declarations": [
+        {
+          "source": "internal/audit/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/audit/events",
+          "operationId": "listAuditEvents"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/audit/events",
+          "operationId": "listAuditEvents"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/audit/events/{eventId}",
+      "declarations": [
+        {
+          "source": "internal/audit/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/audit/events/{eventId}",
+          "operationId": "getAuditEvent"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/audit/events/{eventId}",
+          "operationId": "getAuditEvent"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/bootstrap-status",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/bootstrap-status",
+          "operationId": "getBootstrapStatus"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/bootstrap-status",
+          "operationId": "getBootstrapStatus"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/me",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/me",
+          "operationId": "getCurrentIdentity"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/me",
+          "operationId": "getCurrentIdentity"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/sessions",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/sessions",
+          "operationId": "listOwnSessions"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/sessions",
+          "operationId": "listOwnSessions"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/auth/tokens",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/auth/tokens",
+          "operationId": "listRestrictedTokensR34"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/availability-monitors",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "listAvailabilityMonitors08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "listBackgroundMonitors"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "listBackgroundMonitors"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/availability-monitors/{monitorId}/alerts",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}/alerts",
+          "operationId": "listMonitorAlertEvents"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}/alerts",
+          "operationId": "listMonitorAlertEvents"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/availability-monitors/{monitorId}/history",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}/history",
+          "operationId": "readSelectedSourceHistory"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/backups",
+      "declarations": [
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "BackupHTTPPatterns"
+        },
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "NewBackupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml",
+          "path": "/api/v1/backups",
+          "operationId": "listEncryptedBackupsR12"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/backups/maintenance",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/maintenance",
+          "operationId": "getBackupMaintenanceR29"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/backups/{backupId}/download",
+      "declarations": [
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "BackupHTTPPatterns"
+        },
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "NewBackupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml",
+          "path": "/api/v1/backups/{backupId}/download",
+          "operationId": "downloadAuthenticatedCiphertextR12"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/chain-tasks/{taskId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_install.go",
+          "owner": "registerCertificateInstallRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml",
+          "path": "/api/v1/certificates/chain-tasks/{taskId}",
+          "operationId": "readNodeCertificateInstallReceiptR15"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/cleanup",
+      "declarations": [
+        {
+          "source": "internal/certificates/cleanup_http.go",
+          "owner": "RegisterCleanupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/certificates/cleanup",
+          "operationId": "listCertificateCleanupR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/csr-tasks/{taskId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_csr.go",
+          "owner": "registerCertificateCSRRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r14/node-csr-candidate.yaml",
+          "path": "/api/v1/certificates/csr-tasks/{taskId}",
+          "operationId": "readCompletedNodeCSRTaskR14"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/internal/distributions",
+      "declarations": [
+        {
+          "source": "internal/certificates/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/certificates/internal/distributions",
+          "operationId": "listInternalCertDistributions"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/public-profile",
+      "declarations": [
+        {
+          "source": "apps/controller/server/acme_http.go",
+          "owner": "registerPublicCertificateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml",
+          "path": "/api/v1/certificates/public-profile",
+          "operationId": "publicCertificateProfileR17"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/public-renewals",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_renewals.go",
+          "owner": "registerPublicRenewalRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r24/public-renewals-candidate.yaml",
+          "path": "/api/v1/certificates/public-renewals",
+          "operationId": "listPublicRenewalPoliciesR24"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/public-renewals/{policyId}/delivery",
+      "declarations": [
+        {
+          "source": "apps/controller/server/renewal_delivery.go",
+          "owner": "registerRenewalDeliveryRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r31/delivery-candidate.yaml",
+          "path": "/api/v1/certificates/public-renewals/{policyId}/delivery",
+          "operationId": "getRenewalDelivery"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/public-tasks/{taskId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/acme_http.go",
+          "owner": "registerPublicCertificateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml",
+          "path": "/api/v1/certificates/public-tasks/{taskId}",
+          "operationId": "observePublicCertificateOrderR17"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/credentials",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/credentials",
+          "operationId": "listCredentialMetadata08"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/credentials/{credentialId}/references",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/credentials/{credentialId}/references",
+          "operationId": "getCredentialReferences08"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/disaster-recovery/jobs/{jobId}",
+      "declarations": [
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/disaster-recovery/jobs/{jobId}",
+          "operationId": "getDisasterRecoveryJob08"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dns/accounts",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts",
+          "operationId": "listDNSAccounts"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dns/accounts/{accountId}",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts/{accountId}",
+          "operationId": "getDNSAccount"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dns/accounts/{accountId}/zones",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts/{accountId}/zones",
+          "operationId": "listDNSZones"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dns/providers",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/providers",
+          "operationId": "listDNSProviders"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/dns/zones/{zoneId}/records",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/zones/{zoneId}/records",
+          "operationId": "listDNSRecords"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/enrollments",
+      "declarations": [
+        {
+          "source": "internal/transport/enrollment_management_http.go",
+          "owner": "NewEnrollmentManagementHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/node-enrollments",
+          "operationId": "listNodeEnrollments"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/files/distributions/{distributionId}",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r9/file-distributions-candidate.yaml",
+          "path": "/api/v1/files/distributions/{distributionId}",
+          "operationId": "getFileDistributionR9"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/files/resume-candidates/{taskId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/file_resume.go",
+          "owner": "registerFileResumeRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r21/file-execution-resume-candidate.yaml",
+          "path": "/api/v1/files/resume-candidates/{taskId}",
+          "operationId": "fileResumeCandidates"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/gateway-provisions/{jobId}",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateway-provisions/{jobId}",
+          "operationId": "getGatewayProvisionJob"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/gateway-routes",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateway-routes",
+          "operationId": "listGatewayRoutes"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/gateways",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateways",
+          "operationId": "listGateways"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/gateways/{gatewayId}",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateways/{gatewayId}",
+          "operationId": "getGateway"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/gateways/{gatewayId}/checks",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateways/{gatewayId}/checks",
+          "operationId": "getGatewayChecks"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/groups",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups",
+          "operationId": "listNodeGroups"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/groups/classifications",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups/classifications",
+          "operationId": "listNodeClassificationFacets"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/groups/{groupId}",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups/{groupId}",
+          "operationId": "getNodeGroup"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/installations/catalog",
+      "declarations": [
+        {
+          "source": "apps/controller/server/installation_catalog.go",
+          "owner": "registerInstallationCatalogRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r31/delivery-candidate.yaml",
+          "path": "/api/v1/installations/catalog",
+          "operationId": "getInstallationCatalog"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/availability-monitors",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "listAvailabilityMonitors08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "listBackgroundMonitors"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "listBackgroundMonitors"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/availability-monitors/{monitorId}/history",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}/history",
+          "operationId": "readSelectedSourceHistory"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/monitoring/traffic-risks",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/traffic-risks",
+          "operationId": "listTrafficRisks08"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/node-enrollments",
+      "declarations": [
+        {
+          "source": "internal/transport/enrollment_management_http.go",
+          "owner": "NewEnrollmentManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/node-enrollments",
+          "operationId": "listNodeEnrollments"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes",
+          "operationId": "listNodesForTransfer"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/capabilities",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/capabilities",
+          "operationId": "getNodeCapabilitiesG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/capabilities",
+          "operationId": "getNodeCapabilitiesG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/diagnostics",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/diagnostics",
+          "operationId": "getNodeDiagnostic08"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r8/files-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}",
+          "operationId": "getOwnedUploadR8"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r10/files-resume-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}",
+          "operationId": "getOwnedUploadR10"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r11/upload-policies-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}",
+          "operationId": "getOwnedUploadR11"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/identity",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/identity",
+          "operationId": "getNodeIdentityG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/identity",
+          "operationId": "getNodeIdentityG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/traffic-quota",
+      "declarations": [
+        {
+          "source": "internal/quota/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/traffic-quota",
+          "operationId": "getNodeTrafficQuota08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/traffic-quota",
+          "operationId": "getObservedTrafficQuota"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/channels",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/channels",
+          "operationId": "listNotificationChannels"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/notifications/channels",
+          "operationId": "listBoundNotificationChannels"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/channels/{channel}",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/channels/{channel}",
+          "operationId": "getNotificationChannel"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/deliveries",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/deliveries",
+          "operationId": "listNotificationDeliveries"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/notifications/deliveries",
+          "operationId": "listTaskNotificationDeliveries"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/notifications/settings",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/settings",
+          "operationId": "getNotificationSettings"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations/incidents",
+      "declarations": [
+        {
+          "source": "apps/controller/server/operations_incidents.go",
+          "owner": "registerOperatorIncidentRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/operations/incidents",
+          "operationId": "listOperatorIncidentsR29"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml",
+          "path": "/api/v1/operations/incidents",
+          "operationId": "listOperatorIncidentsR30"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations/incidents/{incidentId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/operations_incidents.go",
+          "owner": "registerOperatorIncidentRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/operations/incidents/{incidentId}",
+          "operationId": "getOperatorIncidentR29"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml",
+          "path": "/api/v1/operations/incidents/{incidentId}",
+          "operationId": "getOperatorIncidentR30"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/operations/incidents/{incidentId}/evidence",
+      "declarations": [
+        {
+          "source": "apps/controller/server/incident_closure.go",
+          "owner": "registerIncidentClosureRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml",
+          "path": "/api/v1/operations/incidents/{incidentId}/evidence",
+          "operationId": "listOperatorIncidentEvidenceR30"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/permissions",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/permissions",
+          "operationId": "listPermissions"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/permissions",
+          "operationId": "listPermissions"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugin-operations/{operationId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugin-operations/{operationId}",
+          "operationId": "getPluginOperation"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins",
+          "operationId": "listInstalledPlugins"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/catalog",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/catalog",
+          "operationId": "listPluginCatalog"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/repository",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/repository",
+          "operationId": "getPluginRepository"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/plugins/xray-manager",
+          "operationId": "getXrayManagerStatusR34"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/capabilities",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/capabilities",
+          "operationId": "xrayGetCapabilities"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/capabilities",
+          "operationId": "xrayGetCapabilities"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/jobs/{jobId}",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/jobs/{jobId}",
+          "operationId": "xrayGetJobLink"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/jobs/{jobId}",
+          "operationId": "xrayGetJobLink"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/nodes",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes",
+          "operationId": "xrayListNodes"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes",
+          "operationId": "xrayListNodes"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/configurations",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/configurations",
+          "operationId": "xrayListConfigRevisions"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/configurations",
+          "operationId": "xrayListConfigRevisions"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/instance",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/instance",
+          "operationId": "xrayGetInstance"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/instance",
+          "operationId": "xrayGetInstance"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/templates",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/templates",
+          "operationId": "xrayListTemplates"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/templates",
+          "operationId": "xrayListTemplates"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/traffic",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/traffic",
+          "operationId": "xrayGetTrafficSeries"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/traffic",
+          "operationId": "xrayGetTrafficSeries"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/traffic/settings",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/traffic/settings",
+          "operationId": "xrayGetTrafficSettings"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/traffic/settings",
+          "operationId": "xrayGetTrafficSettings"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/xray-manager/users",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users",
+          "operationId": "xrayListUsers"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users",
+          "operationId": "xrayListUsers"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/plugins/{pluginId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/{pluginId}",
+          "operationId": "getInstalledPlugin"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/publications",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "listPublications08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "listPublicationsR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/publications/{publicationId}",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}",
+          "operationId": "getPublication08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}",
+          "operationId": "getPublicationR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/publications/{publicationId}/dns-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/publication_dns_http.go",
+          "owner": "registerPublicationDNSRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/dns-tasks",
+          "operationId": "publicationDNSObservationsR19"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/publishing/publications",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "listPublications08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "listPublicationsR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/publishing/publications/{publicationId}",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}",
+          "operationId": "getPublication08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}",
+          "operationId": "getPublicationR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/resource-grants",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/resource-grants",
+          "operationId": "listResourceGrants"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/resource-grants",
+          "operationId": "listResourceGrants"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/roles",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/roles",
+          "operationId": "listRoles"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/roles",
+          "operationId": "listRoles"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/service-groups",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups",
+          "operationId": "listServiceGroups"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/service-groups/{serviceGroupId}",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups/{serviceGroupId}",
+          "operationId": "getServiceGroup"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/service-groups/{serviceGroupId}/dispatch-preview",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups/{serviceGroupId}/dispatch-preview",
+          "operationId": "previewServiceGroupDispatch"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/controller-update-receipts/{taskId}",
+      "declarations": [
+        {
+          "source": "apps/controller/server/resident_updates.go",
+          "owner": "registerResidentUpdateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r22/resident-updates-candidate.yaml",
+          "path": "/api/v1/system/controller-update-receipts/{taskId}",
+          "operationId": "readResidentControllerReceipt"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/recovery-authority",
+      "declarations": [
+        {
+          "source": "apps/controller/server/recovery_authority.go",
+          "owner": "registerRecoveryAuthorityRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r23/recovery-authority-candidate.yaml",
+          "path": "/api/v1/system/recovery-authority",
+          "operationId": "readCurrentRecoveryAuthority"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/updates/jobs",
+      "declarations": [
+        {
+          "source": "internal/updates/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/updates/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/system/updates/jobs",
+          "operationId": "listControllerUpdateJobs"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/updates-candidate.yaml",
+          "path": "/api/v1/system/updates/jobs",
+          "operationId": "listOwnedUpdateTasksR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/updates/jobs/{jobId}",
+      "declarations": [
+        {
+          "source": "internal/updates/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/updates/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/system/updates/jobs/{jobId}",
+          "operationId": "getControllerUpdateJob"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/updates-candidate.yaml",
+          "path": "/api/v1/system/updates/jobs/{jobId}",
+          "operationId": "getOwnedUpdateTaskR7"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/system/updates/source",
+      "declarations": [
+        {
+          "source": "apps/controller/server/release_source.go",
+          "owner": "registerReleaseSourceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r13/release-source-candidate.yaml",
+          "path": "/api/v1/system/updates/source",
+          "operationId": "getTrustedReleaseSourceR13"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/tasks",
+          "operationId": "listTasksG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks",
+          "operationId": "listTasksG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/{jobId}",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}",
+          "operationId": "getBatchTaskJob"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/{jobId}/events",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/events",
+          "operationId": "streamTaskEventsG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/events",
+          "operationId": "streamTaskEventsG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/tasks/{jobId}/executions",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/executions",
+          "operationId": "listTaskExecutionsG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/executions",
+          "operationId": "listTaskExecutionsG2"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/traffic-risks",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/traffic-risks",
+          "operationId": "listTrafficRisks08"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/transfers",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/transfers",
+          "operationId": "listTransfers"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/transfers/{transferId}",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/transfers/{transferId}",
+          "operationId": "getTransfer"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/users",
+          "operationId": "listUsers"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/users",
+          "operationId": "listUsers"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/users/{userId}",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/users/{userId}",
+          "operationId": "getUser"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/users/{userId}",
+          "operationId": "getUser"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workflows",
+      "declarations": [
+        {
+          "source": "internal/workflows/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/workflows",
+          "operationId": "listWorkflowsR34"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/workflows/{workflowId}",
+      "declarations": [
+        {
+          "source": "internal/workflows/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/workflows/{workflowId}",
+          "operationId": "getWorkflowR34"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/healthz",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/healthz",
+          "operationId": "getHealthR34"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/ai/sessions/{sessionId}/approval-policy",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/approval-policy",
+          "operationId": "updateAISessionApprovalPolicy"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/availability-monitors/{monitorId}",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "updateAvailabilityMonitor08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "updateBackgroundMonitor"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "updateBackgroundMonitor"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/dns/accounts/{accountId}",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts/{accountId}",
+          "operationId": "updateDNSAccount"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/dns/zones/{zoneId}/records/{recordId}",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/zones/{zoneId}/records/{recordId}",
+          "operationId": "updateDNSRecord"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/gateway-routes/{routeId}",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateway-routes/{routeId}",
+          "operationId": "updateGatewayRoute"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/gateways/{gatewayId}",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateways/{gatewayId}",
+          "operationId": "setGatewayDispatch"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/gateways/{gatewayId}/dispatch",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/gateways/{gatewayId}/dispatch",
+          "operationId": "patchGatewayDispatchR34"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/groups/{groupId}",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups/{groupId}",
+          "operationId": "updateNodeGroup"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/monitoring/availability-monitors/{monitorId}",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "updateAvailabilityMonitor08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "updateBackgroundMonitor"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}",
+          "operationId": "updateBackgroundMonitor"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/plugins/xray-manager/users/{userId}",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users/{userId}",
+          "operationId": "xrayPatchUser"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users/{userId}",
+          "operationId": "xrayPatchUser"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/plugins/{pluginId}/activation",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/plugins/{pluginId}/activation",
+          "operationId": "patchPluginActivationR34"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/service-groups/{serviceGroupId}",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups/{serviceGroupId}",
+          "operationId": "patchServiceGroup"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/service-groups/{serviceGroupId}/members/{nodeId}/scheduling",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups/{serviceGroupId}/members/{nodeId}/scheduling",
+          "operationId": "setServiceGroupMemberScheduling"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/users/{userId}",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/users/{userId}",
+          "operationId": "patchUser"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/users/{userId}",
+          "operationId": "patchUser"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/workflows/{workflowId}",
+      "declarations": [
+        {
+          "source": "internal/workflows/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/workflows/{workflowId}",
+          "operationId": "patchWorkflowR34"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/command-admission",
+      "declarations": [
+        {
+          "source": "apps/controller/server/command_tasks.go",
+          "owner": "registerCommandRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r20/command-profiles-candidate.yaml",
+          "path": "/api/v1/agent/command-admission",
+          "operationId": "checkNormalCommandAdmissionR20"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/root-admission",
+      "declarations": [
+        {
+          "source": "apps/controller/server/command_tasks.go",
+          "owner": "registerCommandRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r20/command-profiles-candidate.yaml",
+          "path": "/api/v1/agent/root-admission",
+          "operationId": "checkRootBrokerAdmissionR20"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/agent/update-admission",
+      "declarations": [
+        {
+          "source": "apps/controller/server/resident_updates.go",
+          "owner": "registerResidentUpdateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r22/resident-updates-candidate.yaml",
+          "path": "/api/v1/agent/update-admission",
+          "operationId": "residentSupervisorCurrentAdmission"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions",
+          "operationId": "createAISession"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/approvals",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/approvals",
+          "operationId": "createAIToolApproval"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/approvals/{approvalId}/decision",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/approvals/{approvalId}/decision",
+          "operationId": "decideAIToolApproval"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/grants",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/grants",
+          "operationId": "grantAIResource"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/messages",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/messages_http.go",
+          "owner": "NewMessagesHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/messages",
+          "operationId": "createAIMessageG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/messages",
+          "operationId": "createAIMessageG2"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/generation_http.go",
+          "owner": "NewGenerationHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r6/ai-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate",
+          "operationId": "generateAIQueuedMessageR6"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/resource-recommendations",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/resource-recommendations",
+          "operationId": "recommendAIResources"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/runs",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/agent_http.go",
+          "owner": "NewAgentHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/runs",
+          "operationId": "createAIAgentRunR28"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}/advance",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/agent_http.go",
+          "owner": "NewAgentHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}/advance",
+          "operationId": "continueAIAgentRunR28"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}/cancel",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/agent_http.go",
+          "owner": "NewAgentHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml",
+          "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}/cancel",
+          "operationId": "cancelAIAgentRunR28"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/tools/execute",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/management_http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/ai/tools/execute",
+          "operationId": "executeAIScopedTool"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/bootstrap",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/bootstrap",
+          "operationId": "bootstrapInitialAdmin"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/bootstrap",
+          "operationId": "bootstrapInitialAdmin"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/login",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/login",
+          "operationId": "login"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/login",
+          "operationId": "login"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/logout",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/auth/logout",
+          "operationId": "logout"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/auth/logout",
+          "operationId": "logout"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/auth/tokens",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/auth/tokens",
+          "operationId": "issueRestrictedTokenR34"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/availability-monitors",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "createAvailabilityMonitor08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "createBackgroundMonitor"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "createBackgroundMonitor"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/availability-monitors/{monitorId}/probe",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}/probe",
+          "operationId": "runSelectedSourceProbe"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups",
+      "declarations": [
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "BackupHTTPPatterns"
+        },
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "NewBackupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml",
+          "path": "/api/v1/backups",
+          "operationId": "createEncryptedBackupTaskR12"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/key-challenges",
+      "declarations": [
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "BackupHTTPPatterns"
+        },
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "NewBackupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml",
+          "path": "/api/v1/backups/key-challenges",
+          "operationId": "createOfflineKeyChallengeTaskR12"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/key-confirmation",
+      "declarations": [
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "BackupHTTPPatterns"
+        },
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "NewBackupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml",
+          "path": "/api/v1/backups/key-confirmation",
+          "operationId": "confirmOfflineRecoveryKeyR12"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/maintenance/cleanup",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/maintenance/cleanup",
+          "operationId": "submitBackupCleanupR29"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/maintenance/cleanup-preview",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/maintenance/cleanup-preview",
+          "operationId": "previewBackupCleanupR29"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/remotes/{remoteId}/verify",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/remotes/{remoteId}/verify",
+          "operationId": "verifyBackupRemoteR29"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/{backupId}/protection",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/{backupId}/protection",
+          "operationId": "protectBackupR29"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/{backupId}/remote-upload",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/{backupId}/remote-upload",
+          "operationId": "uploadBackupRemoteR29"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/backups/{backupId}/verify",
+      "declarations": [
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "BackupHTTPPatterns"
+        },
+        {
+          "source": "internal/recovery/backup_http.go",
+          "owner": "NewBackupHTTP"
+        },
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/backups/{backupId}/verify",
+          "operationId": "verifyBackup08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r12/backups-controller-tasks-candidate.yaml",
+          "path": "/api/v1/backups/{backupId}/verify",
+          "operationId": "verifyEncryptedBackupReceiptR12"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/chain-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_install.go",
+          "owner": "registerCertificateInstallRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml",
+          "path": "/api/v1/certificates/chain-tasks",
+          "operationId": "createNodeCertificateInstallR15"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/cleanup/{cleanupId}/cancel",
+      "declarations": [
+        {
+          "source": "internal/certificates/cleanup_http.go",
+          "owner": "RegisterCleanupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/certificates/cleanup/{cleanupId}/cancel",
+          "operationId": "cancelCertificateCleanupR7"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/cleanup/{cleanupId}/retry",
+      "declarations": [
+        {
+          "source": "internal/certificates/cleanup_http.go",
+          "owner": "RegisterCleanupHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/certificates/cleanup/{cleanupId}/retry",
+          "operationId": "retryCertificateCleanupR7"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/csr-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_csr.go",
+          "owner": "registerCertificateCSRRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r14/node-csr-candidate.yaml",
+          "path": "/api/v1/certificates/csr-tasks",
+          "operationId": "createNodeCSRTaskR14"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/internal/distributions",
+      "declarations": [
+        {
+          "source": "internal/certificates/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/certificates/internal/distributions",
+          "operationId": "createInternalCertDistribution"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/internal/distributions/{distributionId}/revoke",
+      "declarations": [
+        {
+          "source": "internal/certificates/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/certificates/internal/distributions/{jobId}/revoke",
+          "operationId": "revokeInternalCertDistribution"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/node-sets",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_set.go",
+          "owner": "registerCertificateSetRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r16/node-certificate-sets-candidate.yaml",
+          "path": "/api/v1/certificates/node-sets",
+          "operationId": "freezeNodeCertificateSetR16"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/public-renewals",
+      "declarations": [
+        {
+          "source": "apps/controller/server/certificate_renewals.go",
+          "owner": "registerPublicRenewalRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r24/public-renewals-candidate.yaml",
+          "path": "/api/v1/certificates/public-renewals",
+          "operationId": "configurePublicRenewalPolicyR24"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/public-renewals/{policyId}/delivery",
+      "declarations": [
+        {
+          "source": "apps/controller/server/renewal_delivery.go",
+          "owner": "registerRenewalDeliveryRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r31/delivery-candidate.yaml",
+          "path": "/api/v1/certificates/public-renewals/{policyId}/delivery",
+          "operationId": "configureRenewalDelivery"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/public-renewals/{policyId}/delivery/recover",
+      "declarations": [
+        {
+          "source": "apps/controller/server/renewal_recovery.go",
+          "owner": "registerRenewalRecoveryRoute"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r31/delivery-candidate.yaml",
+          "path": "/api/v1/certificates/public-renewals/{policyId}/delivery/recover",
+          "operationId": "recoverRenewalDelivery"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/certificates/public-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/acme_http.go",
+          "owner": "registerPublicCertificateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml",
+          "path": "/api/v1/certificates/public-tasks",
+          "operationId": "submitPublicCertificateTaskR17"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/commands/tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/command_tasks.go",
+          "owner": "registerCommandRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r20/command-profiles-candidate.yaml",
+          "path": "/api/v1/commands/tasks",
+          "operationId": "submitCommandProfileR20"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/credentials",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/credentials",
+          "operationId": "createCredential08"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/disaster-recovery/jobs",
+      "declarations": [
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/disaster-recovery/jobs",
+          "operationId": "createDisasterRecoveryJob08"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/disaster-recovery/preview",
+      "declarations": [
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/recovery/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/disaster-recovery/preview",
+          "operationId": "previewDisasterRecovery08"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/accounts",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts",
+          "operationId": "createDNSAccount"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/accounts/{accountId}/default",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/dns/accounts/{accountId}/default",
+          "operationId": "setDNSAccountDefaultR34"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/accounts/{accountId}/test",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts/{accountId}/test",
+          "operationId": "testDNSConnection"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/accounts/{accountId}/zones/sync",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/accounts/{accountId}/zones/sync",
+          "operationId": "syncDNSZones"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/provider-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/dns_execution.go",
+          "owner": "registerDNSProviderTaskRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml",
+          "path": "/api/v1/dns/provider-tasks",
+          "operationId": "submitDNSProviderInspectionR17"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/record-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/dns_record_tasks.go",
+          "owner": "registerDNSRecordTaskRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r18/dns-record-tasks-candidate.yaml",
+          "path": "/api/v1/dns/record-tasks",
+          "operationId": "submitDNSRecordChangeR18"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/dns/zones/{zoneId}/records",
+      "declarations": [
+        {
+          "source": "internal/dns/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/dns/zones/{zoneId}/records",
+          "operationId": "createDNSRecord"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/enrollment-tokens",
+      "declarations": [
+        {
+          "source": "internal/transport/enrollment_management_http.go",
+          "owner": "NewEnrollmentManagementHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/node-enrollment-tokens",
+          "operationId": "createNodeEnrollmentToken"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/enrollments/{enrollmentId}/decision",
+      "declarations": [
+        {
+          "source": "internal/transport/enrollment_management_http.go",
+          "owner": "NewEnrollmentManagementHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
+          "operationId": "decideNodeEnrollment"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/files/distributions",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r9/file-distributions-candidate.yaml",
+          "path": "/api/v1/files/distributions",
+          "operationId": "createFileDistributionR9"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/files/distributions/{distributionId}/cancel",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r9/file-distributions-candidate.yaml",
+          "path": "/api/v1/files/distributions/{distributionId}/cancel",
+          "operationId": "cancelFileDistributionR9"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/files/distributions/{distributionId}/complete",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r9/file-distributions-candidate.yaml",
+          "path": "/api/v1/files/distributions/{distributionId}/complete",
+          "operationId": "submitFileDistributionR9"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/files/resume-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/file_resume.go",
+          "owner": "registerFileResumeRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r21/file-execution-resume-candidate.yaml",
+          "path": "/api/v1/files/resume-tasks",
+          "operationId": "createFileResumeTask"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/gateway-routes",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateway-routes",
+          "operationId": "createGatewayRoute"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/gateways",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateways",
+          "operationId": "createGatewayProvision"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/gateways/{gatewayId}/provision",
+      "declarations": [
+        {
+          "source": "internal/gateway/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/gateways/{gatewayId}/provision",
+          "operationId": "retryGatewayProvision"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/groups",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups",
+          "operationId": "createNodeGroup"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/monitoring/availability-monitors",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "createAvailabilityMonitor08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "createBackgroundMonitor"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors",
+          "operationId": "createBackgroundMonitor"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/monitoring/availability-monitors/{monitorId}/probe",
+      "declarations": [
+        {
+          "source": "internal/monitoring/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
+          "path": "/api/v1/availability-monitors/{monitorId}/probe",
+          "operationId": "runSelectedSourceProbe"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/node-enrollment-tokens",
+      "declarations": [
+        {
+          "source": "internal/transport/enrollment_management_http.go",
+          "owner": "NewEnrollmentManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/node-enrollment-tokens",
+          "operationId": "createNodeEnrollmentToken"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
+      "declarations": [
+        {
+          "source": "internal/transport/enrollment_management_http.go",
+          "owner": "NewEnrollmentManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
+          "operationId": "decideNodeEnrollment"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/nodes/{nodeId}/files/uploads",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads",
+          "operationId": "createUploadSession"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r10/files-resume-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads",
+          "operationId": "createOverwriteUploadR10"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r11/upload-policies-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads",
+          "operationId": "createPolicyUploadR11"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete",
+          "operationId": "completeUploadSession"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r8/files-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete",
+          "operationId": "submitOwnedUploadTaskR8"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r10/files-resume-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete",
+          "operationId": "submitOwnedUploadTaskR10"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r11/upload-policies-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete",
+          "operationId": "submitOwnedUploadTaskR11"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/nodes/{nodeId}/revoke",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/revoke",
+          "operationId": "revokeNodeIdentityG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/revoke",
+          "operationId": "revokeNodeIdentityG2"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/nodes/{nodeId}/suspend",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/suspend",
+          "operationId": "suspendNodeG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/suspend",
+          "operationId": "suspendNodeG2"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/notifications/channels/{channel}/credentials",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/notifications/channels/{channel}/credentials",
+          "operationId": "bindNotificationCredentialRevision"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/notifications/channels/{channel}/test",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/channels/{channel}/test",
+          "operationId": "testNotificationChannel"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/notifications/channels/{channel}/test",
+          "operationId": "queueNotificationTest"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/notifications/deliveries/{deliveryId}/retry",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/notifications/deliveries/{deliveryId}/retry",
+          "operationId": "retryKnownFailedNotification"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operations/incidents/sync",
+      "declarations": [
+        {
+          "source": "apps/controller/server/operations_incidents.go",
+          "owner": "registerOperatorIncidentRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/operations/incidents/sync",
+          "operationId": "syncOperatorIncidentsR29"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml",
+          "path": "/api/v1/operations/incidents/sync",
+          "operationId": "syncOperatorIncidentsR30"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operations/incidents/{incidentId}/actions",
+      "declarations": [
+        {
+          "source": "apps/controller/server/operations_incidents.go",
+          "owner": "registerOperatorIncidentRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/operations/incidents/{incidentId}/actions",
+          "operationId": "decideOperatorIncidentR29"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml",
+          "path": "/api/v1/operations/incidents/{incidentId}/actions",
+          "operationId": "decideOperatorIncidentR30"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/operations/incidents/{incidentId}/verify-backup",
+      "declarations": [
+        {
+          "source": "apps/controller/server/incident_closure.go",
+          "owner": "registerIncidentClosureRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml",
+          "path": "/api/v1/operations/incidents/{incidentId}/verify-backup",
+          "operationId": "verifyOperatorIncidentBackupR30"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/catalog/refresh",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/catalog/refresh",
+          "operationId": "refreshPluginCatalog"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/configurations/validate",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/configurations/validate",
+          "operationId": "xrayValidateConfiguration"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/configurations/validate",
+          "operationId": "xrayValidateConfiguration"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/deployments",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/deployments",
+          "operationId": "xrayCreateDeployment"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/deployments",
+          "operationId": "xrayCreateDeployment"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/deployments/preview",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/deployments/preview",
+          "operationId": "xrayPreviewDeployment"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/deployments/preview",
+          "operationId": "xrayPreviewDeployment"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/installations",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/installations",
+          "operationId": "xrayStartInstallation"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/installations",
+          "operationId": "xrayStartInstallation"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/installations/preview",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/installations/preview",
+          "operationId": "xrayPreviewInstall"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/installations/preview",
+          "operationId": "xrayPreviewInstall"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/configurations/rollback",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/configurations/rollback",
+          "operationId": "xrayRollbackConfiguration"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/configurations/rollback",
+          "operationId": "xrayRollbackConfiguration"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/instance/actions",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/instance/actions",
+          "operationId": "xrayInstanceAction"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/nodes/{nodeId}/instance/actions",
+          "operationId": "xrayInstanceAction"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/users",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users",
+          "operationId": "xrayCreateUser"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users",
+          "operationId": "xrayCreateUser"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/xray-manager/users/{userId}/client-export",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users/{userId}/client-export",
+          "operationId": "xrayExportClientConnection"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/users/{userId}/client-export",
+          "operationId": "xrayExportClientConnection"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/{pluginId}/install",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/{pluginId}/install",
+          "operationId": "installPlugin"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/plugins/{pluginId}/update",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/{pluginId}/update",
+          "operationId": "updatePlugin"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publications",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "createPublication08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "createPublicationR7"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publications/preview",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications/preview",
+          "operationId": "previewPublication08"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publications/{publicationId}/cancel",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/publications/{publicationId}/cancel",
+          "operationId": "cancelPublicationR34"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publications/{publicationId}/rollback",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/rollback",
+          "operationId": "compensatePublicationDNSR19"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publications/{publicationId}/rollback-all",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/rollback-all",
+          "operationId": "rollbackAllPublicationR7"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/rollback-all",
+          "operationId": "reverseCompensatePublicationR19"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publications/{publicationId}/run",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/run",
+          "operationId": "runPublicationR7"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/run",
+          "operationId": "continuePublicationDNSR19"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publishing/preview",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications/preview",
+          "operationId": "previewPublication08"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publishing/publications",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "createPublication08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications",
+          "operationId": "createPublicationR7"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publishing/publications/{publicationId}/cancel",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/publications/{publicationId}/cancel",
+          "operationId": "cancelPublicationR34"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publishing/publications/{publicationId}/rollback",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/rollback",
+          "operationId": "compensatePublicationDNSR19"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publishing/publications/{publicationId}/rollback-all",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/rollback-all",
+          "operationId": "rollbackAllPublicationR7"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/rollback-all",
+          "operationId": "reverseCompensatePublicationR19"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/publishing/publications/{publicationId}/run",
+      "declarations": [
+        {
+          "source": "internal/publishing/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "compatibility-alias",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/run",
+          "operationId": "runPublicationR7"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r19/publication-dns-tasks-candidate.yaml",
+          "path": "/api/v1/publications/{publicationId}/run",
+          "operationId": "continuePublicationDNSR19"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/resource-grants",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/resource-grants",
+          "operationId": "createResourceGrant"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/resource-grants",
+          "operationId": "createResourceGrant"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/service-groups",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups",
+          "operationId": "createServiceGroup"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/agent-fleet-updates",
+      "declarations": [
+        {
+          "source": "apps/controller/server/resident_updates.go",
+          "owner": "registerResidentUpdateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r22/resident-updates-candidate.yaml",
+          "path": "/api/v1/system/agent-fleet-updates",
+          "operationId": "submitResidentAgentFleetUpdate"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/controller-update-tasks",
+      "declarations": [
+        {
+          "source": "apps/controller/server/resident_updates.go",
+          "owner": "registerResidentUpdateRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r22/resident-updates-candidate.yaml",
+          "path": "/api/v1/system/controller-update-tasks",
+          "operationId": "submitResidentControllerUpdate"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/updates/acquire",
+      "declarations": [
+        {
+          "source": "apps/controller/server/release_source.go",
+          "owner": "registerReleaseSourceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r13/release-source-candidate.yaml",
+          "path": "/api/v1/system/updates/acquire",
+          "operationId": "acquireSignedAgentReleaseR13"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/updates/apply",
+      "declarations": [
+        {
+          "source": "internal/updates/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/updates/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/system/updates/apply",
+          "operationId": "applyControllerUpdate"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r7/updates-candidate.yaml",
+          "path": "/api/v1/system/updates/apply",
+          "operationId": "applyApprovedUpdateR7"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/updates/check",
+      "declarations": [
+        {
+          "source": "internal/updates/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/updates/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/system/updates/check",
+          "operationId": "checkControllerUpdate"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/updates/jobs/{jobId}/rollback",
+      "declarations": [
+        {
+          "source": "internal/updates/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/updates/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/system/updates/jobs/{jobId}/rollback",
+          "operationId": "rollbackControllerUpdate"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/system/updates/plan",
+      "declarations": [
+        {
+          "source": "internal/updates/http.go",
+          "owner": "NewHTTP"
+        },
+        {
+          "source": "internal/updates/http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/system/updates/plan",
+          "operationId": "planControllerUpdate"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks",
+          "operationId": "createBatchTask"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/preview",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/preview",
+          "operationId": "previewBatchTask"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/{jobId}/approve",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/approve",
+          "operationId": "approveTaskG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/approve",
+          "operationId": "approveTaskG2"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/{jobId}/cancel",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/cancel",
+          "operationId": "cancelTaskG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/cancel",
+          "operationId": "cancelTaskG2"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/tasks/{jobId}/resume",
+      "declarations": [
+        {
+          "source": "internal/tasks/http.go",
+          "owner": "Register"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/resume",
+          "operationId": "resumeTaskG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/tasks/{jobId}/resume",
+          "operationId": "resumeTaskG2"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/transfers",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/transfers",
+          "operationId": "createTransfer"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/transfers/{transferId}/cancel",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/transfers/{transferId}/cancel",
+          "operationId": "cancelTransfer"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/users",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/users",
+          "operationId": "createUser"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/users",
+          "operationId": "createUser"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workflows",
+      "declarations": [
+        {
+          "source": "internal/workflows/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/workflows",
+          "operationId": "createWorkflowR34"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/workflows/{workflowId}/runs",
+      "declarations": [
+        {
+          "source": "internal/workflows/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
+          "path": "/api/v1/workflows/{workflowId}/runs",
+          "operationId": "triggerWorkflowR34"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai/model-settings",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/model_settings_http.go",
+          "owner": "NewModelSettingsHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r6/ai-candidate.yaml",
+          "path": "/api/v1/ai/model-settings",
+          "operationId": "putAIModelSettingsR6"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/ai/model-settings/{profileId}/budget",
+      "declarations": [
+        {
+          "source": "apps/controller/server/ai_budget_http.go",
+          "owner": "RegisterAIBudgetRoutes"
+        },
+        {
+          "source": "internal/ai/budget_http.go",
+          "owner": "NewBudgetHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r7/ai-budget-candidate.yaml",
+          "path": "/api/v1/ai/model-settings/{profileId}/budget",
+          "operationId": "configureOwnerAIBudgetR7"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/backups/maintenance/policy",
+      "declarations": [
+        {
+          "source": "apps/controller/server/backup_maintenance.go",
+          "owner": "registerBackupMaintenanceRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r29/operations-candidate.yaml",
+          "path": "/api/v1/backups/maintenance/policy",
+          "operationId": "configureBackupMaintenanceR29"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/files/distributions/{distributionId}/content",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r9/file-distributions-candidate.yaml",
+          "path": "/api/v1/files/distributions/{distributionId}/content",
+          "operationId": "appendFileDistributionR9"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/groups/{groupId}/members",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups/{groupId}/members",
+          "operationId": "replaceNodeGroupMembers"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r8/files-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content",
+          "operationId": "appendOwnedUploadContentR8"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r10/files-resume-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content",
+          "operationId": "appendOwnedUploadContentR10"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r11/upload-policies-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content",
+          "operationId": "appendOwnedUploadContentR11"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/nodes/{nodeId}/traffic-quota",
+      "declarations": [
+        {
+          "source": "internal/quota/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/traffic-quota",
+          "operationId": "setNodeTrafficQuota08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/traffic-quota",
+          "operationId": "putObservedTrafficQuota"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/notifications/channels/{channel}",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/channels/{channel}",
+          "operationId": "putNotificationChannel"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r32/observability-candidate.yaml",
+          "path": "/api/v1/notifications/channels/{channel}",
+          "operationId": "putNotificationChannelConfiguration"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/notifications/settings",
+      "declarations": [
+        {
+          "source": "internal/notifications/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/notifications/settings",
+          "operationId": "putNotificationSettings"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/plugins/repository",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/repository",
+          "operationId": "putPluginRepository"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/plugins/xray-manager/traffic/settings",
+      "declarations": [
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "NewXrayDeclarativeHTTP"
+        },
+        {
+          "source": "internal/plugins/xray_http.go",
+          "owner": "Patterns"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/traffic/settings",
+          "operationId": "xrayPutTrafficSettings"
+        },
+        {
+          "file": "api/openapi/xray-candidate.yaml",
+          "path": "/api/v1/plugins/xray-manager/traffic/settings",
+          "operationId": "xrayPutTrafficSettings"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/plugins/{pluginId}/activation",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerPluginRoutes"
+        },
+        {
+          "source": "internal/plugins/http.go",
+          "owner": "NewManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/plugins/{pluginId}/activation",
+          "operationId": "setPluginActivation"
+        }
+      ]
+    },
+    {
+      "method": "PUT",
+      "path": "/api/v1/service-groups/{serviceGroupId}/members",
+      "declarations": [
+        {
+          "source": "internal/servicegroups/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/service-groups/{serviceGroupId}/members",
+          "operationId": "replaceServiceGroupMembers"
+        }
+      ]
+    }
+  ]
+}

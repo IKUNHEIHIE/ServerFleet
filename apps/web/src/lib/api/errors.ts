@@ -99,5 +99,3 @@ export function describeApiError(error: unknown): string {
   if (error.requestId) meta.push(`请求 ${error.requestId}`);
   return meta.length > 0 ? `${base}（${meta.join("，")}）` : base;
 }
-
-export const CHECK_UPDATE_MESSAGE = "检查网络与服务状态后重试；不会自动重复提交有副作用的操作。";

@@ -91,3 +91,6 @@ apis:
 
   v09-r33-node-probes:
     root: api/openapi/revisions/v09-r33/node-probes-candidate.yaml
+
+  v09-r34-runtime-additions:
+    root: api/openapi/revisions/v09-r34/runtime-additions-candidate.json
