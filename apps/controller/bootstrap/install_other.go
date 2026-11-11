@@ -23,3 +23,5 @@ func runSystemInstallation(context.Context, string, string, bool, io.Writer, io.
 }
 
 func installationProcessMatches(int, string) bool { return false }
+
+func installationSystemctl(context.Context, bool, ...string) error { return errInstallation }
