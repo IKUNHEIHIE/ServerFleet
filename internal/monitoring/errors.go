@@ -1,6 +1,9 @@
 package monitoring
 
-import "errors"
+import (
+	"errors"
+	"serverfleet.local/serverfleet/internal/netprobe"
+)
 
 // Exported sentinel errors. Probe and notifier errors are never wrapped with raw
 // upstream text; callers receive stable classifications and persisted error text
@@ -12,9 +15,9 @@ var (
 	ErrInvalidMonitor       = errors.New("monitoring: invalid monitor")
 	ErrMonitorExists        = errors.New("monitoring: monitor already exists")
 	ErrMonitorNotFound      = errors.New("monitoring: monitor not found")
-	ErrInvalidTarget        = errors.New("monitoring: invalid target")
-	ErrTargetForbidden      = errors.New("monitoring: target is forbidden")
-	ErrInvalidAllowedHosts  = errors.New("monitoring: invalid allowed host entry")
+	ErrInvalidTarget        = netprobe.ErrInvalidTarget
+	ErrTargetForbidden      = netprobe.ErrTargetForbidden
+	ErrInvalidAllowedHosts  = netprobe.ErrInvalidAllowedHosts
 	ErrProberUnavailable    = errors.New("monitoring: prober is not configured")
 	ErrInvalidProbe         = errors.New("monitoring: invalid probe result")
 	ErrInvalidLimit         = errors.New("monitoring: invalid check limit")

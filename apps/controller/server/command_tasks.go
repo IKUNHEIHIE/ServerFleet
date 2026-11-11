@@ -98,6 +98,23 @@ func (s *Server) agentCommandAdmission(root bool) http.HandlerFunc {
 			releaseSourceJSON(w, 403, map[string]string{"code": "ROOT_ADMISSION_DENIED"})
 			return
 		}
+		if !root && body.Offer.ActionId == transport.ProbeCapability {
+			offer := body.Offer
+			t, e := s.Tasks.CheckExecutionForNode(r.Context(), offer.TaskId, offer.PlanDigestSha256, peer.NodeID)
+			p, parseErr := transport.ParseProbeParameters(offer.CanonicalParametersJson)
+			if e != nil || parseErr != nil || s.nodeProbeTaskCurrent(r.Context(), t) != nil || string(offer.CanonicalParametersJson) != t.Params || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.ExecutionId != executionIDFor(t.ID, peer.NodeID, t.PlanHash) || offer.ActionSchemaVersion != "1" || offer.ScopeRevision != 0 || offer.PluginId != "" || offer.TimeoutSeconds != uint32(p.TimeoutSeconds+transport.ProbeExecutionGraceSeconds) || offer.ExpiresAtUnixMs <= time.Now().UnixMilli() || offer.ExpiresAtUnixMs > time.Now().Add(10*time.Minute).UnixMilli() {
+				releaseSourceJSON(w, 403, map[string]string{"code": "PROBE_ADMISSION_DENIED"})
+				return
+			}
+			if body.Phase == "start" {
+				if e = s.Audit.Append(r.Context(), audit.Event{SubjectID: t.SubmitterID, Action: transport.ProbeCapability, Result: "allowed", RequestID: body.Nonce, TaskID: t.ID, NodeIDs: []string{peer.NodeID}, Source: audit.SourceSystem, ReasonCode: "probe_current_source_and_scope", At: time.Now().UTC()}); e != nil {
+					releaseSourceJSON(w, 503, map[string]string{"code": "PROBE_ADMISSION_UNAVAILABLE"})
+					return
+				}
+			}
+			releaseSourceJSON(w, 200, map[string]string{"taskId": t.ID, "executionId": offer.ExecutionId, "planHash": t.PlanHash, "nonce": body.Nonce, "phase": body.Phase, "timeoutSeconds": strconv.Itoa(p.TimeoutSeconds + transport.ProbeExecutionGraceSeconds)})
+			return
+		}
 		expectedAction, expectedClass, expectedPrivilege := transport.CommandCapability, tasks.OperationClassModifying, agentv1.Privilege_PRIVILEGE_NORMAL
 		if root {
 			expectedAction, expectedClass, expectedPrivilege = transport.RootCommandCapability, tasks.OperationClassRoot, agentv1.Privilege_PRIVILEGE_ROOT

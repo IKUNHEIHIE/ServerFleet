@@ -1,0 +1,599 @@
+openapi: 3.0.3
+info:
+  title: Server Fleet R33 Node Source Monitoring Candidate
+  version: 0.9.33
+  description: Independent additive candidate; does not freeze G2. See docs/contracts/revisions/v09-r33-node-probes.md.
+  license:
+    name: Private project
+servers:
+- url: https://controller.example.invalid
+security:
+- sessionCookie: []
+tags:
+- name: Observability
+  description: Existing monitor configuration and alerts
+- name: NodeMonitoring
+  description: Scoped read-only source-node tasks and observation provenance
+paths:
+  /api/v1/availability-monitors:
+    get:
+      operationId: listBackgroundMonitors
+      summary: Read monitor configuration, thresholds and ownership
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: createBackgroundMonitor
+      summary: Create Controller-local monitor and owner grant
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '201':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorInput'
+  /api/v1/availability-monitors/{monitorId}:
+    patch:
+      operationId: updateBackgroundMonitor
+      summary: Update configuration and current owner revision
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorInput'
+    delete:
+      operationId: deleteBackgroundMonitor
+      summary: Delete monitor; stale outbox intents fail current-source checks
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    parameters:
+    - name: monitorId
+      in: path
+      required: true
+      schema:
+        type: string
+  /api/v1/availability-monitors/{monitorId}/alerts:
+    get:
+      operationId: listMonitorAlertEvents
+      summary: Read latest 20 persisted transition alerts and actual delivery task
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlertEvent'
+                required:
+                - items
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    parameters:
+    - name: monitorId
+      in: path
+      required: true
+      schema:
+        type: string
+  /api/v1/availability-monitors/{monitorId}/probe:
+    parameters: &id001
+    - name: monitorId
+      in: path
+      required: true
+      schema:
+        type: string
+    post:
+      operationId: runSelectedSourceProbe
+      summary: Run one probe using the saved source and preserve actual task provenance
+      tags:
+      - NodeMonitoring
+      description: Current monitor write and selected-node probe grant. Same-origin
+        CSRF for POST. Only empty body or {} and no query are accepted; caller cannot
+        override target, timeout or source. Queue/offline/missing capability/UNKNOWN
+        task/missing receipt produce status=unknown, not a business outage. Target
+        failure requires a completed current task and typed receipt. A manual request
+        creates a standard system task under the acting subject; it does not borrow
+        another owner resource grant.
+      responses:
+        '200':
+          description: Persisted current observation; HTTP success does not imply
+            the target is up.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProbeCheck'
+        '400': &id002
+          description: Invalid request or unsupported target
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403': &id003
+          description: Current actor or selected node not granted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404': &id004
+          description: Monitor not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409': &id005
+          description: Configuration changed while checking
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503': &id006
+          description: Probe dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/availability-monitors/{monitorId}/history:
+    parameters: *id001
+    get:
+      operationId: readSelectedSourceHistory
+      summary: Read persisted observations including source node and real task ID
+      tags:
+      - NodeMonitoring
+      parameters:
+      - name: limit
+        in: query
+        schema:
+          type: integer
+          minimum: 1
+          maximum: 500
+          default: 50
+      responses:
+        '200':
+          description: Actual persisted observations, newest first.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  monitorId:
+                    type: string
+                  limit:
+                    type: integer
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ProbeCheck'
+        '400': *id002
+        '403': *id003
+        '404': *id004
+        '409': *id005
+        '503': *id006
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-sf_session
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required:
+          - code
+          - message
+      required:
+      - error
+    MonitorInput:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 128
+        type:
+          type: string
+          enum:
+          - http
+          - tcp
+          - tls
+        target:
+          type: string
+        intervalSeconds:
+          type: integer
+          minimum: 1
+          maximum: 604800
+        timeoutSeconds:
+          type: integer
+          minimum: 1
+        failureCount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        recoveryCount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        notifyChannels:
+          type: array
+          items: &id007
+            type: string
+            enum:
+            - smtp
+            - qqbot
+          maxItems: 2
+          uniqueItems: true
+          description: Explicit [] disables alerts; omitted legacy configuration selects
+            preferred usable channel
+        enabled:
+          type: boolean
+        state:
+          type: string
+        maintenanceUntil:
+          type: string
+        sourceNodeId:
+          type: string
+          maxLength: 128
+          description: Empty selects Controller. Nonempty node requires current monitoring.write
+            and explicit monitoring.probe node grant; target must be public, <=1024
+            bytes and timeout <=30 seconds. Current actor and saved source revision
+            are checked again for execution.
+      additionalProperties: false
+    Monitor:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - http
+          - tcp
+          - tls
+        target:
+          type: string
+        intervalSeconds:
+          type: integer
+        timeoutSeconds:
+          type: integer
+        enabled:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - healthy
+          - unhealthy
+          - unknown
+          - paused
+        failureCount:
+          type: integer
+        recoveryCount:
+          type: integer
+        notifyChannels:
+          type: array
+          items: *id007
+          nullable: true
+        consecutiveFailures:
+          type: integer
+        automationOwnerId:
+          type: string
+        automationRevision:
+          type: integer
+        lastCheckedAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+        maintenanceUntil:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        sourceNodeId:
+          type: string
+        lastProbeUnknown:
+          type: boolean
+          description: Current observation is inconclusive; state is unknown without
+            fabricating an outage.
+        lastProbeTaskId:
+          type: string
+    AlertEvent:
+      type: object
+      properties:
+        key:
+          type: string
+        monitorId:
+          type: string
+        ownerId:
+          type: string
+        revision:
+          type: integer
+        state:
+          type: string
+          enum:
+          - pending
+          - queued
+          - submitted
+          - provider_accepted
+          - delivery_unknown
+          - failed
+          - rejected
+          - rate_limited
+          - blocked
+        deliveryId:
+          type: integer
+        taskId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        alert:
+          type: object
+          properties:
+            dedupeKey:
+              type: string
+            subject:
+              type: string
+            body:
+              type: string
+      required:
+      - key
+      - state
+      - createdAt
+      - updatedAt
+    ProbeCheck:
+      type: object
+      properties:
+        id:
+          type: integer
+        monitorId:
+          type: string
+        status:
+          type: string
+          enum:
+          - up
+          - down
+          - unknown
+        state:
+          type: string
+          enum:
+          - up
+          - down
+          - unknown
+          description: Last conclusive business state; current status may be unknown.
+        latencyMs:
+          type: number
+          minimum: 0
+        statusCode:
+          type: integer
+        error:
+          type: string
+        checkedAt:
+          type: string
+          format: date-time
+        sourceNodeId:
+          type: string
+        taskId:
+          type: string
+        consecutiveFailures:
+          type: integer
+      required:
+      - monitorId
+      - status
+      - checkedAt

@@ -132,7 +132,7 @@ func TestBackupRestoreAcrossDomains(t *testing.T) {
 		t.Fatalf("reapply migrations: %+v %v", report, err)
 	}
 	versions, err := storage.AppliedVersions(ctx, restored)
-	if err != nil || len(versions) != 19 {
+	if err != nil || len(versions) != 20 {
 		t.Fatalf("versions = %v, %v", versions, err)
 	}
 

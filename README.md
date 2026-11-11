@@ -1,5 +1,7 @@
 # ServerFleet
 
+2026-11-11 R33补指定节点的HTTP/TCP/TLS服务监控、当前源节点权限、统一只读探测任务、严格回执及unknown观察处理。使用见[指定节点监控](docs/development/NODE-PROBE-MONITORING.md)，产品/API见[R33](docs/contracts/revisions/v09-r33-node-probes.md)。接收以本轮PR合并和精确head CI评论为准；真实节点联调由用户进行。
+
 2026-11-11 R32补持续监控调度、真实连续阈值与告警事件、Agent主机流量增量及账期覆盖、到期提醒和统一任务通知投递。配置见[持续监控与通知](docs/development/MONITORING-ALERTS.md)，产品/API同步见[R32](docs/contracts/revisions/v09-r32-observability.md)。本轮接收以包含此变更的PR合并状态和精确head CI评论为准；真实VPS及供应商联调仍由用户进行。
 
 2026-11-11 R31：补齐[续签后的安装发布编排](docs/development/RENEWAL-DELIVERY.md)与[可信一键安装](deployment/INSTALL.md)，正式 Web 带进度、审批任务和人工修复采用。产品/API同步见[R31](docs/contracts/revisions/v09-r31-delivery.md)。自动检查以精确提交 CI 为准，真实供应商与系统服务安装由用户联调。

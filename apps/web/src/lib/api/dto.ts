@@ -471,6 +471,8 @@ export interface WorkflowUpdateInput {
 
 /** GET …/availability-monitors/{id}/history 的单条检查记录（internal/monitoring/http.go checkDTO）。 */
 export interface MonitorCheckEntry {
+  readonly sourceNodeId?: string;
+  readonly taskId?: string;
   readonly id?: number;
   readonly monitorId?: string;
   readonly status: "up" | "down" | "unknown" | string;
@@ -482,6 +484,8 @@ export interface MonitorCheckEntry {
 
 /** POST …/availability-monitors/{id}/probe 的服务端回执（probeDTO）。 */
 export interface MonitorProbeResult {
+  readonly sourceNodeId?: string;
+  readonly taskId?: string;
   readonly monitorId: string;
   readonly status: "up" | "down" | "unknown" | string;
   readonly state: string;
@@ -541,6 +545,8 @@ export interface MonitorAlertEvent {
 }
 
 export interface AvailabilityMonitor {
+  readonly lastProbeUnknown?: boolean;
+  readonly lastProbeTaskId?: string;
   readonly automationOwnerId?: string;
   readonly automationRevision?: number;
   readonly id?: string;

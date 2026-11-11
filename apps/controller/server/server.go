@@ -304,7 +304,7 @@ func AuditActions() []string {
 		"credentials.use.intent",
 		"credentials.use.complete",
 		"tasks.command",
-		transport.CommandCapability,
+		transport.CommandCapability, transport.ProbeCapability,
 		"host.patch",
 		"host.root",
 		"files.transfer",
@@ -433,6 +433,7 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: tasks.ActionRevise, Description: "Revise unstarted tasks on granted nodes", ResourceType: "node"},
 		{Key: tasks.ActionResume, Description: "Resume unstarted queued tasks on granted nodes", ResourceType: "node"},
 		{Key: transport.ResidentUpdateAction, Description: "Install approved signed remote Agent releases", ResourceType: "node", AdminOnly: true},
+		{Key: transport.ProbeCapability, Description: "Probe public services from granted nodes", ResourceType: "node", ReadOnly: true},
 		{Key: transport.CommandCapability, Description: "Execute approved node executable profiles", ResourceType: "node"},
 		{Key: "tasks.command", Description: "Execute standard commands on granted nodes", ResourceType: "node"},
 		{Key: "host.patch", Description: "Execute controlled host changes on granted nodes", ResourceType: "node"},
@@ -959,7 +960,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	tasksService, err := tasks.NewService(tasks.Options{
-		TaskCurrent:         s.aiTaskCurrent,
+		TaskCurrent:         s.currentTask,
 		ControllerExecution: controllerExecution,
 		RuntimeGate:         runtimeGate,
 		Workers:             workers,
@@ -1119,11 +1120,12 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 	}
 	monitoringService, err := monitoring.NewService(monitoring.Options{
-		DB:         db,
-		Repo:       monitoringRepo,
-		Audit:      auditRecorder,
-		Authorizer: authorizer,
-		Prober:     prober, Notifier: alertNotifier, AutomationCurrent: monitorAuthority,
+		DB:           db,
+		Repo:         monitoringRepo,
+		Audit:        auditRecorder,
+		Authorizer:   authorizer,
+		RemoteProber: nodeProbeClient{s}, SourceValidator: s.validateProbeSource,
+		Prober: prober, Notifier: alertNotifier, AutomationCurrent: monitorAuthority,
 		AllowedHosts: cfg.MonitoringAllowedHosts,
 		Now:          now,
 	})
@@ -1241,6 +1243,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Notifications = notificationsService
 	s.Gateway = gatewayService
 	s.Monitoring = monitoringService
+	if agentBridge != nil {
+		agentBridge.probeCurrent = s.nodeProbeTaskCurrent
+		agentBridge.recordProbe = s.recordNodeProbe
+	}
 	s.Quota = quotaService
 	if agentBridge != nil {
 		agentBridge.recordTraffic = s.recordTraffic

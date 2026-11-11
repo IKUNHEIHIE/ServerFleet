@@ -10,7 +10,7 @@ import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, trafficApi } from "@/lib/api/endpoints";
 import { monitoringApi, notificationsApi } from "@/lib/api/endpoints-infra";
-import type { AvailabilityMonitor, MonitorCheckEntry, MonitorState, MonitorProbeResult, NotificationDelivery, NotificationChannel, TrafficRisk } from "@/lib/api/dto";
+import type { AvailabilityMonitor, MonitorCheckEntry, MonitorState, MonitorProbeResult, NotificationDelivery, NotificationChannel, NodeSummary, TrafficRisk } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 import { adaptMetric } from "@/features/nodes/legacy-adapter";
@@ -82,6 +82,8 @@ function CheckHistory({ monitor, onClose }: { readonly monitor: AvailabilityMoni
               { key: "latency", header: "延迟", align: "right", render: check => (typeof check.latencyMs === "number" ? `${check.latencyMs} ms` : "—") },
               { key: "code", header: "状态码", align: "right", render: check => (typeof check.statusCode === "number" ? check.statusCode : "—") },
               { key: "error", header: "错误摘要", render: check => check.error?.trim() || "—" },
+              { key: "source", header: "来源", render: check => check.sourceNodeId || "Controller" },
+              { key: "task", header: "任务", render: check => check.taskId ? <a className="underline" href={`#/tasks/${encodeURIComponent(check.taskId)}`}>查看探测任务</a> : "—" },
             ]}
           />
         )
@@ -119,11 +121,13 @@ const DELIVERY_STATUS_TEXT: Record<NotificationDelivery["status"], string> = {
 function MonitorEditor({
   open,
   monitor,
+  nodes,
   onClose,
   onSaved,
 }: {
   readonly open: boolean;
   readonly monitor: AvailabilityMonitor | null;
+  readonly nodes: readonly NodeSummary[];
   readonly onClose: () => void;
   readonly onSaved: (monitor: AvailabilityMonitor) => void;
 }) {
@@ -131,6 +135,7 @@ function MonitorEditor({
   const [name, setName] = useState("");
   const [type, setType] = useState<AvailabilityMonitor["type"]>("http");
   const [target, setTarget] = useState("");
+  const [sourceNodeId, setSourceNodeId] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState("60");
   const [timeoutSeconds, setTimeoutSeconds] = useState("5");
   const [failureCount, setFailureCount] = useState("3");
@@ -146,6 +151,7 @@ function MonitorEditor({
     setName(monitor?.name ?? "");
     setType(monitor?.type ?? "http");
     setTarget(monitor?.target ?? "");
+    setSourceNodeId(monitor?.sourceNodeId ?? "");
     setIntervalSeconds(String(monitor?.intervalSeconds ?? 60));
     setTimeoutSeconds(String(monitor?.timeoutSeconds ?? 5));
     setFailureCount(String(monitor?.failureCount ?? 3));
@@ -159,6 +165,7 @@ function MonitorEditor({
     if (!name.trim()) return setLocalError("名称不能为空。");
     if (!target.trim()) return setLocalError("探测目标不能为空。");
     if (Number(intervalSeconds) < 15) return setLocalError("检查间隔至少 15 秒。");
+    if(sourceNodeId && Number(timeoutSeconds)>30) return setLocalError("节点探测的目标超时最多30秒。");
     if (Number(timeoutSeconds) < 1) return setLocalError("超时至少 1 秒。");
     setLocalError(null);
     // 真实 Controller 的 PATCH/POST 使用 DisallowUnknownFields：只回传契约字段，
@@ -168,6 +175,7 @@ function MonitorEditor({
       name: name.trim(),
       type,
       target: target.trim(),
+      sourceNodeId,
       intervalSeconds: Number(intervalSeconds),
       timeoutSeconds: Number(timeoutSeconds),
       failureCount: Number(failureCount),
@@ -210,7 +218,12 @@ function MonitorEditor({
               </Select>
             )}
           </Field>
-          <p className="text-sm text-muted-foreground">探测源：Controller。目标仍受服务端白名单与 SSRF 校验。</p>
+          <Field label="探测来源" hint="节点需要支持 monitoring.probe；节点源仅探测公网目标。离线或未取得可信回执时显示未知，不判定业务宕机。">
+            {ids => <Select id={ids.inputId} value={sourceNodeId} onChange={event=>setSourceNodeId(event.target.value)} disabled={disabled}>
+              <option value="">Controller</option>
+              {nodes.map(node=><option key={node.id} value={node.id}>{node.name || node.id}{node.online ? "" : "（离线）"}</option>)}
+            </Select>}
+          </Field>
         </div>
         <Field label="探测目标" hint="HTTP(S) URL、host:port；目标授权与 SSRF 由服务端执行。">
           {ids => <TextInput id={ids.inputId} value={target} onChange={event => setTarget(event.target.value)} required />}
@@ -276,6 +289,7 @@ export function MonitoringPage() {
       name: monitor.name,
       type: monitor.type,
       target: monitor.target,
+      sourceNodeId: monitor.sourceNodeId ?? "",
       intervalSeconds: monitor.intervalSeconds,
       timeoutSeconds: monitor.timeoutSeconds,
       state: paused ? "paused" : "pending",
@@ -413,7 +427,9 @@ export function MonitoringPage() {
                   columns={[
                     { key: "name", header: "名称", render: monitor => monitor.name },
                     { key: "target", header: "目标", render: monitor => `${monitor.type.toUpperCase()} · ${monitor.target}` },
-                    { key: "state", header: "状态", render: monitor => MONITOR_STATE_TEXT[monitor.state ?? "unknown"] },
+                    { key: "state", header: "状态", render: monitor => monitor.lastProbeUnknown ? "未知（探测来源或执行异常）" : MONITOR_STATE_TEXT[monitor.state ?? "unknown"] },
+                    { key: "source", header: "探测来源", render: monitor => monitor.sourceNodeId ? nodeItems.find(node=>node.id===monitor.sourceNodeId)?.name || monitor.sourceNodeId : "Controller" },
+                    { key: "probeTask", header: "探测任务", render: monitor => monitor.lastProbeTaskId ? <a className="underline" href={`#/tasks/${encodeURIComponent(monitor.lastProbeTaskId)}`}>查看任务</a> : "—" },
                     { key: "automation", header: "后台调度", render: monitor => monitor.automationOwnerId ? "已绑定保存者权限" : "请编辑并保存以授权" },
                     { key: "interval", header: "间隔/超时", render: monitor => `${monitor.intervalSeconds}s / ${monitor.timeoutSeconds}s` },
                     { key: "checked", header: "最近检查", render: monitor => formatDateTime(monitor.lastCheckedAt) ?? "—" },
@@ -500,6 +516,7 @@ export function MonitoringPage() {
       <MonitorEditor
         open={editor.open}
         monitor={editor.monitor}
+        nodes={nodeItems}
         onClose={() => setEditor({ open: false, monitor: null })}
         onSaved={() => {
           setEditor({ open: false, monitor: null });

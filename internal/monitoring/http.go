@@ -99,6 +99,9 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, risks TrafficRiskSource,
 }
 
 type monitorDTO struct {
+	SourceNodeID        string                  `json:"sourceNodeId,omitempty"`
+	LastProbeUnknown    bool                    `json:"lastProbeUnknown"`
+	LastProbeTaskID     string                  `json:"lastProbeTaskId,omitempty"`
 	AutomationOwnerID   string                  `json:"automationOwnerId,omitempty"`
 	AutomationRevision  uint64                  `json:"automationRevision,omitempty"`
 	ID                  string                  `json:"id"`
@@ -187,9 +190,10 @@ func (api *httpAPI) createMonitor(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if body.SourceNodeID != nil && *body.SourceNodeID != "" {
-		writeFixed(w, http.StatusBadRequest, "unsupported_probe_source", "background probes run on the Controller")
-		return
+
+	source := ""
+	if body.SourceNodeID != nil {
+		source = *body.SourceNodeID
 	}
 	failure, recovery := 1, 1
 	if body.FailureCount != nil {
@@ -211,7 +215,7 @@ func (api *httpAPI) createMonitor(w http.ResponseWriter, r *http.Request) {
 		channels = *body.NotifyChannels
 	}
 	monitor, err := api.service.Create(r.Context(), principal.SubjectID, principal.RequestID, MonitorInput{
-		ID: id, Name: *body.Name, Kind: Kind(kind), Target: *body.Target, FailureThreshold: failure, RecoveryThreshold: recovery, NotifyChannels: channels,
+		SourceNodeID: source, ID: id, Name: *body.Name, Kind: Kind(kind), Target: *body.Target, FailureThreshold: failure, RecoveryThreshold: recovery, NotifyChannels: channels,
 		IntervalSeconds: *body.IntervalSeconds, TimeoutSeconds: *body.TimeoutSeconds,
 		Enabled: enabled, MaintenanceUntil: maintenance,
 	})
@@ -242,14 +246,11 @@ func (api *httpAPI) updateMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := MonitorInput{
-		ID: current.ID, Name: current.Name, Kind: current.Kind, Target: current.Target, FailureThreshold: current.FailureThreshold, RecoveryThreshold: current.RecoveryThreshold, NotifyChannels: current.NotifyChannels,
+		SourceNodeID: current.SourceNodeID, ID: current.ID, Name: current.Name, Kind: current.Kind, Target: current.Target, FailureThreshold: current.FailureThreshold, RecoveryThreshold: current.RecoveryThreshold, NotifyChannels: current.NotifyChannels,
 		IntervalSeconds: current.IntervalSeconds, TimeoutSeconds: current.TimeoutSeconds,
 		Enabled: current.Enabled, MaintenanceUntil: current.MaintenanceUntil,
 	}
-	if body.SourceNodeID != nil && *body.SourceNodeID != "" {
-		writeFixed(w, http.StatusBadRequest, "unsupported_probe_source", "background probes run on the Controller")
-		return
-	}
+
 	if body.FailureCount != nil {
 		input.FailureThreshold = *body.FailureCount
 		if input.FailureThreshold < 1 {
@@ -266,6 +267,9 @@ func (api *httpAPI) updateMonitor(w http.ResponseWriter, r *http.Request) {
 	}
 	if body.NotifyChannels != nil {
 		input.NotifyChannels = *body.NotifyChannels
+	}
+	if body.SourceNodeID != nil {
+		input.SourceNodeID = *body.SourceNodeID
 	}
 	if body.Name != nil {
 		input.Name = *body.Name
@@ -305,17 +309,19 @@ func (api *httpAPI) updateMonitor(w http.ResponseWriter, r *http.Request) {
 }
 
 type checkDTO struct {
-	ID         int64    `json:"id"`
-	MonitorID  string   `json:"monitorId"`
-	Status     string   `json:"status"`
-	LatencyMs  *float64 `json:"latencyMs,omitempty"`
-	StatusCode *int     `json:"statusCode,omitempty"`
-	Error      string   `json:"error,omitempty"`
-	CheckedAt  string   `json:"checkedAt"`
+	SourceNodeID string   `json:"sourceNodeId,omitempty"`
+	TaskID       string   `json:"taskId,omitempty"`
+	ID           int64    `json:"id"`
+	MonitorID    string   `json:"monitorId"`
+	Status       string   `json:"status"`
+	LatencyMs    *float64 `json:"latencyMs,omitempty"`
+	StatusCode   *int     `json:"statusCode,omitempty"`
+	Error        string   `json:"error,omitempty"`
+	CheckedAt    string   `json:"checkedAt"`
 }
 
 func checkFromRecord(check Check) checkDTO {
-	dto := checkDTO{
+	dto := checkDTO{SourceNodeID: check.SourceNodeID, TaskID: check.TaskID,
 		ID: check.ID, MonitorID: check.MonitorID, Status: string(check.Status),
 		StatusCode: check.StatusCode, Error: check.Error,
 		CheckedAt: formatOptionalTime(check.CheckedAt),
@@ -354,6 +360,8 @@ func (api *httpAPI) monitorHistory(w http.ResponseWriter, r *http.Request) {
 }
 
 type probeDTO struct {
+	SourceNodeID        string   `json:"sourceNodeId,omitempty"`
+	TaskID              string   `json:"taskId,omitempty"`
 	MonitorID           string   `json:"monitorId"`
 	Status              string   `json:"status"`
 	State               string   `json:"state"`
@@ -371,6 +379,16 @@ func (api *httpAPI) probeMonitor(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if r.URL.RawQuery != "" {
+		writeError(w, ErrInvalidMonitor)
+		return
+	}
+	if r.ContentLength != 0 {
+		var body struct{}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+	}
 	monitorID := r.PathValue("monitorId")
 	check, monitor, err := api.service.RunCheckNow(r.Context(), principal.SubjectID, principal.RequestID, monitorID)
 	if err != nil {
@@ -381,7 +399,7 @@ func (api *httpAPI) probeMonitor(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	dto := probeDTO{
+	dto := probeDTO{SourceNodeID: check.SourceNodeID, TaskID: check.TaskID,
 		MonitorID: monitor.ID, Status: string(check.Status), State: string(monitor.State),
 		StatusCode: check.StatusCode, Error: check.Error,
 		CheckedAt:           formatOptionalTime(check.CheckedAt),
@@ -463,7 +481,10 @@ func monitorFromRecord(monitor Monitor) monitorDTO {
 			state = "unknown"
 		}
 	}
-	return monitorDTO{
+	if monitor.LastProbeUnknown && monitor.Enabled {
+		state = "unknown"
+	}
+	return monitorDTO{SourceNodeID: monitor.SourceNodeID, LastProbeUnknown: monitor.LastProbeUnknown, LastProbeTaskID: monitor.LastProbeTaskID,
 		AutomationOwnerID: monitor.AutomationOwnerID, AutomationRevision: monitor.AutomationRevision,
 		ID: monitor.ID, Name: monitor.Name, Type: string(monitor.Kind), Target: monitor.Target,
 		IntervalSeconds: monitor.IntervalSeconds, TimeoutSeconds: monitor.TimeoutSeconds,

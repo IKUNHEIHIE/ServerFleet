@@ -1,5 +1,14 @@
 # 任务登记板
 
+## 当前：指定节点的服务监控探测（2026-11-11 R33）
+
+V09-CLOUD-NODE-PROBES-01 / chatgpt-node-probes-20261111；主控单会话，从已接收bc0d552建立独立ServerFleet-r33 / feature/cloud-node-probes-20261111。用户继续完成整个项目；本项补原有sourceNodeId尚未实现的节点探测。允许monitoring、Agent固定只读探测、transport typed参数/回执、Controller统一任务与mTLS装配、共享纯网络探测代码及明确依赖清单、Web监控页、独立R33产品/API和追加迁移/必要检查。所有权/公共接缝由本主控协调；不启动Agent，不引入第三方依赖/插件Runtime，不改旧48迁移SQL/checksum/Proto/gen，不访问真实VPS或供应商。
+
+只读HTTP/TCP/TLS探测走统一节点任务，目标与源节点权限、配置修订、来源、当前执行在派发和I/O持续校验。Agent公共探测拒绝私网/metadata/DNS重绑定与重定向越界，不提供任意Shell/请求正文/认证头。离线/能力缺失/调度中断/未知任务只形成unknown观察，不把源故障计为业务宕机；旧未知任务不重放。新观察保持实际任务关联及原有连续阈值/告警outbox。整批编码后集中必要检查、最终精确head CI与正常合并；真实联调由用户进行。
+
+
+R33实现记录：Agent固定探测、共享netprobe、Controller持久意图／授权与typed回执、正式Web来源选择及真实任务历史、独立R33产品／API已实现。49项迁移；旧48项SQL／checksum与Proto／gen不变。集中policy／contracts／435项Web／构建／安全PASS，本地全Go仅真实Nginx用例因缺nginx失败，保留记录；受影响包及最终精确head CI、COMMENT复审与合并状态在PR评论登记，不用R32绿灯替代。
+
 ## 当前：持续监控、流量与告警投递闭环（2026-11-11 R32）
 
 用户在R31合并后要求继续，沿既有完整项目授权推进下一项实际源码缺口。V09-CLOUD-MONITOR-ALERT-01 / chatgpt-monitor-20261111；主控单会话，从main7cc452d按Git树38675ac5恢复独立ServerFleet-next / feature/cloud-next-completion-20261111，保留其他目录。现有监控RunDue、quota.RunReminders未被Controller调度，monitor未注入Notifier、SMTP/QQ生产端口未装配，Agent流量未入配额。允许monitoring/quota/notifications、必要auth凭据用途与Controller/Agent metrics接缝、正式Web监控/流量/通知、独立R32产品/API/追加迁移与必要检查，另同步当前进度消除过期未实现标记。保持原45迁移SQL/旧fixture哈希/原ADR/Proto字段号/生成代码/依赖锁不变；不启Agent、不引入Runtime或第三方依赖、不访问生产/VPS/真实供应商。真实指标仅经mTLS身份与当前权威进入，缺失/重置/跨月不伪造全月零流量；通知先持久化意图，UNKNOWN不自动重发；当前权限/凭据版本、隔离锁和撤权需持续复核。集中编码和专项后一次同head完整CI，主控COMMENT复审及expected-SHA正常合并。停止条件为该闭环源码、页面、文档、检查与合并完成；真实账号/服务器/浏览器联调由用户进行。

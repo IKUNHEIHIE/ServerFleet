@@ -197,6 +197,8 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		executor.actions[transport.RootCommandCapability] = action
 		semantic.AllowedActions[transport.RootCommandCapability] = "1"
 	}
+	executor.actions[transport.ProbeCapability] = guardedCommandAction(publicProbeAction(), facts.NodeID, endpoint, tlsConfig)
+	semantic.AllowedActions[transport.ProbeCapability] = "1"
 	if request.CommandProfiles != "" {
 		action, e := registeredCommands(request.CommandProfiles, facts.NodeID)
 		if e != nil {

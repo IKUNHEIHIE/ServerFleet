@@ -173,8 +173,8 @@ func TestGatewayArtifactMigrationIsRegisteredExactlyOnce(t *testing.T) {
 	if seen != 1 {
 		t.Fatalf("cx/0010 registrations = %d, want 1", seen)
 	}
-	if total != 48 {
-		t.Fatalf("complete Controller migrations = %d, want 48", total)
+	if total != 49 {
+		t.Fatalf("complete Controller migrations = %d, want 49", total)
 	}
 }
 

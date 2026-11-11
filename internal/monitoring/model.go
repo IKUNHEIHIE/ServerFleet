@@ -2,6 +2,7 @@ package monitoring
 
 import (
 	"context"
+	"serverfleet.local/serverfleet/internal/netprobe"
 	"strings"
 	"time"
 	"unicode"
@@ -11,17 +12,13 @@ import (
 )
 
 // Kind is the probe protocol modeled by this package.
-type Kind string
+type Kind = netprobe.Kind
 
 const (
-	KindHTTP Kind = "http"
-	KindTCP  Kind = "tcp"
-	KindTLS  Kind = "tls"
+	KindHTTP = netprobe.KindHTTP
+	KindTCP  = netprobe.KindTCP
+	KindTLS  = netprobe.KindTLS
 )
-
-func (k Kind) Valid() bool {
-	return k == KindHTTP || k == KindTCP || k == KindTLS
-}
 
 // State is the persisted monitor state. Unknown means no conclusive check has
 // been recorded yet; it is never converted to a fabricated up or down sample.
@@ -39,6 +36,10 @@ func (s State) Valid() bool {
 
 // Monitor is the persisted probe definition and last observed state.
 type Monitor struct {
+	SourceNodeID     string
+	LastProbeUnknown bool
+	LastProbeTaskID  string
+
 	ConsecutiveRecoveries int
 	FailureThreshold      int
 	RecoveryThreshold     int
@@ -66,6 +67,8 @@ type Monitor struct {
 // MonitorInput is a create or full update of mutable monitor fields. Identity,
 // target policy and bounds are validated by the service before persistence.
 type MonitorInput struct {
+	SourceNodeID string
+
 	FailureThreshold  int
 	RecoveryThreshold int
 	NotifyChannels    []notifications.Channel
@@ -84,18 +87,13 @@ type MonitorInput struct {
 // mean the prober has no such observation; zero is not substituted.
 type ProbeResult struct {
 	Healthy    bool
+	Unknown    bool
+	TaskID     string
 	StatusCode *int
 	Latency    *time.Duration
 	Reason     string
 }
-
-// TargetSpec is handed to the injected Prober. Timeout is derived from the stored
-// monitor timeout.
-type TargetSpec struct {
-	Kind    Kind
-	Target  string
-	Timeout time.Duration
-}
+type TargetSpec = netprobe.TargetSpec
 
 // Prober performs one network probe. Implementations are provided by composition;
 // nil means the service fails closed and never records a fabricated result.
@@ -112,6 +110,9 @@ type Notifier interface {
 
 // Check is one persisted probe sample.
 type Check struct {
+	SourceNodeID string
+	TaskID       string
+
 	ID         int64
 	MonitorID  string
 	Status     State
@@ -137,6 +138,13 @@ const (
 )
 
 func validateMonitorInput(input MonitorInput, policy TargetPolicy) error {
+	if input.SourceNodeID != "" {
+		public, _ := NewTargetPolicy(nil)
+		if !validToken(input.SourceNodeID, 128) || len(input.Target) > 1024 || input.TimeoutSeconds > 30 || public.Validate(input.Kind, input.Target) != nil {
+			return ErrInvalidMonitor
+		}
+	}
+
 	if input.FailureThreshold < 0 || input.FailureThreshold > 100 || input.RecoveryThreshold < 0 || input.RecoveryThreshold > 100 || len(input.NotifyChannels) > 2 {
 		return ErrInvalidMonitor
 	}
@@ -220,3 +228,8 @@ func normalizeThreshold(n int) int {
 	}
 	return n
 }
+
+type RemoteProber interface {
+	Probe(context.Context, Monitor, string, bool) (ProbeResult, error)
+}
+type SourceValidator func(context.Context, string, string) error

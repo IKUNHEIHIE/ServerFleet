@@ -38,6 +38,8 @@ type AuditSink interface {
 // mandatory. A nil Prober fails closed for every check; a nil Notifier suppresses
 // transition alerts but does not fabricate one.
 type Options struct {
+	RemoteProber      RemoteProber
+	SourceValidator   SourceValidator
 	DB                *storage.DB
 	Repo              *Repo
 	Audit             AuditSink
@@ -50,6 +52,8 @@ type Options struct {
 }
 
 type Service struct {
+	remoteProber      RemoteProber
+	sourceValidator   SourceValidator
 	db                *storage.DB
 	repo              *Repo
 	audit             AuditSink
@@ -82,7 +86,7 @@ func NewService(options Options) (*Service, error) {
 		now = time.Now
 	}
 	return &Service{
-		db: options.DB, repo: options.Repo, audit: options.Audit,
+		db: options.DB, repo: options.Repo, audit: options.Audit, remoteProber: options.RemoteProber, sourceValidator: options.SourceValidator,
 		authorizer: options.Authorizer, prober: options.Prober,
 		notifier: options.Notifier, policy: policy, now: now, automationCurrent: options.AutomationCurrent,
 	}, nil
@@ -123,11 +127,14 @@ func (s *Service) Create(ctx context.Context, subjectID, requestID string, input
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, "monitor_create"); err != nil {
 		return Monitor{}, err
 	}
+	if err := s.validateSource(ctx, subjectID, input.SourceNodeID); err != nil {
+		return Monitor{}, err
+	}
 	if err := validateMonitorInput(input, s.policy); err != nil {
 		return Monitor{}, err
 	}
 	now := s.now()
-	monitor := Monitor{FailureThreshold: normalizeThreshold(input.FailureThreshold), RecoveryThreshold: normalizeThreshold(input.RecoveryThreshold), NotifyChannels: input.NotifyChannels,
+	monitor := Monitor{SourceNodeID: input.SourceNodeID, FailureThreshold: normalizeThreshold(input.FailureThreshold), RecoveryThreshold: normalizeThreshold(input.RecoveryThreshold), NotifyChannels: input.NotifyChannels,
 		ID: input.ID, Name: input.Name, Kind: input.Kind, Target: input.Target,
 		IntervalSeconds: input.IntervalSeconds, TimeoutSeconds: input.TimeoutSeconds,
 		Enabled: input.Enabled, MaintenanceUntil: input.MaintenanceUntil,
@@ -173,6 +180,9 @@ func (s *Service) Update(ctx context.Context, subjectID, requestID, monitorID st
 	if err != nil {
 		return Monitor{}, err
 	}
+	if err := s.validateSource(ctx, subjectID, input.SourceNodeID); err != nil {
+		return Monitor{}, err
+	}
 	if err := validateMonitorInput(input, s.policy); err != nil {
 		return Monitor{}, err
 	}
@@ -182,9 +192,12 @@ func (s *Service) Update(ctx context.Context, subjectID, requestID, monitorID st
 	updated.NotifyChannels = input.NotifyChannels
 	updated.ConsecutiveFailures = 0
 	updated.ConsecutiveRecoveries = 0
-	if input.Target != current.Target || input.Kind != current.Kind {
+	if input.Target != current.Target || input.Kind != current.Kind || input.SourceNodeID != current.SourceNodeID {
 		updated.State = StateUnknown
+		updated.LastProbeUnknown = false
+		updated.LastProbeTaskID = ""
 	}
+	updated.SourceNodeID = input.SourceNodeID
 	updated.Name = input.Name
 	updated.Kind = input.Kind
 	updated.Target = input.Target
@@ -241,14 +254,17 @@ func (s *Service) RunCheckNow(ctx context.Context, subjectID, requestID, monitor
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, "monitor_check"); err != nil {
 		return Check{}, Monitor{}, err
 	}
-	if s.prober == nil {
+	if s.prober == nil && s.remoteProber == nil {
 		return Check{}, Monitor{}, ErrProberUnavailable
 	}
 	monitor, err := s.repo.Get(ctx, monitorID)
 	if err != nil {
 		return Check{}, Monitor{}, err
 	}
-	check, updated, alert, _, err := s.runCheck(ctx, monitor, s.now())
+	if e := s.validateSource(ctx, subjectID, monitor.SourceNodeID); e != nil {
+		return Check{}, Monitor{}, e
+	}
+	check, updated, alert, _, err := s.runCheck(ctx, monitor, s.now(), subjectID, true)
 	if err != nil {
 		return Check{}, Monitor{}, err
 	}
@@ -265,7 +281,7 @@ func (s *Service) RunCheckNow(ctx context.Context, subjectID, requestID, monitor
 // RunDue checks every enabled monitor whose interval has elapsed. Maintenance
 // windows record checks but keep state and suppress alerts.
 func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error) {
-	if s.prober == nil {
+	if s.prober == nil && s.remoteProber == nil {
 		return nil, ErrProberUnavailable
 	}
 	if now.IsZero() {
@@ -295,7 +311,7 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 		if !monitor.Enabled || !due(monitor, now) {
 			continue
 		}
-		check, updated, alert, maintenance, err := s.runCheck(ctx, monitor, now)
+		check, updated, alert, maintenance, err := s.runCheck(ctx, monitor, now, monitor.AutomationOwnerID, false)
 		if err != nil {
 			if ctx.Err() != nil {
 				return results, ctx.Err()
@@ -308,7 +324,11 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 		if err := s.recordCheck(ctx, check, updated, nil, alert); err != nil {
 			return results, err
 		}
-		result := RunResult{MonitorID: monitor.ID, Check: check, State: updated.State, Maintenance: maintenance}
+		resultState := updated.State
+		if updated.LastProbeUnknown {
+			resultState = StateUnknown
+		}
+		result := RunResult{MonitorID: monitor.ID, Check: check, State: resultState, Maintenance: maintenance}
 		if alert != nil {
 			if err := s.FlushAlerts(ctx, 50); err != nil {
 				if firstErr == nil {
@@ -323,11 +343,11 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 	return results, firstErr
 }
 
-func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time) (Check, Monitor, *notifications.Alert, bool, error) {
+func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time, actor string, manual bool) (Check, Monitor, *notifications.Alert, bool, error) {
 	if s.automationCurrent != nil && s.automationCurrent(ctx, monitor) != nil {
 		return Check{}, Monitor{}, nil, false, ErrObservationChanged
 	}
-	if s.prober == nil {
+	if monitor.SourceNodeID == "" && s.prober == nil {
 		return Check{}, Monitor{}, nil, false, ErrProberUnavailable
 	}
 	if err := s.policy.Validate(monitor.Kind, monitor.Target); err != nil {
@@ -337,21 +357,37 @@ func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time) 
 		Kind: monitor.Kind, Target: monitor.Target,
 		Timeout: time.Duration(monitor.TimeoutSeconds) * time.Second,
 	}
-	probeCtx, cancel := context.WithTimeout(ctx, spec.Timeout)
+	budget := spec.Timeout
+	if monitor.SourceNodeID != "" {
+		budget += 8 * time.Second
+	}
+	probeCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
 	var (
 		result   ProbeResult
 		probeErr error
 	)
-	switch monitor.Kind {
-	case KindHTTP:
-		result, probeErr = s.prober.HTTP(probeCtx, spec)
-	case KindTCP:
-		result, probeErr = s.prober.TCP(probeCtx, spec)
-	case KindTLS:
-		result, probeErr = s.prober.TLS(probeCtx, spec)
-	default:
-		return Check{}, Monitor{}, nil, false, ErrInvalidMonitor
+	if monitor.SourceNodeID != "" {
+		if s.remoteProber == nil {
+			result = ProbeResult{Unknown: true, Reason: "probe_source_unavailable"}
+		} else {
+			result, probeErr = s.remoteProber.Probe(probeCtx, monitor, actor, manual)
+			if probeErr != nil {
+				result = ProbeResult{Unknown: true, TaskID: result.TaskID, Reason: "probe_source_unavailable"}
+				probeErr = nil
+			}
+		}
+	} else {
+		switch monitor.Kind {
+		case KindHTTP:
+			result, probeErr = s.prober.HTTP(probeCtx, spec)
+		case KindTCP:
+			result, probeErr = s.prober.TCP(probeCtx, spec)
+		case KindTLS:
+			result, probeErr = s.prober.TLS(probeCtx, spec)
+		default:
+			return Check{}, Monitor{}, nil, false, ErrInvalidMonitor
+		}
 	}
 	if err := ctx.Err(); err != nil {
 		return Check{}, Monitor{}, nil, false, err
@@ -375,7 +411,7 @@ func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time) 
 		}
 	}
 	check := Check{
-		MonitorID: monitor.ID, Status: status, Error: reason, CheckedAt: now,
+		MonitorID: monitor.ID, Status: status, Error: reason, CheckedAt: now, SourceNodeID: monitor.SourceNodeID, TaskID: result.TaskID,
 	}
 	if result.Latency != nil {
 		latency := *result.Latency
@@ -389,6 +425,16 @@ func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time) 
 	updated.LastCheckedAt = now
 	updated.UpdatedAt = now
 	updated.LastError = reason
+	updated.LastProbeUnknown = result.Unknown
+	updated.LastProbeTaskID = result.TaskID
+	if result.Unknown {
+		check.Status = StateUnknown
+		check.Error = sanitizeProbeText(result.Reason)
+		updated.LastError = check.Error
+		updated.ConsecutiveFailures = 0
+		updated.ConsecutiveRecoveries = 0
+		return check, updated, nil, false, nil
+	}
 	inMaintenance := !monitor.MaintenanceUntil.IsZero() && now.Before(monitor.MaintenanceUntil)
 	if inMaintenance {
 		return check, updated, nil, true, nil

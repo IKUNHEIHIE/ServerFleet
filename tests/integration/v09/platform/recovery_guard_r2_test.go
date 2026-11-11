@@ -44,7 +44,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 	if legacyCount != 21 {
 		t.Fatal("historical fixture is not actual adopted21", legacyCount)
 	}
-	if total != 48 {
+	if total != 49 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)
@@ -157,7 +157,7 @@ func TestR2RestoredControllerRequiresOfflineReleaseAndLiveRuntimeGuard(t *testin
 // accepted 29-version baseline. Historical SQL/checksums are left unchanged.
 func completionOnlyMigration(v string) bool {
 	switch v {
-	case "ds/0084_notification_task_delivery", "ds/0085_monitor_background_alerts", "ds/0086_traffic_counter_observations", "cx/0011_encrypted_backups", "cx/0012_recovery_revocations", "cx/0013_recovery_reconciliation", "cx/0014_release_acquisition", "cx/0015_agent_certificate_csr", "cx/0016_node_certificate_chains", "cx/0017_node_certificate_sets", "cx/0018_public_certificate_orders", "cx/0019_controller_supervision", "cx/0020_public_certificate_renewals", "cx/0021_backup_maintenance", "cx/0022_operator_incidents", "cx/0023_incident_closure_evidence", "cx/0024_renewal_delivery", "ds/0083_certificate_replacements", "ds/0082_publishing_dns_tasks":
+	case "ds/0087_node_probe_sources", "ds/0084_notification_task_delivery", "ds/0085_monitor_background_alerts", "ds/0086_traffic_counter_observations", "cx/0011_encrypted_backups", "cx/0012_recovery_revocations", "cx/0013_recovery_reconciliation", "cx/0014_release_acquisition", "cx/0015_agent_certificate_csr", "cx/0016_node_certificate_chains", "cx/0017_node_certificate_sets", "cx/0018_public_certificate_orders", "cx/0019_controller_supervision", "cx/0020_public_certificate_renewals", "cx/0021_backup_maintenance", "cx/0022_operator_incidents", "cx/0023_incident_closure_evidence", "cx/0024_renewal_delivery", "ds/0083_certificate_replacements", "ds/0082_publishing_dns_tasks":
 		return true
 	}
 	return false

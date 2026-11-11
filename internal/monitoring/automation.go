@@ -49,7 +49,7 @@ func (s *Service) bindAutomationTx(ctx context.Context, tx storage.Tx, id, owner
 }
 func (r *Repo) hydrateAutomation(ctx context.Context, m *Monitor) error {
 	var raw []byte
-	e := r.db.QueryRow(ctx, `SELECT owner_id,revision,observation_revision,failure_threshold,recovery_threshold,consecutive_recoveries,notify_channels FROM monitor_automation WHERE monitor_id=?`, m.ID).Scan(&m.AutomationOwnerID, &m.AutomationRevision, &m.ObservationRevision, &m.FailureThreshold, &m.RecoveryThreshold, &m.ConsecutiveRecoveries, &raw)
+	e := r.db.QueryRow(ctx, `SELECT owner_id,revision,observation_revision,failure_threshold,recovery_threshold,consecutive_recoveries,notify_channels,source_node_id,last_probe_unknown,last_probe_task_id FROM monitor_automation WHERE monitor_id=?`, m.ID).Scan(&m.AutomationOwnerID, &m.AutomationRevision, &m.ObservationRevision, &m.FailureThreshold, &m.RecoveryThreshold, &m.ConsecutiveRecoveries, &raw, &m.SourceNodeID, &m.LastProbeUnknown, &m.LastProbeTaskID)
 	if storage.IsNotFound(e) {
 		return nil
 	}
@@ -79,7 +79,7 @@ func (s *Service) saveObservation(ctx context.Context, check Check, m Monitor, a
 		return ErrObservationChanged
 	}
 	return s.db.InTx(ctx, func(c context.Context, tx storage.Tx) error {
-		moved, e := tx.Exec(c, `UPDATE monitor_automation SET observation_revision=observation_revision+1,consecutive_recoveries=? WHERE monitor_id=? AND revision=? AND observation_revision=?`, m.ConsecutiveRecoveries, m.ID, m.AutomationRevision, m.ObservationRevision)
+		moved, e := tx.Exec(c, `UPDATE monitor_automation SET observation_revision=observation_revision+1,consecutive_recoveries=?,last_probe_unknown=?,last_probe_task_id=? WHERE monitor_id=? AND revision=? AND observation_revision=?`, m.ConsecutiveRecoveries, m.LastProbeUnknown, m.LastProbeTaskID, m.ID, m.AutomationRevision, m.ObservationRevision)
 		if e != nil {
 			return e
 		}
@@ -272,7 +272,7 @@ func (s *Service) bindMonitorOptions(ctx context.Context, tx storage.Tx, m Monit
 	if e != nil {
 		return e
 	}
-	_, e = tx.Exec(ctx, `UPDATE monitor_automation SET failure_threshold=?,recovery_threshold=?,consecutive_recoveries=?,notify_channels=? WHERE monitor_id=?`, m.FailureThreshold, m.RecoveryThreshold, m.ConsecutiveRecoveries, raw, m.ID)
+	_, e = tx.Exec(ctx, `UPDATE monitor_automation SET failure_threshold=?,recovery_threshold=?,consecutive_recoveries=?,notify_channels=?,source_node_id=?,last_probe_unknown=?,last_probe_task_id=? WHERE monitor_id=?`, m.FailureThreshold, m.RecoveryThreshold, m.ConsecutiveRecoveries, raw, m.SourceNodeID, m.LastProbeUnknown, m.LastProbeTaskID, m.ID)
 	return e
 }
 func (s *Service) transitionAccepted(ctx context.Context, m Monitor, key string) bool {
