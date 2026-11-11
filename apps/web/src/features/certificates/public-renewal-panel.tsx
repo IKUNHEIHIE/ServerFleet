@@ -9,8 +9,11 @@ import { describeApiError } from "@/lib/api/errors";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
+import { RenewalDeliveryPanel } from "./renewal-delivery-panel";
+
 const validID = (value: string) => /^[a-zA-Z0-9_-]{1,128}$/.test(value);
 const stateLabels: Record<string, string> = {
+  renewal_delivery_issuance: "等待续签签发", renewal_delivery_installation: "等待安装审批与结果", renewal_delivery_publication: "等待发布与 HTTPS 核验", renewal_delivery_blocked: "编排停止，需人工处置", renewal_delivery_completed: "本周期已安装发布", renewal_delivery_recovered: "已采用人工修复结果",
   scheduled: "等待续签窗口", disabled: "已停用", configuration_changed: "签发配置已变化，调度暂停",
   awaiting_approval: "等待人工审批", queued: "等待执行", running: "签发中", cancelling: "取消中",
   completed: "签发任务完成", issuance_completed_installation_required: "新证书已签发，等待安装和接续",
@@ -21,7 +24,7 @@ const stateLabels: Record<string, string> = {
 export function PublicRenewalPanel() {
   const session = useSession();
   const allowed = session.can("certificates.public.issue") || session.can("settings.manage");
-  const policies = useResource(`public-renewals:${session.viewEpoch}`, signal => publicRenewalsApi.list(signal).then(response => response.data), { enabled: allowed });
+  const policies = useResource(`public-renewals:${session.viewEpoch}`, signal => publicRenewalsApi.list(signal).then(response => response.data), { enabled: allowed, refreshIntervalMs: 10_000 });
   const save = useAction((body: Parameters<typeof publicRenewalsApi.save>[0]) => publicRenewalsApi.save(body));
   const [selected, setSelected] = useState<PublicRenewalPolicy | null>(null);
   const [order, setOrder] = useState("");
@@ -63,7 +66,7 @@ export function PublicRenewalPanel() {
   return <Panel title="公开证书续签" description="从已成功安装的证书登记续签窗口，复用该节点的现有网站密钥。每次签发仍需人工审批。">
     <div className="space-y-4 px-5 py-4">
       {!allowed ? <Notice tone="warning" title="需要管理员及节点授权">当前身份不能管理续签。</Notice> : null}
-      <Notice tone="info" title="签发、安装与网站生效分别确认">续签任务完成后，将公开链安装到同一节点，再以新签发及安装回执接续策略。网站发布或网关切换仍使用发布流程；失败、取消和未知结果不会自动重跑。</Notice>
+      <Notice tone="info" title="签发、安装与网站生效分别确认">可为每条策略启用安装发布编排：签发后自动创建安装及网关审批任务，核验真实结果后接续下一周期。也可保留手动安装与接续；失败、取消和未知结果不会自动重跑。</Notice>
       <Button type="button" onClick={policies.reload} disabled={!allowed || save.pending}>刷新续签策略</Button>
       {policies.state.status === "loading" ? <p role="status">正在读取续签策略…</p> : null}
       {policies.state.status === "error" ? <Notice tone="error" title="续签策略不可用">{describeApiError(policies.state.error)}</Notice> : null}
@@ -77,6 +80,7 @@ export function PublicRenewalPanel() {
           <Button type="button" disabled={locked || !item.policy.enabled} onClick={() => { void disable(item.policy); }}>停用</Button>
           {item.policy.taskId ? <a href="#/tasks" className="underline">查看任务并审批</a> : null}
         </div>
+        <RenewalDeliveryPanel policy={item.policy} onChanged={policies.reload} />
       </div>) : null}
       <form onSubmit={submit} className="space-y-3 border-t pt-4">
         <p className="text-sm font-medium">{selected ? `调整策略 ${selected.id}` : "登记续签策略"}</p>

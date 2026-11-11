@@ -82,3 +82,6 @@ apis:
 
   v09-r30-incident-closure:
     root: api/openapi/revisions/v09-r30/incidents-closure-candidate.yaml
+
+  v09-r31-delivery:
+    root: api/openapi/revisions/v09-r31/delivery-candidate.yaml

@@ -1,0 +1,560 @@
+openapi: 3.0.3
+info:
+  title: Server Fleet R31 Renewal Delivery and Installation Candidate
+  version: 0.9.31
+  description: Independent additive candidate; not G2 freeze. Product and Web changes
+    documented in v09-r31-delivery.md.
+  license:
+    name: Private project
+servers:
+- url: https://controller.example.invalid
+security:
+- sessionCookie: []
+tags:
+- name: Delivery
+  description: Durable renewal delivery and trusted installation.
+paths:
+  /api/v1/installations/catalog:
+    get:
+      operationId: getInstallationCatalog
+      summary: Read public installation trust metadata, or available=false
+      tags:
+      - Delivery
+      description: Current administrator over TLS, runtime authority and referenced
+        task read permissions. Strict JSON and query validation. POST also requires
+        same-origin session CSRF; no task approval or execution bypass.
+      responses:
+        '200':
+          description: 'Current authorized result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CatalogView'
+        '400':
+          description: Invalid input or unknown fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Stale policy/delivery revision, unsafe state or incomplete
+            evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Trusted deployment unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/certificates/public-renewals/{policyId}/delivery:
+    parameters:
+    - &id001
+      in: path
+      name: policyId
+      required: true
+      schema: &id002
+        type: string
+        pattern: ^[a-zA-Z0-9_-]{1,128}$
+    get:
+      operationId: getRenewalDelivery
+      summary: Read installation/publication cycle, history and minimal task receipts
+      tags:
+      - Delivery
+      description: Current administrator over TLS, runtime authority and referenced
+        task read permissions. Strict JSON and query validation. POST also requires
+        same-origin session CSRF; no task approval or execution bypass.
+      responses:
+        '200':
+          description: 'Current authorized result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/View'
+        '400':
+          description: Invalid input or unknown fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Stale policy/delivery revision, unsafe state or incomplete
+            evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Trusted deployment unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: configureRenewalDelivery
+      summary: Configure future delivery with dual CAS; never replay UNKNOWN
+      tags:
+      - Delivery
+      description: Current administrator over TLS, runtime authority and referenced
+        task read permissions. Strict JSON and query validation. POST also requires
+        same-origin session CSRF; no task approval or execution bypass.
+      responses:
+        '200':
+          description: 'Current authorized result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          description: Invalid input or unknown fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Stale policy/delivery revision, unsafe state or incomplete
+            evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Trusted deployment unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Configure'
+      parameters:
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+  /api/v1/certificates/public-renewals/{policyId}/delivery/recover:
+    parameters:
+    - *id001
+    post:
+      operationId: recoverRenewalDelivery
+      summary: Adopt independent successful proofs after current UNKNOWN case review
+      tags:
+      - Delivery
+      description: Current administrator over TLS, runtime authority and referenced
+        task read permissions. Strict JSON and query validation. POST also requires
+        same-origin session CSRF; no task approval or execution bypass.
+      responses:
+        '200':
+          description: 'Current authorized result. Cache-Control: no-store.'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          description: Invalid input or unknown fields
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Stale policy/delivery revision, unsafe state or incomplete
+            evidence
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Trusted deployment unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Recovery'
+      parameters:
+      - in: header
+        name: X-CSRF-Token
+        required: true
+        schema:
+          type: string
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-sf_session
+      description: Current TLS administrator session; exact cookie follows existing
+        auth contract.
+  schemas:
+    Error:
+      type: object
+      additionalProperties: false
+      properties:
+        code:
+          type: string
+        message:
+          type: string
+      required:
+      - code
+    Download:
+      type: object
+      additionalProperties: false
+      properties:
+        url:
+          type: string
+          format: uri
+          pattern: ^https://
+        sha256:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+      required:
+      - url
+      - sha256
+    Source:
+      type: object
+      additionalProperties: false
+      properties:
+        origin:
+          type: string
+          format: uri
+          description: Canonical HTTPS origin without path/query; no proxy or redirects.
+        addresses:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+          minItems: 1
+        rootPem:
+          type: string
+          maxLength: 16384
+        version:
+          type: string
+          pattern: ^[0-9]+\.[0-9]+\.[0-9]+$
+          maxLength: 64
+        keyId: *id002
+        publicKey:
+          type: string
+          description: Base64 Ed25519 public key, independently trusted.
+        minimumSequence: &id003
+          type: integer
+          minimum: 1
+          maximum: 9007199254740991
+      required:
+      - origin
+      - addresses
+      - rootPem
+      - version
+      - keyId
+      - publicKey
+      - minimumSequence
+    Catalog:
+      type: object
+      additionalProperties: false
+      properties:
+        format:
+          type: integer
+          enum:
+          - 1
+        source:
+          $ref: '#/components/schemas/Source'
+        identityRootPem:
+          type: string
+        httpsRootPem:
+          type: string
+        controllerOrigin:
+          type: string
+          format: uri
+        controllerAddresses:
+          type: array
+          maxItems: 8
+          items:
+            type: string
+          minItems: 1
+        rootPin:
+          type: string
+          pattern: ^[0-9a-f]{64}$
+        installerScript:
+          $ref: '#/components/schemas/Download'
+        bootstrap:
+          type: object
+          additionalProperties: false
+          properties:
+            amd64:
+              $ref: '#/components/schemas/Download'
+            arm64:
+              $ref: '#/components/schemas/Download'
+          required:
+          - amd64
+          - arm64
+      required:
+      - format
+      - source
+      - identityRootPem
+      - httpsRootPem
+      - controllerOrigin
+      - controllerAddresses
+      - rootPin
+      - installerScript
+      - bootstrap
+    CatalogView:
+      type: object
+      additionalProperties: false
+      properties:
+        available:
+          type: boolean
+        catalog:
+          $ref: '#/components/schemas/Catalog'
+      required:
+      - available
+    Publication:
+      type: object
+      additionalProperties: false
+      properties:
+        baseId: *id002
+        id: *id002
+        previousCertificateId: *id002
+        certificateId: *id002
+      required:
+      - baseId
+      - id
+      - previousCertificateId
+    Cycle:
+      type: object
+      additionalProperties: false
+      properties:
+        id: *id002
+        policyRevision: *id003
+        issueTaskId: *id002
+        installTaskId: *id002
+        state:
+          type: string
+          enum:
+          - issuance
+          - installation
+          - publication
+          - blocked
+          - completed
+          - recovered
+        errorCode:
+          type: string
+        publications:
+          type: array
+          maxItems: 8
+          items:
+            $ref: '#/components/schemas/Publication'
+        updatedAt: &id004
+          type: string
+          format: date-time
+        recoveredOrderTaskId: *id002
+        recoveredInstallTaskId: *id002
+        recoveryIncidentIds:
+          type: array
+          maxItems: 66
+          items: *id002
+          uniqueItems: true
+        recoveryPublicationIds:
+          type: array
+          maxItems: 8
+          items: *id002
+          uniqueItems: true
+        recoveryNote:
+          type: string
+          maxLength: 4096
+          description: Filtered operator evidence, max 4096 UTF-8 bytes.
+        previousErrorCode:
+          type: string
+      required:
+      - id
+      - policyRevision
+      - issueTaskId
+      - state
+      - publications
+      - updatedAt
+    Delivery:
+      type: object
+      additionalProperties: false
+      properties:
+        policyId: *id002
+        ownerId: *id002
+        revision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        enabled:
+          type: boolean
+        publicationIds:
+          type: array
+          maxItems: 8
+          items: *id002
+          uniqueItems: true
+        cycle:
+          $ref: '#/components/schemas/Cycle'
+        updatedAt: *id004
+      required:
+      - policyId
+      - ownerId
+      - revision
+      - enabled
+      - publicationIds
+      - updatedAt
+    TaskReceipt:
+      type: object
+      additionalProperties: false
+      required:
+      - taskId
+      - revision
+      - state
+      - targetCount
+      - results
+      - createdAt
+      - updatedAt
+      - terminal
+      properties:
+        taskId:
+          type: string
+        revision:
+          type: integer
+          minimum: 1
+        state:
+          type: string
+        action:
+          type: string
+        planDigest:
+          type: string
+        targetType:
+          type: string
+        targetResourceId:
+          type: string
+        targetDigest:
+          type: string
+        targetCount:
+          type: integer
+          minimum: 0
+        results:
+          type: object
+          additionalProperties:
+            type: integer
+            minimum: 0
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        terminal:
+          type: boolean
+    View:
+      type: object
+      additionalProperties: false
+      properties:
+        delivery:
+          $ref: '#/components/schemas/Delivery'
+        history:
+          type: array
+          maxItems: 50
+          items:
+            $ref: '#/components/schemas/Cycle'
+        tasks:
+          type: array
+          maxItems: 68
+          items:
+            $ref: '#/components/schemas/TaskReceipt'
+      required:
+      - delivery
+      - history
+      - tasks
+    Configure:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRevision:
+          type: integer
+          minimum: 0
+          maximum: 9007199254740991
+        policyRevision: *id003
+        enabled:
+          type: boolean
+        publicationIds:
+          type: array
+          maxItems: 8
+          items: *id002
+          uniqueItems: true
+      required:
+      - expectedRevision
+      - policyRevision
+      - enabled
+      - publicationIds
+    Recovery:
+      type: object
+      additionalProperties: false
+      properties:
+        expectedRevision: *id003
+        policyRevision: *id003
+        orderTaskId: *id002
+        installTaskId: *id002
+        publicationIds:
+          type: array
+          maxItems: 8
+          items: *id002
+          uniqueItems: true
+        incidentIds:
+          type: array
+          maxItems: 66
+          items: *id002
+          uniqueItems: true
+        note:
+          type: string
+          minLength: 1
+          maxLength: 4096
+          description: Nonempty filtered evidence, max 4096 UTF-8 bytes.
+        confirmed:
+          type: boolean
+          enum:
+          - true
+        enabled:
+          type: boolean
+          description: Explicit future-cycle opt-in; Web defaults false.
+      required:
+      - expectedRevision
+      - policyRevision
+      - orderTaskId
+      - installTaskId
+      - publicationIds
+      - incidentIds
+      - note
+      - confirmed
+      - enabled

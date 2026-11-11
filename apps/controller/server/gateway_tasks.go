@@ -138,6 +138,7 @@ func NewProductionPublishingBridge(config ProductionPublishingConfig) (publishin
 	}
 	nodeCertificates := &nodeCertificatePublication{db: config.DB, tasks: config.TasksRepo, gateways: config.Gateways, authorizer: config.Authorizer, roots: roots, now: proofNow}
 	applier := &publicationGatewayApplier{
+		db:       config.DB,
 		gateways: config.Gateways, tasks: host, plans: publicationPlanLookup{repo: config.Plans},
 		sitePaths: config.GatewayPaths, nodeCertificates: nodeCertificates,
 	}
@@ -304,6 +305,7 @@ type gatewayTaskRunner interface {
 }
 
 type publicationGatewayApplier struct {
+	db               *storage.DB
 	nodeCertificates *nodeCertificatePublication
 	gateways         gatewayRouteService
 	tasks            gatewayTaskRunner
@@ -344,9 +346,17 @@ func (a *publicationGatewayApplier) Apply(ctx context.Context, plan publishing.P
 	if err != nil {
 		return "", err
 	}
-	routeID := plan.ID
+	routePlanID := plan.ID
+	if a.db != nil {
+		var e error
+		routePlanID, e = publishing.CertificateRoutePlan(ctx, a.db, plan.ID)
+		if e != nil {
+			return "", e
+		}
+	}
+	routeID := routePlanID
 	if len(plan.GatewayIDs) > 1 {
-		h := sha256.Sum256([]byte(plan.ID + "\x00" + gatewayID))
+		h := sha256.Sum256([]byte(routePlanID + "\x00" + gatewayID))
 		routeID = "pub-route-" + hex.EncodeToString(h[:16])
 	}
 	route, err := a.gateways.GetRoute(ctx, request.SubjectID, routeID)

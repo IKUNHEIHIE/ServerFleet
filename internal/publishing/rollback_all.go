@@ -45,6 +45,10 @@ func (s *Service) RollbackAll(ctx context.Context, subjectID, requestID, planID 
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, group.NodeIDs, "publishing_rollback_all"); err != nil {
 		return Plan{}, err
 	}
+	if s.isCertificateReplacement(ctx, planID) {
+		return Plan{}, ErrStageNotRollable
+	}
+
 	for _, stage := range stages {
 		if stage.Status == StageRunning {
 			return plan, ErrStageAlreadyRunning

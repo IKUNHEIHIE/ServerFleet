@@ -86,8 +86,9 @@ func validGatewayDigest(value string) bool {
 var errGatewayPlan = errors.New("gateway: planned publication task is invalid")
 
 type gatewayArtifactRegistry struct {
-	mu      sync.Mutex
-	entries map[string]gatewayPlannedTask
+	mu           sync.Mutex
+	entries      map[string]gatewayPlannedTask
+	registeredAt map[string]time.Time
 }
 
 func newGatewayArtifactRegistry() *gatewayArtifactRegistry {
@@ -103,6 +104,15 @@ func (r *gatewayArtifactRegistry) register(planned gatewayPlannedTask) error {
 	}
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if r.registeredAt == nil {
+		r.registeredAt = map[string]time.Time{}
+	}
+	for id, at := range r.registeredAt {
+		if time.Since(at) > 15*time.Minute {
+			delete(r.entries, id)
+			delete(r.registeredAt, id)
+		}
+	}
 	if existing, ok := r.entries[planned.TaskID]; ok {
 		if existing.ActionID != planned.ActionID || existing.NodeID != planned.NodeID ||
 			existing.Digest != planned.Digest || existing.SitePath != planned.SitePath ||
@@ -111,6 +121,10 @@ func (r *gatewayArtifactRegistry) register(planned gatewayPlannedTask) error {
 		}
 		return nil
 	}
+	if len(r.entries) >= 1024 {
+		return errGatewayPlan
+	}
+	r.registeredAt[planned.TaskID] = time.Now()
 	r.entries[planned.TaskID] = planned
 	return nil
 }
@@ -126,6 +140,7 @@ func (r *gatewayArtifactRegistry) take(taskID, nodeID, actionID string) (gateway
 		return gatewayPlannedTask{}, false
 	}
 	delete(r.entries, taskID)
+	delete(r.registeredAt, taskID)
 	return planned, true
 }
 
@@ -135,6 +150,7 @@ func (r *gatewayArtifactRegistry) drop(taskID string) {
 	}
 	r.mu.Lock()
 	delete(r.entries, taskID)
+	delete(r.registeredAt, taskID)
 	r.mu.Unlock()
 }
 
@@ -536,13 +552,19 @@ func (h *gatewayTaskHost) execute(ctx context.Context, plan publishing.Plan, req
 		if err := h.registry.register(planned); err != nil {
 			return "", err
 		}
-		defer h.registry.drop(task.ID)
+		if !publishing.NonBlockingTaskObservation(ctx) {
+			defer h.registry.drop(task.ID)
+		}
 	}
 	if h.onSubmitted != nil {
 		h.onSubmitted(task.ID)
 	}
 	if task.Status == tasks.StatusCompleted {
+		h.registry.drop(task.ID)
 		return task.ID, gatewayCompleted(task)
+	}
+	if publishing.NonBlockingTaskObservation(ctx) && !task.Status.Terminal() {
+		return task.ID, publishing.ErrStageAwaitingTask
 	}
 	return h.wait(ctx, task.ID, task.Status)
 }

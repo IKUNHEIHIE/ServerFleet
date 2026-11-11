@@ -344,7 +344,7 @@ export interface PublicRenewalView {
  readonly state: string;
  readonly dueAt: string;
  readonly approvalRequired: true;
- readonly automaticInstallation: false;
+ readonly automaticInstallation: boolean;
 }
 export const publicRenewalsApi = {
  list: (signal?:AbortSignal)=>apiClient.request<{items:readonly PublicRenewalView[]}>("/api/v1/certificates/public-renewals",{signal}),

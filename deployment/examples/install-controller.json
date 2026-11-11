@@ -1,0 +1,46 @@
+{
+  "format": 1,
+  "directory": "/var/lib/serverfleet/controller",
+  "source": {
+    "origin": "https://releases.example.com",
+    "addresses": [
+      "192.0.2.20"
+    ],
+    "rootPem": "REPLACE_WITH_RELEASE_HTTPS_CA_PEM",
+    "version": "1.2.3",
+    "keyId": "release-2026",
+    "publicKey": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY",
+    "minimumSequence": 1
+  },
+  "provision": {
+    "format": 1,
+    "component": "controller",
+    "directory": "",
+    "artifact": "",
+    "manifest": "",
+    "supervisorExecutable": "",
+    "rootCertificate": "",
+    "rootPin": "REPLACE_WITH_OFFLINE_AGENT_ROOT_SPKI_SHA256",
+    "controllerOrigin": "https://fleet.example.com:8443",
+    "controllerAddresses": [
+      "192.0.2.10"
+    ],
+    "releaseKeys": {
+      "release-2026": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY"
+    },
+    "controllerArguments": [
+      "-listen",
+      "0.0.0.0:8443",
+      "-agent-pki-dir",
+      "/var/lib/serverfleet/pki",
+      "-tls-cert",
+      "/var/lib/serverfleet/tls/fullchain.pem",
+      "-tls-key",
+      "/var/lib/serverfleet/tls/private-key.pem"
+    ]
+  },
+  "httpsRootPem": "REPLACE_WITH_CONTROLLER_HTTPS_CA_PEM",
+  "identityRootPem": "REPLACE_WITH_INTERNAL_OFFLINE_ROOT_CA_PEM",
+  "serviceMode": "external",
+  "waitSeconds": 300
+}

@@ -22,12 +22,13 @@ func RunReleaseCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 	}
 	flags := flag.NewFlagSet("controller release "+args[0], flag.ContinueOnError)
 	flags.SetOutput(stderr)
+	sourceDirectory := flags.String("source-directory", "", "private built linux-ARCH directory for a signed installation package")
 	directory := flags.String("directory", "", "new private offline key directory")
 	keyID := flags.String("key-id", "", "explicit release key ID")
 	keyFile := flags.String("key", "", "private offline Ed25519 key file")
 	manifestFile := flags.String("manifest", "", "canonical build-generated ReleaseManifest JSON")
 	artifactFile := flags.String("artifact", "", "matching executable artifact")
-	output := flags.String("output", "", "new private VERSION directory")
+	output := flags.String("output", "", "new private VERSION directory (installation: VERSION/ARCH)")
 	offline := flags.Bool("offline-ack", false, "confirm this action runs on the offline release-signing host")
 	if e := flags.Parse(args[1:]); e != nil {
 		return e
@@ -36,6 +37,8 @@ func RunReleaseCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 		return errProvision
 	}
 	switch args[0] {
+	case "package-installation":
+		return packageInstallation(ctx, *sourceDirectory, *output, *keyFile, *keyID, stdout)
 	case "keygen":
 		root, e := newProvisionDirectory(*directory)
 		if e != nil {

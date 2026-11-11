@@ -345,7 +345,9 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 	for _, stage := range stages {
 		switch stage.Status {
 		case StageRunning:
-			if _, resumable := s.dns.(DeferredDNSPublisher); !resumable || stage.Kind != StageDNS {
+			_, dnsResume := s.dns.(DeferredDNSPublisher)
+			_, gatewayResume := s.gateway.(DeferredGatewayPublisher)
+			if !(dnsResume && stage.Kind == StageDNS || gatewayResume && stage.Kind == StageGateway) {
 				return plan, ErrStageAlreadyRunning
 			}
 		case StageRolledBack:
@@ -354,7 +356,7 @@ func (s *Service) Run(ctx context.Context, subjectID, requestID, planID string) 
 	}
 	runnable := make([]int, 0, len(stages))
 	for index, stage := range stages {
-		if stage.Status == StagePending || stage.Status == StageFailed || stage.Status == StageRunning && stage.Kind == StageDNS {
+		if stage.Status == StagePending || stage.Status == StageFailed || stage.Status == StageRunning && (stage.Kind == StageDNS || stage.Kind == StageGateway) {
 			runnable = append(runnable, index)
 		}
 	}
@@ -504,6 +506,10 @@ func (s *Service) Rollback(ctx context.Context, subjectID, requestID, planID str
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, group.NodeIDs, "publishing_rollback"); err != nil {
 		return Plan{}, err
 	}
+	if s.isCertificateReplacement(ctx, planID) {
+		return Plan{}, ErrStageNotRollable
+	}
+
 	index := -1
 	for stageIndex := range stages {
 		if stages[stageIndex].Kind == normalized {

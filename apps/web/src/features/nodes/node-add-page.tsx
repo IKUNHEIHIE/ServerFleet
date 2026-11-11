@@ -13,6 +13,8 @@ import type { NodeEnrollment } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime, formatDuration } from "@/lib/format";
 
+import { InstallationPanel } from "./installation-panel";
+
 type Decision = "approve" | "reject";
 
 export function NodeAddPage() {
@@ -94,6 +96,7 @@ export function NodeAddPage() {
       ) : null}
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
 
+      <InstallationPanel key={session.viewEpoch} />
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="1. 生成短期接入凭证" description="POST /api/v1/node-enrollment-tokens。令牌只在创建响应显示一次，服务端不得支持后续列表读取明文。">
           <div className="space-y-4 px-5 py-4">
