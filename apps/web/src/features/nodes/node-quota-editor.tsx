@@ -55,8 +55,8 @@ export function NodeQuotaEditor({
     if (!Number.isFinite(numericQuota) || numericQuota <= 0) return setLocalError("配额必须是大于 0 的数字。");
     const resetDay = Number(cycleResetDay);
     if (!Number.isInteger(resetDay) || resetDay < 1 || resetDay > 28) return setLocalError("重置日必须在 1–28。");
-    const thresholdList = thresholds.split(",").map(value => Number(value.trim())).filter(value => Number.isFinite(value));
-    const remindList = remindDays.split(",").map(value => Number(value.trim())).filter(value => Number.isFinite(value));
+    const thresholdList = thresholds.split(",").map(value => value.trim()).filter(Boolean).map(Number).filter(value => Number.isFinite(value));
+    const remindList = remindDays.split(",").map(value => value.trim()).filter(Boolean).map(Number).filter(value => Number.isFinite(value));
     const expiry = expiresAt ? new Date(expiresAt) : null;
     if (expiry && Number.isNaN(expiry.getTime())) return setLocalError("到期时间无法解析。");
     setLocalError(null);
