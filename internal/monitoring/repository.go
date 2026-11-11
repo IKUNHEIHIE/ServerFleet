@@ -151,10 +151,10 @@ func (r *Repo) RecordCheck(ctx context.Context, q storage.Queryer, check Check, 
 		statusCode = *check.StatusCode
 	}
 	if _, err := q.Exec(ctx, `INSERT INTO monitor_checks
-		(monitor_id, status, latency_ns, status_code, error, checked_at)
-		VALUES (?, ?, ?, ?, ?, ?)`,
+		(monitor_id, status, latency_ns, status_code, error, checked_at,source_node_id,task_id)
+		VALUES (?, ?, ?, ?, ?, ?,?,?)`,
 		check.MonitorID, string(check.Status), latency, statusCode, check.Error,
-		storage.EncodeTime(check.CheckedAt)); err != nil {
+		storage.EncodeTime(check.CheckedAt), check.SourceNodeID, check.TaskID); err != nil {
 		return err
 	}
 	outcome, err := q.Exec(ctx, `UPDATE monitors SET
@@ -184,7 +184,7 @@ func (r *Repo) ListChecks(ctx context.Context, monitorID string, limit int) ([]C
 		return nil, err
 	}
 	rows, err := r.db.Query(ctx, `SELECT id, monitor_id, status, latency_ns, status_code,
-		error, checked_at FROM monitor_checks WHERE monitor_id = ?
+		error, checked_at,source_node_id,task_id FROM monitor_checks WHERE monitor_id = ?
 		ORDER BY checked_at DESC, id DESC LIMIT ?`, monitorID, normalized)
 	if err != nil {
 		return nil, err
@@ -263,7 +263,7 @@ func scanCheck(row storage.Row) (Check, error) {
 		checkedAt  string
 	)
 	if err := row.Scan(&check.ID, &check.MonitorID, &status, &latency, &statusCode,
-		&check.Error, &checkedAt); err != nil {
+		&check.Error, &checkedAt, &check.SourceNodeID, &check.TaskID); err != nil {
 		return Check{}, err
 	}
 	check.Status = State(status)

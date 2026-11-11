@@ -7,7 +7,7 @@ import "serverfleet.local/serverfleet/internal/storage"
 
 // Migrations returns the monitoring schema.
 func Migrations() []storage.Migration {
-	return append([]storage.Migration{{
+	return append(append([]storage.Migration{{
 		Version: "ds/0050_monitoring",
 		Name:    "monitors and probe checks",
 		Statements: []string{
@@ -45,5 +45,5 @@ func Migrations() []storage.Migration {
 			`CREATE INDEX monitor_checks_monitor
 				ON monitor_checks (monitor_id, checked_at DESC, id DESC)`,
 		},
-	}}, AutomationMigrations()...)
+	}}, AutomationMigrations()...), NodeProbeMigrations()...)
 }

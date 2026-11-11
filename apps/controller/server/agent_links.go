@@ -22,6 +22,7 @@ import (
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
 	return map[string]string{
+		transport.ProbeCapability:          "1",
 		"tasks.command":                    "1",
 		transport.CommandCapability:        "1",
 		transport.ResidentUpdateAction:     "1",
@@ -38,6 +39,9 @@ func agentAllowedActions() map[string]string {
 // gateway wiring has installed its real child observer and artifact channel.
 func (b *agentLinkBridge) allowedActions() map[string]string {
 	allowed := agentAllowedActions()
+	if b == nil || b.probeCurrent == nil || b.recordProbe == nil {
+		delete(allowed, transport.ProbeCapability)
+	}
 	if b == nil || b.recordCSR == nil {
 		delete(allowed, transport.CertificateCSRAction)
 	}
@@ -78,6 +82,8 @@ func agentFrameLimits() transport.FrameDecodeLimits {
 }
 
 type agentLinkBridge struct {
+	probeCurrent   func(context.Context, tasks.Task) error
+	recordProbe    func(context.Context, transport.LinkObservation, *agentv1.TaskOutput) error
 	recordTraffic  func(context.Context, transport.LinkObservation, string, *agentv1.MetricsBatch) error
 	commandCurrent func(context.Context, tasks.Task) error
 	nodesRepo      *nodes.Repo
@@ -161,6 +167,12 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	}
 	if _, err = b.tasks.CheckDispatch(ctx, task.ID, task.PlanHash, observation.Identity.NodeID); err != nil {
 		return transport.ErrLinkRejected
+	}
+	if task.ActionID == transport.ProbeCapability {
+		p, e := transport.ParseProbeParameters(offer.CanonicalParametersJson)
+		if e != nil || b.probeCurrent == nil || b.probeCurrent(ctx, task) != nil || offer.TimeoutSeconds != uint32(p.TimeoutSeconds) {
+			return transport.ErrLinkRejected
+		}
 	}
 	if task.ActionID == transport.ResidentUpdateAction {
 		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
@@ -302,6 +314,12 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 		return b.taskLog(ctx, observation, started.GetTaskId(), "info", "agent reported task started")
 	case envelope.GetTaskOutput() != nil:
 		output := envelope.GetTaskOutput()
+		if t, e := b.tasksRepo.Get(ctx, output.TaskId); e == nil && t.ActionID == transport.ProbeCapability {
+			if b.recordProbe == nil {
+				return transport.ErrLinkRejected
+			}
+			return b.recordProbe(ctx, observation, output)
+		}
 		if consumed, err := b.observeCertificateInstall(ctx, observation, output); consumed {
 			return err
 		}
@@ -591,6 +609,13 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		ScopeRevision:           task.ScopeRevision,
 		PluginId:                task.PluginID,
 		ActionSchemaVersion:     b.allowedActions()[command.ActionID],
+	}
+	if task.ActionID == transport.ProbeCapability {
+		p, e := transport.ParseProbeParameters(command.Params)
+		if e != nil || b.probeCurrent == nil || b.probeCurrent(ctx, task) != nil {
+			return tasks.DispatchResult{Accepted: false, Reason: "probe_authority_denied"}, nil
+		}
+		offer.TimeoutSeconds = uint32(p.TimeoutSeconds)
 	}
 	if task.ActionID == transport.ResidentUpdateAction {
 		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {
