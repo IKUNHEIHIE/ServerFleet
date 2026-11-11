@@ -44,7 +44,8 @@ export function NodeQuotaEditor({
     setDirection(quota.direction);
     setThresholds(quota.thresholdsPct?.join(",") ?? "70,85,95");
     setExpiryType(quota.expiryType ?? "");
-    setExpiresAt(quota.expiresAt ? quota.expiresAt.slice(0, 16) : "");
+    const expiry=quota.expiresAt ? new Date(quota.expiresAt) : null;
+    setExpiresAt(expiry && !Number.isNaN(expiry.getTime()) ? new Date(expiry.getTime()-expiry.getTimezoneOffset()*60_000).toISOString().slice(0,16) : "");
     setRemindDays(quota.remindDays?.join(",") ?? "30,7,1");
     setLocalError(null);
   }, [open, quota]);
@@ -116,7 +117,7 @@ export function NodeQuotaEditor({
               </Select>
             )}
           </Field>
-          <Field label="到期时间（可选）">{ids => <TextInput id={ids.inputId} type="datetime-local" value={expiresAt} onChange={event => setExpiresAt(event.target.value)} />}</Field>
+          <Field label="到期时间（本地时间，可选）">{ids => <TextInput id={ids.inputId} type="datetime-local" value={expiresAt} onChange={event => setExpiresAt(event.target.value)} />}</Field>
           <Field label="提醒天数（逗号分隔）">{ids => <TextInput id={ids.inputId} value={remindDays} onChange={event => setRemindDays(event.target.value)} />}</Field>
         </div>
         <p className="text-xs text-muted-foreground">默认仅提醒；数据缺失不按 0 处理。重置日与时区用于月度统计；阈值须升序，提醒天数须降序。Agent 统计仅累计实际观测到的流量，不补算安装前或离线期间数据；不能通过此处选择供应商账单。</p>

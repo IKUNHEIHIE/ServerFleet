@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"serverfleet.local/serverfleet/internal/auth"
 	"strconv"
 	"time"
 )
@@ -40,6 +41,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/notifications/settings", api.getSettings)
 	mux.HandleFunc("PUT /api/v1/notifications/settings", api.putSettings)
 	mux.HandleFunc("GET /api/v1/notifications/deliveries", api.listDeliveries)
+	mux.HandleFunc("POST /api/v1/notifications/deliveries/{deliveryId}/retry", api.retryDelivery)
 	return nil
 }
 
@@ -314,11 +316,13 @@ func writeFixed(w http.ResponseWriter, status int, code, message string) {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrInvalidCheck), errors.Is(err, auth.ErrPolicyUnavailable):
+		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
 	case errors.Is(err, ErrChannelNotFound), errors.Is(err, ErrDeliveryNotFound):
 		writeFixed(w, http.StatusNotFound, "not_found", "resource was not found")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
-	case errors.Is(err, ErrChannelNotConfigured), errors.Is(err, ErrProviderUnavailable):
+	case errors.Is(err, ErrChannelNotConfigured), errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrSecretUnavailable):
 		writeFixed(w, http.StatusServiceUnavailable, "notifications_unavailable", "notification channel is not configured")
 	case errors.Is(err, ErrProviderRejected), errors.Is(err, ErrProviderRateLimited):
 		writeFixed(w, http.StatusBadGateway, "provider_rejected", "notification provider rejected the message")
@@ -333,4 +337,30 @@ func writeError(w http.ResponseWriter, err error) {
 	default:
 		writeFixed(w, http.StatusInternalServerError, "internal_error", "request failed")
 	}
+}
+
+func (api *httpAPI) retryDelivery(w http.ResponseWriter, r *http.Request) {
+	p, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body struct{}
+	if r.URL.RawQuery != "" {
+		writeError(w, ErrInvalidQuery)
+		return
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	id, e := strconv.ParseInt(r.PathValue("deliveryId"), 10, 64)
+	if e != nil || id <= 0 {
+		writeError(w, ErrInvalidQuery)
+		return
+	}
+	d, e := api.service.RetryDelivery(r.Context(), p.SubjectID, p.RequestID, id)
+	if e != nil {
+		writeError(w, e)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, dtoFromDelivery(d))
 }

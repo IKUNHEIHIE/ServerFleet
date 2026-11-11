@@ -67,9 +67,22 @@ func (s *Service) RecordCounter(ctx context.Context, sample CounterSample) error
 		return e
 	}
 	return s.db.InTx(ctx, func(c context.Context, tx storage.Tx) error {
+		var policyRaw []byte
+		e := tx.QueryRow(c, `SELECT payload FROM quota_policy_automation WHERE node_id=?`, sample.NodeID).Scan(&policyRaw)
+		var currentPolicy policyAutomation
+		if e == nil {
+			if json.Unmarshal(policyRaw, &currentPolicy) != nil || currentPolicy.Revision != policy.AutomationRevision {
+				return ErrInvalidPolicy
+			}
+		} else if !storage.IsNotFound(e) {
+			return e
+		} else if policy.AutomationRevision != 0 {
+			return ErrInvalidPolicy
+		}
+
 		old := counterState{}
 		var raw []byte
-		e := tx.QueryRow(c, `SELECT payload FROM quota_counter_states WHERE node_id=?`, sample.NodeID).Scan(&raw)
+		e = tx.QueryRow(c, `SELECT payload FROM quota_counter_states WHERE node_id=?`, sample.NodeID).Scan(&raw)
 		found := e == nil
 		if e != nil && !storage.IsNotFound(e) {
 			return e

@@ -128,7 +128,7 @@ function DiagnosticBody({ diagnostic }: { readonly diagnostic: NodeDiagnostic })
 function QuotaBody({ quota }: { readonly quota: TrafficQuota }) {
   const sourceText = quota.source === "agent_estimate"
     ? "Agent 估算（非云账单）"
-    : quota.source === "provider_billing" ? "供应商账单" : "未返回";
+    : quota.source === "provider_billing" ? "供应商账单" : quota.source === "manual_correction" ? "人工修正" : "未返回";
   return (
     <div className="space-y-3 px-5 py-4 text-sm">
       <DefinitionList

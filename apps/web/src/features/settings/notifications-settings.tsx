@@ -23,6 +23,11 @@ const DELIVERY_TEXT: Record<NotificationDelivery["status"], string> = {
   delivery_unknown: "投递未知",
 };
 
+const EMPTY_CHANNELS: Record<NotificationChannel["channel"], NotificationChannel> = {
+ smtp: {channel:"smtp",enabled:false,credentialStatus:"not_configured"},
+ qqbot: {channel:"qqbot",enabled:false,credentialStatus:"not_configured"},
+};
+
 function ChannelForm({ channel, credentials, onChanged, onOpenCredentials }: { readonly channel: NotificationChannel; readonly credentials: readonly CredentialMetadata[]; readonly onChanged: () => void; readonly onOpenCredentials?: () => void }) {
   const session = useSession();
   const [enabled, setEnabled] = useState(channel.enabled);
@@ -127,7 +132,7 @@ function ChannelForm({ channel, credentials, onChanged, onOpenCredentials }: { r
           {onOpenCredentials ? <Button type="button" onClick={onOpenCredentials}>前往凭据管理</Button> : null}</div>
         </div>
         {testResult ? (
-          <Notice tone={testResult.status === "provider_accepted" ? "info" : "warning"} title="测试投递结果">
+          <Notice tone={testResult.status === "provider_accepted" ? "info" : "warning"} title="测试请求结果（最新状态见投递记录）">
             {DELIVERY_TEXT[testResult.status]} · 渠道 {testResult.channel}
             {testResult.taskId ? <a className="ml-2 underline" href={`#/tasks/${encodeURIComponent(testResult.taskId)}`}>查看投递任务</a> : null}
             {testResult.providerCode ? ` · 供应商码 ${testResult.providerCode}` : ""}
@@ -154,6 +159,7 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
   );
   const [draft, setDraft] = useState<NotificationSettings | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
+  const retryDelivery = useAction((id: string) => notificationsApi.retry(id));
   const saveSettings = useAction((body: NotificationSettings) => notificationsApi.putSettings(body));
 
   useEffect(() => {
@@ -162,9 +168,9 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
 
   const canManage = session.can("notify.channel.manage") || session.can("settings.manage");
   const savedItems = channels.state.status === "ready" ? channels.state.data.items : [];
-  const items = (["smtp", "qqbot"] as const).map(channel => savedItems.find(item => item.channel === channel) ?? { channel, enabled: false, credentialStatus: "not_configured" as const });
+  const items = (["smtp", "qqbot"] as const).map(channel => savedItems.find(item => item.channel === channel) ?? EMPTY_CHANNELS[channel]);
   const credentialItems = credentials.state.status === "ready" ? credentials.state.data : [];
-  const changed = () => { channels.reload(); deliveries.reload(); };
+  const changed = () => { channels.refreshSilent(); deliveries.refreshSilent(); };
   const deliveryItems = deliveries.state.status === "ready" ? deliveries.state.data.items : [];
 
   async function submitSettings(event: FormEvent<HTMLFormElement>) {
@@ -241,6 +247,7 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
         </form>
       </Panel>
 
+      {retryDelivery.error ? <Notice tone="error" title="重试未创建">{describeApiError(retryDelivery.error)}</Notice> : null}
       <Panel title="投递记录" description="GET /api/v1/notifications/deliveries；只读状态。" actions={<Button size="sm" onClick={deliveries.reload} loading={deliveries.state.status === "loading"}>刷新</Button>}>
         <AsyncPanel state={deliveries.state} onRetry={deliveries.reload} errorTitle="投递记录加载失败" empty={<EmptyState title="暂无投递记录" />} isEmpty={data => data.items.length === 0}>
           {() => (
@@ -255,6 +262,7 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
                 { key: "task", header: "投递任务", render: delivery => delivery.taskId ? <a className="underline" href={`#/tasks/${encodeURIComponent(delivery.taskId)}`}>查看任务</a> : "—" },
                 { key: "code", header: "供应商码", render: delivery => delivery.providerCode ?? "—" },
                 { key: "message", header: "脱敏说明", render: delivery => delivery.message ?? "—" },
+                { key: "retry", header: "人工重试", render: delivery => delivery.status === "failed" ? <Button size="sm" disabled={!canManage || session.writesLocked || retryDelivery.pending} onClick={async () => { const result=await retryDelivery.run(delivery.id); if(result.ok) deliveries.reload(); }}>重试已确认失败</Button> : delivery.status === "delivery_unknown" ? "请从任务进入人工处置" : "—" },
                 { key: "time", header: "时间", render: delivery => formatDateTime(delivery.createdAt) ?? "—" },
               ]}
             />

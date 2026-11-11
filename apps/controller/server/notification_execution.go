@@ -178,7 +178,12 @@ func (s *Server) borrowNotification(ctx context.Context, use notifications.Secre
 	}
 	op := auth.CredentialOperation{SubjectID: scope.task.SubmitterID, CredentialID: use.Ref, Module: expected, Source: scope.task.Source, OperationID: "notification-use-" + scope.task.ID, PlanDigest: scope.task.PlanHash, Action: "use", ExpectedRevision: scope.intent.Binding.CredentialRevision}
 	scope.operation = op
-	return s.Credentials.UseForService(ctx, op, func(c context.Context, raw []byte) error { return consume(c, string(raw)) })
+	var providerErr error
+	err := s.Credentials.UseForService(ctx, op, func(c context.Context, raw []byte) error { providerErr = consume(c, string(raw)); return nil })
+	if err != nil {
+		return notifications.ErrDeliveryUnknown
+	}
+	return providerErr
 }
 func (s *Server) runNotificationDispatch(ctx context.Context) {
 	ticker := time.NewTicker(5 * time.Second)

@@ -431,7 +431,7 @@ func (s *Service) transitionAlert(monitor Monitor, from, to State, check Check, 
 		body += " Probe: " + check.Error
 	}
 	return &notifications.Alert{
-		DedupeKey: fmt.Sprintf("monitoring:%s:%s:%s", monitor.ID, to, now.UTC().Format(time.RFC3339Nano)),
+		DedupeKey: fmt.Sprintf("monitoring:%s:r%d:o%d:%s", monitor.ID, monitor.AutomationRevision, monitor.ObservationRevision+1, to),
 		Subject:   fmt.Sprintf("Monitor %s is %s", monitor.Name, state),
 		Body:      body,
 	}
@@ -443,16 +443,6 @@ func (s *Service) recordCheck(ctx context.Context, check Check, m Monitor, event
 		writer = func(c context.Context, tx storage.Tx) error { return s.audit.AppendTx(c, tx, *event) }
 	}
 	return s.saveObservation(ctx, check, m, alert, writer)
-}
-
-func (s *Service) sendAlert(ctx context.Context, alert notifications.Alert) error {
-	if s.notifier == nil {
-		return nil
-	}
-	if _, err := s.notifier.SendAlert(ctx, alert); err != nil {
-		return ErrNotifyFailed
-	}
-	return nil
 }
 
 func due(monitor Monitor, now time.Time) bool {

@@ -346,8 +346,8 @@ func (s *Service) EstimateExpiry(ctx context.Context, subjectID, nodeID string, 
 	if span < MinEstimateSpan {
 		return ExpiryEstimate{}, false, nil
 	}
-	latestTotal := latest.BytesIn + latest.BytesOut
-	earlierTotal := earlier.BytesIn + earlier.BytesOut
+	latestTotal := policy.used(Usage{BytesIn: latest.BytesIn, BytesOut: latest.BytesOut})
+	earlierTotal := policy.used(Usage{BytesIn: earlier.BytesIn, BytesOut: earlier.BytesOut})
 	if latestTotal <= earlierTotal {
 		return ExpiryEstimate{}, false, nil
 	}
@@ -534,7 +534,7 @@ func evaluate(policy Policy, usage *Usage, periodStart, now time.Time) Evaluatio
 			evaluation.Level = LevelExpiring
 		}
 	}
-	evaluation.AlertRecommended = evaluation.Level != LevelOK
+	evaluation.AlertRecommended = evaluation.Level != LevelOK || evaluation.Expiring
 	return evaluation
 }
 
@@ -643,7 +643,7 @@ func isPureDenial(err error) bool {
 
 func quotaAlertKey(e Evaluation, t Level) string {
 	if t == LevelExpiring {
-		return "quota:" + e.NodeID + ":expiry:" + e.ExpiryAt.UTC().Format("20060102T150405Z")
+		return "quota:" + e.NodeID + ":expiring:" + e.ExpiryAt.UTC().Format("20060102T150405Z")
 	}
 	return reminderKey(e.NodeID, e.PeriodStart, t)
 }

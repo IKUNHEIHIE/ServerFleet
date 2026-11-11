@@ -144,7 +144,7 @@ func (s *QQBotSender) Send(ctx context.Context, settings QQSettings, secretRef s
 		return ProviderResult{}, ErrQQSecret
 	}
 	if err != nil {
-		if sendErr == nil {
+		if sendErr == nil || errors.Is(err, ErrDeliveryUnknown) {
 			result = ProviderResult{Outcome: ProviderUnknown, Code: "qq_use_unknown"}
 		}
 		return result, err

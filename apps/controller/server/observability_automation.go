@@ -11,6 +11,9 @@ import (
 
 type durableAlertAdapter struct{ service *notifications.Service }
 
+func (a durableAlertAdapter) DeliveryStatus(ctx context.Context, id int64) (notifications.Delivery, error) {
+	return a.service.EffectiveDelivery(ctx, id)
+}
 func (a durableAlertAdapter) SendAlert(ctx context.Context, alert notifications.Alert) (notifications.Delivery, error) {
 	return a.service.SendDurableAlert(ctx, alert)
 }

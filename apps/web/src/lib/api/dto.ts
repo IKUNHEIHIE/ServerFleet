@@ -289,7 +289,7 @@ export interface TrafficQuota {
   readonly timezone?: string;
   readonly direction: "ingress" | "egress" | "combined";
   /** 真实 Controller 仅在有使用样本时返回 source；无样本时缺失。 */
-  readonly source?: "agent_estimate" | "provider_billing";
+  readonly source?: "agent_estimate" | "provider_billing" | "manual_correction";
   readonly dataComplete?: boolean;
   readonly coverage?: { readonly observedFrom: string; readonly observedUntil: string; readonly samples: number; readonly gaps: number; readonly estimated: boolean };
   readonly automationOwnerId?: string;

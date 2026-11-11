@@ -141,10 +141,10 @@ type AlertSource struct {
 }
 type Alert struct {
 	Source    AlertSource `json:"source,omitempty"`
-	DedupeKey string
-	Subject   string
-	Body      string
-	Channel   Channel
+	DedupeKey string      `json:"dedupeKey"`
+	Subject   string      `json:"subject"`
+	Body      string      `json:"body"`
+	Channel   Channel     `json:"channel,omitempty"`
 }
 
 // DeliveryStatus is the persisted provider outcome. Queued and submitted are

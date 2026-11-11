@@ -227,6 +227,18 @@ func (s *Service) AlertEvents(ctx context.Context, subject, id string, limit int
 		if json.Unmarshal(raw, &event) != nil {
 			return nil, ErrInvalidMonitor
 		}
+		if reader, ok := s.notifier.(interface {
+			DeliveryStatus(context.Context, int64) (notifications.Delivery, error)
+		}); ok && event.DeliveryID > 0 {
+			if d, e := reader.DeliveryStatus(ctx, event.DeliveryID); e == nil {
+				event.State = string(d.Status)
+				event.DeliveryID = d.ID
+				event.TaskID = d.TaskID
+				if d.Status == notifications.DeliverySubmitted && d.ProviderCode != "attempt_pending" {
+					event.State = "provider_accepted"
+				}
+			}
+		}
 		out = append(out, event)
 	}
 	return out, rows.Err()

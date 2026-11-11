@@ -176,6 +176,7 @@ func (s *Service) UpsertChannel(ctx context.Context, subjectID, requestID string
 	if err != nil {
 		return ChannelRecord{}, err
 	}
+	s.hydrateChannel(ctx, &record)
 	return record, nil
 }
 
@@ -224,6 +225,7 @@ func (s *Service) SetSecretRef(ctx context.Context, subjectID, requestID string,
 	if err != nil {
 		return ChannelRecord{}, err
 	}
+	s.hydrateChannel(ctx, &record)
 	return record, nil
 }
 
@@ -291,7 +293,11 @@ func (s *Service) TestChannel(ctx context.Context, subjectID, requestID string, 
 		return Delivery{}, err
 	}
 	if start.existing {
-		return start.delivery, providerError(start.delivery.Status)
+		d, e := s.Delivery(ctx, start.delivery.ID)
+		if e != nil {
+			return d, e
+		}
+		return d, providerError(d.Status)
 	}
 	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
 	if s.dispatch != nil {
@@ -462,7 +468,7 @@ func (s *Service) ListDeliveries(ctx context.Context, filter DeliveryFilter) ([]
 		if err != nil {
 			return nil, err
 		}
-		records[i].TaskID = d.TaskID
+		records[i] = d
 	}
 	return records, nil
 }

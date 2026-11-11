@@ -91,6 +91,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, risks TrafficRiskSource,
 	})
 	mux.HandleFunc("POST /api/v1/availability-monitors", api.createMonitor)
 	mux.HandleFunc("PATCH /api/v1/availability-monitors/{monitorId}", api.updateMonitor)
+	mux.HandleFunc("DELETE /api/v1/availability-monitors/{monitorId}", api.deleteMonitor)
 	mux.HandleFunc("GET /api/v1/availability-monitors/{monitorId}/history", api.monitorHistory)
 	mux.HandleFunc("POST /api/v1/availability-monitors/{monitorId}/probe", api.probeMonitor)
 	mux.HandleFunc("GET /api/v1/traffic-risks", api.trafficRisks)
@@ -560,4 +561,20 @@ func writeError(w http.ResponseWriter, err error) {
 	default:
 		writeFixed(w, http.StatusInternalServerError, "internal_error", "request failed")
 	}
+}
+
+func (api *httpAPI) deleteMonitor(w http.ResponseWriter, r *http.Request) {
+	p, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.RawQuery != "" || r.ContentLength > 0 {
+		writeError(w, ErrInvalidMonitor)
+		return
+	}
+	if e := api.service.Delete(r.Context(), p.SubjectID, p.RequestID, r.PathValue("monitorId")); e != nil {
+		writeError(w, e)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

@@ -28,7 +28,7 @@ Standalone发布路由检查器/完整装配、node-local网站私钥/CSR与ACME
 
 web目录及assets目录0700、所有文件0600并由当前进程用户所有；拒绝链接/隐藏/源代码树/未知根文件/丢失入口脚本。仅限index.html、可选favicon.ico及assets内受限类型的平面构建文件；单文件8MiB、总32MiB、最多1024文件。启动时读成不可变快照，后续替换文件不会发布新内容。响应带CSP（脚本/连接仅同源）、nosniff、no-referrer、no-store，HTTPS带HSTS。构建包脚本自动设置权限；直接使用Vite dist前需人工核对/设置这些权限。
 
-固定Go1.27.3/Node24.22.1/npm11，依赖按锁文件准备后，在干净已提交的Linux工作区运行：
+固定Go1.27.4/Node24.22.1/npm11，依赖按锁文件准备后，在干净已提交的Linux工作区运行：
 
 ```sh
 node scripts/build-release.mjs --version=0.9.0 --sequence=1 --output=/absolute/private-parent/new-candidate

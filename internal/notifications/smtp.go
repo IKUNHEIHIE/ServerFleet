@@ -114,7 +114,7 @@ func (s *SMTPMailer) Send(ctx context.Context, settings SMTPSettings, secretRef 
 		return ProviderResult{}, fmt.Errorf("%w: smtp", ErrSecretUnavailable)
 	}
 	if err != nil {
-		if sendErr == nil {
+		if sendErr == nil || errors.Is(err, ErrDeliveryUnknown) {
 			result = ProviderResult{Outcome: ProviderUnknown, Code: "smtp_use_unknown"}
 		}
 		return result, err

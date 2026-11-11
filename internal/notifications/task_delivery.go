@@ -95,7 +95,33 @@ func (s *Service) persistIntentTx(ctx context.Context, tx storage.Tx, in Deliver
 	_, e = tx.Exec(ctx, `INSERT INTO notification_delivery_intents VALUES(?,?,?,?)`, in.DeliveryID, in.Attempt, in.TaskID, raw)
 	return e
 }
-func (s *Service) queueDelivery(ctx context.Context, record ChannelRecord, message Message, d Delivery, source string) (Delivery, error) {
+func (s *Service) queueDelivery(ctx context.Context, record ChannelRecord, message Message, d Delivery, source string) (out Delivery, err error) {
+	defer func() {
+		if err == nil || d.ID <= 0 {
+			return
+		}
+		// A rejected preflight must not leave a permanently queued orphan. An
+		// existing intent (possibly being dispatched concurrently) is untouched.
+		cleanup := s.db.InTx(ctx, func(c context.Context, tx storage.Tx) error {
+			changed, e := tx.Exec(c, `UPDATE notification_deliveries SET status='failed',provider_code='not_queued',updated_at=? WHERE id=? AND attempts=? AND status='queued' AND NOT EXISTS(SELECT 1 FROM notification_delivery_intents WHERE delivery_id=?)`, storage.EncodeTime(s.now()), d.ID, d.Attempts, d.ID)
+			if e != nil {
+				return e
+			}
+			n, e := changed.RowsAffected()
+			if e != nil {
+				return e
+			}
+			if n == 1 {
+				return s.audit.AppendTx(c, tx, s.event(systemAuditSubject, ActionSend, "failure", "notification-preflight", "not_queued"))
+			}
+			return nil
+		})
+		if cleanup == nil {
+			if current, e := s.Delivery(ctx, d.ID); e == nil {
+				out = current
+			}
+		}
+	}()
 	if s.dispatch == nil {
 		return Delivery{}, ErrProviderUnavailable
 	}
@@ -154,14 +180,28 @@ func (s *Service) DispatchIntent(ctx context.Context, id int64, attempt int) (De
 		return d, e
 	}
 	if in.TaskID != "" {
+		if in.Attempt > d.Attempts && d.Status == DeliveryFailed {
+			d.Status = DeliveryQueued
+		}
 		d.TaskID = in.TaskID
 		return d, nil
+	}
+	if d.Attempts >= attempt {
+		return d, ErrNotRetryable
 	}
 	if s.dispatch == nil {
 		return d, ErrProviderUnavailable
 	}
 	if s.current != nil {
 		if e = s.current(ctx, in); e != nil {
+			// No task has been submitted here. Retire this frozen intent so
+			// revoked work cannot silently reactivate or starve crash recovery.
+			if stopped := s.ReconcileTask(ctx, id, attempt, "failed"); stopped != nil {
+				return d, stopped
+			}
+			if current, readErr := s.Delivery(ctx, id); readErr == nil {
+				d = current
+			}
 			return d, e
 		}
 	}
@@ -171,13 +211,16 @@ func (s *Service) DispatchIntent(ctx context.Context, id int64, attempt int) (De
 	}
 	e = s.BindTask(ctx, id, attempt, task)
 	d.TaskID = task
+	if in.Attempt > d.Attempts && d.Status == DeliveryFailed {
+		d.Status = DeliveryQueued
+	}
 	return d, e
 }
 func (s *Service) PendingIntents(ctx context.Context, limit int) ([]DeliveryIntent, error) {
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
-	rows, e := s.db.Query(ctx, `SELECT delivery_id,attempt FROM notification_delivery_intents WHERE task_id='' ORDER BY delivery_id,attempt LIMIT ?`, limit)
+	rows, e := s.db.Query(ctx, `SELECT i.delivery_id,i.attempt FROM notification_delivery_intents i JOIN notification_deliveries d ON d.id=i.delivery_id WHERE i.task_id='' AND d.attempts<i.attempt AND d.status IN ('queued','failed') ORDER BY i.delivery_id,i.attempt LIMIT ?`, limit)
 	if e != nil {
 		return nil, e
 	}
@@ -291,8 +334,12 @@ func (s *Service) Delivery(ctx context.Context, id int64) (Delivery, error) {
 		return d, e
 	}
 	var task string
-	e = s.db.QueryRow(ctx, `SELECT task_id FROM notification_delivery_intents WHERE delivery_id=? ORDER BY attempt DESC LIMIT 1`, id).Scan(&task)
+	var attempt int
+	e = s.db.QueryRow(ctx, `SELECT task_id,attempt FROM notification_delivery_intents WHERE delivery_id=? ORDER BY attempt DESC LIMIT 1`, id).Scan(&task, &attempt)
 	if e == nil {
+		if attempt > d.Attempts && d.Status == DeliveryFailed {
+			d.Status = DeliveryQueued
+		}
 		d.TaskID = task
 	} else if !storage.IsNotFound(e) {
 		return d, e
@@ -495,6 +542,7 @@ func (s *Service) ReconcileTask(ctx context.Context, id int64, attempt int, stat
 	if d.Status == DeliveryUnknown || d.Attempts >= attempt && d.Status != DeliveryQueued && !(d.Status == DeliverySubmitted && d.ProviderCode == "attempt_pending") {
 		return nil
 	}
+	previous := d
 	outcome := DeliveryUnknown
 	code := "task_" + status
 	if status != "unknown" && (d.Status == DeliveryQueued || d.Status == DeliveryFailed && d.Attempts < attempt) {
@@ -507,5 +555,18 @@ func (s *Service) ReconcileTask(ctx context.Context, id int64, attempt int, stat
 	d.Status = outcome
 	d.ProviderCode = code
 	d.UpdatedAt = s.now()
-	return s.db.InTx(ctx, func(c context.Context, tx storage.Tx) error { return s.repo.updateDelivery(c, tx, d) })
+	return s.db.InTx(ctx, func(c context.Context, tx storage.Tx) error {
+		moved, e := tx.Exec(c, `UPDATE notification_deliveries SET status=?,provider_code=?,attempts=?,updated_at=? WHERE id=? AND status=? AND provider_code=? AND attempts=?`, d.Status, d.ProviderCode, d.Attempts, storage.EncodeTime(d.UpdatedAt), id, previous.Status, previous.ProviderCode, previous.Attempts)
+		if e != nil {
+			return e
+		}
+		n, e := moved.RowsAffected()
+		if e != nil {
+			return e
+		}
+		if n == 0 {
+			return nil
+		}
+		return s.audit.AppendTx(c, tx, s.event(systemAuditSubject, ActionSend, "failure", "notification-reconcile-"+strconv.FormatInt(id, 10), "task_terminal_"+status))
+	})
 }
