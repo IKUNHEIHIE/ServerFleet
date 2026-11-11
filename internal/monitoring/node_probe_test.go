@@ -61,6 +61,12 @@ func TestRemoteUnknownPreservesLastBusinessStateAndBreaksFailureSequence(t *test
 	if e != nil || checks[0].TaskID != "source-unknown" || checks[0].Status != monitoring.StateUnknown {
 		t.Fatal("receipt provenance lost", checks, e)
 	}
+	// Editing notification metadata must not fabricate a fresh healthy sample.
+	input.Name = "Renamed while source unknown"
+	m, e = service.Update(ctx, "admin", "rename-unknown", "remote", input)
+	if e != nil || !m.LastProbeUnknown || m.LastProbeTaskID != "source-unknown" || m.State != monitoring.StateUp {
+		t.Fatal("metadata edit cleared unknown source evidence", m, e)
+	}
 	remote.result = monitoring.ProbeResult{TaskID: "second-down"}
 	_, m = run()
 	if m.State != monitoring.StateUp || m.ConsecutiveFailures != 1 {

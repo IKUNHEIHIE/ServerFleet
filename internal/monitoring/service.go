@@ -194,10 +194,10 @@ func (s *Service) Update(ctx context.Context, subjectID, requestID, monitorID st
 	updated.ConsecutiveRecoveries = 0
 	if input.Target != current.Target || input.Kind != current.Kind || input.SourceNodeID != current.SourceNodeID {
 		updated.State = StateUnknown
+		updated.LastProbeUnknown = false
+		updated.LastProbeTaskID = ""
 	}
 	updated.SourceNodeID = input.SourceNodeID
-	updated.LastProbeUnknown = false
-	updated.LastProbeTaskID = ""
 	updated.Name = input.Name
 	updated.Kind = input.Kind
 	updated.Target = input.Target
