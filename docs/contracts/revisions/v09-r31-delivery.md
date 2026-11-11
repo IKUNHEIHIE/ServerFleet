@@ -9,7 +9,7 @@
 | 新增 | 添加节点可信一键命令、服务账户、Root 指纹、隐藏令牌输入、等待审批与续装 | GET /api/v1/installations/catalog；controller install |
 | 新增 | 离线签名覆盖 Controller/Agent/组件清单/Web | controller release package-installation |
 | 修改 | 续签策略实际显示自动安装和编排状态 | automaticInstallation 从恒 false 改为 boolean；state 新增 renewal_delivery_issuance/installation/publication/blocked/completed/recovered |
-| 修改 | 发布等待真实网关任务，可观察确定性子任务 | 内部证书替换后继沿同一路由发布，不再重复 DNS；禁用删除式补偿 |
+| 修改 | 发布等待真实网关任务，可观察确定性子任务 | 内部证书替换后继沿同一路由发布，冻结新发布意图前跟进最新已完成后继以保留其他节点更新，不再重复 DNS；禁用删除式补偿 |
 | 删除 | 无 | 无 |
 
 新增契约 api/openapi/revisions/v09-r31/delivery-candidate.yaml，三个路径、四个操作。均为当前管理员、TLS、会话；POST 还需 CSRF 与 Origin/请求标记，严格 JSON、双版本 CAS、无未知字段。任务与证明每次经过当前读取/执行门，管理员身份不等于节点执行豁免。

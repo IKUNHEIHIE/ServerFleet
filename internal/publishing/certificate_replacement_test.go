@@ -30,6 +30,8 @@ func TestCertificateSuccessorPreservesRoutesDNSAndStopsDestructiveRollback(t *te
 	if _, e = f.service.Run(ctx, "admin", "run-base", base.ID); e != nil {
 		t.Fatal(e)
 	}
+	// Both nodes may have captured this binding before either installs.
+	frozenOtherNodeBase := base.ID
 	next, e := f.service.ReplaceCertificate(ctx, "admin", "rotate-1", "successor-1", base.ID, "cert-1", "cert-2")
 	if e != nil {
 		t.Fatal(e)
@@ -63,11 +65,11 @@ func TestCertificateSuccessorPreservesRoutesDNSAndStopsDestructiveRollback(t *te
 	if _, e = f.service.Run(ctx, "admin", "run-successor", next.ID); e != nil {
 		t.Fatal(e)
 	}
-	latest, e := f.service.LatestCertificatePlan(ctx, "admin", base.ID)
+	latest, e := f.service.LatestCertificatePlan(ctx, "admin", frozenOtherNodeBase)
 	if e != nil || latest.ID != next.ID {
 		t.Fatal("did not follow immutable completed chain", e)
 	}
-	if _, e = f.service.ReplaceCertificate(ctx, "admin", "rotate-2", "successor-2", next.ID, "cert-2", "cert-3"); e != nil {
+	if _, e = f.service.ReplaceCertificate(ctx, "admin", "rotate-2", "successor-2", latest.ID, latest.CertificateID, "cert-3"); e != nil {
 		t.Fatal(e)
 	}
 	root, e = publishing.CertificateRoutePlan(ctx, f.db, "successor-2")

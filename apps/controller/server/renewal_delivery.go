@@ -408,6 +408,20 @@ func (s *Server) advanceRenewalDelivery(ctx context.Context, p certificates.Publ
 	for i := range c.Publications {
 		pub := &c.Publications[i]
 		if pub.CertificateID == "" {
+			// Several nodes can finish issuance/installation from the same old
+			// plan. Resolve its latest completed successor immediately before
+			// freezing this publication intent, retaining other nodes' new refs.
+			// A frozen intent or an admitted task is never redirected/replayed.
+			current, err := s.deliveryPublication(ctx, p, pub.BaseID)
+			if errors.Is(err, publishing.ErrStageAwaitingTask) {
+				return
+			}
+			if err != nil {
+				block("PUBLICATION_BASE_CHANGED")
+				return
+			}
+			pub.BaseID = current.ID
+			pub.PreviousCertificateID = current.CertificateID
 			pub.CertificateID, e = s.replacementCertificate(ctx, p, pub.PreviousCertificateID, c.InstallTaskID)
 			if e != nil {
 				block("CERTIFICATE_SET_CHANGED")
