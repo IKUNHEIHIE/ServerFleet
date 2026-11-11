@@ -78,6 +78,7 @@ func agentFrameLimits() transport.FrameDecodeLimits {
 }
 
 type agentLinkBridge struct {
+	recordTraffic  func(context.Context, transport.LinkObservation, string, *agentv1.MetricsBatch) error
 	commandCurrent func(context.Context, tasks.Task) error
 	nodesRepo      *nodes.Repo
 	nodesService   *nodes.Service
@@ -95,10 +96,11 @@ type agentLinkBridge struct {
 
 	seqMu     sync.Mutex
 	sequences map[string]uint64
+	boots     map[string]string
 }
 
 func newAgentLinkBridge(nodesRepo *nodes.Repo, nodesService *nodes.Service, tasksRepo *tasks.Repo, now func() time.Time) *agentLinkBridge {
-	return &agentLinkBridge{nodesRepo: nodesRepo, nodesService: nodesService, tasksRepo: tasksRepo, now: now, sequences: map[string]uint64{}}
+	return &agentLinkBridge{nodesRepo: nodesRepo, nodesService: nodesService, tasksRepo: tasksRepo, now: now, sequences: map[string]uint64{}, boots: map[string]string{}}
 }
 
 func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.LinkObservation, hello *agentv1.AgentHello) ([]string, error) {
@@ -120,6 +122,16 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	if len(granted) == 0 {
 		return nil, transport.ErrLinkRejected
 	}
+	b.seqMu.Lock()
+	if b.boots == nil {
+		b.boots = map[string]string{}
+	}
+	if len(b.boots) >= 1024 {
+		b.seqMu.Unlock()
+		return nil, transport.ErrLinkRejected
+	}
+	b.boots[observation.ConnectionID] = hello.BootId
+	b.seqMu.Unlock()
 	return granted, nil
 }
 
@@ -273,7 +285,16 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 		return b.applyAgentState(ctx, observation, requestID, nil, nodes.StatusOnline)
 	case envelope.GetMetrics() != nil:
 		metrics := agentMetrics(envelope.GetMetrics(), b.now().UTC())
-		return b.applyAgentState(ctx, observation, requestID, metrics, nodes.StatusOnline)
+		if e := b.applyAgentState(ctx, observation, requestID, metrics, nodes.StatusOnline); e != nil {
+			return e
+		}
+		if b.recordTraffic != nil {
+			b.seqMu.Lock()
+			boot := b.boots[observation.ConnectionID]
+			b.seqMu.Unlock()
+			return b.recordTraffic(ctx, observation, boot, envelope.GetMetrics())
+		}
+		return nil
 	case envelope.GetTaskAck() != nil:
 		return b.taskAck(ctx, observation, envelope.GetTaskAck())
 	case envelope.GetTaskStarted() != nil:
@@ -306,6 +327,9 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 }
 
 func (b *agentLinkBridge) disconnected(ctx context.Context, observation transport.LinkObservation) error {
+	b.seqMu.Lock()
+	delete(b.boots, observation.ConnectionID)
+	b.seqMu.Unlock()
 	err := b.applyAgentState(ctx, observation, "agent-disconnect", nil, nodes.StatusOffline)
 	if errors.Is(err, nodes.ErrNodeRevoked) || errors.Is(err, nodes.ErrNodeNotFound) {
 		return nil

@@ -93,13 +93,16 @@ type ChannelInput struct {
 // ChannelRecord is the redacted stored channel view. SecretRef is an opaque
 // identifier, not a credential value.
 type ChannelRecord struct {
-	Channel          Channel          `json:"channel"`
-	Enabled          bool             `json:"enabled"`
-	SMTP             *SMTPSettings    `json:"smtp,omitempty"`
-	QQ               *QQSettings      `json:"qqbot,omitempty"`
-	SecretRef        string           `json:"secretRef,omitempty"`
-	CredentialStatus CredentialStatus `json:"credentialStatus"`
-	UpdatedAt        time.Time        `json:"updatedAt"`
+	AutomationOwnerID  string           `json:"automationOwnerId,omitempty"`
+	CredentialRevision uint64           `json:"credentialRevision,omitempty"`
+	BackgroundReady    bool             `json:"backgroundReady,omitempty"`
+	Channel            Channel          `json:"channel"`
+	Enabled            bool             `json:"enabled"`
+	SMTP               *SMTPSettings    `json:"smtp,omitempty"`
+	QQ                 *QQSettings      `json:"qqbot,omitempty"`
+	SecretRef          string           `json:"secretRef,omitempty"`
+	CredentialStatus   CredentialStatus `json:"credentialStatus"`
+	UpdatedAt          time.Time        `json:"updatedAt"`
 }
 
 // Settings controls fallback, retry and notification deduplication behavior.
@@ -130,7 +133,14 @@ type Message struct {
 // Alert is the trusted monitoring-to-notification input. An empty Channel selects
 // QQ Bot when usable, otherwise SMTP. DedupeKey may be empty to opt out of
 // suppression; monitoring supplies a stable key.
+type AlertSource struct {
+	Kind     string `json:"kind,omitempty"`
+	ID       string `json:"id,omitempty"`
+	OwnerID  string `json:"ownerId,omitempty"`
+	Revision uint64 `json:"revision,omitempty"`
+}
 type Alert struct {
+	Source    AlertSource `json:"source,omitempty"`
 	DedupeKey string
 	Subject   string
 	Body      string
@@ -163,6 +173,7 @@ func (s DeliveryStatus) Valid() bool {
 
 // Delivery is the redacted delivery record. It never contains a credential.
 type Delivery struct {
+	TaskID       string         `json:"taskId,omitempty"`
 	ID           int64          `json:"id"`
 	Channel      Channel        `json:"channel"`
 	Status       DeliveryStatus `json:"status"`

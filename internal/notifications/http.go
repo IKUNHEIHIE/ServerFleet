@@ -44,15 +44,20 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 }
 
 type channelDTO struct {
-	Channel          Channel          `json:"channel"`
-	Enabled          bool             `json:"enabled"`
-	CredentialStatus CredentialStatus `json:"credentialStatus"`
-	SMTP             *SMTPSettings    `json:"smtp,omitempty"`
-	QQBot            *QQSettings      `json:"qqbot,omitempty"`
-	UpdatedAt        string           `json:"updatedAt,omitempty"`
+	CredentialID       string           `json:"credentialId,omitempty"`
+	AutomationOwnerID  string           `json:"automationOwnerId,omitempty"`
+	CredentialRevision uint64           `json:"credentialRevision,omitempty"`
+	BackgroundReady    bool             `json:"backgroundReady,omitempty"`
+	Channel            Channel          `json:"channel"`
+	Enabled            bool             `json:"enabled"`
+	CredentialStatus   CredentialStatus `json:"credentialStatus"`
+	SMTP               *SMTPSettings    `json:"smtp,omitempty"`
+	QQBot              *QQSettings      `json:"qqbot,omitempty"`
+	UpdatedAt          string           `json:"updatedAt,omitempty"`
 }
 
 type deliveryDTO struct {
+	TaskID       string         `json:"taskId,omitempty"`
 	ID           string         `json:"id"`
 	Channel      Channel        `json:"channel"`
 	Status       DeliveryStatus `json:"status"`
@@ -268,6 +273,7 @@ func (api *httpAPI) authorizeRead(w http.ResponseWriter, r *http.Request, princi
 
 func dtoFromChannel(record ChannelRecord) channelDTO {
 	return channelDTO{
+		CredentialID: record.SecretRef, AutomationOwnerID: record.AutomationOwnerID, CredentialRevision: record.CredentialRevision, BackgroundReady: record.BackgroundReady,
 		Channel: record.Channel, Enabled: record.Enabled, CredentialStatus: record.CredentialStatus,
 		SMTP: record.SMTP, QQBot: record.QQ, UpdatedAt: record.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -275,7 +281,7 @@ func dtoFromChannel(record ChannelRecord) channelDTO {
 
 func dtoFromDelivery(delivery Delivery) deliveryDTO {
 	return deliveryDTO{
-		ID: strconv.FormatInt(delivery.ID, 10), Channel: delivery.Channel, Status: delivery.Status,
+		TaskID: delivery.TaskID, ID: strconv.FormatInt(delivery.ID, 10), Channel: delivery.Channel, Status: delivery.Status,
 		ProviderCode: delivery.ProviderCode, Message: delivery.Message,
 		CreatedAt: delivery.CreatedAt.UTC().Format(time.RFC3339),
 	}

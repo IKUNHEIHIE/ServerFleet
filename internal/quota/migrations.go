@@ -7,7 +7,7 @@ import "serverfleet.local/serverfleet/internal/storage"
 
 // Migrations returns the traffic, quota policy and reminder schema.
 func Migrations() []storage.Migration {
-	return []storage.Migration{{
+	return append([]storage.Migration{{
 		Version: "ds/0052_quota",
 		Name:    "traffic periods, quota policy and reminders",
 		Statements: []string{
@@ -54,5 +54,5 @@ func Migrations() []storage.Migration {
 				sent_at TEXT NOT NULL
 			)`,
 		},
-	}}
+	}}, AutomationMigrations()...)
 }

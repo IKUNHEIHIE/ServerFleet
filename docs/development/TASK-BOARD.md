@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 当前：持续监控、流量与告警投递闭环（2026-11-11 R32）
+
+用户在R31合并后要求继续，沿既有完整项目授权推进下一项实际源码缺口。V09-CLOUD-MONITOR-ALERT-01 / chatgpt-monitor-20261111；主控单会话，从main7cc452d按Git树38675ac5恢复独立ServerFleet-next / feature/cloud-next-completion-20261111，保留其他目录。现有监控RunDue、quota.RunReminders未被Controller调度，monitor未注入Notifier、SMTP/QQ生产端口未装配，Agent流量未入配额。允许monitoring/quota/notifications、必要auth凭据用途与Controller/Agent metrics接缝、正式Web监控/流量/通知、独立R32产品/API/追加迁移与必要检查，另同步当前进度消除过期未实现标记。保持原45迁移SQL/旧fixture哈希/原ADR/Proto字段号/生成代码/依赖锁不变；不启Agent、不引入Runtime或第三方依赖、不访问生产/VPS/真实供应商。真实指标仅经mTLS身份与当前权威进入，缺失/重置/跨月不伪造全月零流量；通知先持久化意图，UNKNOWN不自动重发；当前权限/凭据版本、隔离锁和撤权需持续复核。集中编码和专项后一次同head完整CI，主控COMMENT复审及expected-SHA正常合并。停止条件为该闭环源码、页面、文档、检查与合并完成；真实账号/服务器/浏览器联调由用户进行。
+
 ## 当前：证书续签安装发布与一键安装（2026-11-11 R31）
 
 V09-CLOUD-RENEWAL-INSTALL-01 / chatgpt-delivery-20261111，主控单会话，从main b3d13b77建立独立ServerFleet-delivery / feature/cloud-renewal-install-20261111。用户明确完成续签安装发布编排及哪吒式一键安装。允许certificates/Controller证书、网关/发布必要接缝、bootstrap/Agent安装接入、Web证书/添加节点、scripts/deployment/独立R31产品API/追加迁移/必要检查与发布构建元数据；不启其他Agent、不改旧43迁移SQL/checksum、不引入Runtime/第三方依赖，不触碰生产/VPS/真实供应商/离线Root私钥。保持统一任务、当前权限、独立修改审批、审计和UNKNOWN不重放；首次信任必须HTTPS与外部核对的公开签名密钥/Root pin。离线Root流程不在线自动化。集中编码和专项负向后同head完整CI，主控按既有授权expected-SHA合并，停止条件为两项源码、页面、文档、检查、PR与合并完成。

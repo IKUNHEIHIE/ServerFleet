@@ -37,23 +37,25 @@ type AuditSink interface {
 // mandatory. A nil Notifier makes RunReminders fail closed instead of pretending
 // an alert was sent.
 type Options struct {
-	DB         *storage.DB
-	Repo       *Repo
-	Nodes      *nodes.Repo
-	Audit      AuditSink
-	Authorizer auth.Authorizer
-	Notifier   Notifier
-	Now        func() time.Time
+	DB                *storage.DB
+	Repo              *Repo
+	Nodes             *nodes.Repo
+	Audit             AuditSink
+	Authorizer        auth.Authorizer
+	Notifier          Notifier
+	Now               func() time.Time
+	AutomationCurrent AutomationAuthority
 }
 
 type Service struct {
-	db         *storage.DB
-	repo       *Repo
-	nodes      *nodes.Repo
-	audit      AuditSink
-	authorizer auth.Authorizer
-	notifier   Notifier
-	now        func() time.Time
+	db                *storage.DB
+	repo              *Repo
+	nodes             *nodes.Repo
+	audit             AuditSink
+	authorizer        auth.Authorizer
+	notifier          Notifier
+	now               func() time.Time
+	automationCurrent AutomationAuthority
 }
 
 func NewService(options Options) (*Service, error) {
@@ -75,7 +77,7 @@ func NewService(options Options) (*Service, error) {
 	}
 	return &Service{
 		db: options.DB, repo: options.Repo, nodes: options.Nodes, audit: options.Audit,
-		authorizer: options.Authorizer, notifier: options.Notifier, now: now,
+		authorizer: options.Authorizer, notifier: options.Notifier, now: now, automationCurrent: options.AutomationCurrent,
 	}, nil
 }
 
@@ -229,14 +231,29 @@ func (s *Service) UpsertPolicy(ctx context.Context, subjectID, requestID string,
 		}
 		return Policy{}, err
 	}
+	if input.ResetDay == 0 {
+		input.ResetDay = 1
+	}
+	if input.Timezone == "" {
+		input.Timezone = "UTC"
+	}
+	if input.Direction == "" {
+		input.Direction = "combined"
+	}
 	now := s.now()
 	policy := Policy{
-		NodeID: input.NodeID, MonthlyLimitBytes: input.MonthlyLimitBytes,
+		Direction: input.Direction, ThresholdsPct: input.ThresholdsPct, RemindDays: input.RemindDays, ExpiryType: input.ExpiryType,
+		NodeID: input.NodeID, MonthlyLimitBytes: input.MonthlyLimitBytes, ResetDay: input.ResetDay, Timezone: input.Timezone,
 		WarningPercent: input.WarningPercent, ExpiryAt: input.ExpiryAt.UTC(),
 		Estimated: input.Estimated, UpdatedAt: now,
 	}
 	err := s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		if err := s.repo.UpsertPolicy(txCtx, tx, policy); err != nil {
+			return err
+		}
+		var err error
+		policy, err = s.bindPolicyTx(txCtx, tx, policy, subjectID)
+		if err != nil {
 			return err
 		}
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionPolicy, "success", requestID, input.NodeID, "policy_updated"))
@@ -379,26 +396,71 @@ func (s *Service) RunReminders(ctx context.Context, now time.Time) ([]Reminder, 
 		if err := ctx.Err(); err != nil {
 			return reminders, err
 		}
-		usage, err := s.repo.LatestUsage(ctx, policy.NodeID)
-		if errors.Is(err, ErrUsageNotFound) {
+		if s.automationCurrent != nil && s.automationCurrent(ctx, policy) != nil {
 			continue
 		}
-		if err != nil {
+		period, _, periodErr := PolicyPeriod(now, policy)
+		if periodErr != nil {
+			return reminders, periodErr
+		}
+		usage, err := s.repo.LatestUsage(ctx, policy.NodeID)
+		if errors.Is(err, ErrUsageNotFound) {
+			usage = Usage{}
+		} else if err != nil {
 			return reminders, err
 		}
-		evaluation := evaluate(policy, &usage, usage.PeriodStart, now)
-		candidates := make([]Level, 0, 2)
-		switch evaluation.Level {
-		case LevelExceeded:
-			candidates = append(candidates, LevelExceeded)
-		case LevelWarning:
-			candidates = append(candidates, LevelWarning)
+		var measured *Usage
+		if !usage.PeriodStart.IsZero() && !now.Before(usage.PeriodStart) && now.Before(usage.PeriodEnd) {
+			measured = &usage
+			period = usage.PeriodStart
+		}
+		evaluation := evaluate(policy, measured, period, now)
+		type candidate struct {
+			level  Level
+			suffix string
+		}
+		candidates := []candidate{}
+		if measured != nil {
+			if len(policy.ThresholdsPct) > 0 {
+				// At a large jump, send only the highest crossed threshold; lower
+				// thresholds cannot become newly relevant as usage increases.
+				highest := 0
+				for _, pct := range policy.ThresholdsPct {
+					if evaluation.PercentUsed >= float64(pct) {
+						highest = pct
+					}
+				}
+				if highest > 0 {
+					level := LevelWarning
+					if highest == 100 {
+						level = LevelExceeded
+					}
+					candidates = append(candidates, candidate{level, fmt.Sprintf(":pct-%d", highest)})
+				}
+			} else if evaluation.Level == LevelExceeded || evaluation.Level == LevelWarning {
+				candidates = append(candidates, candidate{level: evaluation.Level})
+			}
 		}
 		if evaluation.Expiring {
-			candidates = append(candidates, LevelExpiring)
+			suffix := ""
+			if len(policy.RemindDays) > 0 {
+				day := -1
+				for _, d := range policy.RemindDays {
+					if !now.Before(policy.ExpiryAt.Add(-time.Duration(d) * 24 * time.Hour)) {
+						day = d
+					}
+				}
+				if day >= 0 {
+					suffix = fmt.Sprintf(":days-%d", day)
+				}
+			}
+			candidates = append(candidates, candidate{LevelExpiring, suffix})
 		}
-		for _, threshold := range candidates {
-			key := reminderKey(policy.NodeID, usage.PeriodStart, threshold)
+		for _, candidate := range candidates {
+			threshold := candidate.level
+			alert := reminderAlert(evaluation, threshold)
+			alert.DedupeKey += candidate.suffix
+			key := alert.DedupeKey
 			exists, err := s.repo.HasReminder(ctx, s.db, key)
 			if err != nil {
 				return reminders, err
@@ -406,14 +468,18 @@ func (s *Service) RunReminders(ctx context.Context, now time.Time) ([]Reminder, 
 			if exists {
 				continue
 			}
-			if _, err := s.notifier.SendAlert(ctx, reminderAlert(evaluation, threshold)); err != nil {
+			delivery, sendErr := s.notifier.SendAlert(ctx, alert)
+			if sendErr != nil {
 				if firstErr == nil {
 					firstErr = ErrNotifyFailed
 				}
 				continue
 			}
+			if delivery.Status != notifications.DeliveryProviderAccepted && !(delivery.Status == notifications.DeliverySubmitted && delivery.ProviderCode != "attempt_pending") && !(s.automationCurrent == nil && delivery.Status == "") {
+				continue
+			}
 			reminder := Reminder{
-				NodeID: policy.NodeID, PeriodStart: usage.PeriodStart,
+				NodeID: policy.NodeID, PeriodStart: period,
 				DedupeKey: key, Threshold: threshold, SentAt: now,
 			}
 			auditEvent := audit.Event{
@@ -442,7 +508,7 @@ func evaluate(policy Policy, usage *Usage, periodStart, now time.Time) Evaluatio
 	}
 	if usage != nil {
 		evaluation.PeriodStart = usage.PeriodStart
-		evaluation.TotalBytes = usage.TotalBytes()
+		evaluation.TotalBytes = policy.used(*usage)
 		if policy.MonthlyLimitBytes > 0 {
 			evaluation.PercentUsed = evaluation.TotalBytes / float64(policy.MonthlyLimitBytes) * 100
 		}
@@ -458,7 +524,11 @@ func evaluate(policy Policy, usage *Usage, periodStart, now time.Time) Evaluatio
 		evaluation.Level = LevelOK
 	}
 	if !policy.ExpiryAt.IsZero() {
-		evaluation.Expiring = !now.Before(policy.ExpiryAt.Add(-ExpiryWarningWindow))
+		window := ExpiryWarningWindow
+		if len(policy.RemindDays) > 0 {
+			window = time.Duration(policy.RemindDays[0]) * 24 * time.Hour
+		}
+		evaluation.Expiring = !now.Before(policy.ExpiryAt.Add(-window))
 		evaluation.Expired = !now.Before(policy.ExpiryAt)
 		if usage != nil && evaluation.Level == LevelOK && evaluation.Expiring {
 			evaluation.Level = LevelExpiring
@@ -478,11 +548,15 @@ func reminderAlert(evaluation Evaluation, threshold Level) notifications.Alert {
 	body := fmt.Sprintf("Node %s used %.0f of %d bytes (%.1f%%) in the period starting %s.",
 		evaluation.NodeID, evaluation.TotalBytes, evaluation.Policy.MonthlyLimitBytes,
 		evaluation.PercentUsed, evaluation.PeriodStart.UTC().Format(time.RFC3339))
+	if evaluation.Usage == nil {
+		body = fmt.Sprintf("Node %s has no current traffic measurement; no zero usage is implied.", evaluation.NodeID)
+	}
 	if threshold == LevelExpiring && !evaluation.ExpiryAt.IsZero() {
 		body += fmt.Sprintf(" Quota expiry: %s.", evaluation.ExpiryAt.UTC().Format(time.RFC3339))
 	}
 	return notifications.Alert{
-		DedupeKey: reminderKey(evaluation.NodeID, evaluation.PeriodStart, threshold),
+		DedupeKey: quotaAlertKey(evaluation, threshold),
+		Source:    notifications.AlertSource{Kind: "quota", ID: evaluation.NodeID, OwnerID: evaluation.Policy.AutomationOwnerID, Revision: evaluation.Policy.AutomationRevision},
 		Subject:   subject,
 		Body:      body,
 	}
@@ -565,4 +639,11 @@ func isPureDenial(err error) bool {
 		err = single.Unwrap()
 	}
 	return false
+}
+
+func quotaAlertKey(e Evaluation, t Level) string {
+	if t == LevelExpiring {
+		return "quota:" + e.NodeID + ":expiry:" + e.ExpiryAt.UTC().Format("20060102T150405Z")
+	}
+	return reminderKey(e.NodeID, e.PeriodStart, t)
 }

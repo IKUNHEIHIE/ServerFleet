@@ -10,7 +10,7 @@ import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, trafficApi } from "@/lib/api/endpoints";
 import { monitoringApi, notificationsApi } from "@/lib/api/endpoints-infra";
-import type { AvailabilityMonitor, MonitorCheckEntry, MonitorState, MonitorProbeResult, NotificationDelivery, NotificationChannel, NodeSummary, TrafficRisk } from "@/lib/api/dto";
+import type { AvailabilityMonitor, MonitorCheckEntry, MonitorState, MonitorProbeResult, NotificationDelivery, NotificationChannel, TrafficRisk } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 import { adaptMetric } from "@/features/nodes/legacy-adapter";
@@ -90,6 +90,22 @@ function CheckHistory({ monitor, onClose }: { readonly monitor: AvailabilityMoni
   );
 }
 
+function AlertHistory({ monitor, onClose }: { readonly monitor: AvailabilityMonitor; readonly onClose: () => void }) {
+ const session=useSession();
+ const events=useResource(`monitor:alert-history:${session.viewEpoch}:${monitor.id}`, signal=>monitoringApi.alerts(monitor.id ?? "",signal).then(result=>result.data),{refreshIntervalMs:5000});
+ const labels:Record<string,string>={pending:"等待可用渠道",queued:"排队",submitted:"已提交，结果待确认",provider_accepted:"平台已接受",delivery_unknown:"投递未知，请人工核查",blocked:"配置或权限已变更",failed:"失败",rejected:"平台拒绝",rate_limited:"平台限流"};
+ return <Modal open title={`告警历史 · ${monitor.name}`} onClose={onClose} wide footer={<Button onClick={onClose}>关闭</Button>}>
+ <p className="mb-3 text-sm text-muted-foreground">告警状态与探测状态独立。UNKNOWN 不自动重发，可在对应任务中进入人工处置。</p>
+ <AsyncPanel state={events.state} onRetry={events.reload} errorTitle="告警历史加载失败" empty={<EmptyState title="暂无告警事件" />} isEmpty={data=>data.items.length===0}>
+ {data=><DataTable caption="监控告警事件" rows={data.items} rowKey={event=>event.key} columns={[
+ {key:"state",header:"状态",render:event=>labels[event.state] ?? event.state},
+ {key:"time",header:"发生时间",render:event=>formatDateTime(event.createdAt)},
+ {key:"delivery",header:"投递记录",render:event=>event.deliveryId ?? "—"},
+ {key:"task",header:"投递任务",render:event=>event.taskId ? <a className="underline" href={`#/tasks/${encodeURIComponent(event.taskId)}`}>查看任务与人工处置</a> : "尚未创建任务"},
+ ]}/>}
+ </AsyncPanel></Modal>;
+}
+
 const DELIVERY_STATUS_TEXT: Record<NotificationDelivery["status"], string> = {
   queued: "排队",
   submitted: "已提交",
@@ -103,13 +119,11 @@ const DELIVERY_STATUS_TEXT: Record<NotificationDelivery["status"], string> = {
 function MonitorEditor({
   open,
   monitor,
-  nodes,
   onClose,
   onSaved,
 }: {
   readonly open: boolean;
   readonly monitor: AvailabilityMonitor | null;
-  readonly nodes: readonly NodeSummary[];
   readonly onClose: () => void;
   readonly onSaved: (monitor: AvailabilityMonitor) => void;
 }) {
@@ -117,7 +131,6 @@ function MonitorEditor({
   const [name, setName] = useState("");
   const [type, setType] = useState<AvailabilityMonitor["type"]>("http");
   const [target, setTarget] = useState("");
-  const [sourceNodeId, setSourceNodeId] = useState("");
   const [intervalSeconds, setIntervalSeconds] = useState("60");
   const [timeoutSeconds, setTimeoutSeconds] = useState("5");
   const [failureCount, setFailureCount] = useState("3");
@@ -133,7 +146,6 @@ function MonitorEditor({
     setName(monitor?.name ?? "");
     setType(monitor?.type ?? "http");
     setTarget(monitor?.target ?? "");
-    setSourceNodeId(monitor?.sourceNodeId ?? "");
     setIntervalSeconds(String(monitor?.intervalSeconds ?? 60));
     setTimeoutSeconds(String(monitor?.timeoutSeconds ?? 5));
     setFailureCount(String(monitor?.failureCount ?? 3));
@@ -156,7 +168,6 @@ function MonitorEditor({
       name: name.trim(),
       type,
       target: target.trim(),
-      ...(sourceNodeId ? { sourceNodeId } : {}),
       intervalSeconds: Number(intervalSeconds),
       timeoutSeconds: Number(timeoutSeconds),
       failureCount: Number(failureCount),
@@ -199,14 +210,7 @@ function MonitorEditor({
               </Select>
             )}
           </Field>
-          <Field label="探测源节点（可选）">
-            {ids => (
-              <Select id={ids.inputId} value={sourceNodeId} onChange={event => setSourceNodeId(event.target.value)}>
-                <option value="">由服务端选择</option>
-                {nodes.map(node => <option key={node.id} value={node.id}>{node.name.trim() || node.id}{node.online ? "" : "（离线）"}</option>)}
-              </Select>
-            )}
-          </Field>
+          <p className="text-sm text-muted-foreground">探测源：Controller。目标仍受服务端白名单与 SSRF 校验。</p>
         </div>
         <Field label="探测目标" hint="HTTP(S) URL、host:port；目标授权与 SSRF 由服务端执行。">
           {ids => <TextInput id={ids.inputId} value={target} onChange={event => setTarget(event.target.value)} required />}
@@ -249,12 +253,13 @@ export function MonitoringPage() {
   const [tab, setTab] = useState<Tab>("resources");
   const [editor, setEditor] = useState<{ open: boolean; monitor: AvailabilityMonitor | null }>({ open: false, monitor: null });
   const [deleting, setDeleting] = useState<AvailabilityMonitor | null>(null);
+  const [alertHistory, setAlertHistory] = useState<AvailabilityMonitor | null>(null);
   const [history, setHistory] = useState<AvailabilityMonitor | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const nodes = useResource(`monitor:nodes:${session.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data));
   const risks = useResource(`monitor:risks:${session.viewEpoch}`, signal => trafficApi.risks(signal).then(result => result.data));
-  const monitors = useResource(`monitor:list:${session.viewEpoch}`, signal => monitoringApi.list(signal).then(result => result.data));
+  const monitors = useResource(`monitor:list:${session.viewEpoch}`, signal => monitoringApi.list(signal).then(result => result.data), { refreshIntervalMs: 10000 });
   const channels = useResource(`monitor:channels:${session.viewEpoch}`, signal => notificationsApi.channels(signal).then(result => result.data));
   const deliveries = useResource(`monitor:deliveries:${session.viewEpoch}`, signal => notificationsApi.deliveries(signal).then(result => result.data));
 
@@ -409,6 +414,7 @@ export function MonitoringPage() {
                     { key: "name", header: "名称", render: monitor => monitor.name },
                     { key: "target", header: "目标", render: monitor => `${monitor.type.toUpperCase()} · ${monitor.target}` },
                     { key: "state", header: "状态", render: monitor => MONITOR_STATE_TEXT[monitor.state ?? "unknown"] },
+                    { key: "automation", header: "后台调度", render: monitor => monitor.automationOwnerId ? "已绑定保存者权限" : "请编辑并保存以授权" },
                     { key: "interval", header: "间隔/超时", render: monitor => `${monitor.intervalSeconds}s / ${monitor.timeoutSeconds}s` },
                     { key: "checked", header: "最近检查", render: monitor => formatDateTime(monitor.lastCheckedAt) ?? "—" },
                     { key: "channels", header: "通知", render: monitor => monitor.notifyChannels?.join("、") || "未设置" },
@@ -426,6 +432,7 @@ export function MonitoringPage() {
                             {monitor.state === "paused" ? "恢复" : "暂停"}
                           </Button>
                           <Button size="sm" onClick={() => setHistory(monitor)}>检查历史</Button>
+                          <Button size="sm" onClick={() => setAlertHistory(monitor)}>告警历史</Button>
                           <Button
                             size="sm"
                             variant="primary"
@@ -493,7 +500,6 @@ export function MonitoringPage() {
       <MonitorEditor
         open={editor.open}
         monitor={editor.monitor}
-        nodes={nodeItems}
         onClose={() => setEditor({ open: false, monitor: null })}
         onSaved={() => {
           setEditor({ open: false, monitor: null });
@@ -501,6 +507,7 @@ export function MonitoringPage() {
           monitors.reload();
         }}
       />
+      {alertHistory ? <AlertHistory monitor={alertHistory} onClose={() => setAlertHistory(null)} /> : null}
       {history ? <CheckHistory monitor={history} onClose={() => setHistory(null)} /> : null}
       <Modal
         open={deleting !== null}

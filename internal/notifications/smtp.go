@@ -34,6 +34,7 @@ var (
 // SMTPConfig configures the standard-library SMTP sender. Dialer and RootCAs are
 // injectable for a local TLS test server; production uses the system roots.
 type SMTPConfig struct {
+	Current         func(context.Context) error
 	Secrets         SecretBorrower
 	Dialer          *net.Dialer
 	RootCAs         *x509.CertPool
@@ -45,6 +46,7 @@ type SMTPConfig struct {
 // SMTPMailer is the real network implementation of SMTPSender. It refuses to send
 // credentials over a plaintext connection and never retries by itself.
 type SMTPMailer struct {
+	current  func(context.Context) error
 	secrets  SecretBorrower
 	dialer   *net.Dialer
 	rootCAs  *x509.CertPool
@@ -76,7 +78,7 @@ func NewSMTPMailer(config SMTPConfig) (*SMTPMailer, error) {
 		now = time.Now
 	}
 	return &SMTPMailer{
-		secrets: config.Secrets, dialer: dialer, rootCAs: config.RootCAs,
+		secrets: config.Secrets, current: config.Current, dialer: dialer, rootCAs: config.RootCAs,
 		timeout: timeout, maxBytes: maxBytes, now: now,
 	}, nil
 }
@@ -128,6 +130,11 @@ func (s *SMTPMailer) sendWithCredential(ctx context.Context, settings SMTPSettin
 	if err != nil {
 		return ProviderResult{}, err
 	}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
+	}
 	client, conn, stop, err := s.connect(ctx, settings)
 	if err != nil {
 		return classifySMTPError("connect", err)
@@ -139,22 +146,51 @@ func (s *SMTPMailer) sendWithCredential(ctx context.Context, settings SMTPSettin
 	}()
 
 	auth := &smtpPlainAuth{username: username, password: password}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
+	}
 	if err := client.Auth(auth); err != nil {
 		return classifySMTPError("auth", err)
+	}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
 	}
 	if err := client.Mail(settings.Sender); err != nil {
 		return classifySMTPError("mail_from", err)
 	}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
+	}
 	if err := client.Rcpt(settings.Recipient); err != nil {
 		return classifySMTPError("rcpt_to", err)
+	}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
 	}
 	writer, err := client.Data()
 	if err != nil {
 		return classifySMTPError("data_open", err)
 	}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
+	}
 	if _, err := writer.Write(payload); err != nil {
-		_ = writer.Close()
 		return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_data_unknown"}, fmt.Errorf("%w: data write", ErrSMTPTransport)
+	}
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "smtp_authority_changed"}, e
+		}
 	}
 	if err := writer.Close(); err != nil {
 		return classifySMTPError("data_close", err)

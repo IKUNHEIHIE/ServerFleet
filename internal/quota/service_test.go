@@ -294,14 +294,17 @@ func TestExpiryReminderDedupe(t *testing.T) {
 	}
 }
 
-func TestExpiryReminderRequiresUsage(t *testing.T) {
+func TestExpiryReminderWithoutUsageDoesNotFabricateZero(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
 	h := newFixture(t, nil, &fakeNotifier{})
 	h.upsertPolicy(t, "n1", 1000, 80, h.clock.Now().Add(2*24*time.Hour))
 	reminders, err := h.service.RunReminders(ctx, h.clock.Now())
-	if err != nil || len(reminders) != 0 || h.notifier.count() != 0 {
+	if err != nil || len(reminders) != 1 || h.notifier.count() != 1 {
 		t.Fatalf("no-data expiry reminders = %+v notifications=%d err=%v", reminders, h.notifier.count(), err)
+	}
+	if !strings.Contains(h.notifier.at(0).Body, "no current traffic measurement") || strings.Contains(h.notifier.at(0).Body, "used 0") {
+		t.Fatal("expiry reminder invented zero usage")
 	}
 }
 

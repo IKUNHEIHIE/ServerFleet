@@ -49,18 +49,26 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 }
 
 type trafficQuotaDTO struct {
-	NodeID         string   `json:"nodeId"`
-	QuotaBytes     int64    `json:"quotaBytes"`
-	QuotaGb        float64  `json:"quotaGb"`
-	UsedBytes      *float64 `json:"usedBytes,omitempty"`
-	UsedGb         *float64 `json:"usedGb,omitempty"`
-	WarningPercent int      `json:"warningPercent"`
-	ThresholdsPct  []int    `json:"thresholdsPct"`
-	ExpiresAt      string   `json:"expiresAt,omitempty"`
-	Estimated      bool     `json:"estimated"`
-	Direction      string   `json:"direction"`
-	Source         string   `json:"source,omitempty"`
-	UpdatedAt      string   `json:"updatedAt,omitempty"`
+	ExpiryType         string           `json:"expiryType,omitempty"`
+	RemindDays         []int            `json:"remindDays,omitempty"`
+	CycleResetDay      int              `json:"cycleResetDay"`
+	Timezone           string           `json:"timezone"`
+	DataComplete       bool             `json:"dataComplete"`
+	Coverage           *CounterCoverage `json:"coverage,omitempty"`
+	AutomationOwnerID  string           `json:"automationOwnerId,omitempty"`
+	AutomationRevision uint64           `json:"automationRevision,omitempty"`
+	NodeID             string           `json:"nodeId"`
+	QuotaBytes         int64            `json:"quotaBytes"`
+	QuotaGb            float64          `json:"quotaGb"`
+	UsedBytes          *float64         `json:"usedBytes,omitempty"`
+	UsedGb             *float64         `json:"usedGb,omitempty"`
+	WarningPercent     int              `json:"warningPercent"`
+	ThresholdsPct      []int            `json:"thresholdsPct"`
+	ExpiresAt          string           `json:"expiresAt,omitempty"`
+	Estimated          bool             `json:"estimated"`
+	Direction          string           `json:"direction"`
+	Source             string           `json:"source,omitempty"`
+	UpdatedAt          string           `json:"updatedAt,omitempty"`
 }
 
 func (api *httpAPI) getPolicy(w http.ResponseWriter, r *http.Request) {
@@ -84,8 +92,28 @@ func (api *httpAPI) getPolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	dto := quotaFromPolicy(policy)
-	if hasUsage {
-		used := usage.TotalBytes()
+	period, _, periodErr := PolicyPeriod(api.service.now(), policy)
+	if periodErr != nil {
+		writeError(w, periodErr)
+		return
+	}
+	if coverage, found, e := api.service.CounterCoverage(r.Context(), principal.SubjectID, nodeID, period); e != nil {
+		writeError(w, e)
+		return
+	} else if found {
+		dto.Coverage = &coverage
+	}
+
+	if hasUsage && api.service.now().Before(usage.PeriodEnd) && !api.service.now().Before(usage.PeriodStart) {
+		dto.Estimated = dto.Estimated || usage.Source == SourceAgent
+		dto.DataComplete = usage.Source == SourceProvider
+		if coverage, found, e := api.service.CounterCoverage(r.Context(), principal.SubjectID, nodeID, usage.PeriodStart); e != nil {
+			writeError(w, e)
+			return
+		} else if found {
+			dto.Coverage = &coverage
+		}
+		used := policy.used(usage)
 		dto.UsedBytes = &used
 		gb := bytesToGB(used)
 		dto.UsedGb = &gb
@@ -104,10 +132,7 @@ type quotaBody struct {
 	ExpiryAt          *string  `json:"expiryAt"`
 	ExpiresAt         *string  `json:"expiresAt"`
 	Estimated         *bool    `json:"estimated"`
-	// The web editor submits these fields. Direction changes the accounting
-	// semantics; only combined ingress+egress is modeled, so other values are
-	// rejected instead of silently ignored. Reset day, timezone, expiry type and
-	// remind days are accepted for compatibility but are not persisted.
+	// Accounting and reminder configuration is validated and persisted.
 	Direction            *string  `json:"direction"`
 	Source               *string  `json:"source"`
 	CycleResetDay        *int     `json:"cycleResetDay"`
@@ -133,10 +158,7 @@ func (api *httpAPI) putPolicy(w http.ResponseWriter, r *http.Request) {
 		writeFixed(w, http.StatusBadRequest, "invalid_request", "node id in the body does not match the path")
 		return
 	}
-	if body.Direction != nil && *body.Direction != "" && *body.Direction != "combined" {
-		writeFixed(w, http.StatusBadRequest, "unsupported_direction", "only combined ingress+egress quotas are modeled")
-		return
-	}
+
 	limit, ok := limitBytes(w, body)
 	if !ok {
 		return
@@ -153,9 +175,25 @@ func (api *httpAPI) putPolicy(w http.ResponseWriter, r *http.Request) {
 	if body.Estimated != nil {
 		estimated = *body.Estimated
 	}
+	resetDay := 1
+	if body.CycleResetDay != nil {
+		resetDay = *body.CycleResetDay
+	}
+	timezone := "UTC"
+	if body.Timezone != nil {
+		timezone = *body.Timezone
+	}
+	direction := "combined"
+	if body.Direction != nil {
+		direction = *body.Direction
+	}
+	expiryType := ""
+	if body.ExpiryType != nil {
+		expiryType = *body.ExpiryType
+	}
 	policy, err := api.service.UpsertPolicy(r.Context(), principal.SubjectID, principal.RequestID, PolicyInput{
-		NodeID: nodeID, MonthlyLimitBytes: limit, WarningPercent: warning,
-		ExpiryAt: expiry, Estimated: estimated,
+		NodeID: nodeID, MonthlyLimitBytes: limit, WarningPercent: warning, Direction: direction, ThresholdsPct: body.ThresholdsPct, RemindDays: body.RemindDays, ExpiryType: expiryType,
+		ExpiryAt: expiry, Estimated: estimated, ResetDay: resetDay, Timezone: timezone,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -233,11 +271,20 @@ func parseExpiry(w http.ResponseWriter, body quotaBody) (time.Time, bool) {
 }
 
 func quotaFromPolicy(policy Policy) trafficQuotaDTO {
+	thresholds := policy.ThresholdsPct
+	if len(thresholds) == 0 {
+		thresholds = []int{policy.WarningPercent}
+	}
+	direction := policy.Direction
+	if direction == "" {
+		direction = "combined"
+	}
 	return trafficQuotaDTO{
+		CycleResetDay: policy.ResetDay, Timezone: policy.Timezone, AutomationOwnerID: policy.AutomationOwnerID, AutomationRevision: policy.AutomationRevision,
 		NodeID: policy.NodeID, QuotaBytes: policy.MonthlyLimitBytes,
 		QuotaGb: bytesToGB(float64(policy.MonthlyLimitBytes)), WarningPercent: policy.WarningPercent,
-		ThresholdsPct: []int{policy.WarningPercent}, ExpiresAt: formatOptionalTime(policy.ExpiryAt),
-		Estimated: policy.Estimated, Direction: "combined", UpdatedAt: formatOptionalTime(policy.UpdatedAt),
+		ThresholdsPct: thresholds, ExpiryType: policy.ExpiryType, RemindDays: policy.RemindDays, ExpiresAt: formatOptionalTime(policy.ExpiryAt),
+		Estimated: policy.Estimated, Direction: direction, UpdatedAt: formatOptionalTime(policy.UpdatedAt),
 	}
 }
 
