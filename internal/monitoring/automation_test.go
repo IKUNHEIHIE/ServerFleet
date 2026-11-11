@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"path/filepath"
+	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/monitoring"
 	"serverfleet.local/serverfleet/internal/notifications"
+	"serverfleet.local/serverfleet/internal/storage"
 	"testing"
 	"time"
 )
@@ -124,5 +127,54 @@ func TestMonitorSchedulerUsesBoundedRoundRobin(t *testing.T) {
 	second, e := h.service.RunDue(ctx, h.clock.Now())
 	if e != nil || len(second) != 10 {
 		t.Fatal("later monitors starved", len(second), e)
+	}
+}
+
+type statusReaderNotifier struct {
+	db       *storage.DB
+	queryErr error
+	calls    int
+}
+
+func (n *statusReaderNotifier) SendAlert(context.Context, notifications.Alert) (notifications.Delivery, error) {
+	return notifications.Delivery{ID: 1, Status: notifications.DeliveryQueued}, nil
+}
+func (n *statusReaderNotifier) DeliveryStatus(ctx context.Context, id int64) (notifications.Delivery, error) {
+	n.calls++
+	var value int
+	n.queryErr = n.db.QueryRow(ctx, `SELECT 1`).Scan(&value)
+	return notifications.Delivery{ID: id, Status: notifications.DeliveryProviderAccepted}, n.queryErr
+}
+func TestAlertHistoryReleasesConnectionBeforeReadingDeliveryStatus(t *testing.T) {
+	ctx := context.Background()
+	db, e := storage.Open(ctx, storage.Config{Path: filepath.Join(t.TempDir(), "one-connection.db"), MaxOpenConns: 1})
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer db.Close()
+	migrations, e := storage.NewMigrator(monitoring.Migrations(), audit.Migrations())
+	if e != nil {
+		t.Fatal(e)
+	}
+	if _, e = migrations.Apply(ctx, db); e != nil {
+		t.Fatal(e)
+	}
+	clock := &testClock{now: time.Date(2026, 11, 11, 1, 0, 0, 0, time.UTC)}
+	prober := &fakeProber{result: healthyResult()}
+	notifier := &statusReaderNotifier{db: db}
+	h := buildFixture(t, db, clock, authorizerFunc(allowAll), prober, notifier)
+	h.create(t, "single-connection", "http", "http://93.184.216.34/")
+	if _, _, e = h.service.RunCheckNow(ctx, "admin", "healthy", "single-connection"); e != nil {
+		t.Fatal(e)
+	}
+	prober.set(monitoring.ProbeResult{Reason: "synthetic down"}, nil)
+	if _, _, e = h.service.RunCheckNow(ctx, "admin", "down", "single-connection"); e != nil {
+		t.Fatal(e)
+	}
+	limited, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+	events, e := h.service.AlertEvents(limited, "admin", "single-connection", 20)
+	if e != nil || notifier.queryErr != nil || notifier.calls != 1 || len(events) != 1 || events[0].State != "provider_accepted" {
+		t.Fatal("history held a connection during nested delivery read", events, e, notifier.queryErr, notifier.calls)
 	}
 }

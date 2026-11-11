@@ -227,6 +227,19 @@ func (s *Service) AlertEvents(ctx context.Context, subject, id string, limit int
 		if json.Unmarshal(raw, &event) != nil {
 			return nil, ErrInvalidMonitor
 		}
+
+		out = append(out, event)
+	}
+	if e = rows.Err(); e != nil {
+		return nil, e
+	}
+	if e = rows.Close(); e != nil {
+		return nil, e
+	}
+	// Release the outer read before crossing into the notification repository.
+	// This also works with a one-connection pool and concurrent history reads.
+	for index := range out {
+		event := out[index]
 		if reader, ok := s.notifier.(interface {
 			DeliveryStatus(context.Context, int64) (notifications.Delivery, error)
 		}); ok && event.DeliveryID > 0 {
@@ -239,9 +252,9 @@ func (s *Service) AlertEvents(ctx context.Context, subject, id string, limit int
 				}
 			}
 		}
-		out = append(out, event)
+		out[index] = event
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 type automationCursor struct {
