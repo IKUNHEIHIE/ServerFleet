@@ -1,5 +1,7 @@
 # ServerFleet
 
+2026-11-11 R32补持续监控调度、真实连续阈值与告警事件、Agent主机流量增量及账期覆盖、到期提醒和统一任务通知投递。配置见[持续监控与通知](docs/development/MONITORING-ALERTS.md)，产品/API同步见[R32](docs/contracts/revisions/v09-r32-observability.md)。本轮接收以包含此变更的PR合并状态和精确head CI评论为准；真实VPS及供应商联调仍由用户进行。
+
 2026-11-11 R31：补齐[续签后的安装发布编排](docs/development/RENEWAL-DELIVERY.md)与[可信一键安装](deployment/INSTALL.md)，正式 Web 带进度、审批任务和人工修复采用。产品/API同步见[R31](docs/contracts/revisions/v09-r31-delivery.md)。自动检查以精确提交 CI 为准，真实供应商与系统服务安装由用户联调。
 
 2026-11-11 R30补齐异常／UNKNOWN人工处置闭环：结构化证据、当前事实快照、后续任务结果阻断、独立复核、结案依据变化自动重新核查，以及备份上传只读核验任务入口。使用见[人工处置闭环](docs/development/INCIDENT-CLOSURE.md)，产品与API变化见[R30](docs/contracts/revisions/v09-r30-incident-closure.md)。人工结论保留原UNKNOWN；真实环境联调仍由用户进行。

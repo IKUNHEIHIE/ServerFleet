@@ -39,6 +39,14 @@ func (s State) Valid() bool {
 
 // Monitor is the persisted probe definition and last observed state.
 type Monitor struct {
+	ConsecutiveRecoveries int
+	FailureThreshold      int
+	RecoveryThreshold     int
+	NotifyChannels        []notifications.Channel
+
+	AutomationOwnerID   string
+	AutomationRevision  uint64
+	ObservationRevision uint64
 	ID                  string
 	Name                string
 	Kind                Kind
@@ -58,6 +66,10 @@ type Monitor struct {
 // MonitorInput is a create or full update of mutable monitor fields. Identity,
 // target policy and bounds are validated by the service before persistence.
 type MonitorInput struct {
+	FailureThreshold  int
+	RecoveryThreshold int
+	NotifyChannels    []notifications.Channel
+
 	ID               string
 	Name             string
 	Kind             Kind
@@ -125,6 +137,16 @@ const (
 )
 
 func validateMonitorInput(input MonitorInput, policy TargetPolicy) error {
+	if input.FailureThreshold < 0 || input.FailureThreshold > 100 || input.RecoveryThreshold < 0 || input.RecoveryThreshold > 100 || len(input.NotifyChannels) > 2 {
+		return ErrInvalidMonitor
+	}
+	seen := map[notifications.Channel]bool{}
+	for _, ch := range input.NotifyChannels {
+		if (ch != notifications.ChannelSMTP && ch != notifications.ChannelQQBot) || seen[ch] {
+			return ErrInvalidMonitor
+		}
+		seen[ch] = true
+	}
 	if !validToken(input.ID, 128) || strings.ContainsAny(input.ID, "*?[]/\\") {
 		return ErrInvalidMonitor
 	}
@@ -190,4 +212,11 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func normalizeThreshold(n int) int {
+	if n == 0 {
+		return 1
+	}
+	return n
 }

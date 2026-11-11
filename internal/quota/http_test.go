@@ -63,7 +63,7 @@ func TestHTTPTrafficQuotaRoundTrip(t *testing.T) {
 	quotaDecode(t, put.Body, &policy)
 	const wantBytes = int64(100_000_000_000)
 	if policy.NodeID != "n1" || policy.QuotaBytes != wantBytes || policy.WarningPercent != 70 ||
-		len(policy.ThresholdsPct) != 1 || policy.ThresholdsPct[0] != 70 || policy.Direction != "combined" {
+		len(policy.ThresholdsPct) != 3 || policy.ThresholdsPct[0] != 70 || policy.Direction != "combined" {
 		t.Fatalf("policy = %+v", policy)
 	}
 
@@ -88,7 +88,7 @@ func TestHTTPTrafficQuotaRoundTrip(t *testing.T) {
 func TestHTTPTrafficQuotaRejectsInvalidAndUnauthorized(t *testing.T) {
 	server := newQuotaServer(t, nil)
 	badDirection := quotaJSON(t, server.URL+"/api/v1/nodes/n1/traffic-quota", http.MethodPut, map[string]any{
-		"quotaGb": 10, "warningPercent": 80, "direction": "ingress",
+		"quotaGb": 10, "warningPercent": 80, "direction": "unsupported",
 	})
 	if badDirection.StatusCode != http.StatusBadRequest {
 		t.Fatalf("direction status = %d body=%s", badDirection.StatusCode, badDirection.Body)

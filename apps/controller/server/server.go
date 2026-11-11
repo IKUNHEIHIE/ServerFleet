@@ -109,44 +109,45 @@ type Config struct {
 
 // Server holds the wired Controller database, services, and HTTP router.
 type Server struct {
-	residentHealthGate func(context.Context) error
-	recoveryCleanup    func() error
-	residentSupervisor *updates.ResidentSupervisorConfig
-	buildVersion       string
-	dbPath             string
-	ProductUpdates     updates.ProductDeployment
-	ReleaseAcquirer    *updates.ReleaseAcquirer
-	PublicCertificates *publicCertificateExecution
-	runtimeGate        func(context.Context) error
-	DB                 *storage.DB
-	Audit              *audit.SQLRecorder
-	IdentityStore      *auth.SQLIdentityStore
-	Identity           *auth.IdentityService
-	Credentials        *auth.CredentialService
-	IdentityHTTP       *auth.IdentityHTTP
-	NodesRepo          *nodes.Repo
-	GroupsRepo         *nodes.GroupRepo
-	ServiceGroupsRepo  *servicegroups.Repo
-	MonitoringRepo     *monitoring.Repo
-	QuotaRepo          *quota.Repo
-	CertificatesRepo   *certificates.Repo
-	PublishingRepo     *publishing.Repo
-	Nodes              *nodes.Service
-	ServiceGroups      *servicegroups.Service
-	TasksRepo          *tasks.Repo
-	Tasks              *tasks.Service
-	Files              *files.Service
-	FilesTransport     *files.LocalStagingTransport
-	DNS                *dns.Service
-	Notifications      *notifications.Service
-	Gateway            *gateway.Service
-	Monitoring         *monitoring.Service
-	Quota              *quota.Service
-	Certificates       *certificates.Service
-	CertificateCleanup *certificates.CleanupJournal
-	cleanupEnabled     bool
-	cleanupInterval    time.Duration
-	Publishing         *publishing.Service
+	notificationAuthority string
+	residentHealthGate    func(context.Context) error
+	recoveryCleanup       func() error
+	residentSupervisor    *updates.ResidentSupervisorConfig
+	buildVersion          string
+	dbPath                string
+	ProductUpdates        updates.ProductDeployment
+	ReleaseAcquirer       *updates.ReleaseAcquirer
+	PublicCertificates    *publicCertificateExecution
+	runtimeGate           func(context.Context) error
+	DB                    *storage.DB
+	Audit                 *audit.SQLRecorder
+	IdentityStore         *auth.SQLIdentityStore
+	Identity              *auth.IdentityService
+	Credentials           *auth.CredentialService
+	IdentityHTTP          *auth.IdentityHTTP
+	NodesRepo             *nodes.Repo
+	GroupsRepo            *nodes.GroupRepo
+	ServiceGroupsRepo     *servicegroups.Repo
+	MonitoringRepo        *monitoring.Repo
+	QuotaRepo             *quota.Repo
+	CertificatesRepo      *certificates.Repo
+	PublishingRepo        *publishing.Repo
+	Nodes                 *nodes.Service
+	ServiceGroups         *servicegroups.Service
+	TasksRepo             *tasks.Repo
+	Tasks                 *tasks.Service
+	Files                 *files.Service
+	FilesTransport        *files.LocalStagingTransport
+	DNS                   *dns.Service
+	Notifications         *notifications.Service
+	Gateway               *gateway.Service
+	Monitoring            *monitoring.Service
+	Quota                 *quota.Service
+	Certificates          *certificates.Service
+	CertificateCleanup    *certificates.CleanupJournal
+	cleanupEnabled        bool
+	cleanupInterval       time.Duration
+	Publishing            *publishing.Service
 
 	Enrollment           *transport.EnrollmentService
 	EnrollmentHTTP       *transport.EnrollmentHTTP
@@ -698,6 +699,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	credentialsService, err := auth.NewPersistentCredentialService(
 		ctx, identityService, keyDir,
 		func(ctx context.Context, op auth.CredentialOperation) error {
+			if (op.Module == "smtp" || op.Module == "qqbot") && s != nil {
+				return s.notificationCredentialGate(ctx, op)
+			}
 			if op.Module == "backups" && s != nil {
 				return s.backupCredentialGate(ctx, op)
 			}
@@ -946,6 +950,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return cleanup(err)
 	}
+	notificationExecution, e := s.setupNotificationExecution(cfg.ControllerAuthorityID, workers)
+	if e != nil {
+		return cleanup(e)
+	}
+	controllerExecution, err = mergeControllerExecutions(controllerExecution, notificationExecution)
+	if err != nil {
+		return cleanup(err)
+	}
 	tasksService, err := tasks.NewService(tasks.Options{
 		TaskCurrent:         s.aiTaskCurrent,
 		ControllerExecution: controllerExecution,
@@ -1028,14 +1040,37 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	smtpSender, qqSender := cfg.SMTPSender, cfg.QQSender
+	var notificationDispatch notifications.DeliveryDispatcher
+	var prepareNotification notifications.CredentialBindingPreparer = s.prepareNotificationCredential
+	var currentNotification notifications.DeliveryAuthority
+	if s.notificationAuthority != "" {
+		notificationDispatch = s.dispatchNotification
+		prepareNotification = s.prepareNotificationCredential
+		currentNotification = s.notificationCurrent
+		borrower := notifications.SecretBorrowerFunc(s.borrowNotification)
+		if smtpSender == nil {
+			smtpSender, err = notifications.NewSMTPMailer(notifications.SMTPConfig{Secrets: borrower, Current: s.notificationIOCurrent})
+			if err != nil {
+				return cleanup(err)
+			}
+		}
+		if qqSender == nil {
+			qqSender, err = notifications.NewQQBotSender(notifications.QQConfig{Secrets: borrower, Current: s.notificationIOCurrent})
+			if err != nil {
+				return cleanup(err)
+			}
+		}
+	}
 	notificationsService, err := notifications.NewService(notifications.Options{
 		DB:         db,
 		Repo:       notificationsRepo,
 		Audit:      auditRecorder,
 		Authorizer: authorizer,
-		SMTPSender: cfg.SMTPSender,
-		QQSender:   cfg.QQSender,
-		Now:        now,
+		SMTPSender: smtpSender,
+		QQSender:   qqSender,
+		Dispatcher: notificationDispatch, PrepareCredential: prepareNotification, CurrentDelivery: currentNotification,
+		Now: now,
 	})
 	if err != nil {
 		return cleanup(err)
@@ -1064,6 +1099,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	var monitorAuthority monitoring.AutomationAuthority
+	var quotaAuthority quota.AutomationAuthority
+	var alertNotifier monitoring.Notifier = notificationsService
+	var quotaNotifier quota.Notifier = notificationsService
+	if s.notificationAuthority != "" {
+		monitorAuthority = s.monitorAutomationCurrent
+		quotaAuthority = s.quotaAutomationCurrent
+		alertNotifier = durableAlertAdapter{notificationsService}
+		quotaNotifier = durableAlertAdapter{notificationsService}
+	}
 	prober := cfg.MonitoringProber
 	if prober == nil {
 		prober, err = monitoring.NewNetProber(monitoring.NetProberConfig{
@@ -1074,11 +1119,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 	}
 	monitoringService, err := monitoring.NewService(monitoring.Options{
-		DB:           db,
-		Repo:         monitoringRepo,
-		Audit:        auditRecorder,
-		Authorizer:   authorizer,
-		Prober:       prober,
+		DB:         db,
+		Repo:       monitoringRepo,
+		Audit:      auditRecorder,
+		Authorizer: authorizer,
+		Prober:     prober, Notifier: alertNotifier, AutomationCurrent: monitorAuthority,
 		AllowedHosts: cfg.MonitoringAllowedHosts,
 		Now:          now,
 	})
@@ -1092,8 +1137,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Nodes:      nodesRepo,
 		Audit:      auditRecorder,
 		Authorizer: authorizer,
-		Notifier:   notificationsService,
-		Now:        now,
+		Notifier:   quotaNotifier, AutomationCurrent: quotaAuthority,
+		Now: now,
 	})
 	if err != nil {
 		return cleanup(err)
@@ -1197,6 +1242,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Gateway = gatewayService
 	s.Monitoring = monitoringService
 	s.Quota = quotaService
+	if agentBridge != nil {
+		agentBridge.recordTraffic = s.recordTraffic
+	}
 	s.Certificates = certificatesService
 	s.Publishing = publishingService
 	s.mux = http.NewServeMux()
@@ -1238,6 +1286,12 @@ func (s *Server) startTaskScheduler() {
 		if s.PublicCertificates != nil {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runPublicRenewalSchedule(ctx) }()
+		}
+		if s.notificationAuthority != "" {
+			workers.Add(3)
+			go func() { defer workers.Done(); s.runMonitorAutomation(ctx) }()
+			go func() { defer workers.Done(); s.runQuotaAutomation(ctx) }()
+			go func() { defer workers.Done(); s.runNotificationDispatch(ctx) }()
 		}
 		workers.Wait()
 	}()

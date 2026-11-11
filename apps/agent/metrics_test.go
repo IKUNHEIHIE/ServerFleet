@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"math"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -63,12 +65,26 @@ func TestSampleAgentMetricsFailsClosedOffLinux(t *testing.T) {
 		if err != nil {
 			t.Fatalf("linux sample: %v", err)
 		}
-		if len(sample.GetPoints()) != 2 || sample.GetPoints()[0].GetName() != "cpu" || sample.GetPoints()[1].GetName() != "memory" || sample.GetBatchId() == "" {
+		if (len(sample.GetPoints()) != 2 && len(sample.GetPoints()) != 5) || sample.GetPoints()[0].GetName() != "cpu" || sample.GetPoints()[1].GetName() != "memory" || sample.GetBatchId() == "" {
 			t.Fatalf("sample = %v", sample)
 		}
-		for _, point := range sample.GetPoints() {
+		for _, point := range sample.GetPoints()[:2] {
 			if point.GetValue() < 0 || point.GetValue() > 100 || point.GetObservedAtUnixMs() <= 0 || point.GetUnit() != "percent" {
 				t.Fatalf("point = %v", point)
+			}
+		}
+		if len(sample.GetPoints()) == 5 {
+			points := sample.GetPoints()
+			for index, name := range []string{"network.rx_bytes", "network.tx_bytes"} {
+				point := points[index+2]
+				if point.GetName() != name || point.GetUnit() != "bytes" || point.GetValue() < 0 || point.GetValue() > 1<<53-1 || math.Trunc(point.GetValue()) != point.GetValue() || point.GetObservedAtUnixMs() != points[0].GetObservedAtUnixMs() {
+					t.Fatalf("network counter = %v", point)
+				}
+			}
+			identity := points[4]
+			digest, e := hex.DecodeString(strings.TrimPrefix(identity.GetName(), "network.interfaces."))
+			if !strings.HasPrefix(identity.GetName(), "network.interfaces.") || e != nil || len(digest) != 32 || identity.GetUnit() != "set" || identity.GetValue() != 1 || identity.GetObservedAtUnixMs() != points[0].GetObservedAtUnixMs() {
+				t.Fatalf("network interface identity = %v", identity)
 			}
 		}
 		return

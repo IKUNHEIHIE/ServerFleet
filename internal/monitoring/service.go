@@ -38,25 +38,28 @@ type AuditSink interface {
 // mandatory. A nil Prober fails closed for every check; a nil Notifier suppresses
 // transition alerts but does not fabricate one.
 type Options struct {
-	DB           *storage.DB
-	Repo         *Repo
-	Audit        AuditSink
-	Authorizer   auth.Authorizer
-	Prober       Prober
-	Notifier     Notifier
-	AllowedHosts []string
-	Now          func() time.Time
+	DB                *storage.DB
+	Repo              *Repo
+	Audit             AuditSink
+	Authorizer        auth.Authorizer
+	Prober            Prober
+	Notifier          Notifier
+	AllowedHosts      []string
+	Now               func() time.Time
+	AutomationCurrent AutomationAuthority
 }
 
 type Service struct {
-	db         *storage.DB
-	repo       *Repo
-	audit      AuditSink
-	authorizer auth.Authorizer
-	prober     Prober
-	notifier   Notifier
-	policy     TargetPolicy
-	now        func() time.Time
+	db                *storage.DB
+	repo              *Repo
+	audit             AuditSink
+	authorizer        auth.Authorizer
+	prober            Prober
+	notifier          Notifier
+	policy            TargetPolicy
+	now               func() time.Time
+	automationCurrent AutomationAuthority
+	cursor            automationCursor
 }
 
 func NewService(options Options) (*Service, error) {
@@ -81,7 +84,7 @@ func NewService(options Options) (*Service, error) {
 	return &Service{
 		db: options.DB, repo: options.Repo, audit: options.Audit,
 		authorizer: options.Authorizer, prober: options.Prober,
-		notifier: options.Notifier, policy: policy, now: now,
+		notifier: options.Notifier, policy: policy, now: now, automationCurrent: options.AutomationCurrent,
 	}, nil
 }
 
@@ -124,7 +127,7 @@ func (s *Service) Create(ctx context.Context, subjectID, requestID string, input
 		return Monitor{}, err
 	}
 	now := s.now()
-	monitor := Monitor{
+	monitor := Monitor{FailureThreshold: normalizeThreshold(input.FailureThreshold), RecoveryThreshold: normalizeThreshold(input.RecoveryThreshold), NotifyChannels: input.NotifyChannels,
 		ID: input.ID, Name: input.Name, Kind: input.Kind, Target: input.Target,
 		IntervalSeconds: input.IntervalSeconds, TimeoutSeconds: input.TimeoutSeconds,
 		Enabled: input.Enabled, MaintenanceUntil: input.MaintenanceUntil,
@@ -133,6 +136,15 @@ func (s *Service) Create(ctx context.Context, subjectID, requestID string, input
 	err := s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		if err := s.repo.Create(txCtx, tx, monitor); err != nil {
 			return err
+		}
+		rev, e := s.bindAutomationTx(txCtx, tx, monitor.ID, subjectID)
+		if e != nil {
+			return e
+		}
+		monitor.AutomationOwnerID = subjectID
+		monitor.AutomationRevision = rev
+		if e = s.bindMonitorOptions(txCtx, tx, monitor); e != nil {
+			return e
 		}
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionCreate, "success", requestID, "monitor_created"))
 	})
@@ -165,6 +177,14 @@ func (s *Service) Update(ctx context.Context, subjectID, requestID, monitorID st
 		return Monitor{}, err
 	}
 	updated := current
+	updated.FailureThreshold = normalizeThreshold(input.FailureThreshold)
+	updated.RecoveryThreshold = normalizeThreshold(input.RecoveryThreshold)
+	updated.NotifyChannels = input.NotifyChannels
+	updated.ConsecutiveFailures = 0
+	updated.ConsecutiveRecoveries = 0
+	if input.Target != current.Target || input.Kind != current.Kind {
+		updated.State = StateUnknown
+	}
 	updated.Name = input.Name
 	updated.Kind = input.Kind
 	updated.Target = input.Target
@@ -176,6 +196,15 @@ func (s *Service) Update(ctx context.Context, subjectID, requestID, monitorID st
 	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		if err := s.repo.Update(txCtx, tx, updated); err != nil {
 			return err
+		}
+		rev, e := s.bindAutomationTx(txCtx, tx, updated.ID, subjectID)
+		if e != nil {
+			return e
+		}
+		updated.AutomationOwnerID = subjectID
+		updated.AutomationRevision = rev
+		if e = s.bindMonitorOptions(txCtx, tx, updated); e != nil {
+			return e
 		}
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionUpdate, "success", requestID, "monitor_updated"))
 	})
@@ -195,6 +224,9 @@ func (s *Service) Delete(ctx context.Context, subjectID, requestID, monitorID st
 	return s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
 		if err := s.repo.Delete(txCtx, tx, monitorID); err != nil {
 			return err
+		}
+		if _, e := tx.Exec(txCtx, `DELETE FROM monitor_automation WHERE monitor_id=?`, monitorID); e != nil {
+			return e
 		}
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionDelete, "success", requestID, "monitor_deleted"))
 	})
@@ -221,13 +253,11 @@ func (s *Service) RunCheckNow(ctx context.Context, subjectID, requestID, monitor
 		return Check{}, Monitor{}, err
 	}
 	auditEvent := s.event(subjectID, ActionCheck, "success", requestID, string(updated.State))
-	if err := s.recordCheck(ctx, check, updated, &auditEvent); err != nil {
+	if err := s.recordCheck(ctx, check, updated, &auditEvent, alert); err != nil {
 		return Check{}, Monitor{}, err
 	}
 	if alert != nil {
-		if err := s.sendAlert(ctx, *alert); err != nil {
-			return check, updated, err
-		}
+		_ = s.FlushAlerts(ctx, 50)
 	}
 	return check, updated, nil
 }
@@ -241,15 +271,26 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 	if now.IsZero() {
 		return nil, ErrInvalidNow
 	}
+	if s.notifier != nil {
+		_ = s.FlushAlerts(ctx, 50)
+	}
 	monitors, err := s.repo.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 	results := make([]RunResult, 0, len(monitors))
 	var firstErr error
-	for _, monitor := range monitors {
+	for n := 0; n < len(monitors) && n < 50; n++ {
+		s.cursor.Lock()
+		index := s.cursor.next % len(monitors)
+		s.cursor.next = (index + 1) % len(monitors)
+		s.cursor.Unlock()
+		monitor := monitors[index]
 		if err := ctx.Err(); err != nil {
 			return results, err
+		}
+		if s.automationCurrent != nil && s.automationCurrent(ctx, monitor) != nil {
+			continue
 		}
 		if !monitor.Enabled || !due(monitor, now) {
 			continue
@@ -264,17 +305,17 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 			}
 			continue
 		}
-		if err := s.recordCheck(ctx, check, updated, nil); err != nil {
+		if err := s.recordCheck(ctx, check, updated, nil, alert); err != nil {
 			return results, err
 		}
 		result := RunResult{MonitorID: monitor.ID, Check: check, State: updated.State, Maintenance: maintenance}
 		if alert != nil {
-			if err := s.sendAlert(ctx, *alert); err != nil {
+			if err := s.FlushAlerts(ctx, 50); err != nil {
 				if firstErr == nil {
 					firstErr = err
 				}
 			} else {
-				result.Alerted = true
+				result.Alerted = s.transitionAccepted(ctx, updated, alert.DedupeKey)
 			}
 		}
 		results = append(results, result)
@@ -283,6 +324,9 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 }
 
 func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time) (Check, Monitor, *notifications.Alert, bool, error) {
+	if s.automationCurrent != nil && s.automationCurrent(ctx, monitor) != nil {
+		return Check{}, Monitor{}, nil, false, ErrObservationChanged
+	}
 	if s.prober == nil {
 		return Check{}, Monitor{}, nil, false, ErrProberUnavailable
 	}
@@ -352,18 +396,26 @@ func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time) 
 	previous := monitor.State
 	var alert *notifications.Alert
 	if healthy {
-		updated.State = StateUp
 		updated.ConsecutiveFailures = 0
-		if previous == StateDown {
-			alert = s.transitionAlert(updated, previous, StateUp, check, now)
+		if updated.ConsecutiveRecoveries < 100 {
+			updated.ConsecutiveRecoveries++
+		}
+		if updated.ConsecutiveRecoveries >= normalizeThreshold(monitor.RecoveryThreshold) {
+			updated.State = StateUp
+			if previous == StateDown {
+				alert = s.transitionAlert(updated, previous, StateUp, check, now)
+			}
 		}
 	} else {
-		updated.State = StateDown
+		updated.ConsecutiveRecoveries = 0
 		if updated.ConsecutiveFailures < math.MaxInt {
 			updated.ConsecutiveFailures++
 		}
-		if previous == StateUp {
-			alert = s.transitionAlert(updated, previous, StateDown, check, now)
+		if updated.ConsecutiveFailures >= normalizeThreshold(monitor.FailureThreshold) {
+			updated.State = StateDown
+			if previous != StateDown {
+				alert = s.transitionAlert(updated, previous, StateDown, check, now)
+			}
 		}
 	}
 	return check, updated, alert, false, nil
@@ -379,33 +431,18 @@ func (s *Service) transitionAlert(monitor Monitor, from, to State, check Check, 
 		body += " Probe: " + check.Error
 	}
 	return &notifications.Alert{
-		DedupeKey: fmt.Sprintf("monitoring:%s:%s:%s", monitor.ID, to, now.UTC().Format(time.RFC3339Nano)),
+		DedupeKey: fmt.Sprintf("monitoring:%s:r%d:o%d:%s", monitor.ID, monitor.AutomationRevision, monitor.ObservationRevision+1, to),
 		Subject:   fmt.Sprintf("Monitor %s is %s", monitor.Name, state),
 		Body:      body,
 	}
 }
 
-func (s *Service) recordCheck(ctx context.Context, check Check, monitor Monitor, event *audit.Event) error {
-	return s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
-		if err := s.repo.RecordCheck(txCtx, tx, check, monitor.State,
-			monitor.ConsecutiveFailures, monitor.LastError, monitor.LastCheckedAt); err != nil {
-			return err
-		}
-		if event == nil {
-			return nil
-		}
-		return s.audit.AppendTx(txCtx, tx, *event)
-	})
-}
-
-func (s *Service) sendAlert(ctx context.Context, alert notifications.Alert) error {
-	if s.notifier == nil {
-		return nil
+func (s *Service) recordCheck(ctx context.Context, check Check, m Monitor, event *audit.Event, alert *notifications.Alert) error {
+	var writer func(context.Context, storage.Tx) error
+	if event != nil {
+		writer = func(c context.Context, tx storage.Tx) error { return s.audit.AppendTx(c, tx, *event) }
 	}
-	if _, err := s.notifier.SendAlert(ctx, alert); err != nil {
-		return ErrNotifyFailed
-	}
-	return nil
+	return s.saveObservation(ctx, check, m, alert, writer)
 }
 
 func due(monitor Monitor, now time.Time) bool {

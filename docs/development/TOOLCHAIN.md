@@ -1,5 +1,7 @@
 # 工具与真实检查
 
+2026-11-11 R32 安全修订：固定 Go 更新为 **1.27.4**（go.mod 与 scripts/tool-versions.json 同步）。govulncheck 在旧1.27.3发现 GO-2026-6859 / CVE-2026-97054，修复版本由[Go官方发布记录](https://go.dev/doc/devel/release#go1.27.4)及[官方漏洞条目](https://vuln.go.dev/ID/GO-2026-6859.json)确认；其他依赖和工具固定版本不变。下方原版本是历史记录，不作为新构建基线。
+
 本次固定版本：Go 1.27.3；Node 24.22.1；npm 11（本轮记录 11.19.1，须实测版本）；React 19.3.1；TypeScript 7.0.2；Vite 8.3.5；Tailwind 4.3.3；Vitest 5.0.5；Buf 1.75.0；Redocly 2.72.0；Protobuf/Go 1.36.12；staticcheck 0.8.2；govulncheck 1.9.0；actionlint 1.7.12。精确 npm 包版本见 manifests/lockfile，Go 工具见 `scripts/tool-versions.json`。shadcn 使用源码组件模式；正式管理台与多业务页面已有实现，具体接收范围和缺口见 README 与当前进度，不能从组件清单推断完整产品验收。
 
 初次安装：

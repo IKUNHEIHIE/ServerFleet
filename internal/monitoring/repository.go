@@ -46,7 +46,8 @@ func (r *Repo) Create(ctx context.Context, q storage.Queryer, monitor Monitor) e
 		}
 		return err
 	}
-	return nil
+	_, err = q.Exec(ctx, `INSERT OR IGNORE INTO monitor_automation(monitor_id,owner_id,revision,observation_revision) VALUES(?,'',0,0)`, monitor.ID)
+	return err
 }
 
 func (r *Repo) Get(ctx context.Context, id string) (Monitor, error) {
@@ -57,6 +58,9 @@ func (r *Repo) Get(ctx context.Context, id string) (Monitor, error) {
 	if storage.IsNotFound(err) {
 		return Monitor{}, ErrMonitorNotFound
 	}
+	if err == nil {
+		err = r.hydrateAutomation(ctx, &monitor)
+	}
 	return monitor, err
 }
 
@@ -64,7 +68,7 @@ func (r *Repo) List(ctx context.Context) ([]Monitor, error) {
 	if r == nil || r.db == nil {
 		return nil, ErrServiceNotConfigured
 	}
-	rows, err := r.db.Query(ctx, monitorSelect+" ORDER BY id")
+	rows, err := r.db.Query(ctx, monitorSelect+" ORDER BY id LIMIT 1001")
 	if err != nil {
 		return nil, err
 	}
@@ -77,7 +81,19 @@ func (r *Repo) List(ctx context.Context) ([]Monitor, error) {
 		}
 		monitors = append(monitors, monitor)
 	}
-	return monitors, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if len(monitors) > 1000 {
+		return nil, ErrInvalidLimit
+	}
+	for i := range monitors {
+		if err = r.hydrateAutomation(ctx, &monitors[i]); err != nil {
+			return nil, err
+		}
+	}
+	return monitors, nil
 }
 
 func (r *Repo) Update(ctx context.Context, q storage.Queryer, monitor Monitor) error {

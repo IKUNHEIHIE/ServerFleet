@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
+	"serverfleet.local/serverfleet/internal/notifications"
 )
 
 // Principal is supplied by Controller authentication middleware.
@@ -72,8 +73,25 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, risks TrafficRiskSource,
 	mux.HandleFunc("GET /api/v1/monitoring/traffic-risks", api.trafficRisks)
 	// The v0.9 candidate contract and the web client use the unprefixed paths.
 	mux.HandleFunc("GET /api/v1/availability-monitors", api.listMonitors)
+	mux.HandleFunc("GET /api/v1/availability-monitors/{monitorId}/alerts", func(w http.ResponseWriter, r *http.Request) {
+		p, ok := api.principal(w, r)
+		if !ok {
+			return
+		}
+		if r.URL.RawQuery != "" || r.ContentLength != 0 {
+			writeFixed(w, 400, "invalid_request", "invalid query")
+			return
+		}
+		events, e := api.service.AlertEvents(r.Context(), p.SubjectID, r.PathValue("monitorId"), 20)
+		if e != nil {
+			writeError(w, e)
+			return
+		}
+		writeJSON(w, 200, map[string]any{"items": events})
+	})
 	mux.HandleFunc("POST /api/v1/availability-monitors", api.createMonitor)
 	mux.HandleFunc("PATCH /api/v1/availability-monitors/{monitorId}", api.updateMonitor)
+	mux.HandleFunc("DELETE /api/v1/availability-monitors/{monitorId}", api.deleteMonitor)
 	mux.HandleFunc("GET /api/v1/availability-monitors/{monitorId}/history", api.monitorHistory)
 	mux.HandleFunc("POST /api/v1/availability-monitors/{monitorId}/probe", api.probeMonitor)
 	mux.HandleFunc("GET /api/v1/traffic-risks", api.trafficRisks)
@@ -81,21 +99,25 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, risks TrafficRiskSource,
 }
 
 type monitorDTO struct {
-	ID                  string `json:"id"`
-	Name                string `json:"name"`
-	Type                string `json:"type"`
-	Target              string `json:"target"`
-	IntervalSeconds     int    `json:"intervalSeconds"`
-	TimeoutSeconds      int    `json:"timeoutSeconds"`
-	Enabled             bool   `json:"enabled"`
-	State               string `json:"state"`
-	FailureCount        int    `json:"failureCount"`
-	LastCheckedAt       string `json:"lastCheckedAt,omitempty"`
-	LastError           string `json:"lastError,omitempty"`
-	MaintenanceUntil    string `json:"maintenanceUntil,omitempty"`
-	ConsecutiveFailures int    `json:"consecutiveFailures"`
-	CreatedAt           string `json:"createdAt,omitempty"`
-	UpdatedAt           string `json:"updatedAt,omitempty"`
+	AutomationOwnerID   string                  `json:"automationOwnerId,omitempty"`
+	AutomationRevision  uint64                  `json:"automationRevision,omitempty"`
+	ID                  string                  `json:"id"`
+	Name                string                  `json:"name"`
+	Type                string                  `json:"type"`
+	Target              string                  `json:"target"`
+	IntervalSeconds     int                     `json:"intervalSeconds"`
+	TimeoutSeconds      int                     `json:"timeoutSeconds"`
+	Enabled             bool                    `json:"enabled"`
+	State               string                  `json:"state"`
+	FailureCount        int                     `json:"failureCount"`
+	RecoveryCount       int                     `json:"recoveryCount"`
+	NotifyChannels      []notifications.Channel `json:"notifyChannels"`
+	LastCheckedAt       string                  `json:"lastCheckedAt,omitempty"`
+	LastError           string                  `json:"lastError,omitempty"`
+	MaintenanceUntil    string                  `json:"maintenanceUntil,omitempty"`
+	ConsecutiveFailures int                     `json:"consecutiveFailures"`
+	CreatedAt           string                  `json:"createdAt,omitempty"`
+	UpdatedAt           string                  `json:"updatedAt,omitempty"`
 }
 
 func (api *httpAPI) listMonitors(w http.ResponseWriter, r *http.Request) {
@@ -116,23 +138,23 @@ func (api *httpAPI) listMonitors(w http.ResponseWriter, r *http.Request) {
 }
 
 type monitorBody struct {
-	ID               *string         `json:"id"`
-	Name             *string         `json:"name"`
-	Type             *string         `json:"type"`
-	Kind             *string         `json:"kind"`
-	Target           *string         `json:"target"`
-	IntervalSeconds  *int            `json:"intervalSeconds"`
-	TimeoutSeconds   *int            `json:"timeoutSeconds"`
-	Enabled          *bool           `json:"enabled"`
-	Paused           *bool           `json:"paused"`
-	State            *string         `json:"state"`
-	FailureCount     *int            `json:"failureCount"`
-	RecoveryCount    *int            `json:"recoveryCount"`
-	LastCheckedAt    json.RawMessage `json:"lastCheckedAt"`
-	SourceNodeID     *string         `json:"sourceNodeId"`
-	LinkedResource   json.RawMessage `json:"linkedResource"`
-	NotifyChannels   json.RawMessage `json:"notifyChannels"`
-	MaintenanceUntil *string         `json:"maintenanceUntil"`
+	ID               *string                  `json:"id"`
+	Name             *string                  `json:"name"`
+	Type             *string                  `json:"type"`
+	Kind             *string                  `json:"kind"`
+	Target           *string                  `json:"target"`
+	IntervalSeconds  *int                     `json:"intervalSeconds"`
+	TimeoutSeconds   *int                     `json:"timeoutSeconds"`
+	Enabled          *bool                    `json:"enabled"`
+	Paused           *bool                    `json:"paused"`
+	State            *string                  `json:"state"`
+	FailureCount     *int                     `json:"failureCount"`
+	RecoveryCount    *int                     `json:"recoveryCount"`
+	LastCheckedAt    json.RawMessage          `json:"lastCheckedAt"`
+	SourceNodeID     *string                  `json:"sourceNodeId"`
+	LinkedResource   json.RawMessage          `json:"linkedResource"`
+	NotifyChannels   *[]notifications.Channel `json:"notifyChannels"`
+	MaintenanceUntil *string                  `json:"maintenanceUntil"`
 }
 
 func (api *httpAPI) createMonitor(w http.ResponseWriter, r *http.Request) {
@@ -165,8 +187,31 @@ func (api *httpAPI) createMonitor(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if body.SourceNodeID != nil && *body.SourceNodeID != "" {
+		writeFixed(w, http.StatusBadRequest, "unsupported_probe_source", "background probes run on the Controller")
+		return
+	}
+	failure, recovery := 1, 1
+	if body.FailureCount != nil {
+		failure = *body.FailureCount
+		if failure < 1 {
+			writeError(w, ErrInvalidMonitor)
+			return
+		}
+	}
+	if body.RecoveryCount != nil {
+		recovery = *body.RecoveryCount
+		if recovery < 1 {
+			writeError(w, ErrInvalidMonitor)
+			return
+		}
+	}
+	var channels []notifications.Channel
+	if body.NotifyChannels != nil {
+		channels = *body.NotifyChannels
+	}
 	monitor, err := api.service.Create(r.Context(), principal.SubjectID, principal.RequestID, MonitorInput{
-		ID: id, Name: *body.Name, Kind: Kind(kind), Target: *body.Target,
+		ID: id, Name: *body.Name, Kind: Kind(kind), Target: *body.Target, FailureThreshold: failure, RecoveryThreshold: recovery, NotifyChannels: channels,
 		IntervalSeconds: *body.IntervalSeconds, TimeoutSeconds: *body.TimeoutSeconds,
 		Enabled: enabled, MaintenanceUntil: maintenance,
 	})
@@ -197,9 +242,30 @@ func (api *httpAPI) updateMonitor(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	input := MonitorInput{
-		ID: current.ID, Name: current.Name, Kind: current.Kind, Target: current.Target,
+		ID: current.ID, Name: current.Name, Kind: current.Kind, Target: current.Target, FailureThreshold: current.FailureThreshold, RecoveryThreshold: current.RecoveryThreshold, NotifyChannels: current.NotifyChannels,
 		IntervalSeconds: current.IntervalSeconds, TimeoutSeconds: current.TimeoutSeconds,
 		Enabled: current.Enabled, MaintenanceUntil: current.MaintenanceUntil,
+	}
+	if body.SourceNodeID != nil && *body.SourceNodeID != "" {
+		writeFixed(w, http.StatusBadRequest, "unsupported_probe_source", "background probes run on the Controller")
+		return
+	}
+	if body.FailureCount != nil {
+		input.FailureThreshold = *body.FailureCount
+		if input.FailureThreshold < 1 {
+			writeError(w, ErrInvalidMonitor)
+			return
+		}
+	}
+	if body.RecoveryCount != nil {
+		input.RecoveryThreshold = *body.RecoveryCount
+		if input.RecoveryThreshold < 1 {
+			writeError(w, ErrInvalidMonitor)
+			return
+		}
+	}
+	if body.NotifyChannels != nil {
+		input.NotifyChannels = *body.NotifyChannels
 	}
 	if body.Name != nil {
 		input.Name = *body.Name
@@ -398,9 +464,10 @@ func monitorFromRecord(monitor Monitor) monitorDTO {
 		}
 	}
 	return monitorDTO{
+		AutomationOwnerID: monitor.AutomationOwnerID, AutomationRevision: monitor.AutomationRevision,
 		ID: monitor.ID, Name: monitor.Name, Type: string(monitor.Kind), Target: monitor.Target,
 		IntervalSeconds: monitor.IntervalSeconds, TimeoutSeconds: monitor.TimeoutSeconds,
-		Enabled: monitor.Enabled, State: state, FailureCount: monitor.ConsecutiveFailures,
+		Enabled: monitor.Enabled, State: state, FailureCount: normalizeThreshold(monitor.FailureThreshold), RecoveryCount: normalizeThreshold(monitor.RecoveryThreshold), NotifyChannels: monitor.NotifyChannels,
 		LastCheckedAt: formatOptionalTime(monitor.LastCheckedAt), LastError: monitor.LastError,
 		MaintenanceUntil:    formatOptionalTime(monitor.MaintenanceUntil),
 		ConsecutiveFailures: monitor.ConsecutiveFailures,
@@ -475,6 +542,8 @@ func writeFixed(w http.ResponseWriter, status int, code, message string) {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, ErrObservationChanged):
+		writeFixed(w, http.StatusConflict, "monitor_changed", "monitor changed during probe; refresh before retrying")
 	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrInvalidCheck), errors.Is(err, auth.ErrPolicyUnavailable):
 		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
 	case errors.Is(err, ErrMonitorNotFound):
@@ -492,4 +561,20 @@ func writeError(w http.ResponseWriter, err error) {
 	default:
 		writeFixed(w, http.StatusInternalServerError, "internal_error", "request failed")
 	}
+}
+
+func (api *httpAPI) deleteMonitor(w http.ResponseWriter, r *http.Request) {
+	p, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.RawQuery != "" || r.ContentLength > 0 {
+		writeError(w, ErrInvalidMonitor)
+		return
+	}
+	if e := api.service.Delete(r.Context(), p.SubjectID, p.RequestID, r.PathValue("monitorId")); e != nil {
+		writeError(w, e)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]bool{"ok": true})
 }

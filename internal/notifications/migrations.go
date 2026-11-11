@@ -8,7 +8,7 @@ import "serverfleet.local/serverfleet/internal/storage"
 // Migrations returns the notification schema. Provider calls are made through
 // injected ports; this package performs no network I/O.
 func Migrations() []storage.Migration {
-	return []storage.Migration{{
+	return append([]storage.Migration{{
 		Version: "ds/0051_notifications",
 		Name:    "notification channels, settings and deliveries",
 		Statements: []string{
@@ -62,5 +62,5 @@ func Migrations() []storage.Migration {
 			`CREATE INDEX notification_deliveries_created
 				ON notification_deliveries (created_at DESC, id DESC)`,
 		},
-	}}
+	}}, TaskDeliveryMigrations()...)
 }

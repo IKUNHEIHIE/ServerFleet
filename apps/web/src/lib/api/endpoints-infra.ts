@@ -15,6 +15,7 @@ import type {
   GatewayRouteInput,
   InternalCertificateJob,
   MonitorCheckEntry,
+  MonitorAlertEvent,
   MonitorProbeResult,
   NotificationChannel,
   NotificationDelivery,
@@ -26,6 +27,7 @@ import type {
 } from "./dto";
 
 export const monitoringApi = {
+  alerts: (monitorId: string, signal?: AbortSignal) => apiClient.request<{ items: readonly MonitorAlertEvent[] }>(`/api/v1/availability-monitors/${encodeURIComponent(monitorId)}/alerts`, { signal }),
   list: (signal?: AbortSignal) => apiClient.request<readonly AvailabilityMonitor[]>("/api/v1/availability-monitors", { signal }),
   create: (body: AvailabilityMonitor) =>
     apiClient.request<AvailabilityMonitor>("/api/v1/availability-monitors", { method: "POST", body }),
@@ -53,6 +55,7 @@ export const monitoringApi = {
 };
 
 export const notificationsApi = {
+  retry: (deliveryId: string) => apiClient.request<NotificationDelivery>(`/api/v1/notifications/deliveries/${encodeURIComponent(deliveryId)}/retry`, {method:"POST",body:{}}),
   channels: (signal?: AbortSignal) =>
     apiClient.request<{ items: readonly NotificationChannel[] }>("/api/v1/notifications/channels", { signal }),
   putChannel: (channel: "smtp" | "qqbot", body: { enabled: boolean; smtp?: SMTPConfig; qqbot?: QQBotConfig }) =>

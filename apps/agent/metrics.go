@@ -56,6 +56,7 @@ func sampleAgentMetrics(ctx context.Context) (*agentv1.MetricsBatch, error) {
 		{Name: "cpu", Value: cpuPercent(first, second), Unit: "percent", ObservedAtUnixMs: now},
 		{Name: "memory", Value: memoryPercent, Unit: "percent", ObservedAtUnixMs: now},
 	}
+	points = append(points, networkMetricPoints(now)...)
 	return &agentv1.MetricsBatch{Points: points, BatchId: batchID}, nil
 }
 

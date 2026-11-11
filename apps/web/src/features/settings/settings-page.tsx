@@ -303,7 +303,7 @@ export function SettingsPage() {
         </div>
       ) : null}
 
-      {tab === "notifications" ? <NotificationsSettings /> : null}
+      {tab === "notifications" ? <NotificationsSettings onOpenCredentials={() => setTab("credentials")} /> : null}
 
       {tab === "updates" ? (
         <div className="space-y-4">

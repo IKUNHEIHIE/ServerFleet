@@ -115,4 +115,12 @@ describe("monitoring page", () => {
     expect(await screen.findByText("暂无检查记录")).toBeVisible();
     expect(screen.getByText(/不会伪造历史/)).toBeVisible();
   });
+  it("links unknown alert history to the real task without offering an automatic resend", async () => {
+    await renderAuthenticated("/monitoring",{...monitorRoutes(),"GET /api/v1/availability-monitors/m-1/alerts":()=>jsonResponse({items:[{key:"episode-1",state:"delivery_unknown",deliveryId:7,taskId:"notify-unknown",createdAt:"2026-11-11T01:00:00Z",updatedAt:"2026-11-11T01:01:00Z"}]})});
+    fireEvent.click(await screen.findByRole("tab",{name:"服务监控"}));
+    fireEvent.click(await screen.findByRole("button",{name:"告警历史"}));
+    expect(await screen.findByText("投递未知，请人工核查")).toBeVisible();
+    expect(screen.getByRole("link",{name:"查看任务与人工处置"})).toHaveAttribute("href","#/tasks/notify-unknown");
+  });
+
 });

@@ -85,3 +85,6 @@ apis:
 
   v09-r31-delivery:
     root: api/openapi/revisions/v09-r31/delivery-candidate.yaml
+
+  v09-r32-observability:
+    root: api/openapi/revisions/v09-r32/observability-candidate.yaml

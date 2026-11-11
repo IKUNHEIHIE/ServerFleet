@@ -42,23 +42,29 @@ type AuditSink interface {
 // Options configures the notification service. DB, Repo, Audit and Authorizer are
 // mandatory; provider ports are optional until a send is attempted.
 type Options struct {
-	DB         *storage.DB
-	Repo       *Repo
-	Audit      AuditSink
-	Authorizer auth.Authorizer
-	SMTPSender SMTPSender
-	QQSender   QQSender
-	Now        func() time.Time
+	DB                *storage.DB
+	Repo              *Repo
+	Audit             AuditSink
+	Authorizer        auth.Authorizer
+	SMTPSender        SMTPSender
+	QQSender          QQSender
+	Now               func() time.Time
+	Dispatcher        DeliveryDispatcher
+	PrepareCredential CredentialBindingPreparer
+	CurrentDelivery   DeliveryAuthority
 }
 
 type Service struct {
-	db         *storage.DB
-	repo       *Repo
-	audit      AuditSink
-	authorizer auth.Authorizer
-	smtp       SMTPSender
-	qq         QQSender
-	now        func() time.Time
+	db                *storage.DB
+	repo              *Repo
+	audit             AuditSink
+	authorizer        auth.Authorizer
+	smtp              SMTPSender
+	qq                QQSender
+	now               func() time.Time
+	dispatch          DeliveryDispatcher
+	prepareCredential CredentialBindingPreparer
+	current           DeliveryAuthority
 }
 
 func NewService(options Options) (*Service, error) {
@@ -79,7 +85,7 @@ func NewService(options Options) (*Service, error) {
 	return &Service{
 		db: options.DB, repo: options.Repo, audit: options.Audit,
 		authorizer: options.Authorizer, smtp: options.SMTPSender, qq: options.QQSender,
-		now: now,
+		now: now, dispatch: options.Dispatcher, prepareCredential: options.PrepareCredential, current: options.CurrentDelivery,
 	}, nil
 }
 
@@ -91,7 +97,11 @@ func (s *Service) GetChannel(ctx context.Context, channel Channel) (ChannelRecor
 	if !channel.Valid() {
 		return ChannelRecord{}, ErrInvalidChannel
 	}
-	return s.repo.GetChannel(ctx, channel)
+	record, e := s.repo.GetChannel(ctx, channel)
+	if e == nil {
+		s.hydrateChannel(ctx, &record)
+	}
+	return record, e
 }
 
 // ListChannels returns every configured channel. Secret values are never present.
@@ -99,7 +109,14 @@ func (s *Service) ListChannels(ctx context.Context) ([]ChannelRecord, error) {
 	if s == nil {
 		return nil, ErrServiceNotConfigured
 	}
-	return s.repo.ListChannels(ctx)
+	records, e := s.repo.ListChannels(ctx)
+	if e != nil {
+		return nil, e
+	}
+	for i := range records {
+		s.hydrateChannel(ctx, &records[i])
+	}
+	return records, nil
 }
 
 // GetSettings returns fallback, retry and deduplication settings.
@@ -159,6 +176,7 @@ func (s *Service) UpsertChannel(ctx context.Context, subjectID, requestID string
 	if err != nil {
 		return ChannelRecord{}, err
 	}
+	s.hydrateChannel(ctx, &record)
 	return record, nil
 }
 
@@ -177,6 +195,14 @@ func (s *Service) SetSecretRef(ctx context.Context, subjectID, requestID string,
 	if err := validateSecretRef(secretRef); err != nil {
 		return ChannelRecord{}, err
 	}
+	revision := uint64(1)
+	if s.prepareCredential != nil {
+		var e error
+		revision, e = s.prepareCredential(ctx, subjectID, channel, secretRef)
+		if e != nil {
+			return ChannelRecord{}, e
+		}
+	}
 	now := s.now()
 	var record ChannelRecord
 	err := s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
@@ -191,11 +217,15 @@ func (s *Service) SetSecretRef(ctx context.Context, subjectID, requestID string,
 			return err
 		}
 		record = updated
+		if e := s.bindCredentialTx(txCtx, tx, subjectID, updated, revision); e != nil {
+			return e
+		}
 		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionSecret, "success", requestID, "secret_reference_set"))
 	})
 	if err != nil {
 		return ChannelRecord{}, err
 	}
+	s.hydrateChannel(ctx, &record)
 	return record, nil
 }
 
@@ -263,9 +293,16 @@ func (s *Service) TestChannel(ctx context.Context, subjectID, requestID string, 
 		return Delivery{}, err
 	}
 	if start.existing {
-		return start.delivery, providerError(start.delivery.Status)
+		d, e := s.Delivery(ctx, start.delivery.ID)
+		if e != nil {
+			return d, e
+		}
+		return d, providerError(d.Status)
 	}
 	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+	if s.dispatch != nil {
+		return s.queueDelivery(attemptCtx, record, message, start.delivery, "web")
+	}
 	attempted, sendErr := s.attempt(attemptCtx, record, message, start.delivery)
 	final, err := s.finalizeDelivery(ctx, attempted, ActionTest, subjectID, requestID, "test_send", func(txCtx context.Context, tx storage.Tx) error {
 		if attempted.ProviderCredentialInvalid {
@@ -326,6 +363,9 @@ func (s *Service) SendAlert(ctx context.Context, alert Alert) (Delivery, error) 
 		return start.delivery, nil
 	}
 	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: systemAuditSubject, RequestID: "alert"})
+	if s.dispatch != nil {
+		return s.queueDelivery(attemptCtx, primary, message, start.delivery, "system")
+	}
 	attempted, sendErr := s.attempt(attemptCtx, primary, message, start.delivery)
 	final, err := s.finalizeDelivery(ctx, attempted, ActionSend, systemAuditSubject, "alert", "alert", nil)
 	if err != nil {
@@ -400,6 +440,9 @@ func (s *Service) RetryDelivery(ctx context.Context, subjectID, requestID string
 	}
 	message := Message{Subject: "ServerFleet notification retry", Body: delivery.Message}
 	attemptCtx := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+	if s.dispatch != nil {
+		return s.queueDelivery(attemptCtx, record, message, delivery, "web")
+	}
 	attempted, sendErr := s.attempt(attemptCtx, record, message, delivery)
 	final, err := s.finalizeDelivery(ctx, attempted, ActionRetry, subjectID, requestID, "retry", nil)
 	if err != nil {
@@ -416,7 +459,18 @@ func (s *Service) ListDeliveries(ctx context.Context, filter DeliveryFilter) ([]
 	if s == nil {
 		return nil, ErrServiceNotConfigured
 	}
-	return s.repo.ListDeliveries(ctx, filter)
+	records, e := s.repo.ListDeliveries(ctx, filter)
+	if e != nil {
+		return nil, e
+	}
+	for i := range records {
+		d, err := s.Delivery(ctx, records[i].ID)
+		if err != nil {
+			return nil, err
+		}
+		records[i] = d
+	}
+	return records, nil
 }
 
 type deliveryStart struct {
@@ -733,4 +787,18 @@ func isPureDenial(err error) bool {
 		err = single.Unwrap()
 	}
 	return false
+}
+
+func (s *Service) hydrateChannel(ctx context.Context, r *ChannelRecord) {
+	if s.prepareCredential == nil {
+		return
+	}
+	binding, e := s.ReadBinding(ctx, r.Channel)
+	if e != nil {
+		return
+	}
+	r.AutomationOwnerID = binding.OwnerID
+	r.CredentialRevision = binding.CredentialRevision
+	revision, e := s.prepareCredential(ctx, binding.OwnerID, r.Channel, r.SecretRef)
+	r.BackgroundReady = e == nil && revision == binding.CredentialRevision && binding.ConfigurationSHA256 == ChannelConfigurationSHA256(*r) && r.Enabled && r.CredentialStatus == CredentialConfigured
 }

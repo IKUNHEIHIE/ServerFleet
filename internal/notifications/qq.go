@@ -31,6 +31,7 @@ var (
 // QQConfig configures the real QQ Bot OpenAPI adapter. Endpoints are injectable
 // for a local TLS test server and must be https in both cases.
 type QQConfig struct {
+	Current    func(context.Context) error
 	Client     *http.Client
 	TokenURL   string
 	APIBaseURL string
@@ -41,6 +42,7 @@ type QQConfig struct {
 // QQBotSender implements QQSender. A token is fetched for each send; no token or
 // app secret is cached on the struct.
 type QQBotSender struct {
+	current    func(context.Context) error
 	client     *http.Client
 	tokenURL   string
 	apiBaseURL string
@@ -91,7 +93,7 @@ func NewQQBotSender(config QQConfig) (*QQBotSender, error) {
 		return errors.New("notifications: qq redirect is not allowed")
 	}
 	return &QQBotSender{
-		client: &cloned, tokenURL: strings.TrimSuffix(tokenURL, "/"),
+		client: &cloned, current: config.Current, tokenURL: strings.TrimSuffix(tokenURL, "/"),
 		apiBaseURL: strings.TrimSuffix(apiBase, "/"), secrets: config.Secrets,
 	}, nil
 }
@@ -142,7 +144,7 @@ func (s *QQBotSender) Send(ctx context.Context, settings QQSettings, secretRef s
 		return ProviderResult{}, ErrQQSecret
 	}
 	if err != nil {
-		if sendErr == nil {
+		if sendErr == nil || errors.Is(err, ErrDeliveryUnknown) {
 			result = ProviderResult{Outcome: ProviderUnknown, Code: "qq_use_unknown"}
 		}
 		return result, err
@@ -176,6 +178,11 @@ func (s *QQBotSender) sendWithSecret(ctx context.Context, settings QQSettings, c
 	request.Header.Set("Authorization", "QQBot "+token)
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "qq_authority_changed"}, e
+		}
+	}
 	response, err := s.client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -184,6 +191,12 @@ func (s *QQBotSender) sendWithSecret(ctx context.Context, settings QQSettings, c
 		return ProviderResult{Outcome: ProviderUnknown, Code: "qq_unknown"}, fmt.Errorf("%w: send", ErrQQTransport)
 	}
 	defer response.Body.Close()
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return ProviderResult{Outcome: ProviderUnknown, Code: "qq_authority_changed"}, e
+		}
+	}
+
 	payload, readErr := io.ReadAll(io.LimitReader(response.Body, maxQQBodyBytes+1))
 	if readErr != nil || len(payload) > maxQQBodyBytes {
 		return ProviderResult{Outcome: ProviderUnknown, Code: "qq_unknown"}, fmt.Errorf("%w: send body", ErrQQTransport)
@@ -222,6 +235,11 @@ func (s *QQBotSender) fetchToken(ctx context.Context, appID, clientSecret string
 	}
 	request.Header.Set("Content-Type", "application/json")
 	request.Header.Set("Accept", "application/json")
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return "", ProviderResult{Outcome: ProviderUnknown, Code: "qq_authority_changed"}, e
+		}
+	}
 	response, err := s.client.Do(request)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -230,6 +248,12 @@ func (s *QQBotSender) fetchToken(ctx context.Context, appID, clientSecret string
 		return "", ProviderResult{}, fmt.Errorf("%w: token", ErrQQTransport)
 	}
 	defer response.Body.Close()
+	if s.current != nil {
+		if e := s.current(ctx); e != nil {
+			return "", ProviderResult{Outcome: ProviderUnknown, Code: "qq_authority_changed"}, e
+		}
+	}
+
 	payload, readErr := io.ReadAll(io.LimitReader(response.Body, maxQQBodyBytes+1))
 	if readErr != nil || len(payload) > maxQQBodyBytes {
 		return "", ProviderResult{}, fmt.Errorf("%w: token body", ErrQQTransport)

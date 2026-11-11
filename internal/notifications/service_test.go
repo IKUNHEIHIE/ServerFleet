@@ -263,7 +263,7 @@ func TestNotificationSecretValueNeverStoredOrReturned(t *testing.T) {
 	} {
 		for index := 0; index < typ.NumField(); index++ {
 			name := strings.ToLower(typ.Field(index).Name)
-			if name == "secretref" || name == "credentialstatus" {
+			if name == "secretref" || name == "credentialstatus" || name == "credentialrevision" {
 				continue
 			}
 			if strings.Contains(name, "secret") || strings.Contains(name, "password") || strings.Contains(name, "credential") {

@@ -57,6 +57,9 @@ func (r *Repo) GetPolicy(ctx context.Context, nodeID string) (Policy, error) {
 	if storage.IsNotFound(err) {
 		return Policy{}, ErrPolicyNotFound
 	}
+	if err == nil {
+		err = r.hydratePolicy(ctx, &policy)
+	}
 	return policy, err
 }
 
@@ -65,7 +68,7 @@ func (r *Repo) ListPolicies(ctx context.Context) ([]Policy, error) {
 		return nil, ErrServiceNotConfigured
 	}
 	rows, err := r.db.Query(ctx, `SELECT node_id, monthly_limit_bytes, warning_percent,
-		expiry_at, estimated, updated_at FROM quota_policies ORDER BY node_id`)
+		expiry_at, estimated, updated_at FROM quota_policies ORDER BY node_id LIMIT 1001`)
 	if err != nil {
 		return nil, err
 	}
@@ -78,7 +81,19 @@ func (r *Repo) ListPolicies(ctx context.Context) ([]Policy, error) {
 		}
 		policies = append(policies, policy)
 	}
-	return policies, rows.Err()
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	rows.Close()
+	if len(policies) > 1000 {
+		return nil, ErrInvalidPolicy
+	}
+	for i := range policies {
+		if err = r.hydratePolicy(ctx, &policies[i]); err != nil {
+			return nil, err
+		}
+	}
+	return policies, nil
 }
 
 const usageSelect = `SELECT node_id, period_start, period_end, bytes_in, bytes_out,

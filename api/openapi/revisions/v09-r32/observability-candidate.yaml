@@ -1,0 +1,1174 @@
+openapi: 3.0.3
+info:
+  title: Server Fleet R32 Continuous Monitoring and Notification Candidate
+  version: 0.9.32
+  description: Independent additive candidate, not a G2 freeze. See docs/contracts/revisions/v09-r32-observability.md.
+  license:
+    name: Private project
+servers:
+- url: https://controller.example.invalid
+security:
+- sessionCookie: []
+tags:
+- name: Observability
+  description: Durable alerts, observed host traffic and task-backed notification
+    delivery
+paths:
+  /api/v1/availability-monitors:
+    get:
+      operationId: listBackgroundMonitors
+      summary: Read monitor configuration, thresholds and ownership
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      operationId: createBackgroundMonitor
+      summary: Create Controller-local monitor and owner grant
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '201':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorInput'
+  /api/v1/availability-monitors/{monitorId}:
+    patch:
+      operationId: updateBackgroundMonitor
+      summary: Update configuration and current owner revision
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Monitor'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MonitorInput'
+    delete:
+      operationId: deleteBackgroundMonitor
+      summary: Delete monitor; stale outbox intents fail current-source checks
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    parameters:
+    - name: monitorId
+      in: path
+      required: true
+      schema:
+        type: string
+  /api/v1/availability-monitors/{monitorId}/alerts:
+    get:
+      operationId: listMonitorAlertEvents
+      summary: Read latest 20 persisted transition alerts and actual delivery task
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/AlertEvent'
+                required:
+                - items
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    parameters:
+    - name: monitorId
+      in: path
+      required: true
+      schema:
+        type: string
+  /api/v1/nodes/{nodeId}/traffic-quota:
+    get:
+      operationId: getObservedTrafficQuota
+      summary: Read actual current usage or missing data and sampling coverage
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quota'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      operationId: putObservedTrafficQuota
+      summary: Persist cycle, direction, ordered thresholds and expiry reminders
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Quota'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/QuotaInput'
+    parameters:
+    - name: nodeId
+      in: path
+      required: true
+      schema:
+        type: string
+  /api/v1/notifications/channels:
+    get:
+      operationId: listBoundNotificationChannels
+      summary: Read channel readiness and encrypted credential binding
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Channel'
+                required:
+                - items
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notifications/channels/{channel}:
+    put:
+      operationId: putNotificationChannelConfiguration
+      summary: Replace public settings; rebind credentials after configuration changes
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChannelInput'
+    parameters:
+    - name: channel
+      in: path
+      required: true
+      schema: &id001
+        type: string
+        enum:
+        - smtp
+        - qqbot
+  /api/v1/notifications/channels/{channel}/credentials:
+    post:
+      operationId: bindNotificationCredentialRevision
+      summary: Bind current administrator owned encrypted credential and exact revision
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Channel'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CredentialBinding'
+    parameters:
+    - name: channel
+      in: path
+      required: true
+      schema: *id001
+  /api/v1/notifications/channels/{channel}/test:
+    post:
+      operationId: queueNotificationTest
+      summary: Queue a unified notification task; HTTP success is not delivery success
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                idempotencyKey:
+                  type: string
+              additionalProperties: false
+    parameters:
+    - name: channel
+      in: path
+      required: true
+      schema: *id001
+  /api/v1/notifications/deliveries:
+    get:
+      operationId: listTaskNotificationDeliveries
+      summary: Read real delivery outcomes and task IDs
+      tags:
+      - Observability
+      description: Current session and module permissions required. Writes require
+        same-origin CSRF. Strict JSON; no direct Agent or credential access.
+      responses:
+        '200':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Delivery'
+                required:
+                - items
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /api/v1/notifications/deliveries/{deliveryId}/retry:
+    post:
+      operationId: retryKnownFailedNotification
+      summary: Explicitly queue a new attempt for definitive failure only
+      tags:
+      - Observability
+      description: notifications.write, current administrator, own channel credential,
+        runtime/source authority, backoff and retry limit. Preserves frozen body and
+        source provenance. UNKNOWN, submitted, accepted and rejected are not retryable.
+        Existing human incident workflow handles UNKNOWN; it never changes the provider
+        result or resends.
+      responses:
+        '202':
+          description: Current authorized result, no-store
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Delivery'
+        '400':
+          description: Invalid input
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '403':
+          description: Current authority, origin or CSRF denied
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '404':
+          description: Resource absent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: Conflict or nonretryable result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '503':
+          description: Dependency unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties: {}
+              additionalProperties: false
+    parameters:
+    - name: deliveryId
+      in: path
+      required: true
+      schema:
+        type: string
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: __Host-sf_session
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+          required:
+          - code
+          - message
+      required:
+      - error
+    SMTP:
+      type: object
+      properties:
+        host:
+          type: string
+        port:
+          type: integer
+          minimum: 1
+          maximum: 65535
+        security:
+          type: string
+          enum:
+          - tls
+          - starttls
+        sender:
+          type: string
+          format: email
+        recipient:
+          type: string
+          format: email
+      required:
+      - host
+      - port
+      - security
+      - sender
+      - recipient
+      additionalProperties: false
+    QQBot:
+      type: object
+      properties:
+        appId:
+          type: string
+        targetType:
+          type: string
+          enum:
+          - private
+          - group
+        targetId:
+          type: string
+          description: Official OpenID, not a QQ number
+      required:
+      - appId
+      - targetType
+      - targetId
+      additionalProperties: false
+    ChannelInput:
+      type: object
+      properties:
+        enabled:
+          type: boolean
+        smtp:
+          $ref: '#/components/schemas/SMTP'
+        qqbot:
+          $ref: '#/components/schemas/QQBot'
+      required:
+      - enabled
+      additionalProperties: false
+    Channel:
+      type: object
+      properties:
+        channel: *id001
+        enabled:
+          type: boolean
+        smtp:
+          $ref: '#/components/schemas/SMTP'
+        qqbot:
+          $ref: '#/components/schemas/QQBot'
+        credentialStatus:
+          type: string
+          enum:
+          - not_configured
+          - configured
+          - invalid
+        credentialId:
+          type: string
+        credentialRevision:
+          type: integer
+          minimum: 1
+        automationOwnerId:
+          type: string
+        backgroundReady:
+          type: boolean
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - channel
+      - enabled
+      - credentialStatus
+    Delivery:
+      type: object
+      properties:
+        id:
+          type: string
+        channel: *id001
+        status:
+          type: string
+          enum:
+          - queued
+          - submitted
+          - provider_accepted
+          - rejected
+          - rate_limited
+          - failed
+          - delivery_unknown
+        taskId:
+          type: string
+        providerCode:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+      - id
+      - channel
+      - status
+    CredentialBinding:
+      type: object
+      properties:
+        secretRef:
+          type: string
+          description: Existing encrypted credential ID owned by current administrator,
+            matching smtp_password/qqbot_secret; never a password or AppSecret
+      required:
+      - secretRef
+      additionalProperties: false
+    MonitorInput:
+      type: object
+      properties:
+        id:
+          type: string
+          maxLength: 128
+        name:
+          type: string
+          maxLength: 128
+        type:
+          type: string
+          enum:
+          - http
+          - tcp
+          - tls
+        target:
+          type: string
+        intervalSeconds:
+          type: integer
+          minimum: 1
+          maximum: 604800
+        timeoutSeconds:
+          type: integer
+          minimum: 1
+        failureCount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        recoveryCount:
+          type: integer
+          minimum: 1
+          maximum: 100
+        notifyChannels:
+          type: array
+          items: *id001
+          maxItems: 2
+          uniqueItems: true
+          description: Explicit [] disables alerts; omitted legacy configuration selects
+            preferred usable channel
+        enabled:
+          type: boolean
+        state:
+          type: string
+        maintenanceUntil:
+          type: string
+        sourceNodeId:
+          type: string
+          enum:
+          - ''
+          description: Only Controller-local probes are implemented; nonempty node
+            source is rejected
+      additionalProperties: false
+    Monitor:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+          - http
+          - tcp
+          - tls
+        target:
+          type: string
+        intervalSeconds:
+          type: integer
+        timeoutSeconds:
+          type: integer
+        enabled:
+          type: boolean
+        state:
+          type: string
+          enum:
+          - healthy
+          - unhealthy
+          - unknown
+          - paused
+        failureCount:
+          type: integer
+        recoveryCount:
+          type: integer
+        notifyChannels:
+          type: array
+          items: *id001
+          nullable: true
+        consecutiveFailures:
+          type: integer
+        automationOwnerId:
+          type: string
+        automationRevision:
+          type: integer
+        lastCheckedAt:
+          type: string
+          format: date-time
+        lastError:
+          type: string
+        maintenanceUntil:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+    AlertEvent:
+      type: object
+      properties:
+        key:
+          type: string
+        monitorId:
+          type: string
+        ownerId:
+          type: string
+        revision:
+          type: integer
+        state:
+          type: string
+          enum:
+          - pending
+          - queued
+          - submitted
+          - provider_accepted
+          - delivery_unknown
+          - failed
+          - rejected
+          - rate_limited
+          - blocked
+        deliveryId:
+          type: integer
+        taskId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        alert:
+          type: object
+          properties:
+            dedupeKey:
+              type: string
+            subject:
+              type: string
+            body:
+              type: string
+      required:
+      - key
+      - state
+      - createdAt
+      - updatedAt
+    Coverage:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        periodStart:
+          type: string
+          format: date-time
+        observedFrom:
+          type: string
+          format: date-time
+        observedUntil:
+          type: string
+          format: date-time
+        samples:
+          type: integer
+          minimum: 1
+        gaps:
+          type: integer
+          minimum: 0
+        estimated:
+          type: boolean
+      required:
+      - observedFrom
+      - observedUntil
+      - samples
+      - gaps
+      - estimated
+    QuotaInput:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        quotaGb:
+          type: number
+          exclusiveMinimum: true
+          minimum: 0
+        monthlyLimitBytes:
+          type: integer
+          minimum: 1
+        warningPercent:
+          type: integer
+          minimum: 1
+          maximum: 100
+        thresholdsPct:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+            maximum: 100
+          maxItems: 10
+          description: Strictly ascending
+        cycleResetDay:
+          type: integer
+          minimum: 1
+          maximum: 28
+        timezone:
+          type: string
+          description: IANA timezone, default UTC
+        direction:
+          type: string
+          enum:
+          - ingress
+          - egress
+          - combined
+        expiresAt:
+          type: string
+        remindDays:
+          type: array
+          items:
+            type: integer
+            minimum: 0
+            maximum: 366
+          maxItems: 10
+          description: Strictly descending, absent/empty uses legacy 7-day reminder
+        expiryType:
+          type: string
+          enum:
+          - instance
+          - trial
+          - credit
+          - other
+        estimated:
+          type: boolean
+      additionalProperties: false
+    Quota:
+      type: object
+      properties:
+        nodeId:
+          type: string
+        quotaGb:
+          type: number
+        quotaBytes:
+          type: integer
+        usedGb:
+          type: number
+        usedBytes:
+          type: number
+        warningPercent:
+          type: integer
+        thresholdsPct:
+          type: array
+          items:
+            type: integer
+        cycleResetDay:
+          type: integer
+        timezone:
+          type: string
+        direction:
+          type: string
+          enum:
+          - ingress
+          - egress
+          - combined
+        expiresAt:
+          type: string
+          format: date-time
+        remindDays:
+          type: array
+          items:
+            type: integer
+        expiryType:
+          type: string
+        estimated:
+          type: boolean
+        dataComplete:
+          type: boolean
+          description: Host estimates are always partial; no missing usage is rendered
+            as zero
+        source:
+          type: string
+          enum:
+          - agent_estimate
+          - provider_billing
+          - manual_correction
+        coverage:
+          $ref: '#/components/schemas/Coverage'
+        automationOwnerId:
+          type: string
+        automationRevision:
+          type: integer
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+      - nodeId
+      - quotaGb
+      - cycleResetDay
+      - timezone
+      - direction
+      - dataComplete

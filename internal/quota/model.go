@@ -35,17 +35,33 @@ func (s Source) allowsDecrease() bool {
 // Policy is the per-node quota configuration. ExpiryAt is optional; a zero value
 // means the quota has no expiry reminder. Estimated marks an approximate limit.
 type Policy struct {
-	NodeID            string
-	MonthlyLimitBytes int64
-	WarningPercent    int
-	ExpiryAt          time.Time
-	Estimated         bool
-	UpdatedAt         time.Time
+	Direction     string
+	ThresholdsPct []int
+	RemindDays    []int
+	ExpiryType    string
+
+	AutomationOwnerID  string
+	AutomationRevision uint64
+	ResetDay           int
+	Timezone           string
+	NodeID             string
+	MonthlyLimitBytes  int64
+	WarningPercent     int
+	ExpiryAt           time.Time
+	Estimated          bool
+	UpdatedAt          time.Time
 }
 
 // PolicyInput is a policy write. Node existence is verified through the nodes
 // owner port before persistence.
 type PolicyInput struct {
+	Direction     string
+	ThresholdsPct []int
+	RemindDays    []int
+	ExpiryType    string
+
+	ResetDay          int
+	Timezone          string
 	NodeID            string
 	MonthlyLimitBytes int64
 	WarningPercent    int
@@ -150,7 +166,35 @@ const (
 )
 
 func validatePolicyInput(input PolicyInput) error {
+	if _, _, e := PolicyPeriod(time.Now(), Policy{ResetDay: input.ResetDay, Timezone: input.Timezone}); e != nil {
+		return e
+	}
 	if !validToken(input.NodeID, 128) {
+		return ErrInvalidPolicy
+	}
+	if input.Direction != "" && input.Direction != "combined" && input.Direction != "ingress" && input.Direction != "egress" {
+		return ErrInvalidPolicy
+	}
+	if len(input.ThresholdsPct) > 10 || len(input.RemindDays) > 10 {
+		return ErrInvalidPolicy
+	}
+	previous := 0
+	for _, pct := range input.ThresholdsPct {
+		if pct <= previous || pct > 100 {
+			return ErrInvalidPolicy
+		}
+		previous = pct
+	}
+	previous = 367
+	for _, day := range input.RemindDays {
+		if day < 0 || day >= previous || day > 366 {
+			return ErrInvalidPolicy
+		}
+		previous = day
+	}
+	switch input.ExpiryType {
+	case "", "instance", "trial", "credit", "other":
+	default:
 		return ErrInvalidPolicy
 	}
 	if input.MonthlyLimitBytes <= 0 {
@@ -209,4 +253,14 @@ func boolInt(value bool) int {
 		return 1
 	}
 	return 0
+}
+
+func (p Policy) used(u Usage) float64 {
+	switch p.Direction {
+	case "ingress":
+		return u.BytesIn
+	case "egress":
+		return u.BytesOut
+	}
+	return u.TotalBytes()
 }

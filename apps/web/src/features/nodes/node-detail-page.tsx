@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
@@ -125,10 +126,9 @@ function DiagnosticBody({ diagnostic }: { readonly diagnostic: NodeDiagnostic })
 }
 
 function QuotaBody({ quota }: { readonly quota: TrafficQuota }) {
-  // 真实 Controller 只持久化限额/预警/到期/方向；重置日、时区与来源可能不回传（GM-W4-02）。
   const sourceText = quota.source === "agent_estimate"
     ? "Agent 估算（非云账单）"
-    : quota.source === "provider_billing" ? "供应商账单" : "未返回";
+    : quota.source === "provider_billing" ? "供应商账单" : quota.source === "manual_correction" ? "人工修正" : "未返回";
   return (
     <div className="space-y-3 px-5 py-4 text-sm">
       <DefinitionList
@@ -139,12 +139,13 @@ function QuotaBody({ quota }: { readonly quota: TrafficQuota }) {
           {
             term: "周期重置日",
             value: quota.cycleResetDay === undefined
-              ? "未返回（当前 Controller 不持久化重置日/时区）"
+              ? "未返回"
               : `每月 ${quota.cycleResetDay} 日 · ${quota.timezone ?? "未返回"}`,
           },
           { term: "方向", value: quota.direction },
           { term: "来源", value: sourceText },
           { term: "数据完整", value: quota.dataComplete === undefined ? "未知" : quota.dataComplete ? "是" : "否（存在缺口）" },
+          { term: "采样覆盖", value: quota.coverage ? `${formatDateTime(quota.coverage.observedFrom)} 至 ${formatDateTime(quota.coverage.observedUntil)} · ${quota.coverage.samples} 次采样 · ${quota.coverage.gaps} 次缺口/重置` : "等待 Agent 计数采样" },
           { term: "阈值", value: quota.thresholdsPct?.join(" / ") ?? "未设置" },
           { term: "预测", value: quota.predictionGb === undefined ? "样本不足，无法估算" : `${quota.predictionGb} GB（置信度 ${quota.predictionConfidence ?? "未知"}）` },
           { term: "到期类型", value: quota.expiryType ?? "未设置" },

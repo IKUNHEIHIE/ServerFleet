@@ -7,8 +7,9 @@ import { Field, Select, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
+import { credentialsApi } from "@/lib/api/endpoints";
 import { notificationsApi } from "@/lib/api/endpoints-infra";
-import type { NotificationChannel, NotificationDelivery, NotificationSettings } from "@/lib/api/dto";
+import type { CredentialMetadata, NotificationChannel, NotificationDelivery, NotificationSettings } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
@@ -22,12 +23,17 @@ const DELIVERY_TEXT: Record<NotificationDelivery["status"], string> = {
   delivery_unknown: "投递未知",
 };
 
-function ChannelForm({ channel }: { readonly channel: NotificationChannel }) {
+const EMPTY_CHANNELS: Record<NotificationChannel["channel"], NotificationChannel> = {
+ smtp: {channel:"smtp",enabled:false,credentialStatus:"not_configured"},
+ qqbot: {channel:"qqbot",enabled:false,credentialStatus:"not_configured"},
+};
+
+function ChannelForm({ channel, credentials, onChanged, onOpenCredentials }: { readonly channel: NotificationChannel; readonly credentials: readonly CredentialMetadata[]; readonly onChanged: () => void; readonly onOpenCredentials?: () => void }) {
   const session = useSession();
   const [enabled, setEnabled] = useState(channel.enabled);
   const [smtp, setSmtp] = useState<NonNullable<NotificationChannel["smtp"]>>(channel.smtp ?? {});
   const [qqbot, setQqbot] = useState<NonNullable<NotificationChannel["qqbot"]>>(channel.qqbot ?? {});
-  const [secret, setSecret] = useState("");
+  const [credentialId, setCredentialId] = useState(channel.credentialId ?? "");
   const [testResult, setTestResult] = useState<NotificationDelivery | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
   const save = useAction((body: { enabled: boolean; smtp?: NonNullable<NotificationChannel["smtp"]>; qqbot?: NonNullable<NotificationChannel["qqbot"]> }) =>
@@ -52,28 +58,27 @@ function ChannelForm({ channel }: { readonly channel: NotificationChannel }) {
       enabled,
       ...(channel.channel === "smtp" ? { smtp } : { qqbot }),
     });
-    if (result.ok) setOutcome("渠道配置已保存（服务端结果）。");
+    if (result.ok) { setOutcome("渠道配置已保存；修改配置后请重新绑定凭据以授权后台投递。"); onChanged(); }
   }
 
   async function submitSecret() {
-    if (!secret) return;
+    if (!credentialId) return;
     setOutcome(null);
-    const result = await saveSecret.run(secret);
-    setSecret("");
-    if (result.ok) setOutcome("秘密已安全写入；不会在本页回显。");
+    const result = await saveSecret.run(credentialId);
+    if (result.ok) { setOutcome("已绑定加密凭据及当前修订，后台投递授权已保存。"); onChanged(); }
   }
 
   async function runTest() {
     setOutcome(null);
     setTestResult(null);
     const result = await test.run();
-    if (result.ok && result.data) setTestResult(result.data.data);
+    if (result.ok && result.data) { setTestResult(result.data.data); onChanged(); }
   }
 
   return (
     <Panel
       title={channel.channel === "smtp" ? "SMTP 邮箱" : "QQ 官方机器人"}
-      description={`凭据状态：${channel.credentialStatus}。秘密只写不读。`}
+      description={`凭据状态：${channel.credentialStatus}。${channel.backgroundReady ? "后台投递已授权" : "请保存配置后绑定凭据"}。`}
     >
       <form onSubmit={submit} className="space-y-4 px-5 py-4">
         {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
@@ -89,10 +94,9 @@ function ChannelForm({ channel }: { readonly channel: NotificationChannel }) {
             <Field label="端口">{ids => <TextInput id={ids.inputId} type="number" min={1} max={65535} value={smtp.port ?? ""} onChange={event => setSmtp({ ...smtp, port: event.target.value ? Number(event.target.value) : undefined })} disabled={disabled} />}</Field>
             <Field label="加密">
               {ids => (
-                <Select id={ids.inputId} value={smtp.security ?? "tls"} onChange={event => setSmtp({ ...smtp, security: event.target.value as "tls" | "starttls" | "none" })} disabled={disabled}>
+                <Select id={ids.inputId} value={smtp.security ?? "tls"} onChange={event => setSmtp({ ...smtp, security: event.target.value as "tls" | "starttls" })} disabled={disabled}>
                   <option value="tls">TLS</option>
                   <option value="starttls">STARTTLS</option>
-                  <option value="none">无</option>
                 </Select>
               )}
             </Field>
@@ -110,7 +114,7 @@ function ChannelForm({ channel }: { readonly channel: NotificationChannel }) {
                 </Select>
               )}
             </Field>
-            <Field label="接收对象 ID">{ids => <TextInput id={ids.inputId} value={qqbot.targetId ?? ""} onChange={event => setQqbot({ ...qqbot, targetId: event.target.value })} disabled={disabled} />}</Field>
+            <Field label="接收对象 OpenID">{ids => <TextInput id={ids.inputId} value={qqbot.targetId ?? ""} onChange={event => setQqbot({ ...qqbot, targetId: event.target.value })} disabled={disabled} />}</Field>
           </div>
         )}
         <div className="flex flex-wrap items-end gap-2">
@@ -118,14 +122,19 @@ function ChannelForm({ channel }: { readonly channel: NotificationChannel }) {
           <Button type="button" onClick={runTest} loading={test.pending} disabled={!canTest}>测试消息</Button>
         </div>
         <div className="rounded-lg border bg-secondary/30 px-4 py-3">
-          <Field label={channel.channel === "smtp" ? "SMTP 密码/授权码（只写）" : "AppSecret（只写）"} hint="提交后立即清空输入；不写入浏览器存储。">
-            {ids => <TextInput id={ids.inputId} type="password" autoComplete="new-password" value={secret} onChange={event => setSecret(event.target.value)} disabled={disabled} />}
+          <Field label="加密凭据" hint="先在凭据管理创建 SMTP 密码或 QQ Bot Secret；此处只绑定凭据 ID。">
+            {ids => <Select id={ids.inputId} value={credentialId} onChange={event => setCredentialId(event.target.value)} disabled={disabled}>
+              <option value="">请选择凭据</option>
+              {credentials.filter(item => item.kind === (channel.channel === "smtp" ? "smtp_password" : "qqbot_secret") && item.status !== "revoked" && item.status !== "expired").map(item => <option key={item.id} value={item.id}>{item.name} · 修订 {item.revision}</option>)}
+            </Select>}
           </Field>
-          <Button type="button" className="mt-2" onClick={submitSecret} loading={saveSecret.pending} disabled={disabled || !secret}>安全写入秘密</Button>
+          <div className="mt-2 flex gap-2"><Button type="button" onClick={submitSecret} loading={saveSecret.pending} disabled={disabled || !credentialId}>绑定凭据</Button>
+          {onOpenCredentials ? <Button type="button" onClick={onOpenCredentials}>前往凭据管理</Button> : null}</div>
         </div>
         {testResult ? (
-          <Notice tone={testResult.status === "provider_accepted" ? "info" : "warning"} title="测试投递结果">
+          <Notice tone={testResult.status === "provider_accepted" ? "info" : "warning"} title="测试请求结果（最新状态见投递记录）">
             {DELIVERY_TEXT[testResult.status]} · 渠道 {testResult.channel}
+            {testResult.taskId ? <a className="ml-2 underline" href={`#/tasks/${encodeURIComponent(testResult.taskId)}`}>查看投递任务</a> : null}
             {testResult.providerCode ? ` · 供应商码 ${testResult.providerCode}` : ""}
             {testResult.message ? ` · ${testResult.message}` : ""}
           </Notice>
@@ -135,19 +144,22 @@ function ChannelForm({ channel }: { readonly channel: NotificationChannel }) {
   );
 }
 
-export function NotificationsSettings() {
+export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCredentials?: () => void }) {
   const session = useSession();
   const channels = useResource(`settings:notification:channels:${session.viewEpoch}`, signal =>
     notificationsApi.channels(signal).then(result => result.data),
   );
+  const credentials = useResource(`settings:notification:credentials:${session.viewEpoch}`, signal => credentialsApi.list(signal).then(result => result.data));
   const settings = useResource(`settings:notification:settings:${session.viewEpoch}`, signal =>
     notificationsApi.settings(signal).then(result => result.data),
   );
   const deliveries = useResource(`settings:notification:deliveries:${session.viewEpoch}`, signal =>
     notificationsApi.deliveries(signal).then(result => result.data),
+    { refreshIntervalMs: 5000 },
   );
   const [draft, setDraft] = useState<NotificationSettings | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
+  const retryDelivery = useAction((id: string) => notificationsApi.retry(id));
   const saveSettings = useAction((body: NotificationSettings) => notificationsApi.putSettings(body));
 
   useEffect(() => {
@@ -155,7 +167,10 @@ export function NotificationsSettings() {
   }, [settings.state]);
 
   const canManage = session.can("notify.channel.manage") || session.can("settings.manage");
-  const items = channels.state.status === "ready" ? channels.state.data.items : [];
+  const savedItems = channels.state.status === "ready" ? channels.state.data.items : [];
+  const items = (["smtp", "qqbot"] as const).map(channel => savedItems.find(item => item.channel === channel) ?? EMPTY_CHANNELS[channel]);
+  const credentialItems = credentials.state.status === "ready" ? credentials.state.data : [];
+  const changed = () => { channels.refreshSilent(); deliveries.refreshSilent(); };
   const deliveryItems = deliveries.state.status === "ready" ? deliveries.state.data.items : [];
 
   async function submitSettings(event: FormEvent<HTMLFormElement>) {
@@ -174,10 +189,11 @@ export function NotificationsSettings() {
         “平台已接受”不等于收件人已读；QQ 失败时 SMTP 备用、重试上限和去重窗口以服务端策略执行。测试按钮不会把模拟结果说成真实送达。
       </Notice>
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
-      <AsyncPanel state={channels.state} onRetry={channels.reload} errorTitle="通知渠道加载失败" empty={<EmptyState title="服务端未返回通知渠道" />} isEmpty={data => data.items.length === 0}>
+      {credentials.state.status === "error" ? <Notice tone="error" title="凭据列表加载失败">{describeApiError(credentials.state.error)}<Button size="sm" onClick={credentials.reload}>重试</Button></Notice> : null}
+      <AsyncPanel state={channels.state} onRetry={channels.reload} errorTitle="通知渠道加载失败">
         {() => (
           <div className="grid gap-5 xl:grid-cols-2">
-            {items.map(channel => <ChannelForm key={channel.channel} channel={channel} />)}
+            {items.map(channel => <ChannelForm key={channel.channel} channel={channel} credentials={credentialItems} onChanged={changed} onOpenCredentials={onOpenCredentials} />)}
           </div>
         )}
       </AsyncPanel>
@@ -231,6 +247,7 @@ export function NotificationsSettings() {
         </form>
       </Panel>
 
+      {retryDelivery.error ? <Notice tone="error" title="重试未创建">{describeApiError(retryDelivery.error)}</Notice> : null}
       <Panel title="投递记录" description="GET /api/v1/notifications/deliveries；只读状态。" actions={<Button size="sm" onClick={deliveries.reload} loading={deliveries.state.status === "loading"}>刷新</Button>}>
         <AsyncPanel state={deliveries.state} onRetry={deliveries.reload} errorTitle="投递记录加载失败" empty={<EmptyState title="暂无投递记录" />} isEmpty={data => data.items.length === 0}>
           {() => (
@@ -242,8 +259,10 @@ export function NotificationsSettings() {
                 { key: "id", header: "记录", render: delivery => <span className="font-mono text-xs">{delivery.id}</span> },
                 { key: "channel", header: "渠道", render: delivery => (delivery.channel === "smtp" ? "SMTP" : "QQ Bot") },
                 { key: "status", header: "状态", render: delivery => DELIVERY_TEXT[delivery.status] },
+                { key: "task", header: "投递任务", render: delivery => delivery.taskId ? <a className="underline" href={`#/tasks/${encodeURIComponent(delivery.taskId)}`}>查看任务</a> : "—" },
                 { key: "code", header: "供应商码", render: delivery => delivery.providerCode ?? "—" },
                 { key: "message", header: "脱敏说明", render: delivery => delivery.message ?? "—" },
+                { key: "retry", header: "人工重试", render: delivery => delivery.status === "failed" ? <Button size="sm" disabled={!canManage || session.writesLocked || retryDelivery.pending} onClick={async () => { const result=await retryDelivery.run(delivery.id); if(result.ok) deliveries.reload(); }}>重试已确认失败</Button> : delivery.status === "delivery_unknown" ? "请从任务进入人工处置" : "—" },
                 { key: "time", header: "时间", render: delivery => formatDateTime(delivery.createdAt) ?? "—" },
               ]}
             />

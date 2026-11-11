@@ -284,13 +284,16 @@ export interface TrafficQuota {
   readonly nodeId: string;
   readonly quotaGb: number;
   readonly usedGb?: number;
-  /** 真实 Controller 的 quota HTTP 只持久化限额/预警/到期/方向；重置日与时区接受但不回传（GM-W4-02）。 */
+  /** 月度重置日与 IANA 时区，服务端持久化并用于统计。 */
   readonly cycleResetDay?: number;
   readonly timezone?: string;
   readonly direction: "ingress" | "egress" | "combined";
   /** 真实 Controller 仅在有使用样本时返回 source；无样本时缺失。 */
-  readonly source?: "agent_estimate" | "provider_billing";
+  readonly source?: "agent_estimate" | "provider_billing" | "manual_correction";
   readonly dataComplete?: boolean;
+  readonly coverage?: { readonly observedFrom: string; readonly observedUntil: string; readonly samples: number; readonly gaps: number; readonly estimated: boolean };
+  readonly automationOwnerId?: string;
+  readonly automationRevision?: number;
   readonly thresholdsPct?: readonly number[];
   readonly expiryType?: "instance" | "trial" | "credit" | "other";
   readonly expiresAt?: string;
@@ -528,7 +531,18 @@ export interface CreateTransferRequest {
 
 export type MonitorState = "healthy" | "degraded" | "unhealthy" | "pending" | "unknown" | "paused";
 
+export interface MonitorAlertEvent {
+  readonly key: string;
+  readonly state: string;
+  readonly deliveryId?: number;
+  readonly taskId?: string;
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
 export interface AvailabilityMonitor {
+  readonly automationOwnerId?: string;
+  readonly automationRevision?: number;
   readonly id?: string;
   readonly name: string;
   readonly type: "http" | "tcp" | "tls";
@@ -547,7 +561,7 @@ export interface AvailabilityMonitor {
 export interface SMTPConfig {
   readonly host?: string;
   readonly port?: number;
-  readonly security?: "tls" | "starttls" | "none";
+  readonly security?: "tls" | "starttls";
   readonly sender?: string;
   readonly recipient?: string;
   readonly password?: never;
@@ -561,6 +575,10 @@ export interface QQBotConfig {
 }
 
 export interface NotificationChannel {
+  readonly credentialId?: string;
+  readonly automationOwnerId?: string;
+  readonly credentialRevision?: number;
+  readonly backgroundReady?: boolean;
   readonly channel: "smtp" | "qqbot";
   readonly enabled: boolean;
   readonly credentialStatus: "not_configured" | "configured" | "invalid";
@@ -569,6 +587,7 @@ export interface NotificationChannel {
 }
 
 export interface NotificationDelivery {
+  readonly taskId?: string;
   readonly id: string;
   readonly channel: "smtp" | "qqbot";
   readonly status: "queued" | "submitted" | "provider_accepted" | "rejected" | "rate_limited" | "failed" | "delivery_unknown";

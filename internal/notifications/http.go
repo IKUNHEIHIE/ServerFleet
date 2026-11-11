@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"serverfleet.local/serverfleet/internal/auth"
 	"strconv"
 	"time"
 )
@@ -40,19 +41,25 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/notifications/settings", api.getSettings)
 	mux.HandleFunc("PUT /api/v1/notifications/settings", api.putSettings)
 	mux.HandleFunc("GET /api/v1/notifications/deliveries", api.listDeliveries)
+	mux.HandleFunc("POST /api/v1/notifications/deliveries/{deliveryId}/retry", api.retryDelivery)
 	return nil
 }
 
 type channelDTO struct {
-	Channel          Channel          `json:"channel"`
-	Enabled          bool             `json:"enabled"`
-	CredentialStatus CredentialStatus `json:"credentialStatus"`
-	SMTP             *SMTPSettings    `json:"smtp,omitempty"`
-	QQBot            *QQSettings      `json:"qqbot,omitempty"`
-	UpdatedAt        string           `json:"updatedAt,omitempty"`
+	CredentialID       string           `json:"credentialId,omitempty"`
+	AutomationOwnerID  string           `json:"automationOwnerId,omitempty"`
+	CredentialRevision uint64           `json:"credentialRevision,omitempty"`
+	BackgroundReady    bool             `json:"backgroundReady,omitempty"`
+	Channel            Channel          `json:"channel"`
+	Enabled            bool             `json:"enabled"`
+	CredentialStatus   CredentialStatus `json:"credentialStatus"`
+	SMTP               *SMTPSettings    `json:"smtp,omitempty"`
+	QQBot              *QQSettings      `json:"qqbot,omitempty"`
+	UpdatedAt          string           `json:"updatedAt,omitempty"`
 }
 
 type deliveryDTO struct {
+	TaskID       string         `json:"taskId,omitempty"`
 	ID           string         `json:"id"`
 	Channel      Channel        `json:"channel"`
 	Status       DeliveryStatus `json:"status"`
@@ -268,6 +275,7 @@ func (api *httpAPI) authorizeRead(w http.ResponseWriter, r *http.Request, princi
 
 func dtoFromChannel(record ChannelRecord) channelDTO {
 	return channelDTO{
+		CredentialID: record.SecretRef, AutomationOwnerID: record.AutomationOwnerID, CredentialRevision: record.CredentialRevision, BackgroundReady: record.BackgroundReady,
 		Channel: record.Channel, Enabled: record.Enabled, CredentialStatus: record.CredentialStatus,
 		SMTP: record.SMTP, QQBot: record.QQ, UpdatedAt: record.UpdatedAt.UTC().Format(time.RFC3339),
 	}
@@ -275,7 +283,7 @@ func dtoFromChannel(record ChannelRecord) channelDTO {
 
 func dtoFromDelivery(delivery Delivery) deliveryDTO {
 	return deliveryDTO{
-		ID: strconv.FormatInt(delivery.ID, 10), Channel: delivery.Channel, Status: delivery.Status,
+		TaskID: delivery.TaskID, ID: strconv.FormatInt(delivery.ID, 10), Channel: delivery.Channel, Status: delivery.Status,
 		ProviderCode: delivery.ProviderCode, Message: delivery.Message,
 		CreatedAt: delivery.CreatedAt.UTC().Format(time.RFC3339),
 	}
@@ -308,11 +316,13 @@ func writeFixed(w http.ResponseWriter, status int, code, message string) {
 
 func writeError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, auth.ErrDenied), errors.Is(err, auth.ErrInvalidCheck), errors.Is(err, auth.ErrPolicyUnavailable):
+		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
 	case errors.Is(err, ErrChannelNotFound), errors.Is(err, ErrDeliveryNotFound):
 		writeFixed(w, http.StatusNotFound, "not_found", "resource was not found")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
-	case errors.Is(err, ErrChannelNotConfigured), errors.Is(err, ErrProviderUnavailable):
+	case errors.Is(err, ErrChannelNotConfigured), errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrSecretUnavailable):
 		writeFixed(w, http.StatusServiceUnavailable, "notifications_unavailable", "notification channel is not configured")
 	case errors.Is(err, ErrProviderRejected), errors.Is(err, ErrProviderRateLimited):
 		writeFixed(w, http.StatusBadGateway, "provider_rejected", "notification provider rejected the message")
@@ -327,4 +337,30 @@ func writeError(w http.ResponseWriter, err error) {
 	default:
 		writeFixed(w, http.StatusInternalServerError, "internal_error", "request failed")
 	}
+}
+
+func (api *httpAPI) retryDelivery(w http.ResponseWriter, r *http.Request) {
+	p, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	var body struct{}
+	if r.URL.RawQuery != "" {
+		writeError(w, ErrInvalidQuery)
+		return
+	}
+	if !decodeJSON(w, r, &body) {
+		return
+	}
+	id, e := strconv.ParseInt(r.PathValue("deliveryId"), 10, 64)
+	if e != nil || id <= 0 {
+		writeError(w, ErrInvalidQuery)
+		return
+	}
+	d, e := api.service.RetryDelivery(r.Context(), p.SubjectID, p.RequestID, id)
+	if e != nil {
+		writeError(w, e)
+		return
+	}
+	writeJSON(w, http.StatusAccepted, dtoFromDelivery(d))
 }
