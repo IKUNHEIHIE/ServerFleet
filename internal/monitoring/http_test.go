@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/monitoring"
@@ -379,5 +380,43 @@ func decode(t *testing.T, body []byte, destination any) {
 	t.Helper()
 	if err := json.Unmarshal(body, destination); err != nil {
 		t.Fatalf("decode %s: %v", body, err)
+	}
+}
+
+// ResponseController must override the ordinary HTTP server's shorter write
+// deadline while the service still bounds network I/O to the configured timeout.
+type probeDeadlineWriter struct {
+	*httptest.ResponseRecorder
+	deadline time.Time
+	failure  error
+}
+
+func (w *probeDeadlineWriter) SetWriteDeadline(deadline time.Time) error {
+	w.deadline = deadline
+	return w.failure
+}
+func TestManualProbeHasBoundedResponseDeadline(t *testing.T) {
+	h := newFixture(t, nil, &fakeProber{result: healthyResult()}, &fakeNotifier{})
+	input := validInput("slow-probe", "http", "https://example.com/health")
+	input.TimeoutSeconds = 300
+	if _, err := h.service.Create(context.Background(), "admin", "slow-create", input); err != nil {
+		t.Fatal(err)
+	}
+	mux := http.NewServeMux()
+	if err := monitoring.RegisterHTTP(mux, h.service, nil, func(*http.Request) (monitoring.Principal, error) {
+		return monitoring.Principal{SubjectID: "admin", RequestID: "slow-probe"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	before := time.Now()
+	writer := &probeDeadlineWriter{ResponseRecorder: httptest.NewRecorder()}
+	mux.ServeHTTP(writer, httptest.NewRequest("POST", "/api/v1/availability-monitors/slow-probe/probe", nil))
+	if writer.Code != 200 || writer.deadline.Before(before.Add(300*time.Second)) || writer.deadline.After(time.Now().Add(311*time.Second)) {
+		t.Fatal(writer.Code, writer.deadline)
+	}
+	unavailable := &probeDeadlineWriter{ResponseRecorder: httptest.NewRecorder(), failure: errors.New("deadline failed")}
+	mux.ServeHTTP(unavailable, httptest.NewRequest("POST", "/api/v1/availability-monitors/slow-probe/probe", nil))
+	if unavailable.Code != 503 || len(h.prober.calls) != 1 {
+		t.Fatal("deadline failure still performed I/O", unavailable.Code, len(h.prober.calls))
 	}
 }

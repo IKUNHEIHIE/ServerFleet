@@ -51,6 +51,8 @@ export const monitoringApi = {
   probe: (monitorId: string) =>
     apiClient.request<MonitorProbeResult>(`/api/v1/availability-monitors/${encodeURIComponent(monitorId)}/probe`, {
       method: "POST",
+      // Controller target maximum 300s plus bounded response overhead.
+      timeoutMs: 315_000,
     }),
 };
 

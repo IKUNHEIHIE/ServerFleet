@@ -150,6 +150,16 @@ describe("normalizeTransferItem", () => {
     });
   });
 
+  it("rejects contradictory transfer aliases instead of silently picking one", () => {
+    for (const item of [
+      { path: "/a", sourcePath: "/b" },
+      { state: "copied", status: "failed" },
+      { bytes: 12, bytesCopied: 24 },
+    ]) expect(() => normalizeTransferItem(item, "transfer")).toThrow(ApiError);
+    expect(normalizeTransferItem({ path: "/a", sourcePath: "/a", bytes: 12, bytesCopied: 12 }, "transfer"))
+      .toEqual({ path: "/a", bytes: 12 });
+  });
+
   it("drops invalid bytes and rejects non-object entries", () => {
     expect(normalizeTransferItem({ sourcePath: "/a", status: "copied", bytesCopied: "many" }, "t")).toEqual({ path: "/a", state: "copied" });
     expect(() => normalizeTransferItem("nope", "t")).toThrow(ApiError);

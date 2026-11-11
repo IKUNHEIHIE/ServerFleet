@@ -14,18 +14,10 @@ G1 的 PLUGIN v0.3 替代旧编译期内置业务插件条款；DEPLOY v0.3 扩�
 
 原69项资料包未独立收录的PRIV/WC/PKI-OPS/UPDATE四份已批准原文，2026-11-08已从用户原始归档找回，单独保存在[恢复来源](../reference/recovered-adrs-20261108/README.md)，字节和SHA见该目录清单；原69项/旧包不变。先按现行G1替代关系核对，不用旧原文覆盖后续批准解释，不用当前实现反向补造条款。来源恢复不等于权限分离/更新/灾备已实现或G2已冻结。
 
-## 当前接手与验证范围（2026-11-08）
+## 当前实现与审计入口（2026-11-12）
 
-已接收main f1d715b，独立CI42458157478成功。#12已接收#7/#8/#9及返修，#13已接收Controller暂存恢复与四ADR来源；正式28项迁移、旧25fixture/SQL/hash不改。本分支R10增加显式owner授权的续传绑定读回，Web仅对尚未派发暂存进行有界分块；默认R8响应、统一任务/审批/逐帧授权不变，已派发/UNKNOWN不重放。真实浏览器/程序重启组合及B03—B06/G2/发布仍待验收。主控单会话继续，不启动其他Agent。
-## 2026-11-03实现与验证历史
+当前核心实现、条件装配与验收状态见[现行功能说明](../product/FEATURES.md)，接口见[API说明](../api/README.md)，目录/模块边界见[项目结构](../development/PROJECT-STRUCTURE.md)和[依赖规则](../development/DEPENDENCY-RULES.md)。R33已由PR24合入main8aa1ac0，正式49项迁移；R34审计及结构整改单独按精确head检查/接收，不用旧CI替代。
 
-已接收产品基线为 `51e0ee57e66493892eb5f5168b9e0690b53f3661`，独立 main CI 成功，正式迁移26项。Controller/Agent、SQLite WAL、REST/SSE、WSS+mTLS、统一任务/审批/审计已有实现；真实文件CLI/双Agent多文件及三种冲突策略、文件页面、AI预算HTTP/UI与TLS生成已有验证。
+Controller为Go模块化单体，SQLite WAL；Agent主动WSS+mTLS、Protobuf，每帧当前授权；Web仅REST/SSE。统一任务/审批/审计、独立节点资源范围、UNKNOWN不重放、离线Root与恢复代次/旧权威隔离约束继续有效。可选Xray不进核心Release，PluginRuntime/Eino/WASM未因代码存在而获得准入；受限Bearer读取HTTP尚未装配。
 
-云端首轮补齐用户上传统一任务/审批/取消/终态对账/实际摘要；接收网关工件、独立子执行、冻结计划与持久终态CAS；Agent组件本地签名更新/健康回滚已有真实浏览器专项证据。仅这些检查点获接收，不代表全部业务已装配或G2冻结。
-
-多目标/完整续传、网关中央装配及完整发布/补偿、Controller可信更新/在线发行装配、实际灾备新权威/旧主控隔离等仍未完成。1 vCPU / 1 GB RAM、物理双机、ARM实际运行和真实外部供应商仍待验收；WASM/Eino未获Runtime准入。Xray当前全范围由WorkBuddy承担，所有权变更不代表准入获批，可选插件仍不能编入核心Release。
-
-最新状态见[任务板](../development/TASK-BOARD.md)、[当前进度](../development/sprints/v09-five-day/CURRENT-PROGRESS.md)、[云端首轮接收报告](../development/reviews/V09-CLOUD-R1-REVIEW.md)与[Cloud R2任务](../development/sprints/v09-five-day/cloud-r2/PLAN.md)。默认缺可信配置仍拒绝，编译/CI不能代替完整运行时安全与产品验收。
-
-
-2026-11-08当前基线更新：main a8a093c及独立CI42480445288 success，#14持久浏览器暂存续传已接收（28项迁移）。本分支候选R11/第29项追加上传策略迁移、当前owner cleanup后台执行与可信Agent更新启动配置，详见[产品启动](../development/PRODUCT-STARTUP.md)。统一任务/审批/逐帧授权与UNKNOWN不重放不变；没有新增SSH、Web/插件直连或常驻updater，完整发布/恢复及G2继续OPEN。
+原始需求/批准ADR保留不可变；当前实现不能反向改写批准条款，接口候选未冻结。历史检查、物理/供应商/Root/硬1C1G和G2发布准入边界见[进度记录](../development/sprints/v09-five-day/CURRENT-PROGRESS.md)；历史“尚未实现”的语句不替代后续已合并源码。

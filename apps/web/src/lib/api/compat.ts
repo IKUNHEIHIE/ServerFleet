@@ -203,6 +203,11 @@ export function normalizeTransferItem(item: unknown, label: string): {
   readonly error?: string;
 } {
   if (!isRecord(item)) throw invalid(`${label}: transfer item is not an object`);
+  for (const [candidate, actual] of [["path", "sourcePath"], ["state", "status"], ["bytes", "bytesCopied"]] as const) {
+    if (item[candidate] !== undefined && item[actual] !== undefined && item[candidate] !== item[actual]) {
+      throw invalid(`${label}: conflicting transfer ${candidate} aliases`);
+    }
+  }
   const path = asString(item.path) ?? asString(item.sourcePath);
   const state = asString(item.state) ?? asString(item.status);
   const rawBytes = item.bytes ?? item.bytesCopied;

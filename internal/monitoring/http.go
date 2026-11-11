@@ -389,6 +389,13 @@ func (api *httpAPI) probeMonitor(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
+	// Controller probes permit up to 300s; the global server write deadline is
+	// intentionally shorter for ordinary requests. Bound this one route without
+	// weakening authentication, target timeouts or the recovery response gate.
+	if err := http.NewResponseController(w).SetWriteDeadline(time.Now().Add(310 * time.Second)); err != nil && !errors.Is(err, http.ErrNotSupported) {
+		writeFixed(w, http.StatusServiceUnavailable, "probe_deadline_unavailable", "probe response deadline is unavailable")
+		return
+	}
 	monitorID := r.PathValue("monitorId")
 	check, monitor, err := api.service.RunCheckNow(r.Context(), principal.SubjectID, principal.RequestID, monitorID)
 	if err != nil {
