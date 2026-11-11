@@ -379,6 +379,16 @@ func (api *httpAPI) probeMonitor(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
+	if r.URL.RawQuery != "" {
+		writeError(w, ErrInvalidMonitor)
+		return
+	}
+	if r.ContentLength != 0 {
+		var body struct{}
+		if !decodeJSON(w, r, &body) {
+			return
+		}
+	}
 	monitorID := r.PathValue("monitorId")
 	check, monitor, err := api.service.RunCheckNow(r.Context(), principal.SubjectID, principal.RequestID, monitorID)
 	if err != nil {

@@ -254,12 +254,15 @@ func (s *Service) RunCheckNow(ctx context.Context, subjectID, requestID, monitor
 	if err := s.authorize(ctx, subjectID, ActionWrite, requestID, "monitor_check"); err != nil {
 		return Check{}, Monitor{}, err
 	}
-	if s.prober == nil {
+	if s.prober == nil && s.remoteProber == nil {
 		return Check{}, Monitor{}, ErrProberUnavailable
 	}
 	monitor, err := s.repo.Get(ctx, monitorID)
 	if err != nil {
 		return Check{}, Monitor{}, err
+	}
+	if e := s.validateSource(ctx, subjectID, monitor.SourceNodeID); e != nil {
+		return Check{}, Monitor{}, e
 	}
 	check, updated, alert, _, err := s.runCheck(ctx, monitor, s.now(), subjectID, true)
 	if err != nil {
@@ -278,7 +281,7 @@ func (s *Service) RunCheckNow(ctx context.Context, subjectID, requestID, monitor
 // RunDue checks every enabled monitor whose interval has elapsed. Maintenance
 // windows record checks but keep state and suppress alerts.
 func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error) {
-	if s.prober == nil {
+	if s.prober == nil && s.remoteProber == nil {
 		return nil, ErrProberUnavailable
 	}
 	if now.IsZero() {
@@ -321,7 +324,11 @@ func (s *Service) RunDue(ctx context.Context, now time.Time) ([]RunResult, error
 		if err := s.recordCheck(ctx, check, updated, nil, alert); err != nil {
 			return results, err
 		}
-		result := RunResult{MonitorID: monitor.ID, Check: check, State: updated.State, Maintenance: maintenance}
+		resultState := updated.State
+		if updated.LastProbeUnknown {
+			resultState = StateUnknown
+		}
+		result := RunResult{MonitorID: monitor.ID, Check: check, State: resultState, Maintenance: maintenance}
 		if alert != nil {
 			if err := s.FlushAlerts(ctx, 50); err != nil {
 				if firstErr == nil {
@@ -340,7 +347,7 @@ func (s *Service) runCheck(ctx context.Context, monitor Monitor, now time.Time, 
 	if s.automationCurrent != nil && s.automationCurrent(ctx, monitor) != nil {
 		return Check{}, Monitor{}, nil, false, ErrObservationChanged
 	}
-	if s.prober == nil {
+	if monitor.SourceNodeID == "" && s.prober == nil {
 		return Check{}, Monitor{}, nil, false, ErrProberUnavailable
 	}
 	if err := s.policy.Validate(monitor.Kind, monitor.Target); err != nil {

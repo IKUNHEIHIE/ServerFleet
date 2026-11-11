@@ -59,3 +59,5 @@ Xray所有工作由WorkBuddy承担；这不是Runtime批准。可选插件不编
 ## 2026-11-08 单会话接手（覆盖上方平台写权限）
 
 用户授权ChatGPT直接返修#7/#8/#9并独立继续完整项目。V09-CLOUD-TAKEOVER-01/chatgpt-takeover-01取得三包剩余模块及主控协调范围；原三平台/Windows作者不自动复活，原中央窗口转交本会话单写。历史交付/分支/进度保留，不把转交标完成。源资料/ADR不可改写，公共接口/迁移/生成/锁/CI仍须协调审查；统一任务/审批/审计、未知不重放、可选Runtime未准入等条件不变。见TASK-BOARD与progress/chatgpt/cloud-r3/TAKEOVER.md。
+
+2026-11-11 R33：internal/netprobe归主控共享低层网络代码；仅标准库。monitoring维持业务授权/状态/存储，Agent只消费公开探测类型，Controller独占任务与来源装配。当前任务协调以上明确边界，不开放通配写入或插件Runtime。

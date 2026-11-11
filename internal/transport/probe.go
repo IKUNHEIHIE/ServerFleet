@@ -9,6 +9,8 @@ import (
 )
 
 const ProbeCapability = "monitoring.probe"
+const ProbeExecutionGraceSeconds = 5
+
 const ProbeProfile = "public-http-tcp-tls-v1"
 
 type ProbeParameters struct {
@@ -64,7 +66,7 @@ func ParseProbeReceipt(raw []byte) (ProbeReceipt, error) {
 	default:
 		return r, ErrLinkRejected
 	}
-	if r.Outcome == "up" && r.Reason != "" || r.LatencyMs != nil && (*r.LatencyMs < 0 || *r.LatencyMs > 30_000) || r.StatusCode != nil && (*r.StatusCode < 100 || *r.StatusCode > 599) {
+	if r.Outcome == "up" && r.Reason != "" || r.LatencyMs != nil && (*r.LatencyMs < 0 || *r.LatencyMs > 35_000) || r.StatusCode != nil && (*r.StatusCode < 100 || *r.StatusCode > 599) {
 		return r, ErrLinkRejected
 	}
 	return r, nil

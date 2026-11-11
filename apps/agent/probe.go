@@ -12,13 +12,22 @@ import (
 
 // A fixed in-process read-only capability. No shell, arbitrary method, headers,
 // request body, custom CA or user-provided network allowlist is accepted.
+type probeImplementation interface {
+	HTTP(context.Context, netprobe.TargetSpec) (netprobe.ProbeResult, error)
+	TCP(context.Context, netprobe.TargetSpec) (netprobe.ProbeResult, error)
+	TLS(context.Context, netprobe.TargetSpec) (netprobe.ProbeResult, error)
+}
+
 func publicProbeAction() agentAction {
+	p, _ := netprobe.NewNetProber(netprobe.NetProberConfig{})
+	return probeActionUsing(p)
+}
+func probeActionUsing(probe probeImplementation) agentAction {
 	return agentAction{Validate: func(raw []byte) error { _, e := transport.ParseProbeParameters(raw); return e }, Run: func(ctx context.Context, raw []byte) executionResult {
 		p, e := transport.ParseProbeParameters(raw)
 		if e != nil {
 			return executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_FAILED}
 		}
-		probe, _ := netprobe.NewNetProber(netprobe.NetProberConfig{})
 		bounded, cancel := context.WithTimeout(ctx, time.Duration(p.TimeoutSeconds)*time.Second)
 		defer cancel()
 		spec := netprobe.TargetSpec{Kind: p.Kind, Target: p.Target, Timeout: time.Duration(p.TimeoutSeconds) * time.Second}

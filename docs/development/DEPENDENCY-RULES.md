@@ -43,3 +43,5 @@ Web 仅消费 Controller REST/SSE；API DTO 将来由契约适配层转换成 Vi
 Controller组合入口和tests增加对上述域的显式允许；tasks增加servicegroups用于目标快照；没有`internal/*`通配放行。实际策略测试覆盖正常任务/组合方向及AI/文件直连transport、Agent导入业务、storage反向、核心导入可选Xray、未登记相似前缀等拒绝。撤回本次新方向需与相应业务调用一起协调，不删除旧限制或生成基线。
 
 2026-11-09 主控 R22 候选：updates → transport 仅消费 ResidentUpdateIntent 的公开 typed 交接格式；无 transport 反向依赖或 Agent 导入 updates/数据库。独立监督进程在 Controller 组合入口装配真实 owner Repo/Identity gate，禁止借此创建 Web/AI 直连执行旁路。
+
+2026-11-11 R33：主控协调新增std-only internal/netprobe，供monitoring与Agent复用现有HTTP/TCP/TLS/SSRF实现；transport仅依赖其公开类型和校验。显式边登记dependencies.json；不增加Agent到业务域/数据库依赖，不引入插件Runtime或第三方包。

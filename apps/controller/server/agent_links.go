@@ -170,7 +170,7 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	}
 	if task.ActionID == transport.ProbeCapability {
 		p, e := transport.ParseProbeParameters(offer.CanonicalParametersJson)
-		if e != nil || b.probeCurrent == nil || b.probeCurrent(ctx, task) != nil || offer.TimeoutSeconds != uint32(p.TimeoutSeconds) {
+		if e != nil || b.probeCurrent == nil || b.probeCurrent(ctx, task) != nil || offer.TimeoutSeconds != uint32(p.TimeoutSeconds+transport.ProbeExecutionGraceSeconds) {
 			return transport.ErrLinkRejected
 		}
 	}
@@ -615,7 +615,7 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		if e != nil || b.probeCurrent == nil || b.probeCurrent(ctx, task) != nil {
 			return tasks.DispatchResult{Accepted: false, Reason: "probe_authority_denied"}, nil
 		}
-		offer.TimeoutSeconds = uint32(p.TimeoutSeconds)
+		offer.TimeoutSeconds = uint32(p.TimeoutSeconds + transport.ProbeExecutionGraceSeconds)
 	}
 	if task.ActionID == transport.ResidentUpdateAction {
 		if task.Source != "web" || task.PluginID != "" || task.ScopeRevision != 0 || !task.ApprovalRequired || task.OperationClass != tasks.OperationClassModifying || b.commandCurrent == nil || b.commandCurrent(ctx, task) != nil {

@@ -102,7 +102,7 @@ func (s *Server) agentCommandAdmission(root bool) http.HandlerFunc {
 			offer := body.Offer
 			t, e := s.Tasks.CheckExecutionForNode(r.Context(), offer.TaskId, offer.PlanDigestSha256, peer.NodeID)
 			p, parseErr := transport.ParseProbeParameters(offer.CanonicalParametersJson)
-			if e != nil || parseErr != nil || s.nodeProbeTaskCurrent(r.Context(), t) != nil || string(offer.CanonicalParametersJson) != t.Params || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.ExecutionId != executionIDFor(t.ID, peer.NodeID, t.PlanHash) || offer.ActionSchemaVersion != "1" || offer.ScopeRevision != 0 || offer.PluginId != "" || offer.TimeoutSeconds != uint32(p.TimeoutSeconds) || offer.ExpiresAtUnixMs <= time.Now().UnixMilli() || offer.ExpiresAtUnixMs > time.Now().Add(10*time.Minute).UnixMilli() {
+			if e != nil || parseErr != nil || s.nodeProbeTaskCurrent(r.Context(), t) != nil || string(offer.CanonicalParametersJson) != t.Params || offer.Privilege != agentv1.Privilege_PRIVILEGE_NORMAL || offer.ExecutionId != executionIDFor(t.ID, peer.NodeID, t.PlanHash) || offer.ActionSchemaVersion != "1" || offer.ScopeRevision != 0 || offer.PluginId != "" || offer.TimeoutSeconds != uint32(p.TimeoutSeconds+transport.ProbeExecutionGraceSeconds) || offer.ExpiresAtUnixMs <= time.Now().UnixMilli() || offer.ExpiresAtUnixMs > time.Now().Add(10*time.Minute).UnixMilli() {
 				releaseSourceJSON(w, 403, map[string]string{"code": "PROBE_ADMISSION_DENIED"})
 				return
 			}
@@ -112,7 +112,7 @@ func (s *Server) agentCommandAdmission(root bool) http.HandlerFunc {
 					return
 				}
 			}
-			releaseSourceJSON(w, 200, map[string]string{"taskId": t.ID, "executionId": offer.ExecutionId, "planHash": t.PlanHash, "nonce": body.Nonce, "phase": body.Phase, "timeoutSeconds": strconv.Itoa(p.TimeoutSeconds)})
+			releaseSourceJSON(w, 200, map[string]string{"taskId": t.ID, "executionId": offer.ExecutionId, "planHash": t.PlanHash, "nonce": body.Nonce, "phase": body.Phase, "timeoutSeconds": strconv.Itoa(p.TimeoutSeconds + transport.ProbeExecutionGraceSeconds)})
 			return
 		}
 		expectedAction, expectedClass, expectedPrivilege := transport.CommandCapability, tasks.OperationClassModifying, agentv1.Privilege_PRIVILEGE_NORMAL

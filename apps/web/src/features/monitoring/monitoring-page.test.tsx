@@ -123,4 +123,18 @@ describe("monitoring page", () => {
     expect(screen.getByRole("link",{name:"查看任务与人工处置"})).toHaveAttribute("href","#/tasks/notify-unknown");
   });
 
+  it("persists the selected source node and links unknown observations to their tasks", async () => {
+    const routes=monitorRoutes();
+    routes["GET /api/v1/availability-monitors"]=()=>jsonResponse([{id:"m-1",name:"Remote Web",type:"http",target:"https://example.com/",sourceNodeId:"n-1",intervalSeconds:60,timeoutSeconds:5,state:"unknown",lastProbeUnknown:true,lastProbeTaskId:"probe-task-1"}]);
+    const {calls}=await renderAuthenticated("/monitoring",routes);
+    fireEvent.click(await screen.findByRole("tab",{name:"服务监控"}));
+    expect(await screen.findByText("未知（探测来源或执行异常）")).toBeVisible();
+    expect(screen.getByRole("link",{name:"查看任务"})).toHaveAttribute("href","#/tasks/probe-task-1");
+    fireEvent.click(screen.getByRole("button",{name:"编辑"}));
+    const dialog=await screen.findByRole("dialog");
+    expect(within(dialog).getByLabelText("探测来源")).toHaveValue("n-1");
+    fireEvent.click(within(dialog).getByRole("button",{name:"保存监控"}));
+    await waitFor(()=>{const call=calls.find(call=>call.method==="PATCH"&&call.url==="/api/v1/availability-monitors/m-1");expect(JSON.parse(String(call?.init?.body))).toMatchObject({sourceNodeId:"n-1"});});
+  });
+
 });

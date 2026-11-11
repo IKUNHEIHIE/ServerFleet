@@ -19,6 +19,8 @@ import (
 
 type nodeProbeClient struct{ s *Server }
 type nodeProbeRun struct {
+	Deadline     time.Time
+	Stopped      bool
 	Key          string
 	MonitorID    string
 	Owner        string
@@ -59,7 +61,7 @@ func (s *Server) readNodeProbe(ctx context.Context, key string) (nodeProbeRun, e
 	return r, nil
 }
 func (s *Server) currentNodeProbe(ctx context.Context, r nodeProbeRun) error {
-	if s.Monitoring == nil || s.validateProbeSource(ctx, r.Actor, r.Node) != nil {
+	if r.Stopped || r.Deadline.IsZero() || !time.Now().UTC().Before(r.Deadline) || s.Monitoring == nil || s.validateProbeSource(ctx, r.Actor, r.Node) != nil {
 		return auth.ErrDenied
 	}
 	m, e := s.Monitoring.ProbeSnapshot(ctx, r.MonitorID, r.Owner, r.Revision, r.Observation, r.Node)
@@ -123,6 +125,10 @@ func (c nodeProbeClient) Probe(ctx context.Context, m monitoring.Monitor, actor 
 	if s.validateProbeSource(ctx, actor, m.SourceNodeID) != nil {
 		return unknown("", "probe_source_denied"), nil
 	}
+	node, e := s.NodesRepo.Get(ctx, m.SourceNodeID)
+	if e != nil || node.Status != nodes.StatusOnline {
+		return unknown("", "probe_source_offline"), nil
+	}
 	if s.Links == nil {
 		return unknown("", "probe_source_unavailable"), nil
 	}
@@ -136,12 +142,16 @@ func (c nodeProbeClient) Probe(ctx context.Context, m monitoring.Monitor, actor 
 	if _, e := transport.ParseProbeParameters(params); e != nil {
 		return unknown("", "probe_target_rejected"), nil
 	}
-	run := nodeProbeRun{Key: key, MonitorID: m.ID, Owner: m.AutomationOwnerID, Actor: actor, Revision: m.AutomationRevision, Observation: m.ObservationRevision, Node: m.SourceNodeID, Manual: manual, Enabled: m.Enabled, Params: string(params)}
+	deadline := time.Now().UTC().Add(time.Duration(m.TimeoutSeconds+8) * time.Second)
+	if d, ok := ctx.Deadline(); ok && d.Before(deadline) {
+		deadline = d
+	}
+	run := nodeProbeRun{Deadline: deadline, Key: key, MonitorID: m.ID, Owner: m.AutomationOwnerID, Actor: actor, Revision: m.AutomationRevision, Observation: m.ObservationRevision, Node: m.SourceNodeID, Manual: manual, Enabled: m.Enabled, Params: string(params)}
 	raw, _ := json.Marshal(run)
 	if _, e := s.DB.Exec(ctx, `INSERT OR IGNORE INTO monitor_probe_runs(run_key,task_id,payload) VALUES(?,'',?)`, key, raw); e != nil {
 		return unknown("", "probe_storage_unavailable"), e
 	}
-	run, e := s.readNodeProbe(ctx, key)
+	run, e = s.readNodeProbe(ctx, key)
 	if e != nil || s.currentNodeProbe(ctx, run) != nil {
 		return unknown("", "probe_configuration_changed"), nil
 	}
@@ -155,6 +165,11 @@ func (c nodeProbeClient) Probe(ctx context.Context, m monitoring.Monitor, actor 
 		}
 		run.TaskID = t.ID
 	}
+	defer func() {
+		if ctx.Err() != nil {
+			s.stopNodeProbe(context.WithoutCancel(ctx), run.Key)
+		}
+	}()
 	ticker := time.NewTicker(100 * time.Millisecond)
 	defer ticker.Stop()
 	for {
@@ -245,3 +260,24 @@ func (s *Server) recordNodeProbe(ctx context.Context, obs transport.LinkObservat
 }
 
 var _ monitoring.RemoteProber = nodeProbeClient{}
+
+// Producer cancellation retires only its private read-only intent; it does not
+// bypass task cancel permissions. A durable deadline also fences a hard crash.
+func (s *Server) stopNodeProbe(ctx context.Context, key string) {
+	bounded, cancel := context.WithTimeout(ctx, 2*time.Second)
+	defer cancel()
+	_ = s.DB.InTx(bounded, func(c context.Context, tx storage.Tx) error {
+		var raw []byte
+		if e := tx.QueryRow(c, `SELECT payload FROM monitor_probe_runs WHERE run_key=?`, key).Scan(&raw); e != nil {
+			return e
+		}
+		var r nodeProbeRun
+		if json.Unmarshal(raw, &r) != nil {
+			return auth.ErrDenied
+		}
+		r.Stopped = true
+		raw, _ = json.Marshal(r)
+		_, e := tx.Exec(c, `UPDATE monitor_probe_runs SET payload=? WHERE run_key=?`, raw, key)
+		return e
+	})
+}

@@ -1,191 +1,30 @@
 {
   "module": "serverfleet.local/serverfleet",
   "allowed": {
-    "apps/controller": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/tasks",
-      "internal/audit",
-      "internal/plugins",
-      "internal/transport",
-      "internal/storage",
-      "internal/ai",
-      "internal/workflows",
-      "internal/updates",
-      "internal/recovery",
-      "internal/files",
-      "internal/monitoring",
-      "internal/notifications",
-      "internal/quota",
-      "internal/dns",
-      "internal/certificates",
-      "internal/gateway",
-      "internal/servicegroups",
-      "internal/publishing",
-      "gen/go"
-    ],
-    "apps/agent": [
-      "internal/transport",
-      "gen/go",
-      "internal/netprobe"
-    ],
-    "internal/auth": [
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/nodes": [
-      "internal/auth",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/tasks": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/audit",
-      "internal/transport",
-      "internal/storage",
-      "internal/servicegroups"
-    ],
-    "internal/audit": [
-      "internal/storage"
-    ],
-    "internal/plugins": [
-      "internal/auth",
-      "internal/tasks",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/transport": [
-      "internal/audit",
-      "internal/storage",
-      "gen/go",
-      "internal/netprobe"
-    ],
+    "apps/controller": ["internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/plugins", "internal/transport", "internal/storage", "internal/ai", "internal/workflows", "internal/updates", "internal/recovery", "internal/files", "internal/monitoring", "internal/notifications", "internal/quota", "internal/dns", "internal/certificates", "internal/gateway", "internal/servicegroups", "internal/publishing", "gen/go"],
+    "apps/agent": ["internal/transport", "gen/go", "internal/netprobe"],
+    "internal/auth": ["internal/audit", "internal/storage"],
+    "internal/nodes": ["internal/auth", "internal/audit", "internal/storage"],
+    "internal/tasks": ["internal/auth", "internal/nodes", "internal/audit", "internal/transport", "internal/storage", "internal/servicegroups"],
+    "internal/audit": ["internal/storage"],
+    "internal/plugins": ["internal/auth", "internal/tasks", "internal/audit", "internal/storage"],
+    "internal/transport": ["internal/audit", "internal/storage", "gen/go", "internal/netprobe"],
+    "internal/netprobe": [],
     "internal/storage": [],
-    "internal/ai": [
-      "internal/auth",
-      "internal/tasks",
-      "internal/nodes",
-      "internal/servicegroups",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/workflows": [
-      "internal/auth",
-      "internal/tasks",
-      "internal/nodes",
-      "internal/notifications",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/updates": [
-      "internal/transport",
-      "internal/auth",
-      "internal/tasks",
-      "internal/nodes",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/recovery": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/tasks",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/files": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/tasks",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/monitoring": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/notifications",
-      "internal/audit",
-      "internal/storage",
-      "internal/netprobe"
-    ],
-    "internal/notifications": [
-      "internal/auth",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/quota": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/notifications",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/dns": [
-      "internal/auth",
-      "internal/tasks",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/certificates": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/tasks",
-      "internal/dns",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/gateway": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/tasks",
-      "internal/servicegroups",
-      "internal/certificates",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/servicegroups": [
-      "internal/auth",
-      "internal/nodes",
-      "internal/audit",
-      "internal/storage"
-    ],
-    "internal/publishing": [
-      "internal/auth",
-      "internal/tasks",
-      "internal/nodes",
-      "internal/servicegroups",
-      "internal/gateway",
-      "internal/dns",
-      "internal/certificates",
-      "internal/audit",
-      "internal/storage"
-    ],
+    "internal/ai": ["internal/auth", "internal/tasks", "internal/nodes", "internal/servicegroups", "internal/audit", "internal/storage"],
+    "internal/workflows": ["internal/auth", "internal/tasks", "internal/nodes", "internal/notifications", "internal/audit", "internal/storage"],
+    "internal/updates": ["internal/transport", "internal/auth", "internal/tasks", "internal/nodes", "internal/audit", "internal/storage"],
+    "internal/recovery": ["internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/storage"],
+    "internal/files": ["internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/storage"],
+    "internal/monitoring": ["internal/auth", "internal/nodes", "internal/notifications", "internal/audit", "internal/storage", "internal/netprobe"],
+    "internal/notifications": ["internal/auth", "internal/audit", "internal/storage"],
+    "internal/quota": ["internal/auth", "internal/nodes", "internal/notifications", "internal/audit", "internal/storage"],
+    "internal/dns": ["internal/auth", "internal/tasks", "internal/audit", "internal/storage"],
+    "internal/certificates": ["internal/auth", "internal/nodes", "internal/tasks", "internal/dns", "internal/audit", "internal/storage"],
+    "internal/gateway": ["internal/auth", "internal/nodes", "internal/tasks", "internal/servicegroups", "internal/certificates", "internal/audit", "internal/storage"],
+    "internal/servicegroups": ["internal/auth", "internal/nodes", "internal/audit", "internal/storage"],
+    "internal/publishing": ["internal/auth", "internal/tasks", "internal/nodes", "internal/servicegroups", "internal/gateway", "internal/dns", "internal/certificates", "internal/audit", "internal/storage"],
     "gen/go": [],
-    "tests": [
-      "apps/controller",
-      "apps/agent",
-      "internal/auth",
-      "internal/nodes",
-      "internal/tasks",
-      "internal/audit",
-      "internal/plugins",
-      "internal/transport",
-      "internal/storage",
-      "internal/ai",
-      "internal/workflows",
-      "internal/updates",
-      "internal/recovery",
-      "internal/files",
-      "internal/monitoring",
-      "internal/notifications",
-      "internal/quota",
-      "internal/dns",
-      "internal/certificates",
-      "internal/gateway",
-      "internal/servicegroups",
-      "internal/publishing",
-      "gen/go"
-    ],
-    "internal/netprobe": []
+    "tests": ["apps/controller", "apps/agent", "internal/auth", "internal/nodes", "internal/tasks", "internal/audit", "internal/plugins", "internal/transport", "internal/storage", "internal/ai", "internal/workflows", "internal/updates", "internal/recovery", "internal/files", "internal/monitoring", "internal/notifications", "internal/quota", "internal/dns", "internal/certificates", "internal/gateway", "internal/servicegroups", "internal/publishing", "gen/go"]
   }
 }
