@@ -41,3 +41,7 @@ install-state.json 绑定原配置与签名清单。重复运行复用已验证�
 相关行为以 systemd 官方 systemctl 文档与 curl 官方选项文档为准：
 https://www.freedesktop.org/software/systemd/man/latest/systemctl.html
 https://curl.se/docs/manpage.html
+
+## v0.9.1 身份生命周期
+
+常驻 Agent 自动续期并安全切换连接。过期证书不会被启动重试自动替换；保留账本，按 [UPGRADE.md](UPGRADE.md) 的显式恢复流程操作。批准界面勾选单节点读取授权才能使相应账户看到节点，批准和执行权限互不替代。令牌 ID 与入网请求 ID 不同，安装器会等待同一请求的审批。

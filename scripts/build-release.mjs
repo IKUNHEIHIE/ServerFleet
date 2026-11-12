@@ -61,7 +61,7 @@ try {
   const deploymentDirectory = path.join(output, "deployment");
   mkdirSync(deploymentDirectory, { mode: 0o700 });
   mkdirSync(path.join(deploymentDirectory, "examples"), { mode: 0o700 });
-  for (const name of ["README.md", "INSTALL.md", "install.sh", "examples/install-controller.json", "examples/installation-catalog.json", "examples/controller.json", "examples/agent.json", "examples/file-deployment.json", "examples/command-profiles.json", "examples/root-command-profiles.json", "examples/root-executor.json", "examples/root-helper-registration.json"]) {
+  for (const name of ["README.md", "INSTALL.md", "UPGRADE.md", "REVERSE-PROXY.md", "examples/nginx-controller.conf", "examples/nginx-agent-stream.conf", "install.sh", "examples/install-controller.json", "examples/installation-catalog.json", "examples/controller.json", "examples/agent.json", "examples/file-deployment.json", "examples/command-profiles.json", "examples/root-command-profiles.json", "examples/root-executor.json", "examples/root-helper-registration.json"]) {
     const source = path.join(root, "deployment", name), stat = lstatSync(source);
     if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1 || stat.size <= 0 || stat.size > (64 << 10)) throw new Error("Invalid deployment documentation or example");
     writeFileSync(path.join(deploymentDirectory, name), readFileSync(source), { mode: 0o600, flag: "wx" });

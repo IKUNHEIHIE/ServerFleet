@@ -94,3 +94,6 @@ apis:
 
   v09-r34-runtime-additions:
     root: api/openapi/revisions/v09-r34/runtime-additions-candidate.json
+
+  v09-r37-identity-operations:
+    root: api/openapi/revisions/v09-r37/identity-operations-candidate.json

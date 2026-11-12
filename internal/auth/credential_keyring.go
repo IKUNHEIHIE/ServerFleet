@@ -213,57 +213,7 @@ func NewPersistentCredentialService(ctx context.Context, identity *IdentityServi
 	if err != nil {
 		return nil, err
 	}
-	err = identity.read(ctx, func(st *identityState, now time.Time) error {
-		for key := range st.CredentialKeyUses {
-			if v.cipher.keys[key] == nil {
-				return ErrIdentityUnavailable
-			}
-		}
-		for _, r := range st.Credentials {
-			// Revocation deliberately erases ciphertext. It must remain revoked,
-			// and cannot be treated as a corrupt live credential at startup.
-			if r.Revoked && len(r.Sealed.Ciphertext) == 0 {
-				continue
-			}
-			binding, e := credentialBindingFor(r)
-			if e != nil {
-				return e
-			}
-			plain, e := v.cipher.open(binding, r.Sealed, credentialExpiry(r.Meta), now, false)
-			// Expired/revoked ciphertext still needs an authentication check.
-			if !now.Before(credentialExpiry(r.Meta)) {
-				plain, e = v.cipher.open(binding, r.Sealed, credentialExpiry(r.Meta), r.Meta.CreatedAt, false)
-			}
-			clear(plain)
-			if e != nil {
-				return ErrIdentityUnavailable
-			}
-		}
-		for _, r := range st.CredentialChanges {
-			purpose, _, e := credentialPurpose(r.Meta.Kind)
-			if e != nil {
-				return ErrIdentityUnavailable
-			}
-			plain, e := v.cipher.open(credentialBinding{r.BindingID, r.Owner, purpose, r.Meta.Revision}, r.Sealed, credentialExpiry(r.Meta), r.Meta.CreatedAt, false)
-			clear(plain)
-			if e != nil {
-				return ErrIdentityUnavailable
-			}
-		}
-		for _, r := range st.XrayMaterials {
-			if v.cipher.keys[r.ReservedKeyID] == nil {
-				return ErrIdentityUnavailable
-			}
-			if len(r.Sealed.Ciphertext) > 0 {
-				plain, e := v.cipher.open(xrayMaterialBinding(r), r.Sealed, r.Meta.ExpiresAt, r.Meta.CreatedAt, false)
-				clear(plain)
-				if e != nil {
-					return ErrIdentityUnavailable
-				}
-			}
-		}
-		return nil
-	})
+	err = validatePersistentCredentials(ctx, identity, v)
 	if err != nil {
 		return nil, ErrIdentityUnavailable
 	}
@@ -332,4 +282,58 @@ func ValidateCredentialKeyDirectory(directory string) error {
 	}
 	keys.Clear()
 	return nil
+}
+
+func validatePersistentCredentials(ctx context.Context, identity *IdentityService, v *CredentialService) error {
+	return identity.read(ctx, func(st *identityState, now time.Time) error {
+		for key := range st.CredentialKeyUses {
+			if v.cipher.keys[key] == nil {
+				return ErrIdentityUnavailable
+			}
+		}
+		for _, r := range st.Credentials {
+			// Revocation deliberately erases ciphertext. It must remain revoked,
+			// and cannot be treated as a corrupt live credential at startup.
+			if r.Revoked && len(r.Sealed.Ciphertext) == 0 {
+				continue
+			}
+			binding, e := credentialBindingFor(r)
+			if e != nil {
+				return e
+			}
+			plain, e := v.cipher.open(binding, r.Sealed, credentialExpiry(r.Meta), now, false)
+			// Expired/revoked ciphertext still needs an authentication check.
+			if !now.Before(credentialExpiry(r.Meta)) {
+				plain, e = v.cipher.open(binding, r.Sealed, credentialExpiry(r.Meta), r.Meta.CreatedAt, false)
+			}
+			clear(plain)
+			if e != nil {
+				return ErrIdentityUnavailable
+			}
+		}
+		for _, r := range st.CredentialChanges {
+			purpose, _, e := credentialPurpose(r.Meta.Kind)
+			if e != nil {
+				return ErrIdentityUnavailable
+			}
+			plain, e := v.cipher.open(credentialBinding{r.BindingID, r.Owner, purpose, r.Meta.Revision}, r.Sealed, credentialExpiry(r.Meta), r.Meta.CreatedAt, false)
+			clear(plain)
+			if e != nil {
+				return ErrIdentityUnavailable
+			}
+		}
+		for _, r := range st.XrayMaterials {
+			if v.cipher.keys[r.ReservedKeyID] == nil {
+				return ErrIdentityUnavailable
+			}
+			if len(r.Sealed.Ciphertext) > 0 {
+				plain, e := v.cipher.open(xrayMaterialBinding(r), r.Sealed, r.Meta.ExpiresAt, r.Meta.CreatedAt, false)
+				clear(plain)
+				if e != nil {
+					return ErrIdentityUnavailable
+				}
+			}
+		}
+		return nil
+	})
 }

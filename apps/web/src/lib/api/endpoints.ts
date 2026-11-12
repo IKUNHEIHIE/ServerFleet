@@ -94,11 +94,11 @@ export const nodesApi = {
 };
 
 export const enrollmentApi = {
-  createToken: (body: { expiryMinutes?: number; maxUses?: number }) =>
+  createToken: (body: { expiryMinutes?: number; maxUses?: number; replaceNodeId?: string }) =>
     apiClient.request<NodeEnrollmentToken>("/api/v1/node-enrollment-tokens", { method: "POST", body }),
   list: (signal?: AbortSignal) =>
     apiClient.request<ItemList<NodeEnrollment>>("/api/v1/node-enrollments", { signal }),
-  decide: (enrollmentId: string, body: { decision: "approve" | "reject"; reason?: string }) =>
+  decide: (enrollmentId: string, body: { decision: "approve" | "reject"; reason?: string; grantRead?: boolean }) =>
     apiClient.request<NodeEnrollment>(`/api/v1/node-enrollments/${encodeURIComponent(enrollmentId)}/decision`, {
       method: "POST",
       body,

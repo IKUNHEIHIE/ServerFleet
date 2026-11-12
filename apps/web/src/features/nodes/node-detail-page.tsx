@@ -90,11 +90,14 @@ function DiagnosticBody({ diagnostic }: { readonly diagnostic: NodeDiagnostic })
           { term: "最近心跳", value: diagnostic.lastHeartbeatAt ?? "未提供" },
           { term: "身份已验证", value: diagnostic.identityVerified === undefined ? "未知" : diagnostic.identityVerified ? "是" : "否" },
           { term: "Agent 版本", value: diagnostic.agentVersion ?? "未提供" },
+          { term: "身份有效期", value: diagnostic.agent?.certificateExpiresAt ?? "未提供" },
+          { term: "最近身份握手", value: diagnostic.agent?.recorded ? diagnostic.agent.observedAt ?? "未提供" : "尚未记录" },
         ]}
       />
+      {diagnostic.agent?.history && diagnostic.agent.history.length > 0 ? <div><p className="font-medium">最近连接记录（最多 100 条）</p><ul className="mt-2 space-y-1 text-xs">{diagnostic.agent.history.map((event,index) => <li key={`${event.at}-${index}`}>{event.at} · {event.code === "authenticated" ? "身份握手已验证" : "连接断开"}</li>)}</ul></div> : null}
       <div>
         <p className="font-medium">待执行任务</p>
-        {!diagnostic.pendingTasks || diagnostic.pendingTasks.length === 0 ? (
+        {diagnostic.pendingTasksKnown === false ? <p className="mt-1 text-muted-foreground">待执行任务状态未记录，请到任务管理查看。</p> : !diagnostic.pendingTasks || diagnostic.pendingTasks.length === 0 ? (
           <p className="mt-1 text-muted-foreground">没有待执行任务。</p>
         ) : (
           <ul className="mt-2 space-y-1">

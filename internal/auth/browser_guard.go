@@ -29,23 +29,31 @@ func NewBrowserGuard(origin string) (*BrowserGuard, error) {
 // contain node data or CSRF material. Mutations require an exact Origin.
 // TLS termination is outside this helper and needs its own reviewed proxy setup.
 func (g *BrowserGuard) Check(r *http.Request, mutation bool) error {
-	if g == nil || r == nil || r.Host != g.host {
-		return ErrDenied
-	}
-	origins := r.Header.Values("Origin")
-	if len(origins) > 1 || len(origins) == 1 && origins[0] != g.origin {
-		return ErrDenied
-	}
-	if mutation && len(origins) != 1 {
-		return ErrDenied
-	}
-	if len(r.Header.Values("Sec-Fetch-Site")) > 1 {
-		return ErrDenied
-	}
-	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+	if g.RejectionCode(r, mutation) != "" {
 		return ErrDenied
 	}
 	return nil
+}
+
+// Fixed diagnostic categories do not disclose configured origins or credentials.
+func (g *BrowserGuard) RejectionCode(r *http.Request, mutation bool) string {
+	if g == nil || r == nil || r.Host != g.host {
+		return "HOST_MISMATCH"
+	}
+	origins := r.Header.Values("Origin")
+	if len(origins) > 1 || len(origins) == 1 && origins[0] != g.origin {
+		return "ORIGIN_MISMATCH"
+	}
+	if mutation && len(origins) != 1 {
+		return "ORIGIN_REQUIRED"
+	}
+	if len(r.Header.Values("Sec-Fetch-Site")) > 1 {
+		return "FETCH_SITE_REJECTED"
+	}
+	if site := r.Header.Get("Sec-Fetch-Site"); site != "" && site != "same-origin" && site != "none" {
+		return "FETCH_SITE_REJECTED"
+	}
+	return ""
 }
 
 // SessionCredential rejects ambiguous credentials BEFORE looking up identity.

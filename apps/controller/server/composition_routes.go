@@ -20,6 +20,7 @@ import (
 func (s *Server) registerRoutes() error {
 	s.registerOperatorIncidentRoutes()
 	s.registerBackupMaintenanceRoutes()
+	s.mux.HandleFunc("GET /readyz", s.readiness)
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": "ok", "stage": "v0.9-wave5"})
@@ -40,6 +41,9 @@ func (s *Server) registerRoutes() error {
 	}
 
 	s.registerEnrollmentRoutes()
+	if s.IdentityRenewalHTTP != nil {
+		s.mux.Handle("/api/v1/agent/identity/renew", s.IdentityRenewalHTTP)
+	}
 	s.registerAIRoutes()
 	if err := s.RegisterAIBudgetRoutes(); err != nil {
 		return err

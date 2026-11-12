@@ -74,7 +74,11 @@ func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*Identit
 func (h *IdentityHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
-	id, err := randomIdentity(rand.Reader)
+	id := w.Header().Get("X-Request-ID")
+	var err error
+	if id == "" {
+		id, err = randomIdentity(rand.Reader)
+	}
 	if err != nil {
 		http.Error(w, "unavailable", http.StatusServiceUnavailable)
 		return
@@ -82,10 +86,21 @@ func (h *IdentityHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Request-ID", id)
 	r = r.WithContext(context.WithValue(r.Context(), identityAuditContextKey{}, id))
 	if r.TLS == nil || h.guard.Check(r, r.Method != "GET" && r.Method != "HEAD") != nil {
-		h.problem(w, r, ErrDenied)
+		code := h.BrowserRejectionCode(r)
+		if code == "" {
+			code = "HTTPS_REQUIRED"
+		}
+		h.problemStatus(w, 403, code)
 		return
 	}
 	h.mux.ServeHTTP(w, r)
+}
+
+func (h *IdentityHTTP) BrowserRejectionCode(r *http.Request) string {
+	if h == nil || r == nil {
+		return "HOST_MISMATCH"
+	}
+	return h.guard.RejectionCode(r, r.Method != "GET" && r.Method != "HEAD")
 }
 
 // AuthenticateRequest is the same Cookie/CSRF/Origin boundary used by all auth

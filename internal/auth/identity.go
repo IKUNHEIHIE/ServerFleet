@@ -92,30 +92,31 @@ type identityAudit struct {
 	NodeIDs                   []string
 }
 type identityState struct {
-	Version            int
-	Initialized        bool
-	SetupDigest        string
-	SetupExpires       time.Time
-	ClockFloor         time.Time
-	PolicyRevision     uint64
-	Users              map[string]identityUser
-	Sessions           map[string]identitySession
-	Failures           map[string]loginWindow
-	Outbox             []identityAudit
-	Grants             map[string]identityGrant
-	Receipts           map[string]identityReceipt
-	AuditSequence      uint64
-	Credentials        map[string]storedCredential
-	CredentialChanges  map[string]credentialChange
-	CredentialKeyUses  map[string]uint64
-	CredentialUses     map[string]credentialUse
-	XrayMaterials      map[string]xrayMaterialRecord `json:",omitempty"`
-	XrayMaterialUses   map[string]xrayMaterialUse    `json:",omitempty"`
-	XrayMaterialOutbox []XrayMaterialAuditEvent      `json:",omitempty"`
-	Tokens             map[string]restrictedToken
-	Approvals          map[string]approvalRecord
-	requestID          string
-	requestSource      string
+	Version              int
+	Initialized          bool
+	SetupDigest          string
+	SetupExpires         time.Time
+	ClockFloor           time.Time
+	PolicyRevision       uint64
+	Users                map[string]identityUser
+	Sessions             map[string]identitySession
+	Failures             map[string]loginWindow
+	Outbox               []identityAudit
+	Grants               map[string]identityGrant
+	EnrollmentReadGrants map[string]string `json:",omitempty"`
+	Receipts             map[string]identityReceipt
+	AuditSequence        uint64
+	Credentials          map[string]storedCredential
+	CredentialChanges    map[string]credentialChange
+	CredentialKeyUses    map[string]uint64
+	CredentialUses       map[string]credentialUse
+	XrayMaterials        map[string]xrayMaterialRecord `json:",omitempty"`
+	XrayMaterialUses     map[string]xrayMaterialUse    `json:",omitempty"`
+	XrayMaterialOutbox   []XrayMaterialAuditEvent      `json:",omitempty"`
+	Tokens               map[string]restrictedToken
+	Approvals            map[string]approvalRecord
+	requestID            string
+	requestSource        string
 }
 
 // IdentityService implements auth-local lifecycle logic. The public contract and
@@ -136,12 +137,24 @@ func NewIdentityService(store IdentityStore) (*IdentityService, error) {
 }
 
 func decodeIdentity(data []byte) (*identityState, error) {
+	state, err := decodeIdentityDetailed(data)
+	if err != nil {
+		return nil, ErrIdentityUnavailable
+	}
+	return state, nil
+}
+
+// Detailed fixed categories are used only by local upgrade diagnostics.
+func decodeIdentityDetailed(data []byte) (*identityState, error) {
 	s := &identityState{}
 	if len(data) > 16<<20 {
 		return nil, ErrIdentityUnavailable
 	}
-	if len(data) > 0 && (json.Unmarshal(data, s) != nil || s.Version != 1 && s.Version != 2) {
-		return nil, ErrIdentityUnavailable
+	if len(data) > 0 && json.Unmarshal(data, s) != nil {
+		return nil, &UpgradeError{Code: "IDENTITY_PAYLOAD_JSON_INVALID"}
+	}
+	if len(data) > 0 && s.Version != 1 && s.Version != 2 {
+		return nil, &UpgradeError{Code: "IDENTITY_VERSION_UNSUPPORTED"}
 	}
 	if len(data) > 0 && (!s.Initialized && len(s.Users) > 0 || s.Initialized && len(s.Users) == 0) {
 		return nil, ErrIdentityUnavailable
@@ -160,6 +173,17 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	}
 	if s.Grants == nil {
 		s.Grants = map[string]identityGrant{}
+	}
+	if s.EnrollmentReadGrants == nil {
+		s.EnrollmentReadGrants = map[string]string{}
+	}
+	if len(s.EnrollmentReadGrants) > 10000 || !s.Initialized && len(s.EnrollmentReadGrants) > 0 {
+		return nil, ErrIdentityUnavailable
+	}
+	for key, id := range s.EnrollmentReadGrants {
+		if !validSecret(key) || !validSecret(id) {
+			return nil, ErrIdentityUnavailable
+		}
 	}
 	if s.Receipts == nil {
 		s.Receipts = map[string]identityReceipt{}
@@ -228,7 +252,7 @@ func decodeIdentity(data []byte) (*identityState, error) {
 	names := map[string]bool{}
 	for id, u := range s.Users {
 		if id != u.ID || !validSecret(id) || !validUsername(u.Username) || names[u.Username] || u.Epoch == 0 || u.Password.Iterations != 600000 || len(u.Password.Salt) != 32 || len(u.Password.Hash) != 32 {
-			return nil, ErrIdentityUnavailable
+			return nil, &UpgradeError{Code: "IDENTITY_USER_RECORD_INVALID"}
 		}
 		names[u.Username] = true
 		if u.Revision == 0 {
@@ -241,21 +265,21 @@ func decodeIdentity(data []byte) (*identityState, error) {
 			u.RoleIDs = []string{"administrator"}
 		}
 		if !validRoleIDs(u.RoleIDs) {
-			return nil, ErrIdentityUnavailable
+			return nil, &UpgradeError{Code: "IDENTITY_USER_RECORD_INVALID"}
 		}
 		if u.Administrator != containsAdministrator(u.RoleIDs) {
-			return nil, ErrIdentityUnavailable
+			return nil, &UpgradeError{Code: "IDENTITY_USER_RECORD_INVALID"}
 		}
 		s.Users[id] = u
 	}
 	for id, grant := range s.Grants {
 		if id != grant.Value.GrantID || !validSecret(id) || s.Users[grant.Value.PrincipalID].ID == "" || !validResourceType(grant.Value.ResourceType) || !validPolicyID(grant.Value.ResourceID) || !validExactIDs(grant.Nodes) || !validExactIDs(grant.Value.Permissions) {
-			return nil, ErrIdentityUnavailable
+			return nil, &UpgradeError{Code: "IDENTITY_GRANT_RECORD_INVALID"}
 		}
 	}
 	for digest, se := range s.Sessions {
 		if digest != se.Digest || !validSecret(digest) || !validSecret(se.ID) || !validSecret(se.CSRF) || s.Users[se.Subject].ID == "" || se.Epoch == 0 || se.Created.IsZero() || se.Seen.Before(se.Created) || !se.Expires.After(se.Created) {
-			return nil, ErrIdentityUnavailable
+			return nil, &UpgradeError{Code: "IDENTITY_SESSION_RECORD_INVALID"}
 		}
 	}
 	return s, nil

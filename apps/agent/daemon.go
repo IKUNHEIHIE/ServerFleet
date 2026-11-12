@@ -38,6 +38,10 @@ func serveAgentLinks(ctx context.Context, r agentruntime.ConnectRequest, connect
 		}
 		started := now()
 		_, err := connect(ctx, r)
+		if errors.Is(err, errAgentIdentityRotated) {
+			failures = 0
+			continue
+		}
 		if errors.Is(err, errAgentWorkersUnknown) {
 			return err
 		}

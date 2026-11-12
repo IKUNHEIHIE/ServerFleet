@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
+	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 	"serverfleet.local/serverfleet/internal/audit"
+	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/nodes"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
@@ -29,6 +31,17 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		principal, ok := transport.EnrollmentPrincipalFromContext(ctx)
 		if !ok || !principal.Administrator || principal.SubjectID != op.ActorID {
 			return transport.ErrEnrollmentRejected
+		}
+		if op.NodeID != "" {
+			node, e := s.NodesRepo.Get(ctx, op.NodeID)
+			if e == nil {
+				if node.Status == nodes.StatusRevoked || node.Status == nodes.StatusSuspended || s.Identity.Authorize(ctx, auth.Check{SubjectID: principal.SubjectID, Action: nodes.ActionNodesRevoke, NodeIDs: []string{op.NodeID}}) != nil {
+					return transport.ErrEnrollmentRejected
+				}
+			}
+			if e != nil && !errors.Is(e, nodes.ErrNodeNotFound) {
+				return transport.ErrEnrollmentUnavailable
+			}
 		}
 		return nil
 	}
@@ -68,11 +81,37 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 	if err != nil {
 		return nil, err
 	}
+	management.GrantRead = func(r *http.Request, principal transport.EnrollmentPrincipal, view transport.EnrollmentView) error {
+		secret, e := auth.SessionCredential(r)
+		if e != nil {
+			return e
+		}
+		_, e = s.Identity.CreateEnrollmentReadGrant(r.Context(), secret, r.Header.Get("X-CSRF-Token"), auth.GrantRequest{PrincipalID: principal.SubjectID, ResourceType: "node", ResourceID: view.NodeID, Permissions: []string{"nodes.read"}}, backupTaskKey("enrollment-read", principal.SubjectID+"\x00"+view.ID))
+		return e
+	}
 	verifier, err := transport.NewPeerVerifier(service.Lookup)
 	if err != nil {
 		return nil, err
 	}
 	bridge := newAgentLinkBridge(s.NodesRepo, nodesService, tasksRepo, s.now)
+	bridge.activateIdentity = service.ActivateRenewedIdentity
+	bridge.observeConnection = func(ctx context.Context, o transport.LinkObservation, hello *agentv1.AgentHello, capabilities []string) error {
+		expiry, e := service.IdentityExpiry(ctx, o.Identity.FingerprintSHA256)
+		if e != nil {
+			return e
+		}
+		return s.NodesRepo.RecordConnection(ctx, o.Identity.NodeID, nodes.ConnectionObservation{AgentVersion: hello.AgentVersion, Capabilities: capabilities, ConnectionID: o.ConnectionID, ObservedAt: s.now().UTC(), CertificateExpiresAt: expiry})
+	}
+	bridge.observeDisconnect = func(ctx context.Context, o transport.LinkObservation) error {
+		return s.NodesRepo.RecordDisconnect(ctx, o.Identity.NodeID, s.now().UTC())
+	}
+	s.IdentityRenewalHTTP = transport.NewIdentityRenewalHTTP(service, cfg.AgentAuthority, cfg.AgentServerName, func(ctx context.Context, nodeID string) error {
+		n, e := s.NodesRepo.Get(ctx, nodeID)
+		if e != nil || n.Status == nodes.StatusRevoked || n.Status == nodes.StatusSuspended {
+			return transport.ErrEnrollmentRejected
+		}
+		return nil
+	})
 	bridge.commandCurrent = s.authorizeCommandTask
 	bridge.readCSR = func(ctx context.Context, id string) (transport.CertificateCSRReceipt, error) {
 		return transport.ReadCertificateCSR(ctx, s.DB, id)
@@ -165,7 +204,7 @@ func newEnrollmentStore(db *storage.DB, recorder *audit.SQLRecorder) (*transport
 					AppendAudit: func(auditCtx context.Context, events []transport.EnrollmentAuditEvent) error {
 						for _, event := range events {
 							source := audit.SourceWeb
-							if event.ActorID == "enrolling-agent" {
+							if event.ActorID == "enrolling-agent" || strings.HasPrefix(event.Action, "agent.identity.") {
 								source = audit.SourceAgent
 							}
 							nodeIDs := []string{}

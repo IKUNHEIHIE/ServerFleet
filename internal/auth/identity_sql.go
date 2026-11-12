@@ -51,6 +51,19 @@ func NewSQLIdentityStore(backend IdentitySQLBackend) (*SQLIdentityStore, error) 
 
 const readIdentitySQL = `SELECT payload,ever_initialized FROM cx_auth_identity WHERE singleton=1 AND (payload IS NULL OR length(payload)<=16777216)`
 
+// Operator preflight reads before ordinary normalization so fixed field/version
+// diagnostics can distinguish a bad payload from an initialization-marker error.
+func (s *SQLIdentityStore) readUpgrade(ctx context.Context, fn func([]byte, bool) error) error {
+	if s == nil || s.backend.Read == nil || ctx == nil || ctx.Err() != nil {
+		return ErrIdentityUnavailable
+	}
+	raw, initialized, e := s.backend.Read(ctx, readIdentitySQL)
+	if e != nil {
+		return e
+	}
+	return fn(bytes.Clone(raw), initialized)
+}
+
 func checkIdentityRecord(data []byte, initialized bool) error {
 	st, err := decodeIdentity(data)
 	if err != nil {

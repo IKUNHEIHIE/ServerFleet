@@ -38,6 +38,8 @@ func EnrollmentPrincipalFromContext(ctx context.Context) (EnrollmentPrincipal, b
 // list and human decisions. It never lists token secrets and never approves an
 // enrollment without the service's transaction-bound gate.
 type EnrollmentManagementHTTP struct {
+	// Optional explicit read-grant step, supplied by the existing auth service.
+	GrantRead      func(*http.Request, EnrollmentPrincipal, EnrollmentView) error
 	service        *EnrollmentService
 	authenticate   func(*http.Request) (EnrollmentPrincipal, error)
 	ensureEnrolled func(context.Context, EnrollmentPrincipal, EnrollmentView) error
@@ -140,6 +142,7 @@ func (h *EnrollmentManagementHTTP) issueToken(w http.ResponseWriter, r *http.Req
 		Name          string `json:"name"`
 		ExpiryMinutes int    `json:"expiryMinutes"`
 		MaxUses       int    `json:"maxUses"`
+		ReplaceNodeID string `json:"replaceNodeId"`
 	}
 	if !decodeManagementJSON(w, r, &input) {
 		return
@@ -165,7 +168,8 @@ func (h *EnrollmentManagementHTTP) issueToken(w http.ResponseWriter, r *http.Req
 	token, err := h.service.IssueToken(ctx, EnrollmentOperation{
 		ActorID: principal.SubjectID,
 		Action:  "enrollment.issue",
-	}, EnrollmentTokenInput{Name: input.Name, TTLSeconds: input.ExpiryMinutes * 60})
+		NodeID:  input.ReplaceNodeID,
+	}, EnrollmentTokenInput{Name: input.Name, TTLSeconds: input.ExpiryMinutes * 60, ReplaceNodeID: input.ReplaceNodeID})
 	if err != nil {
 		writeEnrollmentError(w, err)
 		return
@@ -202,8 +206,9 @@ func (h *EnrollmentManagementHTTP) decide(w http.ResponseWriter, r *http.Request
 		return
 	}
 	var input struct {
-		Decision string `json:"decision"`
-		Reason   string `json:"reason"`
+		Decision  string `json:"decision"`
+		Reason    string `json:"reason"`
+		GrantRead bool   `json:"grantRead"`
 	}
 	if !decodeManagementJSON(w, r, &input) {
 		return
@@ -231,17 +236,20 @@ func (h *EnrollmentManagementHTTP) decide(w http.ResponseWriter, r *http.Request
 		writeTransportProblem(w, http.StatusNotFound, "ENROLLMENT_NOT_FOUND")
 		return
 	}
-	if current.Status != "pending" {
+	if current.Status != "pending" && !(current.Status == "approved" && input.Decision == "approve") {
 		writeTransportProblem(w, http.StatusConflict, "ENROLLMENT_NOT_PENDING")
 		return
 	}
-	view, err := h.service.Decide(ctx, EnrollmentOperation{
-		ActorID:          principal.SubjectID,
-		Action:           "enrollment.decide",
-		EnrollmentID:     enrollmentID,
-		NodeID:           current.NodeID,
-		ExpectedRevision: current.Revision,
-	}, input.Decision == "approve")
+	view := current
+	if current.Status == "pending" {
+		view, err = h.service.Decide(ctx, EnrollmentOperation{
+			ActorID:          principal.SubjectID,
+			Action:           "enrollment.decide",
+			EnrollmentID:     enrollmentID,
+			NodeID:           current.NodeID,
+			ExpectedRevision: current.Revision,
+		}, input.Decision == "approve")
+	}
 	if err != nil {
 		writeEnrollmentError(w, err)
 		return
@@ -249,6 +257,12 @@ func (h *EnrollmentManagementHTTP) decide(w http.ResponseWriter, r *http.Request
 	if view.Status == "approved" && h.ensureEnrolled != nil {
 		if err := h.ensureEnrolled(r.Context(), principal, view); err != nil {
 			writeTransportProblem(w, http.StatusServiceUnavailable, "ENROLLMENT_NODE_UNAVAILABLE")
+			return
+		}
+	}
+	if view.Status == "approved" && input.GrantRead {
+		if h.GrantRead == nil || h.GrantRead(r, principal, view) != nil {
+			writeTransportProblem(w, 503, "ENROLLMENT_APPROVED_READ_GRANT_PENDING")
 			return
 		}
 	}

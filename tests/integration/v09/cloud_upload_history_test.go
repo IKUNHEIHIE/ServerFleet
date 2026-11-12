@@ -81,7 +81,7 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 		t.Fatalf("old upload changed: task=%q status=%q", taskID, status)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 49 {
+	if err != nil || len(versions) != 50 {
 		t.Fatal("new migration count", versions, err)
 	}
 }

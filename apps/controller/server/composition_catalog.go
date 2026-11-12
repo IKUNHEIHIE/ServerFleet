@@ -157,6 +157,8 @@ func AuditActions() []string {
 		"enrollment.decide",
 		"enrollment.list",
 		"agent.revoke",
+		"agent.identity.renew",
+		"agent.identity.activate",
 		"ai.sessions.create",
 		tasks.ActionIncidentManage,
 		recovery.ActionBackupPolicy, recovery.ActionBackupProtect, recovery.ActionBackupRemoteVerify,

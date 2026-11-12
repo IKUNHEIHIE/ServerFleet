@@ -31,14 +31,13 @@ describe("add-node page", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "添加节点" })).toBeVisible();
     expect(await screen.findByText("new-node")).toBeVisible();
 
-    fireEvent.change(screen.getByLabelText("有效期（分钟）"), { target: { value: "15" } });
-    fireEvent.change(screen.getByLabelText("最大使用次数"), { target: { value: "2" } });
+    fireEvent.change(screen.getByLabelText("有效期（分钟）"), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: "生成一次性凭证" }));
 
     expect(await screen.findByText("tok-secret-value")).toBeVisible();
     expect(screen.getByText("接入令牌（仅显示这一次）")).toBeVisible();
     const create = calls.find(call => call.method === "POST" && call.url === "/api/v1/node-enrollment-tokens");
-    expect(JSON.parse(String(create?.init?.body))).toEqual({ expiryMinutes: 15, maxUses: 2 });
+    expect(JSON.parse(String(create?.init?.body))).toEqual({ expiryMinutes: 10, maxUses: 1 });
 
     fireEvent.click(screen.getByRole("button", { name: "批准" }));
     expect(await screen.findByRole("heading", { level: 2, name: "批准节点接入" })).toBeVisible();
@@ -50,9 +49,9 @@ describe("add-node page", () => {
         call => call.method === "POST" && call.url === "/api/v1/node-enrollments/e-1/decision",
       );
       expect(decision).toBeDefined();
-      expect(JSON.parse(String(decision?.init?.body))).toEqual({ decision: "approve", reason: "已验证安装来源" });
+      expect(JSON.parse(String(decision?.init?.body))).toEqual({ decision: "approve", reason: "已验证安装来源", grantRead: true });
     });
-    expect(await screen.findByText("已批准该接入请求。")).toBeVisible();
+    expect(await screen.findByText("已批准该接入请求，并授予当前账户该节点的读取权限。")).toBeVisible();
     await waitFor(() => {
       expect(calls.filter(call => call.url === "/api/v1/node-enrollments").length).toBeGreaterThanOrEqual(2);
     });
