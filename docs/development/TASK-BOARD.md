@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 当前：预编译包与 GitHub Releases（2026-11-12 R36）
+
+V09-CLOUD-RELEASE-01 / chatgpt-release-20261112，主控单会话；独立 ServerFleet-release / chore/precompiled-release-20261112，从 main4972eb5 开始。用户明确授权在现有公开仓库发布预编译包。允许发行工作流、打包脚本、发行/部署说明及本登记；CI共享差异由总控协调。复用固定工具和已有build-release，构建Linux amd64/arm64核心Controller/Agent/Web与示例、SHA256和源码溯源，检查通过后正常PR合并并手动触发发行。无离线签名密钥时明确unsigned，不生成冒充受信任的签名材料，不绕过一键安装/更新验签；不含可选插件、状态或秘密，不改变生产代码/契约/锁/迁移/ADR，不启其他Agent。精确head CI、安全与COMMENT审查、expected-SHA合并，十分钟一次检查运行状态；停止于实际Release及资产核验，真实部署由用户负责。
+
 ## 当前：首个正式版 README（2026-11-12 R35）
 
 V09-CLOUD-README-01 / chatgpt-readme-20261112，主控单会话，从PR25/mainc045e7f建立独立ServerFleet-readme / docs/first-release-readme-20261112。用户明确将当前版定位为首个正式版并更新README。允许README及本任务登记：按既有版本号v0.9.0重写首发介绍、功能、构建/部署、文档导航与已知限制；不更改程序/接口/锁/迁移/原始资料，不创建tag、GitHub Release或冒称发行包已签名发布。不把版本命名视为Xray/Bearer已装配、完整G2或真实环境验收完成。核对链接/构建参数与内容差异，保留代码基线CI范围；按精确head检查/COMMENT审查及expected-SHA正常合并，停止于文档接收。
