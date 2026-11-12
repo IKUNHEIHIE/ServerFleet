@@ -12,6 +12,7 @@ import pwd
 import shutil
 import ssl
 import subprocess
+import sys
 import tarfile
 import tempfile
 import threading
@@ -98,6 +99,23 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(setup.systemd_word('/private/a $x %n "b"'), '"/private/a $$x %%n \\"b\\""')
         with self.assertRaises(setup.SetupError):
             setup.systemd_word("line\nbreak")
+
+    def test_controller_identity_rejects_exec_wrappers(self):
+        binary = str(pathlib.Path(sys.executable).resolve())
+        user = pwd.getpwuid(os.geteuid()).pw_name
+        argv = [binary, "-db", "/state/db", "-origin", "https://fleet.test:8443",
+                "-tls-cert", "/state/tls.pem", "-tls-key", "/state/tls.key", "-agent-root-pin", "0" * 64]
+
+        def properties(executable):
+            return (f"MainPID={os.getpid()}\nUser={user}\nActiveState=active\nDynamicUser=no\nType=simple\n"
+                    f"ExecStart={{ path={executable} ; argv[]={executable} ; ignore_errors=no ; }}\n").encode()
+
+        with patch.object(setup.pathlib.Path, "read_bytes", return_value=b"\0".join(arg.encode() for arg in argv) + b"\0"):
+            with patch.object(setup, "run", return_value=properties(binary)):
+                self.assertEqual(setup.controller_state("serverfleet-controller.service")[2], argv)
+            with patch.object(setup, "run", return_value=properties("/bin/sh")):
+                with self.assertRaises(setup.SetupError):
+                    setup.controller_state("serverfleet-controller.service")
 
     def test_strict_origin_and_fixed_ips(self):
         for value in ["http://fleet.test", "https://fleet.test/", "https://u:p@fleet.test", "https://fleet.test?q=1",
@@ -263,7 +281,8 @@ class SetupTests(unittest.TestCase):
             if str(command[0]) == "systemctl":
                 calls.append(command)
                 failed = fail_restart and command[1:3] == ["restart", args.service]
-                return subprocess.CompletedProcess(command, 1 if failed else 0, b"", b"")
+                output = b"not-found\n" if "--property=LoadState" in command else b""
+                return subprocess.CompletedProcess(command, 1 if failed else 0, output, b"")
             return original(command, **kwargs)
 
         def get(url, ips, ca, limit):
@@ -325,13 +344,15 @@ class SetupTests(unittest.TestCase):
         self.assertEqual(original.read_text(), "EXISTING UNIT")
         self.assertTrue((base / "receipt.json").exists())
         self.assertGreaterEqual(calls.count(["systemctl", "restart", args.service]), 2)
+        self.assertIn(["systemctl", "stop", setup.SERVICE], calls)
+        self.assertIn(["systemctl", "disable", setup.SERVICE], calls)
         self.assertEqual(pathlib.Path(values["db"]).read_bytes(), b"EXISTING DATABASE DO NOT MODIFY")
 
     def test_configure_check_has_no_service_changes(self):
         args, state = self.configure_fixture()
         args.check = True
         calls = self.isolated_configure(args, state)
-        self.assertEqual(calls, [])
+        self.assertEqual(calls, [["systemctl", "show", setup.SERVICE, "--property=LoadState", "--value"]])
         self.assertFalse(state[1].exists())
 
     def test_ready_old_process_does_not_count_as_configured(self):

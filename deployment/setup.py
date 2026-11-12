@@ -346,7 +346,7 @@ def systemd_word(value):
 
 def controller_state(service):
     require(re.fullmatch(r"[A-Za-z0-9_.@-]+\.service", service) and service != SERVICE, "主控服务名无效。")
-    data = run(["systemctl", "show", service, "--property=MainPID,User,Group,FragmentPath,ActiveState,RootDirectory,RootImage,DynamicUser,Type"])
+    data = run(["systemctl", "show", service, "--property=MainPID,User,Group,FragmentPath,ActiveState,RootDirectory,RootImage,DynamicUser,Type,ExecStart"])
     properties = dict(line.split("=", 1) for line in data.decode().splitlines() if "=" in line)
     require(properties.get("ActiveState") == "active" and int(properties.get("MainPID", "0")) > 0, "主控服务需要先处于运行状态。")
     require(not properties.get("RootDirectory") and not properties.get("RootImage") and properties.get("DynamicUser") != "yes", "当前向导不接管容器、chroot 或动态用户服务。")
@@ -357,6 +357,10 @@ def controller_state(service):
     proc = pathlib.Path("/proc") / properties["MainPID"]
     argv = [item.decode() for item in (proc / "cmdline").read_bytes().split(b"\0") if item]
     require(argv and pathlib.Path(argv[0]).is_absolute() and pathlib.Path(argv[0]).resolve() == (proc / "exe").resolve(), "当前主控不是直接 ExecStart；受监督或包装服务请按 QUICK-SETUP.md 集成，不能改写冻结策略。")
+    executable = re.match(r"^\{\s*path=([^;]+?)\s*;\s*argv\[\]=", properties.get("ExecStart", ""))
+    require(executable is not None and pathlib.Path(executable.group(1)).is_absolute()
+            and pathlib.Path(executable.group(1)).resolve() == (proc / "exe").resolve(),
+            "unit 的 ExecStart 不是当前主控程序；向导不替换 shell/exec 包装启动。")
     values = flag_values(argv)
     require(not values.get("resident-supervisor") and "db" in values and "origin" in values
             and values.get("agent-pki-mode", "provisioned") == "provisioned", "需要直接运行、已配置离线 Root/在线 Intermediate 的正式 Controller。")
@@ -484,7 +488,13 @@ def configure(args):
     dropdir = SYSTEMD_DIR / (service + ".d")
     dropin = dropdir / "90-serverfleet-installation.conf"
     require(not unit.exists() and not unit.is_symlink() and not dropin.exists() and not dropin.is_symlink(), "已有同名服务或 drop-in，拒绝覆盖。")
+    load_state = run(["systemctl", "show", SERVICE, "--property=LoadState", "--value"]).decode().strip()
+    require(load_state == "not-found", "系统中已有同名分发服务（可能位于其他 unit 目录），拒绝覆盖。")
     require(not dropdir.is_symlink(), "systemd drop-in 目录不能是符号链接。")
+    if dropdir.exists():
+        info = dropdir.stat()
+        require(dropdir.is_dir() and info.st_uid == 0 and not info.st_mode & 0o022,
+                "现有 systemd drop-in 目录须由 root 所有且不可由组/其他用户写入。")
     run(["openssl", "verify", "-CAfile", https_root, "-untrusted", values["tls-cert"], "-verify_hostname", controller.hostname, values["tls-cert"]])
     ready = json.loads(pinned_get(values["origin"] + "/readyz", ips, ca, 8192))
     require(ready.get("status") == "ready", "主控尚未就绪，请先修复 /readyz。")
@@ -521,9 +531,11 @@ def configure(args):
             (base / "server.json").chmod(0o644)
             private = base / "controller-config"
             private.mkdir(mode=0o700)
-            os.chown(private, user.pw_uid, user.pw_gid)
             write_json(private / "installation-catalog.json", catalog)
-            os.chown(private / "installation-catalog.json", user.pw_uid, user.pw_gid)
+            # Keep this directory root-only until the file is complete and
+            # owned correctly. Never follow a replaceable path during chown.
+            os.chown(private / "installation-catalog.json", user.pw_uid, user.pw_gid, follow_symlinks=False)
+            os.chown(private, user.pw_uid, user.pw_gid, follow_symlinks=False)
             group = properties.get("Group") or str(user.pw_gid)
             write_new(unit, distribution_unit(base, user.pw_name, group), 0o644)
             changed.append(unit)
@@ -540,7 +552,6 @@ def configure(args):
                         raise
                     time.sleep(1)
             dropdir.mkdir(mode=0o755, exist_ok=True)
-            dropdir.chmod(0o755)
             command = argv + ["-installation-catalog", str(private / "installation-catalog.json")]
             write_new(dropin, "[Service]\nExecStart=\nExecStart=" + " ".join(map(systemd_word, command)) + "\n", 0o644)
             changed.append(dropin)
@@ -569,10 +580,13 @@ def configure(args):
             print("回退：删除本脚本新增的 drop-in 后 daemon-reload 并重启原主控；停用分发服务。")
             print("drop-in:", dropin)
         except BaseException:
+            # Stop/disable while the owned unit file still exists, then unlink.
+            if unit in changed:
+                subprocess.run(["systemctl", "stop", SERVICE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+                subprocess.run(["systemctl", "disable", SERVICE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             for path in reversed(changed):
                 with contextlib.suppress(OSError):
                     path.unlink()
-            subprocess.run(["systemctl", "disable", "--now", SERVICE], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             subprocess.run(["systemctl", "daemon-reload"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
             if dropin in changed:
                 subprocess.run(["systemctl", "restart", service], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
