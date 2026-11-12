@@ -100,11 +100,13 @@ jobs:
           cd packages
           sha256sum --check SHA256SUMS
           node -e 'const m=require("./build-manifest.json"); if(m.commit!==process.env.SOURCE_SHA||m.version!==process.env.VERSION)throw Error("Source/version mismatch")'
+          gh api --method POST "repos/$GH_REPO/git/refs" \
+            -f "ref=refs/tags/v$VERSION" -f "sha=$SOURCE_SHA"
           gh release create "v$VERSION" \
             "serverfleet_${VERSION}_linux_amd64.tar.gz" \
             "serverfleet_${VERSION}_linux_arm64.tar.gz" SHA256SUMS build-manifest.json \
             --target "$SOURCE_SHA" --title "Server Fleet v$VERSION" \
-            --notes-file RELEASE-NOTES.md --draft
+            --notes-file RELEASE-NOTES.md --draft --verify-tag
           test "$(gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" --jq .object.sha)" = "$SOURCE_SHA"
           gh release view "v$VERSION" --json assets --jq '.assets[].name' | sort > actual-assets.txt
           printf '%s\n' "serverfleet_${VERSION}_linux_amd64.tar.gz" \
