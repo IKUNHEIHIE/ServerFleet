@@ -26,7 +26,7 @@ type ConnectionDiagnostics struct {
 }
 
 func DiagnosticMigrations() []storage.Migration {
-	return []storage.Migration{{Version: "ds/0050_node_diagnostics", Name: "bounded authenticated Agent connection diagnostics", Statements: []string{
+	return []storage.Migration{{Version: "ds/0088_node_diagnostics", Name: "bounded authenticated Agent connection diagnostics", Statements: []string{
 		`CREATE TABLE node_connection_diagnostics (node_id TEXT PRIMARY KEY REFERENCES nodes(id) ON DELETE CASCADE, payload BLOB NOT NULL)`,
 		`CREATE TABLE node_connection_history (id INTEGER PRIMARY KEY AUTOINCREMENT,node_id TEXT NOT NULL REFERENCES nodes(id) ON DELETE CASCADE,at TEXT NOT NULL,code TEXT NOT NULL)`,
 		`CREATE INDEX node_connection_history_node ON node_connection_history(node_id,id DESC)`,

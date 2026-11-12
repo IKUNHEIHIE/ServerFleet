@@ -307,6 +307,15 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 			nextAttempt = time.Now().Add(time.Minute)
 			var e error
 			renewed, e = maybeRenewAgentIdentity(ctx, request)
+			// A rename may have completed even if its directory fsync reported an
+			// error. Detect the verified on-disk successor on the next attempt.
+			if !renewed {
+				changed, checkErr := installedAgentIdentityChanged(ctx, request, facts)
+				if checkErr == nil && changed {
+					renewed = true
+					e = nil
+				}
+			}
 			renewalLog(e, facts.ExpiresAt)
 			return renewed, e
 		}

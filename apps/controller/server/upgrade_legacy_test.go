@@ -5,9 +5,11 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/storage"
 	"testing"
+	"time"
 )
 
 func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo50(t *testing.T) {
@@ -19,7 +21,7 @@ func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo50(t *testing.T) {
 	for _, group := range Migrations() {
 		old := []storage.Migration{}
 		for _, m := range group {
-			if m.Version != "ds/0050_node_diagnostics" {
+			if m.Version != "ds/0088_node_diagnostics" {
 				old = append(old, m)
 			}
 		}
@@ -39,7 +41,15 @@ func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo50(t *testing.T) {
 	if _, e = migrator.Apply(ctx, db); e != nil {
 		t.Fatal(e)
 	}
-	store, e := newIdentityStore(db, nil)
+	validator, e := audit.NewValidator(AuditActions(), audit.DefaultLimits())
+	if e != nil {
+		t.Fatal(e)
+	}
+	recorder, e := audit.NewSQLRecorder(db, validator, time.Now)
+	if e != nil {
+		t.Fatal(e)
+	}
+	store, e := newIdentityStore(db, recorder)
 	if e != nil {
 		t.Fatal(e)
 	}

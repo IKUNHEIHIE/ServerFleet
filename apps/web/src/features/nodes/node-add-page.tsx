@@ -22,7 +22,7 @@ export function NodeAddPage() {
   const [expiryMinutes, setExpiryMinutes] = useState("10");
   const maxUses = 1;
   const [replaceNodeId, setReplaceNodeId] = useState("");
-  const [token, setToken] = useState<{ id: string; token: string; expiresAt: string } | null>(null);
+  const [token, setToken] = useState<{ id: string; token: string; expiresAt: string; replaceNodeId?: string } | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ enrollment: NodeEnrollment; decision: Decision } | null>(null);
   const [reason, setReason] = useState("");
@@ -51,7 +51,7 @@ export function NodeAddPage() {
     setCopyStatus(null);
     const result = await createToken.run();
     if (result.ok && result.data) {
-      setToken(result.data.data);
+      setToken({ ...result.data.data, ...(replaceNodeId.trim() ? { replaceNodeId: replaceNodeId.trim() } : {}) });
     }
   }
 

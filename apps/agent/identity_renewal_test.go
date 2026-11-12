@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	agentruntime "serverfleet.local/serverfleet/apps/agent/runtime"
 	"testing"
 	"time"
 )
@@ -46,6 +47,9 @@ func TestAgentIdentityRenewalAtomicReplacementAndRestart(t *testing.T) {
 	}
 	if e = s.replaceIssued(ctx, prior, renewed); e != nil {
 		t.Fatal("identical retry rejected", e)
+	}
+	if changed, e := installedAgentIdentityChanged(ctx, agentruntime.ConnectRequest{StateDir: directory, RootPin: s.pin}, prior); e != nil || !changed {
+		t.Fatal("could not detect an already installed successor", e)
 	}
 	reopened, e := openAgentIdentity(directory, s.pin, 3)
 	if e != nil {

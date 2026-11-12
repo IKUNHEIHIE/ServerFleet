@@ -100,4 +100,15 @@ func TestEnrollmentExplicitReadGrantDoesNotGrantExecutionOrReviveRevocation(t *t
 	if e = s.Identity.Authorize(ctx, auth.Check{SubjectID: owner, Action: "nodes.read", NodeIDs: []string{node}}); e == nil {
 		t.Fatal("revoked node still visible")
 	}
+	op := transport.EnrollmentOperation{ActorID: owner, Action: "enrollment.issue", NodeID: node}
+	replacement := transport.EnrollmentTokenInput{Name: "explicit recovery", TTLSeconds: 600, ReplaceNodeID: node}
+	if _, e = s.Enrollment.IssueToken(trusted, op, replacement); e == nil {
+		t.Fatal("replacement allowed without exact nodes.revoke permission")
+	}
+	if _, e = s.Identity.CreateResourceGrant(ctx, login.Secret, login.CSRF, auth.GrantRequest{PrincipalID: owner, ResourceType: "node", ResourceID: node, Permissions: []string{"nodes.revoke"}}); e != nil {
+		t.Fatal(e)
+	}
+	if _, e = s.Enrollment.IssueToken(trusted, op, replacement); e != nil {
+		t.Fatal("explicitly authorized replacement denied", e)
+	}
 }

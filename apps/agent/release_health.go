@@ -11,7 +11,7 @@ import (
 
 // Set only by the release build (-X main.agentBuildVersion=...), never by HTTP,
 // enrollment metadata or the optional -agent-version compatibility label.
-var agentBuildVersion = "0.9.0-dev"
+var agentBuildVersion = "0.9.1-dev"
 
 type agentReleaseHealth struct {
 	Version         string    `json:"version"`

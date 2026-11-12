@@ -16,6 +16,10 @@ type accessResponse struct {
 
 func (w *accessResponse) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 func (w *accessResponse) WriteHeader(status int) {
+	if status >= 100 && status < 200 && status != 101 {
+		w.ResponseWriter.WriteHeader(status)
+		return
+	}
 	if w.status == 0 {
 		w.status = status
 		w.ResponseWriter.WriteHeader(status)
@@ -30,10 +34,13 @@ func (w *accessResponse) Write(raw []byte) (int, error) {
 	return n, e
 }
 func (w *accessResponse) Flush() {
+	_ = w.FlushError()
+}
+func (w *accessResponse) FlushError() error {
 	if w.status == 0 {
 		w.WriteHeader(200)
 	}
-	_ = http.NewResponseController(w.ResponseWriter).Flush()
+	return http.NewResponseController(w.ResponseWriter).Flush()
 }
 func (w *accessResponse) Hijack() (net.Conn, *bufio.ReadWriter, error) {
 	c, b, e := http.NewResponseController(w.ResponseWriter).Hijack()

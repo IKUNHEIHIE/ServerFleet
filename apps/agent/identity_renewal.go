@@ -21,6 +21,14 @@ import (
 
 var errAgentIdentityRotated = errors.New("agent: identity renewed; reconnect after draining")
 
+func installedAgentIdentityChanged(ctx context.Context, request agentruntime.ConnectRequest, prior agentIdentityFacts) (bool, error) {
+	status, e := agentStatus(ctx, request.StateDir, request.RootPin)
+	if e != nil || !status.Enrolled || status.NodeID != prior.NodeID || status.TrustGeneration != prior.TrustGeneration {
+		return false, errAgentIdentity
+	}
+	return status.Fingerprint != prior.Fingerprint, nil
+}
+
 // Read/replace uses its own store handle: the current link lends the old pair
 // under another handle's lock until the session has safely drained its workers.
 func maybeRenewAgentIdentity(ctx context.Context, request agentruntime.ConnectRequest) (bool, error) {
