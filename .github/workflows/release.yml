@@ -1,6 +1,14 @@
 name: Precompiled Release
 run-name: Release v${{ inputs.version }} from ${{ github.sha }}
 on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      sequence:
+        required: true
+        type: string
   workflow_dispatch:
     inputs:
       version:
