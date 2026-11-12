@@ -254,7 +254,7 @@ class SetupTests(unittest.TestCase):
                                   https_root=str(ca), directory=str(base), port=19444, check=False)
         return args, (systemd, base, values, argv, trust)
 
-    def isolated_configure(self, args, state, fail_restart=False):
+    def isolated_configure(self, args, state, fail_restart=False, wrong_argv=False):
         systemd, base, values, argv, trust = state
         calls = []
         original = subprocess.run
@@ -275,10 +275,12 @@ class SetupTests(unittest.TestCase):
         with patch.object(setup, "SYSTEMD_DIR", systemd), patch.object(setup.os, "geteuid", return_value=0), \
                 patch.object(setup, "owned_root_parent"), \
                 patch.object(setup, "controller_state", return_value=({}, user, argv, values)), \
+                patch.object(setup, "running_argv", return_value=argv if wrong_argv else argv +
+                             ["-installation-catalog", str(base / "controller-config/installation-catalog.json")]), \
                 patch.object(setup.subprocess, "run", side_effect=subprocess_call), \
                 patch.object(setup, "pinned_get", side_effect=get), contextlib.redirect_stdout(io.StringIO()), \
                 contextlib.redirect_stderr(io.StringIO()):
-            if fail_restart:
+            if fail_restart or wrong_argv:
                 with self.assertRaises(setup.SetupError):
                     setup.configure(args)
             else:
@@ -331,6 +333,12 @@ class SetupTests(unittest.TestCase):
         calls = self.isolated_configure(args, state)
         self.assertEqual(calls, [])
         self.assertFalse(state[1].exists())
+
+    def test_ready_old_process_does_not_count_as_configured(self):
+        args, state = self.configure_fixture()
+        calls = self.isolated_configure(args, state, wrong_argv=True)
+        self.assertNotIn(["systemctl", "enable", setup.SERVICE], calls)
+        self.assertFalse((state[0] / setup.SERVICE).exists())
 
     @unittest.skipUnless(os.environ.get("SF_SETUP_TEST_CONTROLLER"), "set SF_SETUP_TEST_CONTROLLER to the built Controller")
     def test_offline_packaging_with_real_controller_and_public_only_export(self):

@@ -84,7 +84,8 @@ def unique_object(pairs):
 
 
 def read_json(path, limit=256 << 10):
-    raw = path.read_bytes()
+    with path.open("rb") as stream:
+        raw = stream.read(limit + 1)
     require(len(raw) <= limit, "JSON 超出大小限制。")
     return json.loads(raw, object_pairs_hook=unique_object)
 
@@ -393,7 +394,8 @@ def addresses(value):
 
 
 def root_certificate(path, pin=None):
-    raw = path.read_bytes()
+    with path.open("rb") as stream:
+        raw = stream.read(16385)
     require(len(raw) <= 16384 and raw.count(b"-----BEGIN CERTIFICATE-----") == 1
             and raw.count(b"-----END CERTIFICATE-----") == 1
             and b"PRIVATE KEY" not in raw, "需要单张公开根 CA，不是证书链或私钥。")
@@ -446,6 +448,12 @@ def distribution_unit(base, user, group):
             "ExecStart=" + " ".join(systemd_word(str(word)) for word in [executable, base / SCRIPT, "serve", "--config", base / "server.json"])
             + "\nNoNewPrivileges=yes\nPrivateTmp=yes\nProtectSystem=strict\nProtectHome=read-only\n"
             "CapabilityBoundingSet=\nRestrictSUIDSGID=yes\nRestart=no\n\n[Install]\nWantedBy=multi-user.target\n")
+
+
+def running_argv(service):
+    pid = run(["systemctl", "show", service, "--property=MainPID", "--value"]).decode().strip()
+    require(pid.isdecimal() and int(pid) > 0, "主控没有实际运行的 PID。")
+    return [item.decode() for item in (pathlib.Path("/proc") / pid / "cmdline").read_bytes().split(b"\0") if item]
 
 
 def configure(args):
@@ -549,6 +557,7 @@ def configure(args):
                     if attempt == 19:
                         raise SetupError("安装目录启用后主控未恢复就绪。") from None
                     time.sleep(1)
+            require(running_argv(service) == command, "实际主控进程未加载新的安装目录参数，拒绝认定配置成功。")
             run(["systemctl", "enable", SERVICE])
             receipt = read_json(base / "receipt.json")
             receipt["state"] = "READY_PENDING_NODE_ACCEPTANCE"

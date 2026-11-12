@@ -51,7 +51,7 @@ sudo python3 deployment/setup.py configure \
 - 默认新目录 `/var/lib/serverfleet-installation`：仅含公开发行文件、分发程序、catalog 和回执；发行私钥与内部 Root 私钥不进入此目录。catalog 位于 `controller-config/installation-catalog.json`，其父目录为主控用户所有、0700，文件同属主控用户、0600，满足产品实际私有文件读取规则。
 - 新增 `serverfleet-distribution.service`：普通主控用户运行，TLS 1.3，只读提供经过核对的公开文件。没有目录浏览，不提供私钥/配置文件，不跟随 URL 跳转、代理、任意路径或查询参数。
 - 新增主控服务的 `90-serverfleet-installation.conf` drop-in：保留实际直接启动参数，仅追加 `-installation-catalog`。不改原 unit，不重建数据库、凭据 keyring 或节点身份。
-- 在修改主控前验证真实分发 HTTPS/摘要；重启后检查 `/readyz`。失败会删除本次新增的启动覆盖和分发 unit，尝试恢复原服务；保留文件和回执用于排障，不删除产品数据。进程被 SIGKILL/断电时来不及执行自动回退，按下方步骤恢复。
+- 在修改主控前验证真实分发 HTTPS/摘要；重启后检查 `/readyz` 和实际主控 PID 的完整参数，旧进程仍就绪不算配置成功。失败会删除本次新增的启动覆盖和分发 unit，尝试恢复原服务；保留文件和回执用于排障，不删除产品数据。进程被强制终止或断电时可能来不及执行自动回退，按下方步骤恢复。
 
 主动回退时，删除本次新增的主控 drop-in（具体路径由向导输出），再执行：
 
