@@ -1,0 +1,114 @@
+name: Precompiled Release
+run-name: Release v${{ inputs.version }} from ${{ github.sha }}
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable version (without v)
+        required: true
+        default: '0.9.0'
+        type: string
+      sequence:
+        description: Positive release sequence
+        required: true
+        default: '1'
+        type: string
+
+permissions:
+  contents: read
+concurrency:
+  group: precompiled-release
+  cancel-in-progress: false
+env:
+  GOTOOLCHAIN: local
+  REDOCLY_TELEMETRY: 'off'
+  REDOCLY_SDK_TELEMETRY: 'off'
+  DO_NOT_TRACK: '1'
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate inputs and release notes
+        env:
+          VERSION: ${{ inputs.version }}
+          SEQUENCE: ${{ inputs.sequence }}
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SEQUENCE" =~ ^[1-9][0-9]*$ ]]
+          test -f "docs/releases/v$VERSION.md"
+          if git show-ref --verify --quiet "refs/tags/v$VERSION"; then
+            echo 'Refusing an existing version tag'; exit 1
+          fi
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5
+        with:
+          node-version-file: .node-version
+          cache: npm
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
+        with:
+          go-version-file: go.mod
+          cache-dependency-path: go.sum
+      - run: npm ci
+      - run: node --test scripts/package-release.test.mjs
+      - name: Build and package core
+        env:
+          VERSION: ${{ inputs.version }}
+          SEQUENCE: ${{ inputs.sequence }}
+        run: |
+          node scripts/build-release.mjs --version="$VERSION" --sequence="$SEQUENCE" --output="$RUNNER_TEMP/core"
+          node scripts/package-release.mjs "$RUNNER_TEMP/core" "$RUNNER_TEMP/packages"
+          cp "docs/releases/v$VERSION.md" "$RUNNER_TEMP/packages/RELEASE-NOTES.md"
+          cd "$RUNNER_TEMP/packages"
+          sha256sum --check SHA256SUMS
+          tar -xzf "serverfleet_${VERSION}_linux_amd64.tar.gz" -C "$RUNNER_TEMP"
+          test "$("$RUNNER_TEMP/serverfleet_${VERSION}_linux_amd64/controller" -version)" = "$VERSION"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: precompiled-release
+          path: |
+            ${{ runner.temp }}/packages/*.tar.gz
+            ${{ runner.temp }}/packages/SHA256SUMS
+            ${{ runner.temp }}/packages/build-manifest.json
+            ${{ runner.temp }}/packages/RELEASE-NOTES.md
+          if-no-files-found: error
+          retention-days: 7
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: precompiled-release
+          path: packages
+      - name: Verify and publish complete assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          cd packages
+          sha256sum --check SHA256SUMS
+          node -e 'const m=require("./build-manifest.json"); if(m.commit!==process.env.SOURCE_SHA||m.version!==process.env.VERSION)throw Error("Source/version mismatch")'
+          gh release create "v$VERSION" \
+            "serverfleet_${VERSION}_linux_amd64.tar.gz" \
+            "serverfleet_${VERSION}_linux_arm64.tar.gz" SHA256SUMS build-manifest.json \
+            --target "$SOURCE_SHA" --title "Server Fleet v$VERSION" \
+            --notes-file RELEASE-NOTES.md --draft
+          test "$(gh api "repos/$GH_REPO/git/ref/tags/v$VERSION" --jq .object.sha)" = "$SOURCE_SHA"
+          gh release view "v$VERSION" --json assets --jq '.assets[].name' | sort > actual-assets.txt
+          printf '%s\n' "serverfleet_${VERSION}_linux_amd64.tar.gz" \
+            "serverfleet_${VERSION}_linux_arm64.tar.gz" SHA256SUMS build-manifest.json | sort > expected-assets.txt
+          diff -u expected-assets.txt actual-assets.txt
+          gh release edit "v$VERSION" --draft=false --verify-tag --latest
+          gh release view "v$VERSION" --json url,tagName,targetCommitish,assets

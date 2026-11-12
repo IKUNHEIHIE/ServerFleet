@@ -29,7 +29,11 @@
 
 准备直接 HTTPS 访问的 Controller 地址、私有运行目录及内部身份信任。Controller 和 Agent 通常以普通用户运行；需要提权的操作另行配置固定命令与独立审批。
 
-### 2. 构建核心发行包
+### 2. 下载或构建核心发行包
+
+预编译包在 [GitHub Releases](https://github.com/IKUNHEIHIE/ServerFleet/releases) 提供 Linux amd64／arm64 版本，包含 Controller、Agent、Web 和部署示例。下载后先核对随附 `SHA256SUMS` 并阅读[发行说明](docs/releases/v0.9.0.md)。当前下载包未做离线发行签名，不能直接作为一键安装／自动更新的受信任目录。
+
+从源码自行构建：
 
 在干净且已提交的源码目录执行：
 

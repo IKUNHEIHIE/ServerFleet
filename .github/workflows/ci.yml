@@ -37,6 +37,8 @@ jobs:
           cache-dependency-path: go.sum
       - run: npm ci
       - run: npm run tools:install -- protoc-gen-go staticcheck actionlint
+      - name: Release packaging integrity
+        run: node --test scripts/package-release.test.mjs
       - name: Policy, contracts, generation, Go and Web
         run: npm run check
       - name: No generated or lockfile drift
