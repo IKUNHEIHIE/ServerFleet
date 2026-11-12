@@ -1,0 +1,16 @@
+# This version-specific request can publish once. Existing tags/assets are never overwritten.
+name: Publish v0.9.0 request
+on:
+  push:
+    branches: [main]
+    paths: ['.github/releases/v0.9.0.request']
+permissions:
+  contents: read
+jobs:
+  release:
+    permissions:
+      contents: write
+    uses: ./.github/workflows/release.yml
+    with:
+      version: '0.9.0'
+      sequence: '1'

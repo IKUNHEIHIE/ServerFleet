@@ -1,0 +1,4 @@
+Publish Server Fleet v0.9.0, sequence 1, from the exact main commit containing this request.
+Authorized by the repository owner's request to publish precompiled packages on 2026-11-12.
+Reuse release.yml for Linux amd64/arm64 build, digest/provenance checks and draft-first publication.
+Unsigned core only. No production deployment or offline signing material is authorized here.
