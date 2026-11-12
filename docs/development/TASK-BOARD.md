@@ -1,5 +1,11 @@
 # 任务登记板
 
+## 当前：身份续期与运维可用性返修（2026-11-12 R37）
+
+V09-CLOUD-IDENTITY-OPS-01 / chatgpt-repair-20261112，主控单会话；独立ServerFleet-repair / fix/agent-identity-and-operations-20261112，从v0.9.0/main be107188恢复并核对完整Git树ba97dd15。用户授权按已评估问题修复并发布新预编译包。允许Agent本地身份原子续期、transport当前mTLS身份续签/审计与幂等/撤销、Controller装配与批准后明确节点读取授权、auth升级预检/脱敏分类错误、通用readyz/结构化访问日志、nodes有限诊断快照、相关Web交互与独立R37产品/API候选、部署/升级/反代示例、v0.9.1发行说明与请求及必要检查。公共接缝由总控协调；保持旧49迁移/原SQL与checksum/Proto/gen/依赖锁/原始ADR不变，新增迁移只追加，不启动其他Agent、不引入依赖或Runtime、不访问真实VPS/供应商/旧生产DB/Root或发行私钥。
+
+续期必须在有效mTLS当前身份、节点状态、信任代次及CSR持有证明下完成；重试不得重复签发，旧证书仅在新证书被实际使用后有限重叠退役，失效身份不自动重新注册，UNKNOWN任务不重放。升级错误保留fail-closed且区分缺失keyring/权限/格式/数据绑定，不重建已初始化库密钥；支持旧格式的现有兼容路径和升级前备份说明，不冒称已验证用户未提供的旧库。节点授权保持精确范围，不开放管理员通配符；日志和诊断不得泄露秘密。集中专项后一次精确head完整CI与安全、COMMENT复审/expected-SHA正常合并，再发布v0.9.1双架构unsigned包/校验/溯源，不覆盖v0.9.0；CI状态每10分钟检查。纯文档不单独安排全量CI。停止于修复、文档、检查、合并和实际Release资产核验完成。
+
 ## 当前：预编译包与 GitHub Releases（2026-11-12 R36）
 
 V09-CLOUD-RELEASE-01 / chatgpt-release-20261112，主控单会话；独立 ServerFleet-release / chore/precompiled-release-20261112，从 main4972eb5 开始。用户明确授权在现有公开仓库发布预编译包。允许发行工作流、打包脚本、发行/部署说明及本登记；CI共享差异由总控协调。复用固定工具和已有build-release，构建Linux amd64/arm64核心Controller/Agent/Web与示例、SHA256和源码溯源，检查通过后正常PR合并并手动触发发行。无离线签名密钥时明确unsigned，不生成冒充受信任的签名材料，不绕过一键安装/更新验签；不含可选插件、状态或秘密，不改变生产代码/契约/锁/迁移/ADR，不启其他Agent。初次发行设施PR27精确head7248862的CI43149072533通过并合入43c355a。随后浏览器断开，手动触发不可用；同任务追加workflow_call和仅v0.9.0的main发行请求入口，复用已审查流程，不新建凭据、不扩展部署权限、不覆盖既有tag/Release。追加部分按新精确head CI/COMMENT审查及expected-SHA正常合并，发行请求随合并触发。十分钟一次检查运行状态；停止于实际Release及资产核验，真实部署由用户负责。

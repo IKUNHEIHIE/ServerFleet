@@ -39,6 +39,7 @@ type agentSessionConfig struct {
 	// session writes one Heartbeat and the Metrics batch immediately after the
 	// handshake; nil keeps the ticker-only behavior of the long-lived profile.
 	InitialSample func(context.Context) (*agentv1.MetricsBatch, error)
+	RenewIdentity func(context.Context) (bool, error)
 	// Established and ExecutionFinished are program-owned notifications for the
 	// one-shot CLI. They must not block; they never replace transport delivery.
 	Established       func()
@@ -201,6 +202,7 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 	}
 	var runningMu sync.Mutex
 	running := map[string]*activeAgentExecution{}
+	rotatingIdentity := false
 	var workers sync.WaitGroup
 	failure := make(chan error, 1)
 	fail := func(err error) {
@@ -291,6 +293,17 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 						return
 					}
 				}
+				if cfg.RenewIdentity != nil {
+					ready, _ := cfg.RenewIdentity(bounded)
+					runningMu.Lock()
+					rotatingIdentity = rotatingIdentity || ready
+					idle := rotatingIdentity && len(running) == 0
+					runningMu.Unlock()
+					if idle {
+						fail(errAgentIdentityRotated)
+						return
+					}
+				}
 			}
 		}
 	}()
@@ -335,6 +348,13 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 				continue
 			}
 			runningMu.Lock()
+			if rotatingIdentity {
+				runningMu.Unlock()
+				if ack(offer, false, false, "AGENT_BUSY") != nil {
+					return errAgentSession
+				}
+				continue
+			}
 			prior := running[offer.ExecutionId]
 			if prior != nil && !prior.finished {
 				valid, reserved := prior.taskID == offer.TaskId && prior.digest == offerDigest(offer), prior.reserved

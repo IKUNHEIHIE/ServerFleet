@@ -20,11 +20,13 @@ type Decision = "approve" | "reject";
 export function NodeAddPage() {
   const session = useSession();
   const [expiryMinutes, setExpiryMinutes] = useState("10");
-  const [maxUses, setMaxUses] = useState("1");
+  const maxUses = 1;
+  const [replaceNodeId, setReplaceNodeId] = useState("");
   const [token, setToken] = useState<{ id: string; token: string; expiresAt: string } | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ enrollment: NodeEnrollment; decision: Decision } | null>(null);
   const [reason, setReason] = useState("");
+  const [grantRead, setGrantRead] = useState(true);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const canManage = session.can("node.manage") || session.can("node.approve") || session.can("node.enroll");
@@ -37,9 +39,10 @@ export function NodeAddPage() {
     enrollmentApi.createToken({
       expiryMinutes: Number(expiryMinutes),
       maxUses: Number(maxUses),
+      ...(replaceNodeId.trim() ? { replaceNodeId: replaceNodeId.trim() } : {}),
     }),
   );
-  const decide = useAction((enrollmentId: string, body: { decision: Decision; reason?: string }) =>
+  const decide = useAction((enrollmentId: string, body: { decision: Decision; reason?: string; grantRead?: boolean }) =>
     enrollmentApi.decide(enrollmentId, body),
   );
 
@@ -66,10 +69,11 @@ export function NodeAddPage() {
     if (!decision) return;
     const result = await decide.run(decision.enrollment.id, {
       decision: decision.decision,
+      ...(decision.decision === "approve" ? { grantRead } : {}),
       ...(reason.trim() ? { reason: reason.trim() } : {}),
     });
     if (result.ok) {
-      setOutcome(decision.decision === "approve" ? "已批准该接入请求。" : "已拒绝该接入请求。");
+      setOutcome(decision.decision === "approve" ? grantRead ? "已批准该接入请求，并授予当前账户该节点的读取权限。" : "已批准该接入请求；读取节点前请配置资源授权。" : "已拒绝该接入请求。");
       setDecision(null);
       setReason("");
       list.reload();
@@ -114,24 +118,25 @@ export function NodeAddPage() {
                   />
                 )}
               </Field>
-              <Field label="最大使用次数" hint="服务端允许 1–10；默认 1 次。">
+              <Field label="最大使用次数" hint="一次性令牌固定仅使用 1 次。">
                 {ids => (
                   <TextInput
                     id={ids.inputId}
                     type="number"
                     min={1}
-                    max={10}
+                    max={1}
                     value={maxUses}
-                    onChange={event => setMaxUses(event.target.value)}
+                    readOnly
                     disabled={locked || createToken.pending}
                   />
                 )}
               </Field>
             </div>
+            <Field label="恢复已有节点 ID（可选）" hint="仅用于已核验的身份恢复，要求该节点的 nodes.revoke 授权。批准后旧身份会被吊销；保留原执行账本，不自动重放任务。">{ids => <TextInput id={ids.inputId} value={replaceNodeId} onChange={event => setReplaceNodeId(event.target.value)} disabled={locked || createToken.pending} />}</Field>
             {createToken.error ? (
               <Notice tone="error" title="凭证生成失败">{describeApiError(createToken.error)}</Notice>
             ) : null}
-            <Button type="button" variant="primary" onClick={generate} loading={createToken.pending} disabled={locked}>
+            <Button type="button" variant="primary" onClick={generate} loading={createToken.pending} disabled={locked || !Number.isInteger(Number(expiryMinutes)) || Number(expiryMinutes) < 1 || Number(expiryMinutes) > 10}>
               生成一次性凭证
             </Button>
 
@@ -267,6 +272,7 @@ export function NodeAddPage() {
         }
       >
         {decide.error ? <Notice tone="error" title="审批未完成">{describeApiError(decide.error)}</Notice> : null}
+        {decision?.decision === "approve" ? <label className="mb-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={grantRead} onChange={event => setGrantRead(event.target.checked)} disabled={decide.pending} />授予当前账户该节点的读取权限（不授予执行权限）</label> : null}
         <Field label="原因（可选）" hint="服务端会写入审计；不要包含秘密或凭据。">
           {ids => (
             <TextArea

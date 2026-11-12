@@ -36,6 +36,7 @@ import (
 	"serverfleet.local/serverfleet/internal/workflows"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -149,6 +150,7 @@ type Server struct {
 
 	Enrollment           *transport.EnrollmentService
 	EnrollmentHTTP       *transport.EnrollmentHTTP
+	IdentityRenewalHTTP  http.Handler
 	EnrollmentManagement *transport.EnrollmentManagementHTTP
 	Links                *transport.ControllerLinks
 	AgentFiles           *transport.FileClient
@@ -192,8 +194,9 @@ type Server struct {
 	stagingDir  string
 	backupDir   string
 
-	runCancel context.CancelFunc
-	runDone   chan struct{}
+	runCancel      context.CancelFunc
+	runDone        chan struct{}
+	schedulerReady atomic.Bool
 }
 
 type requestIDContextKey struct{}
@@ -263,6 +266,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 
 	migrator, err := storage.NewMigrator(Migrations()...)
 	if err != nil {
+		return cleanup(err)
+	}
+	upgradeKeys, keyErr := credentialDirectory(cfg.DBPath, cfg.CredentialKeyDir)
+	if keyErr != nil {
+		return cleanup(keyErr)
+	}
+	if _, err = preflightExistingIdentity(ctx, db, upgradeKeys); err != nil {
 		return cleanup(err)
 	}
 	if _, err := migrator.Apply(ctx, db); err != nil {
@@ -986,11 +996,12 @@ func (s *Server) startTaskScheduler() {
 	ctx, cancel := context.WithCancel(context.Background())
 	s.runCancel = cancel
 	s.runDone = make(chan struct{})
+	s.schedulerReady.Store(true)
 	go func() {
 		defer close(s.runDone)
 		var workers sync.WaitGroup
 		workers.Add(1)
-		go func() { defer workers.Done(); _ = s.Tasks.Run(ctx) }()
+		go func() { defer workers.Done(); defer s.schedulerReady.Store(false); _ = s.Tasks.Run(ctx) }()
 		if s.cleanupEnabled {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()
@@ -1082,11 +1093,21 @@ func (s *Server) Close() error {
 
 // ServeHTTP sets security headers and a request ID before dispatching to the composed mux.
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	logged := &accessResponse{ResponseWriter: w}
+	w = logged
+	started := time.Now()
+	defer func() { logAccess(started, logged, r) }()
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	reqID := newRequestID()
 	w.Header().Set("X-Request-ID", reqID)
 	ctx := context.WithValue(r.Context(), requestIDContextKey{}, reqID)
+	r = r.WithContext(ctx)
+	if s.IdentityHTTP != nil && strings.HasPrefix(r.URL.Path, "/api/") && !strings.HasPrefix(r.URL.Path, "/api/v1/agent/") {
+		if code := s.IdentityHTTP.BrowserRejectionCode(r); code != "" {
+			w.Header().Set("X-SF-Diagnostic-Code", code)
+		}
+	}
 	// Private read-only readiness for the actual owning parent. Business APIs,
 	// workers and browser access keep the maintenance gate during replacement.
 	if r.Method == "GET" && r.URL.Path == "/internal/resident-ready" && r.URL.RawQuery == "" && s.residentSupervisor != nil {
@@ -1096,7 +1117,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Content-Type", "application/json")
 				_ = json.NewEncoder(w).Encode(map[string]string{"state": "owned_process_ready"})
 			})
-			recovery.RuntimeHTTP(handler, s.residentHealthGate).ServeHTTP(w, r.WithContext(ctx))
+			recovery.RuntimeHTTP(handler, s.residentHealthGate).ServeHTTP(w, r)
 			return
 		}
 	}
@@ -1104,7 +1125,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if s.console != nil && (r.URL.Path == "/" || r.URL.Path == "/index.html" || r.URL.Path == "/favicon.ico" || strings.HasPrefix(r.URL.Path, "/assets/")) {
 		next = s.console
 	}
-	recovery.RuntimeHTTP(next, s.runtimeGate).ServeHTTP(w, r.WithContext(ctx))
+	recovery.RuntimeHTTP(next, s.runtimeGate).ServeHTTP(w, r)
 }
 
 func (s *Server) authenticate(r *http.Request) (string, string, error) {

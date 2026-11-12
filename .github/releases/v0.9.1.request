@@ -1,0 +1,1 @@
+Publish v0.9.1 sequence 2 from this exact main merge after the accepted identity/operations repair. Build both Linux architectures, verify SHA256 and provenance, publish a complete draft, preserve v0.9.0. Unsigned core only; no signing secrets or production deployment.

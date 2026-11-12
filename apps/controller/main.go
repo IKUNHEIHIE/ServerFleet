@@ -21,9 +21,16 @@ import (
 )
 
 // Set only by the controlled core release build.
-var controllerBuildVersion = "0.9.0-dev"
+var controllerBuildVersion = "0.9.1-dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "upgrade-check" {
+		if e := bootstrap.RunUpgradeCheckCommand(context.Background(), os.Args[2:], os.Stdout, os.Stderr); e != nil {
+			log.Print(e)
+			os.Exit(2)
+		}
+		return
+	}
 	if len(os.Args) > 1 && (os.Args[1] == "install" || os.Args[1] == "provision" || os.Args[1] == "bootstrap-token" || os.Args[1] == "release") {
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()

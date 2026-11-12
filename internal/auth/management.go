@@ -325,12 +325,21 @@ func (s *IdentityService) PatchUser(ctx context.Context, secret, csrf, userID st
 }
 
 func (s *IdentityService) CreateResourceGrant(ctx context.Context, secret, csrf string, input GrantRequest) (ResourceGrant, error) {
-	return s.createResourceGrant(ctx, secret, csrf, input, "")
+	return s.createResourceGrant(ctx, secret, csrf, input, "", false)
 }
 func (s *IdentityService) CreateResourceGrantIdempotent(ctx context.Context, secret, csrf string, input GrantRequest, key string) (ResourceGrant, error) {
-	return s.createResourceGrant(ctx, secret, csrf, input, key)
+	return s.createResourceGrant(ctx, secret, csrf, input, key, false)
 }
-func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf string, input GrantRequest, key string) (ResourceGrant, error) {
+
+// Enrollment grants retain a bounded permanent association so an old approval
+// cannot recreate a revoked grant after ordinary 1h idempotency receipts expire.
+func (s *IdentityService) CreateEnrollmentReadGrant(ctx context.Context, secret, csrf string, input GrantRequest, key string) (ResourceGrant, error) {
+	if input.ResourceType != "node" || len(input.Permissions) != 1 || input.Permissions[0] != "nodes.read" || input.ExpiresAt != nil {
+		return ResourceGrant{}, ErrInvalidCheck
+	}
+	return s.createResourceGrant(ctx, secret, csrf, input, key, true)
+}
+func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf string, input GrantRequest, key string, enrollment bool) (ResourceGrant, error) {
 	var result ResourceGrant
 	input.Permissions = append([]string{}, input.Permissions...)
 	if input.ExpiresAt != nil {
@@ -350,6 +359,26 @@ func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf 
 		if err != nil {
 			return err
 		}
+		association := receiptKey(actor.ID, "auth.enrollment-read", key)
+		if enrollment {
+			if actor.ID != input.PrincipalID || !validPolicyID(key) || len(key) < 16 || len(key) > 128 {
+				return ErrInvalidCheck
+			}
+			if id, ok := st.EnrollmentReadGrants[association]; ok {
+				grant, present := st.Grants[id]
+				if !present {
+					return ErrDenied
+				}
+				if requestDigest(GrantRequest{PrincipalID: grant.Value.PrincipalID, ResourceType: grant.Value.ResourceType, ResourceID: grant.Value.ResourceID, Permissions: grant.Value.Permissions, ExpiresAt: grant.Value.ExpiresAt}) != requestDigest(input) {
+					return ErrIdempotencyConflict
+				}
+				result = grant.Value
+				return nil
+			}
+			if len(st.EnrollmentReadGrants) >= 10000 {
+				return ErrIdentityUnavailable
+			}
+		}
 		digest := requestDigest(input)
 		receipt, replay, err := loadReceipt(st, actor.ID, "auth.grant.create", key, digest, now)
 		if err != nil {
@@ -364,6 +393,9 @@ func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf 
 				return ErrDenied
 			}
 			result = grant.Value
+			if enrollment {
+				st.EnrollmentReadGrants[association] = grant.Value.GrantID
+			}
 			return nil
 		}
 		if _, ok := st.Users[input.PrincipalID]; !ok {
@@ -391,6 +423,9 @@ func (s *IdentityService) createResourceGrant(ctx context.Context, secret, csrf 
 		}
 		result = ResourceGrant{id, input.PrincipalID, input.ResourceType, input.ResourceID, input.Permissions, now, input.ExpiresAt}
 		st.Grants[id] = identityGrant{result, append([]string{}, nodes...)}
+		if enrollment {
+			st.EnrollmentReadGrants[association] = id
+		}
 		saveReceipt(st, actor.ID, "auth.grant.create", key, digest, id, passwordRecord{}, now)
 		st.PolicyRevision++
 		return appendIdentityAudit(st, actor.ID, "auth.grant.create", "succeeded", now, nodes...)

@@ -53,6 +53,16 @@ type ControllerLinks struct {
 	closed   bool
 	all      map[*controllerLink]struct{}
 }
+
+func (h *ControllerLinks) Ready() bool {
+	if h == nil {
+		return false
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	return !h.closed
+}
+
 type controllerLink struct {
 	hub             *ControllerLinks
 	socket          FrameSocket

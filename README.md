@@ -1,6 +1,6 @@
 # Server Fleet
 
-**v0.9.0 · 首个正式版**
+**v0.9.1 · 身份续期与运维修复版**
 
 轻量、可自托管的服务器群控系统。通过统一 Web 控制台管理节点、文件、服务、证书、任务与 AI 运维，让多台服务器的日常管理、变更执行和异常处置集中在同一套权限与审计体系中。
 
@@ -21,6 +21,8 @@
 
 各功能的配置前提、实际行为和实现边界见[功能说明](docs/product/FEATURES.md)。
 
+当前补丁修复 Agent 身份自动续期，补充接入读取授权、升级预检、就绪检查与节点诊断。升级和已过期身份恢复请先阅读[升级说明](deployment/UPGRADE.md)，反代部署见[HTTPS 与 mTLS 参考](deployment/REVERSE-PROXY.md)。
+
 ## 快速开始
 
 ### 1. 准备环境
@@ -31,7 +33,7 @@
 
 ### 2. 下载或构建核心发行包
 
-预编译包在 [GitHub Releases](https://github.com/IKUNHEIHIE/ServerFleet/releases) 提供 Linux amd64／arm64 版本，包含 Controller、Agent、Web 和部署示例。下载后先核对随附 `SHA256SUMS` 并阅读[发行说明](docs/releases/v0.9.0.md)。当前下载包未做离线发行签名，不能直接作为一键安装／自动更新的受信任目录。
+预编译包在 [GitHub Releases](https://github.com/IKUNHEIHIE/ServerFleet/releases) 提供 Linux amd64／arm64 版本，包含 Controller、Agent、Web 和部署示例。下载后先核对随附 `SHA256SUMS` 并阅读[发行说明](docs/releases/v0.9.1.md)。当前下载包未做离线发行签名，不能直接作为一键安装／自动更新的受信任目录。
 
 从源码自行构建：
 
@@ -39,7 +41,7 @@
 
 ```sh
 npm ci
-node scripts/build-release.mjs --version=0.9.0 --sequence=1 --output=/home/serverfleet/releases/0.9.0
+node scripts/build-release.mjs --version=0.9.1 --sequence=2 --output=/home/serverfleet/releases/0.9.1
 ```
 
 示例输出路径须位于仓库外，父目录已存在，目标目录必须是新目录。构建包含两个架构的 Controller、Agent、正式 Web、配置示例和摘要清单。构建产物尚需按[部署说明](deployment/README.md)核对来源并进行离线发行签名，之后再分发和安装。

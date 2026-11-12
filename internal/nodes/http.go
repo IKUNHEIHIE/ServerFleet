@@ -130,6 +130,7 @@ type nodeIdentityDTO struct {
 }
 
 type nodeCapabilitiesDTO struct {
+	ObservedAt   string   `json:"observedAt,omitempty"`
 	NodeID       string   `json:"nodeId"`
 	Capabilities []string `json:"capabilities"`
 	Recorded     bool     `json:"recorded"`
@@ -137,12 +138,14 @@ type nodeCapabilitiesDTO struct {
 }
 
 type nodeDiagnosticsDTO struct {
-	NodeID            string   `json:"nodeId"`
-	Status            string   `json:"status"`
-	ConnectionState   string   `json:"connectionState"`
-	LastHeartbeatAt   string   `json:"lastHeartbeatAt,omitempty"`
-	DiagnosticNotes   []string `json:"diagnosticNotes"`
-	PendingTasksKnown bool     `json:"pendingTasksKnown"`
+	AgentVersion      string                 `json:"agentVersion,omitempty"`
+	Agent             *ConnectionDiagnostics `json:"agent,omitempty"`
+	NodeID            string                 `json:"nodeId"`
+	Status            string                 `json:"status"`
+	ConnectionState   string                 `json:"connectionState"`
+	LastHeartbeatAt   string                 `json:"lastHeartbeatAt,omitempty"`
+	DiagnosticNotes   []string               `json:"diagnosticNotes"`
+	PendingTasksKnown bool                   `json:"pendingTasksKnown"`
 }
 
 type lifecycleBody struct {
@@ -221,9 +224,14 @@ func (api *httpAPI) nodeCapabilities(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
+	diagnostics, err := api.service.ConnectionDiagnostics(r.Context(), principal.SubjectID, node.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
 	writeJSON(w, http.StatusOK, nodeCapabilitiesDTO{
-		NodeID: node.ID, Capabilities: []string{}, Recorded: false,
-		Message: "agent protocol capabilities are not recorded by the nodes module",
+		ObservedAt: formatNodeTime(diagnostics.ObservedAt),
+		NodeID:     node.ID, Capabilities: diagnostics.Capabilities, Recorded: diagnostics.Recorded,
 	})
 }
 
@@ -237,7 +245,18 @@ func (api *httpAPI) nodeDiagnostics(w http.ResponseWriter, r *http.Request) {
 		writeError(w, err)
 		return
 	}
-	notes := []string{"agent version, capabilities and per-check history are not recorded by the nodes module"}
+	diagnostics, err := api.service.ConnectionDiagnostics(r.Context(), principal.SubjectID, node.ID)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	notes := []string{}
+	if !diagnostics.Recorded {
+		notes = append(notes, "no authenticated Agent handshake has been recorded")
+	}
+	if !diagnostics.CertificateExpiresAt.IsZero() && time.Until(diagnostics.CertificateExpiresAt) < 4*time.Hour {
+		notes = append(notes, "Agent identity certificate is near expiry; inspect identity renewal logs")
+	}
 	connectionState := "unknown"
 	switch node.Status {
 	case StatusOnline:
@@ -251,7 +270,9 @@ func (api *httpAPI) nodeDiagnostics(w http.ResponseWriter, r *http.Request) {
 		notes = append(notes, "node is administratively suspended")
 	}
 	writeJSON(w, http.StatusOK, nodeDiagnosticsDTO{
-		NodeID: node.ID, Status: string(node.Status), ConnectionState: connectionState,
+		AgentVersion: diagnostics.AgentVersion,
+		Agent:        &diagnostics,
+		NodeID:       node.ID, Status: string(node.Status), ConnectionState: connectionState,
 		LastHeartbeatAt: formatNodeTime(node.LastSeenAt), DiagnosticNotes: notes,
 		PendingTasksKnown: false,
 	})

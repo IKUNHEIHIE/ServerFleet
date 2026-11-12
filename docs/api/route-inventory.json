@@ -1338,6 +1338,11 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/nodes/{nodeId}/capabilities",
           "operationId": "getNodeCapabilitiesG2"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/api/v1/nodes/{nodeId}/capabilities",
+          "operationId": "readRecordedNodeCapabilitiesR37"
         }
       ]
     },
@@ -1356,6 +1361,11 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/nodes/{nodeId}/diagnostics",
           "operationId": "getNodeDiagnostic08"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/api/v1/nodes/{nodeId}/diagnostics",
+          "operationId": "readNodeConnectionDiagnosticsR37"
         }
       ]
     },
@@ -2533,6 +2543,24 @@
           "file": "api/openapi/revisions/v09-r34/runtime-additions-candidate.json",
           "path": "/healthz",
           "operationId": "getHealthR34"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/readyz",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerRoutes"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/readyz",
+          "operationId": "readControllerReadinessR37"
         }
       ]
     },
@@ -3892,6 +3920,11 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/node-enrollment-tokens",
           "operationId": "createNodeEnrollmentToken"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/api/v1/node-enrollment-tokens",
+          "operationId": "issueNodeEnrollmentTokenR37"
         }
       ]
     },
@@ -3910,6 +3943,11 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
           "operationId": "decideNodeEnrollment"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
+          "operationId": "decideEnrollmentWithReadGrantR37"
         }
       ]
     },
@@ -4118,6 +4156,11 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/node-enrollment-tokens",
           "operationId": "createNodeEnrollmentToken"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/api/v1/node-enrollment-tokens",
+          "operationId": "issueNodeEnrollmentTokenR37"
         }
       ]
     },
@@ -4136,6 +4179,11 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
           "operationId": "decideNodeEnrollment"
+        },
+        {
+          "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
+          "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
+          "operationId": "decideEnrollmentWithReadGrantR37"
         }
       ]
     },

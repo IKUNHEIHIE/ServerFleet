@@ -28,7 +28,7 @@ import (
 const Scaffold = "Server Fleet Agent — M0-P1 scaffold; registration and execution unavailable"
 
 // DefaultVersion is the default Agent version reported during enrollment.
-var DefaultVersion = "0.9.0-dev"
+var DefaultVersion = "0.9.1-dev"
 
 var errRuntime = errors.New("agent runtime: invalid or unavailable local state")
 

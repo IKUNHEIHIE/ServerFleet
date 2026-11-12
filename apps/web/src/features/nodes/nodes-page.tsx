@@ -71,7 +71,7 @@ function RichNodesView({
           }}
           loadingLabel="正在读取节点详情…"
           errorTitle="节点详情加载失败"
-          empty={<p className="px-6 py-8 text-sm text-muted-foreground">没有可见节点。</p>}
+          empty={<p className="px-6 py-8 text-sm text-muted-foreground">当前没有可见节点；节点已接入时，请检查当前账户的资源读取授权。</p>}
           isEmpty={items => items.length === 0}
         >
           {items => (

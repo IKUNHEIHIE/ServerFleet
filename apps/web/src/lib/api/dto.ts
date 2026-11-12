@@ -271,6 +271,8 @@ export interface HealthPayload {
 }
 
 export interface NodeDiagnostic {
+  readonly pendingTasksKnown?: boolean;
+	readonly agent?: { readonly recorded: boolean; readonly observedAt?: string; readonly certificateExpiresAt?: string; readonly history: readonly { readonly at: string; readonly code: string }[] };
   readonly nodeId: string;
   readonly connectionState: "online" | "unreachable" | "identity_rejected" | "unknown";
   readonly lastHeartbeatAt?: string;

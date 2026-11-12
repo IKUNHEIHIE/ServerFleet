@@ -50,6 +50,12 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 		!validAgentVersion(request.AgentVersion) || request.WaitTaskMillis < 0 || request.WaitTaskMillis > 600000 {
 		return result, errAgentConnect
 	}
+	if request.Persistent {
+		_, e := maybeRenewAgentIdentity(ctx, request)
+		if e != nil {
+			renewalLog(e, time.Time{})
+		}
+	}
 	rootPEM, err := readAgentFile(request.RootCertificate, 16<<10)
 	if err != nil {
 		return result, errAgentConnect
@@ -96,6 +102,9 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 			return linkErr
 		})
 	if err != nil {
+		if errors.Is(linkErr, errAgentIdentityRotated) {
+			return result, errAgentIdentityRotated
+		}
 		if errors.Is(linkErr, errAgentWorkersUnknown) {
 			return result, errAgentWorkersUnknown
 		}
@@ -284,6 +293,23 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 			default:
 			}
 		},
+	}
+	if request.Persistent {
+		var nextAttempt time.Time
+		renewed := false
+		cfg.RenewIdentity = func(ctx context.Context) (bool, error) {
+			if renewed {
+				return true, nil
+			}
+			if time.Until(facts.ExpiresAt) > 4*time.Hour || time.Now().Before(nextAttempt) {
+				return false, nil
+			}
+			nextAttempt = time.Now().Add(time.Minute)
+			var e error
+			renewed, e = maybeRenewAgentIdentity(ctx, request)
+			renewalLog(e, facts.ExpiresAt)
+			return renewed, e
+		}
 	}
 	sessionCtx, sessionCancel := context.WithCancel(ctx)
 	defer sessionCancel()

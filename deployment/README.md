@@ -115,3 +115,7 @@ R29支持在正式备份页配置S3兼容／WebDAV HTTPS密文上传、定时备
 ## R31 安装与证书编排
 
 [可信一键安装与发行](INSTALL.md)包括两种架构、服务账户、签名清单、接入审批与续装。[续签安装发布](../docs/development/RENEWAL-DELIVERY.md)包括真实回执、HTTPS核验、后继发布与人工修复采用。当前迁移总数45，历史SQL不变。
+
+## v0.9.1 升级与运维
+
+升级前先执行只读 `controller upgrade-check`，保留 DB 和原密钥，详见 [UPGRADE.md](UPGRADE.md)。Agent 身份续期在 `-serve` 中自动执行；已过期身份走显式替换审批并保留执行账本。Nginx 的 Host/Origin 与端到端 Agent mTLS 参考见 [REVERSE-PROXY.md](REVERSE-PROXY.md)。通用 `/readyz` 与私有监督就绪通道分工不同。

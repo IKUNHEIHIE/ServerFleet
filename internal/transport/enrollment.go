@@ -97,6 +97,8 @@ type enrollmentState struct {
 	Identities         map[string]AgentIdentity
 	RevocationSequence uint64
 	Outbox             []enrollmentAudit
+	Renewals           map[string]identityRenewal `json:",omitempty"`
+	Retirements        map[string]time.Time       `json:",omitempty"`
 }
 type EnrollmentService struct {
 	store  EnrollmentStore
@@ -127,6 +129,9 @@ func decodeEnrollment(b []byte) (*enrollmentState, error) {
 	}
 	if st.Identities == nil {
 		st.Identities = map[string]AgentIdentity{}
+	}
+	if err := prepareIdentityRenewals(st); err != nil {
+		return nil, err
 	}
 	if len(st.Tokens) > 10000 || len(st.Requests) > 10000 || len(st.Identities) > 20000 || len(st.Outbox) > 10000 {
 		return nil, ErrEnrollmentUnavailable
@@ -443,7 +448,7 @@ func (s *EnrollmentService) Lookup(ctx context.Context, fingerprint string) (Age
 		}
 		var ok bool
 		id, ok = st.Identities[fingerprint]
-		if !ok {
+		if !ok || s.now().Before(st.ClockFloor) || !st.Retirements[fingerprint].IsZero() && !s.now().Before(st.Retirements[fingerprint]) {
 			return ErrPeerIdentity
 		}
 		return nil
@@ -467,6 +472,7 @@ func (s *EnrollmentService) Revoke(ctx context.Context, op EnrollmentOperation, 
 		}
 		id.Revoked = true
 		st.Identities[fingerprint] = id
+		revokeRenewalDescendants(st, fingerprint)
 		st.RevocationSequence++
 		return appendEnrollmentAudit(st, op, "agent.revoke", id.NodeID, fingerprint, now)
 	})

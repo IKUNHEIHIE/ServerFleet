@@ -93,7 +93,7 @@ const KIND_TEXT: Record<ApiErrorKind, string> = {
 /** 固定文案 + 便于支持定位的错误码/请求 ID；不回显原始响应体。 */
 export function describeApiError(error: unknown): string {
   if (!isApiError(error)) return "请求未能完成。";
-  const base = KIND_TEXT[error.kind];
+  const base = error.code === "ENROLLMENT_APPROVED_READ_GRANT_PENDING" ? "节点接入已批准，但读取授权尚未完成；请重试同一审批或检查资源授权。" : KIND_TEXT[error.kind];
   const meta: string[] = [];
   if (error.code) meta.push(`错误码 ${error.code}`);
   if (error.requestId) meta.push(`请求 ${error.requestId}`);

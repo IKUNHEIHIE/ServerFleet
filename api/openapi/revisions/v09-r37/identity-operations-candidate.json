@@ -1,0 +1,858 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Server Fleet identity and operational repairs R37 candidate",
+    "version": "0.9.37-candidate",
+    "description": "Additive HTTP revision. Existing G2/Proto/ADR inputs remain unchanged; not a G2 freeze. Identity renewals are control-plane lifecycle operations, never arbitrary task execution."
+  },
+  "servers": [
+    {
+      "url": "https://server-fleet.example.invalid"
+    }
+  ],
+  "paths": {
+    "/readyz": {
+      "get": {
+        "operationId": "readControllerReadinessR37",
+        "summary": "Read configured subsystem readiness without exposing identities",
+        "description": "Database, current runtime authority, task scheduler and configured Agent transport/issuer. No live nodes is not a failure.",
+        "tags": [
+          "IdentityOperationsR37"
+        ],
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Ready",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "status": {
+                      "type": "string",
+                      "enum": [
+                        "ready",
+                        "not_ready"
+                      ]
+                    },
+                    "checks": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "string",
+                        "enum": [
+                          "ready",
+                          "unavailable",
+                          "not_configured"
+                        ]
+                      }
+                    }
+                  },
+                  "required": [
+                    "status",
+                    "checks"
+                  ]
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Not ready or controller quarantined",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "additionalProperties": false,
+                      "properties": {
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "ready",
+                            "not_ready"
+                          ]
+                        },
+                        "checks": {
+                          "type": "object",
+                          "additionalProperties": {
+                            "type": "string",
+                            "enum": [
+                              "ready",
+                              "unavailable",
+                              "not_configured"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "checks"
+                      ]
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "code": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/agent/identity/renew": {
+      "post": {
+        "operationId": "renewAgentIdentityR37",
+        "summary": "Renew current unexpired Agent identity over direct mutual TLS",
+        "description": "TLS1.3 end-to-end; exact configured authority/SNI; no Cookie, Origin or Authorization. Same CSR public key and current node/generation; service gates rechecked. Inactive/revoked/expired identities cannot renew. New leaf activation retires the prior leaf after a two-minute overlap; no UNKNOWN task replay.",
+        "tags": [
+          "IdentityOperationsR37"
+        ],
+        "security": [
+          {
+            "agentMTLS": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Same successor certificate for the same old fingerprint/request/CSR",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "properties": {
+                    "state": {
+                      "type": "string",
+                      "const": "issued"
+                    },
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "certificatePem": {
+                      "type": "string"
+                    },
+                    "intermediateChainPem": {
+                      "type": "string"
+                    },
+                    "trustGeneration": {
+                      "type": "integer",
+                      "minimum": 1
+                    },
+                    "expiresAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    }
+                  },
+                  "required": [
+                    "state",
+                    "nodeId",
+                    "certificatePem",
+                    "intermediateChainPem",
+                    "trustGeneration",
+                    "expiresAt"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "requestId": {
+                    "type": "string",
+                    "pattern": "^[a-f0-9]{64}$"
+                  },
+                  "csrPem": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 16384
+                  }
+                },
+                "required": [
+                  "requestId",
+                  "csrPem"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/node-enrollment-tokens": {
+      "post": {
+        "operationId": "issueNodeEnrollmentTokenR37",
+        "summary": "Issue a one-time enrollment or explicitly authorized replacement token",
+        "description": "TTL1-10 minutes, maxUses=1. replaceNodeId requires current administrator plus that node nodes.revoke grant; suspended/revoked nodes are not automatically reactivated. Token ID differs from Agent persistent enrollment request ID.",
+        "tags": [
+          "IdentityOperationsR37"
+        ],
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Token shown once",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "name": {
+                    "type": "string",
+                    "maxLength": 128
+                  },
+                  "expiryMinutes": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 10,
+                    "default": 10
+                  },
+                  "maxUses": {
+                    "type": "integer",
+                    "const": 1,
+                    "default": 1
+                  },
+                  "replaceNodeId": {
+                    "type": "string",
+                    "maxLength": 128
+                  }
+                },
+                "required": []
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/node-enrollments/{enrollmentId}/decision": {
+      "post": {
+        "operationId": "decideEnrollmentWithReadGrantR37",
+        "summary": "Approve or reject enrollment with an explicit optional node read grant",
+        "description": "grantRead defaults false for backward compatibility. When explicitly true, existing authorization service grants only this node nodes.read to the current administrator. A partially completed approval returns ENROLLMENT_APPROVED_READ_GRANT_PENDING; retry the same approved request. Revoked grants are not resurrected.",
+        "tags": [
+          "IdentityOperationsR37"
+        ],
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Approved/rejected enrollment view",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "enrollmentId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "X-CSRF-Token",
+            "in": "header",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "properties": {
+                  "decision": {
+                    "type": "string",
+                    "enum": [
+                      "approve",
+                      "reject"
+                    ]
+                  },
+                  "reason": {
+                    "type": "string",
+                    "maxLength": 1024
+                  },
+                  "grantRead": {
+                    "type": "boolean",
+                    "default": false
+                  }
+                },
+                "required": [
+                  "decision"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/nodes/{nodeId}/diagnostics": {
+      "get": {
+        "operationId": "readNodeConnectionDiagnosticsR37",
+        "summary": "Read persistent bounded Agent diagnostics within current nodes.read scope",
+        "description": "Latest heartbeat is separate; a historical handshake is not a current authorization proof. No extra history row per heartbeat, no global inventory leak.",
+        "tags": [
+          "IdentityOperationsR37"
+        ],
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Latest authenticated handshake and up to 100 connection events",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "connectionState": {
+                      "type": "string",
+                      "enum": [
+                        "online",
+                        "unreachable",
+                        "identity_rejected",
+                        "unknown"
+                      ]
+                    },
+                    "lastHeartbeatAt": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "agentVersion": {
+                      "type": "string"
+                    },
+                    "pendingTasksKnown": {
+                      "type": "boolean"
+                    },
+                    "diagnosticNotes": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
+                    "agent": {
+                      "type": "object",
+                      "properties": {
+                        "recorded": {
+                          "type": "boolean"
+                        },
+                        "agentVersion": {
+                          "type": "string"
+                        },
+                        "capabilities": {
+                          "type": "array",
+                          "maxItems": 32,
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "observedAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "certificateExpiresAt": {
+                          "type": "string",
+                          "format": "date-time"
+                        },
+                        "history": {
+                          "type": "array",
+                          "maxItems": 100,
+                          "items": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "properties": {
+                              "at": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "code": {
+                                "type": "string",
+                                "enum": [
+                                  "authenticated",
+                                  "disconnected"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "at",
+                              "code"
+                            ]
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    },
+    "/api/v1/nodes/{nodeId}/capabilities": {
+      "get": {
+        "operationId": "readRecordedNodeCapabilitiesR37",
+        "summary": "Read server-admitted recorded capabilities for a visible node",
+        "description": "Read server-admitted recorded capabilities for a visible node",
+        "tags": [
+          "IdentityOperationsR37"
+        ],
+        "security": [
+          {
+            "cookieSession": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Recorded=false until a trusted handshake",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "nodeId": {
+                      "type": "string"
+                    },
+                    "recorded": {
+                      "type": "boolean"
+                    },
+                    "capabilities": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "maxItems": 32
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Fixed sanitized problem code; preserves existing identity/tasks.",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer"
+                    },
+                    "requestId": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "nodeId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 128
+            }
+          }
+        ]
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "cookieSession": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "__Host-sf_session"
+      },
+      "agentMTLS": {
+        "type": "mutualTLS",
+        "description": "Verified current Agent leaf, internal Root and active trust generation; not a browser session."
+      }
+    }
+  }
+}

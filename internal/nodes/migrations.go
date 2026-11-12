@@ -5,7 +5,7 @@ import "serverfleet.local/serverfleet/internal/storage"
 // Migrations returns the node inventory and ordinary group schema. Service group
 // tables live in the servicegroups package.
 func Migrations() []storage.Migration {
-	return []storage.Migration{{
+	return append([]storage.Migration{{
 		Version: "ds/0020_nodes",
 		Name:    "node inventory and ordinary groups",
 		Statements: []string{
@@ -44,5 +44,5 @@ func Migrations() []storage.Migration {
 			)`,
 			`CREATE INDEX node_group_members_node ON node_group_members (node_id)`,
 		},
-	}}
+	}}, DiagnosticMigrations()...)
 }

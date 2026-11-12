@@ -44,7 +44,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 	if legacyCount != 21 {
 		t.Fatal("historical fixture is not actual adopted21", legacyCount)
 	}
-	if total != 49 {
+	if total != 50 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)

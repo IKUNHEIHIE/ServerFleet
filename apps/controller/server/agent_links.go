@@ -82,23 +82,26 @@ func agentFrameLimits() transport.FrameDecodeLimits {
 }
 
 type agentLinkBridge struct {
-	probeCurrent   func(context.Context, tasks.Task) error
-	recordProbe    func(context.Context, transport.LinkObservation, *agentv1.TaskOutput) error
-	recordTraffic  func(context.Context, transport.LinkObservation, string, *agentv1.MetricsBatch) error
-	commandCurrent func(context.Context, tasks.Task) error
-	nodesRepo      *nodes.Repo
-	nodesService   *nodes.Service
-	tasksRepo      *tasks.Repo
-	tasks          *tasks.Service
-	links          *transport.ControllerLinks
-	files          *transport.FileClient
-	fileWorker     *FileExecutionWorker
-	gatewayChild   *GatewayArtifactObserver
-	recordCSR      func(context.Context, transport.CertificateCSRReceipt) error
-	readCSR        func(context.Context, string) (transport.CertificateCSRReceipt, error)
-	recordChain    func(context.Context, transport.CertificateChainReceipt) error
-	readChain      func(context.Context, string) (transport.CertificateChainReceipt, error)
-	now            func() time.Time
+	probeCurrent      func(context.Context, tasks.Task) error
+	recordProbe       func(context.Context, transport.LinkObservation, *agentv1.TaskOutput) error
+	recordTraffic     func(context.Context, transport.LinkObservation, string, *agentv1.MetricsBatch) error
+	commandCurrent    func(context.Context, tasks.Task) error
+	nodesRepo         *nodes.Repo
+	nodesService      *nodes.Service
+	tasksRepo         *tasks.Repo
+	tasks             *tasks.Service
+	links             *transport.ControllerLinks
+	files             *transport.FileClient
+	fileWorker        *FileExecutionWorker
+	gatewayChild      *GatewayArtifactObserver
+	recordCSR         func(context.Context, transport.CertificateCSRReceipt) error
+	readCSR           func(context.Context, string) (transport.CertificateCSRReceipt, error)
+	recordChain       func(context.Context, transport.CertificateChainReceipt) error
+	readChain         func(context.Context, string) (transport.CertificateChainReceipt, error)
+	now               func() time.Time
+	activateIdentity  func(context.Context, transport.AgentIdentity) error
+	observeConnection func(context.Context, transport.LinkObservation, *agentv1.AgentHello, []string) error
+	observeDisconnect func(context.Context, transport.LinkObservation) error
 
 	seqMu     sync.Mutex
 	sequences map[string]uint64
@@ -117,6 +120,9 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	if err != nil || node.Status == nodes.StatusRevoked || node.Status == nodes.StatusSuspended {
 		return nil, transport.ErrLinkRejected
 	}
+	if b.activateIdentity != nil && b.activateIdentity(ctx, observation.Identity) != nil {
+		return nil, transport.ErrLinkRejected
+	}
 	allowed := b.allowedActions()
 	granted := make([]string, 0, len(hello.CapabilityIds))
 	for _, capability := range hello.CapabilityIds {
@@ -126,6 +132,9 @@ func (b *agentLinkBridge) handshake(ctx context.Context, observation transport.L
 	}
 	sort.Strings(granted)
 	if len(granted) == 0 {
+		return nil, transport.ErrLinkRejected
+	}
+	if b.observeConnection != nil && b.observeConnection(ctx, observation, hello, granted) != nil {
 		return nil, transport.ErrLinkRejected
 	}
 	b.seqMu.Lock()
@@ -349,6 +358,9 @@ func (b *agentLinkBridge) disconnected(ctx context.Context, observation transpor
 	delete(b.boots, observation.ConnectionID)
 	b.seqMu.Unlock()
 	err := b.applyAgentState(ctx, observation, "agent-disconnect", nil, nodes.StatusOffline)
+	if err == nil && b.observeDisconnect != nil {
+		err = b.observeDisconnect(ctx, observation)
+	}
 	if errors.Is(err, nodes.ErrNodeRevoked) || errors.Is(err, nodes.ErrNodeNotFound) {
 		return nil
 	}

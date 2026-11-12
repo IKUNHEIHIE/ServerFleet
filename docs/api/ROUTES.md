@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **266** 个不同的 method/path 声明，其中 **0** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **267** 个不同的 method/path 声明，其中 **0** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -165,14 +165,14 @@
 
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
-| POST | `/api/v1/enrollment-tokens` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [createNodeEnrollmentToken](../../api/openapi/g2-merged-candidate.yaml) |
+| POST | `/api/v1/enrollment-tokens` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [issueNodeEnrollmentTokenR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 
 ## enrollments
 
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
 | GET | `/api/v1/enrollments` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [listNodeEnrollments](../../api/openapi/g2-merged-candidate.yaml) |
-| POST | `/api/v1/enrollments/{enrollmentId}/decision` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [decideNodeEnrollment](../../api/openapi/g2-merged-candidate.yaml) |
+| POST | `/api/v1/enrollments/{enrollmentId}/decision` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [decideEnrollmentWithReadGrantR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 
 ## files
 
@@ -230,6 +230,7 @@
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
 | GET | `/healthz` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerRoutes | [getHealthR34](../../api/openapi/revisions/v09-r34/runtime-additions-candidate.json) |
+| GET | `/readyz` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerRoutes | [readControllerReadinessR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 
 ## installations
 
@@ -252,22 +253,22 @@
 
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
-| POST | `/api/v1/node-enrollment-tokens` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [createNodeEnrollmentToken](../../api/openapi/g2-merged-candidate.yaml) |
+| POST | `/api/v1/node-enrollment-tokens` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [issueNodeEnrollmentTokenR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 
 ## node-enrollments
 
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
 | GET | `/api/v1/node-enrollments` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [listNodeEnrollments](../../api/openapi/g2-merged-candidate.yaml) |
-| POST | `/api/v1/node-enrollments/{enrollmentId}/decision` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [decideNodeEnrollment](../../api/openapi/g2-merged-candidate.yaml) |
+| POST | `/api/v1/node-enrollments/{enrollmentId}/decision` | [enrollment_management_http.go](../../internal/transport/enrollment_management_http.go) · NewEnrollmentManagementHTTP | [decideEnrollmentWithReadGrantR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 
 ## nodes
 
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
 | GET | `/api/v1/nodes` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [listNodesForTransfer](../../api/openapi/g2-merged-candidate.yaml) |
-| GET | `/api/v1/nodes/{nodeId}/capabilities` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [getNodeCapabilitiesG2](../../api/openapi/g2-merged-candidate.yaml) |
-| GET | `/api/v1/nodes/{nodeId}/diagnostics` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [getNodeDiagnostic08](../../api/openapi/g2-merged-candidate.yaml) |
+| GET | `/api/v1/nodes/{nodeId}/capabilities` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [readRecordedNodeCapabilitiesR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
+| GET | `/api/v1/nodes/{nodeId}/diagnostics` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [readNodeConnectionDiagnosticsR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 | GET | `/api/v1/nodes/{nodeId}/files/uploads/{uploadId}` | [http.go](../../internal/files/http.go) · RegisterHTTP | [getOwnedUploadR11](../../api/openapi/revisions/v09-r11/upload-policies-candidate.yaml) |
 | GET | `/api/v1/nodes/{nodeId}/identity` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [getNodeIdentityG2](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/nodes/{nodeId}/traffic-quota` | [http.go](../../internal/quota/http.go) · RegisterHTTP | [getObservedTrafficQuota](../../api/openapi/revisions/v09-r32/observability-candidate.yaml) |
