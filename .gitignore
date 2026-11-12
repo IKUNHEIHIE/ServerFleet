@@ -6,6 +6,7 @@ coverage/
 reports/
 .worktrees/
 *.tsbuildinfo
+__pycache__/
 .env
 .env.*
 !.env.example

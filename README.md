@@ -50,6 +50,8 @@ node scripts/build-release.mjs --version=0.9.1 --sequence=2 --output=/home/serve
 
 按[部署与初始化](deployment/README.md)配置 HTTPS、内部 PKI、运行目录和监督进程，完成首次管理员初始化；再通过控制台“添加节点”生成短期注册令牌并使用[一键安装流程](deployment/INSTALL.md)。首次安装需独立核对发行签名公钥和 Root 指纹。
 
+已部署主控如果显示“尚未配置可信安装分发”，使用[安装向导](deployment/QUICK-SETUP.md)：`sudo python3 deployment/setup.py`。向导为符合条件的现有 systemd 主控配置 HTTPS 分发和 catalog；首次签名公开文件包在离线机器用 `prepare --offline-ack` 自动制作。现有 v0.9.1 Release 不含此新向导，先从当前源码取得；未签名压缩包仍不能直接充当可信安装目录。
+
 节点接入后，为操作者明确分配节点资源权限，并根据需要配置文件根、命令策略、DNS／ACME、通知渠道及备份存储。
 
 ## 架构

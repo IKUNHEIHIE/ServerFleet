@@ -1,5 +1,7 @@
 # Server Fleet：核心代码运行说明
 
+已有主控的“尚未配置可信安装分发”可用[安装向导](QUICK-SETUP.md)处理：`sudo python3 deployment/setup.py`。离线签名准备与在线启用均自动整理文件，不手写 catalog；全新主控初始化仍见下文。
+
 五项核心功能的正式源码、Web入口与本机部署工具一并交付；实际联调、找bug与故障演练由操作者执行。程序在Linux amd64/arm64普通用户下运行。发布签名、Root权限和恢复激活仍有各自的显式授权边界，不因代码交付自动放行。
 
 异常／UNKNOWN的证据登记、后续任务、快照和独立复核流程见[人工处置闭环](../docs/development/INCIDENT-CLOSURE.md)。R30仅追加第43项迁移，升级前按现有流程备份；无需清库，不回写旧迁移。

@@ -41,6 +41,10 @@ jobs:
         run: node --test scripts/package-release.test.mjs
       - name: Policy, contracts, generation, Go and Web
         run: npm run check
+      - name: Installation setup signatures, TLS and service rollback
+        run: python3 -m unittest discover -s deployment -p test_setup.py -v
+        env:
+          SF_SETUP_TEST_CONTROLLER: reports/controller
       - name: No generated or lockfile drift
         run: git diff --exit-code -- gen/go go.mod go.sum package-lock.json
       - name: Linux Agent cross-build

@@ -1,5 +1,13 @@
 # 任务登记板
 
+## 当前：已有主控的可信安装分发向导（2026-11-13 R38）
+
+V09-INSTALL-WIZARD-01 / chatgpt-install-wizard-20261113，主控单会话；独立 ServerFleet-installer / feature/install-wizard-20261113，从 main8d6b926 的完整 Git 树006e3647恢复。用户因“尚未配置可信安装分发”要求编写一键安装脚本；当前范围为已部署主控启用节点一键安装的交互向导。允许 deployment/setup.py、标准库专项、部署/README/产品/API使用说明、发行打包收录与 CI 专项，由主控协调共享文件。保留原 install.sh/Controller 安装接口、离线 Root/发行签名约束、既有数据库与身份；不引入依赖、不启动其他 Agent，不访问真实 VPS、Root/发行私钥或绕过签名。不把向导称为全新主控零准备安装，不自动接管容器/root服务/冻结监督策略，不覆盖已有配置或 tag/Release。
+
+离线 prepare 固定校验 v0.9.1 双架构压缩包，调用既有离线签名程序，仅导出公开文件包与独立信任指纹。在线 configure 校验指纹、签名与全量摘要后创建只读 HTTPS 分发和 0600 catalog，原参数只追加 catalog；失败移除新增覆盖并尝试恢复原服务，不重建 DB/keyring/身份。集中真实签名/TLS、归档拒绝、配置事务与回退专项后，精确 head 完整 CI、安全与 COMMENT 复审，按既有授权 expected-SHA 正常合并；CI 状态每十分钟检查。真实 root/systemd/VPS 与干净节点接入由部署者联调，停止于脚本/文档/验证/合并。
+
+本地15项专项通过，包含真实 Controller 离线打包与实际 Go catalog 私有目录/格式校验，另7项发行打包、接口索引、原始资料完整性与 actionlint 通过。初次专项发现 URL 查询丢弃、测试将导出 archive 误当公开树，以及审查发现 Go 读取要求私有父目录，均已修正，保留失败记录；TLS HEAD 与错误域名专项通过。最终精确 head CI 与合并回执以 PR 评论为准；模拟 systemd 不等于实机安装已验收。
+
 ## 当前：身份续期与运维可用性返修（2026-11-12 R37）
 
 V09-CLOUD-IDENTITY-OPS-01 / chatgpt-repair-20261112，主控单会话；独立ServerFleet-repair / fix/agent-identity-and-operations-20261112，从v0.9.0/main be107188恢复并核对完整Git树ba97dd15。用户授权按已评估问题修复并发布新预编译包。允许Agent本地身份原子续期、transport当前mTLS身份续签/审计与幂等/撤销、Controller装配与批准后明确节点读取授权、auth升级预检/脱敏分类错误、通用readyz/结构化访问日志、nodes有限诊断快照、相关Web交互与独立R37产品/API候选、部署/升级/反代示例、v0.9.1发行说明与请求及必要检查。公共接缝由总控协调；保持旧49迁移/原SQL与checksum/Proto/gen/依赖锁/原始ADR不变，新增迁移只追加，不启动其他Agent、不引入依赖或Runtime、不访问真实VPS/供应商/旧生产DB/Root或发行私钥。
