@@ -1,5 +1,7 @@
 # 当前接口说明
 
+v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完整证书链及有效旧回执的公开 PEM 响应，不新增业务路由或字段；撤销/过期/代次校验不变。安装 catalog 的既有 url/sha256 默认用于固定版本 raw 安装入口，新版命令增加公开 bootstrap CA，令牌仍不进入命令。
+
 安装目录的 `GET /api/v1/installations/catalog` 仍须管理员会话；未配置时返回 `200 {"available":false}`，不是注册失败或应跳过的安全门。符合条件的已有主控可用[安装向导](../../deployment/QUICK-SETUP.md)生成公开信任材料与私有 catalog 配置；向导不新增业务接口，不代替管理员登录、令牌生成或节点审批。完成后须登录确认 `available:true` 并实际接入节点，不能仅凭 systemd 启动成功判定安装完成。
 
 > v0.9.1 / R37：新增 Agent 身份续期与安全切换、明确接入读取授权、只读升级预检、通用就绪和有界节点诊断。现行迁移共50项（旧49项不变）。行为与接口见 [身份运维说明](../development/IDENTITY-OPERATIONS.md)，升级/反代见仓库 deployment/UPGRADE.md 与 deployment/REVERSE-PROXY.md；旧审计/CI记录仅说明其当时基线。

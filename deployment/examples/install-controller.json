@@ -7,10 +7,10 @@
       "192.0.2.20"
     ],
     "rootPem": "REPLACE_WITH_RELEASE_HTTPS_CA_PEM",
-    "version": "1.2.3",
+    "version": "0.9.2",
     "keyId": "release-2026",
     "publicKey": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY",
-    "minimumSequence": 1
+    "minimumSequence": 3
   },
   "provision": {
     "format": 1,

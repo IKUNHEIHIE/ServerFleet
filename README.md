@@ -1,6 +1,6 @@
 # Server Fleet
 
-**v0.9.1 · 身份续期与运维修复版**
+**v0.9.2 · 正式 PKI 入网与 raw 安装修复版**
 
 轻量、可自托管的服务器群控系统。通过统一 Web 控制台管理节点、文件、服务、证书、任务与 AI 运维，让多台服务器的日常管理、变更执行和异常处置集中在同一套权限与审计体系中。
 
@@ -23,6 +23,14 @@
 
 当前补丁修复 Agent 身份自动续期，补充接入读取授权、升级预检、就绪检查与节点诊断。升级和已过期身份恢复请先阅读[升级说明](deployment/UPGRADE.md)，反代部署见[HTTPS 与 mTLS 参考](deployment/REVERSE-PROXY.md)。
 
+v0.9.2 修复 provisioned 模式重复 Intermediate、缺少 Root 导致 Agent 拒绝入网/续期的问题；旧批准回执保留原 leaf 并修复公开响应链。主控/Agent 共用 [raw 安装入口](deployment/RAW-INSTALL.md)：
+
+```sh
+curl --fail --silent --show-error --proto '=https' --tlsv1.3 https://raw.githubusercontent.com/IKUNHEIHIE/ServerFleet/v0.9.2/deployment/raw-install.sh -o serverfleet-install.sh && sudo sh serverfleet-install.sh setup
+```
+
+这是已有主控启用分发的入口；`controller` 安装新主控，Agent 完整命令由控制台生成并使用同一 raw URL。首次离线 Root/发行签名准备保持，不在主控生成离线私钥。
+
 ## 快速开始
 
 ### 1. 准备环境
@@ -33,7 +41,7 @@
 
 ### 2. 下载或构建核心发行包
 
-预编译包在 [GitHub Releases](https://github.com/IKUNHEIHIE/ServerFleet/releases) 提供 Linux amd64／arm64 版本，包含 Controller、Agent、Web 和部署示例。下载后先核对随附 `SHA256SUMS` 并阅读[发行说明](docs/releases/v0.9.1.md)。当前下载包未做离线发行签名，不能直接作为一键安装／自动更新的受信任目录。
+预编译包在 [GitHub Releases](https://github.com/IKUNHEIHIE/ServerFleet/releases) 提供 Linux amd64／arm64 版本，包含 Controller、Agent、Web 和部署示例。下载后先核对随附 `SHA256SUMS` 并阅读[发行说明](docs/releases/v0.9.2.md)。当前下载包未做离线发行签名，不能直接作为一键安装／自动更新的受信任目录。
 
 从源码自行构建：
 
@@ -41,7 +49,7 @@
 
 ```sh
 npm ci
-node scripts/build-release.mjs --version=0.9.1 --sequence=2 --output=/home/serverfleet/releases/0.9.1
+node scripts/build-release.mjs --version=0.9.2 --sequence=3 --output=/home/serverfleet/releases/0.9.2
 ```
 
 示例输出路径须位于仓库外，父目录已存在，目标目录必须是新目录。构建包含两个架构的 Controller、Agent、正式 Web、配置示例和摘要清单。构建产物尚需按[部署说明](deployment/README.md)核对来源并进行离线发行签名，之后再分发和安装。
@@ -50,7 +58,7 @@ node scripts/build-release.mjs --version=0.9.1 --sequence=2 --output=/home/serve
 
 按[部署与初始化](deployment/README.md)配置 HTTPS、内部 PKI、运行目录和监督进程，完成首次管理员初始化；再通过控制台“添加节点”生成短期注册令牌并使用[一键安装流程](deployment/INSTALL.md)。首次安装需独立核对发行签名公钥和 Root 指纹。
 
-已部署主控如果显示“尚未配置可信安装分发”，使用[安装向导](deployment/QUICK-SETUP.md)：`sudo python3 deployment/setup.py`。向导为符合条件的现有 systemd 主控配置 HTTPS 分发和 catalog；首次签名公开文件包在离线机器用 `prepare --offline-ack` 自动制作。现有 v0.9.1 Release 不含此新向导，先从当前源码取得；未签名压缩包仍不能直接充当可信安装目录。
+已部署主控如果显示“尚未配置可信安装分发”，使用[安装向导](deployment/QUICK-SETUP.md)：`sudo python3 deployment/setup.py`，或上述 raw 入口。首次签名公开文件包在离线机器用 `prepare --offline-ack` 自动制作；已有向导分发用 `update-distribution` 升级。本版发行包包含工具，旧 v0.9.1 不再作为新主控安装源；未签名压缩包仍不能直接充当可信安装目录。
 
 节点接入后，为操作者明确分配节点资源权限，并根据需要配置文件根、命令策略、DNS／ACME、通知渠道及备份存储。
 

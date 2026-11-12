@@ -45,13 +45,21 @@ func NewCertificateIssuer(issuerDER []byte, key crypto.Signer, roots *x509.CertP
 	}
 	intermediate := x509.NewCertPool()
 	chain := [][]byte{}
+	previous := issuer
+	seen := map[[32]byte]bool{sha256.Sum256(issuer.Raw): true}
 	for _, der := range chainDER {
 		cert, err := x509.ParseCertificate(bytes.Clone(der))
-		if err != nil {
+		if err != nil || !cert.IsCA || seen[sha256.Sum256(der)] || !bytes.Equal(previous.RawIssuer, cert.RawSubject) || previous.CheckSignatureFrom(cert) != nil {
 			return nil, ErrPeerIdentity
 		}
+		seen[sha256.Sum256(der)] = true
+		previous = cert
 		intermediate.AddCert(cert)
 		chain = append(chain, bytes.Clone(der))
+	}
+	terminalPin := sha256.Sum256(previous.RawSubjectPublicKeyInfo)
+	if !bytes.Equal(previous.RawIssuer, previous.RawSubject) || previous.CheckSignatureFrom(previous) != nil || hex.EncodeToString(terminalPin[:]) != rootSPKI {
+		return nil, ErrPeerIdentity
 	}
 	paths, err := issuer.Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediate, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageAny}})
 	if err != nil {
@@ -127,10 +135,41 @@ func (c *CertificateIssuer) issue(ctx context.Context, node string, csr *x509.Ce
 		return issuedAgentCertificate{}, ErrPeerIdentity
 	}
 	fp := sha256.Sum256(der)
-	certPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})
-	certPEM = append(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.certificate.Raw})...)
-	for _, chain := range c.chain {
-		certPEM = append(certPEM, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: chain})...)
+	return issuedAgentCertificate{der, c.certificatePEM(der), leaf.SerialNumber.String(), hex.EncodeToString(fp[:]), leaf.NotAfter}, nil
+}
+
+func (c *CertificateIssuer) certificatePEM(leaf []byte) string {
+	out := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: leaf})
+	out = append(out, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: c.certificate.Raw})...)
+	for _, der := range c.chain {
+		out = append(out, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der})...)
 	}
-	return issuedAgentCertificate{der, string(certPEM), leaf.SerialNumber.String(), hex.EncodeToString(fp[:]), leaf.NotAfter}, nil
+	return string(out)
+}
+
+// responsePEM repairs only the exact legacy leaf/issuer/issuer response. The
+// original leaf, key, serial, fingerprint, expiry and persisted audit evidence
+// remain untouched; all existing authentication/revocation gates still apply.
+func (c *CertificateIssuer) responsePEM(cert issuedAgentCertificate) (string, error) {
+	var chain [][]byte
+	for rest := []byte(cert.PEM); len(bytes.TrimSpace(rest)) > 0; {
+		block, next := pem.Decode(rest)
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 || !bytes.HasPrefix(rest, []byte("-----BEGIN CERTIFICATE-----")) || len(chain) >= 3 {
+			return cert.PEM, nil
+		}
+		chain = append(chain, block.Bytes)
+		rest = next
+	}
+	if len(chain) != 3 || !bytes.Equal(chain[1], chain[2]) || !bytes.Equal(chain[1], c.certificate.Raw) || len(c.chain) != 1 {
+		return cert.PEM, nil
+	}
+	leaf, err := x509.ParseCertificate(chain[0])
+	if err != nil || !bytes.Equal(cert.DER, chain[0]) || leaf.CheckSignatureFrom(c.certificate) != nil || leaf.SerialNumber.String() != cert.Serial || !leaf.NotAfter.Equal(cert.Expires) {
+		return "", ErrEnrollmentUnavailable
+	}
+	fingerprint := sha256.Sum256(leaf.Raw)
+	if hex.EncodeToString(fingerprint[:]) != cert.Fingerprint {
+		return "", ErrEnrollmentUnavailable
+	}
+	return c.certificatePEM(cert.DER), nil
 }

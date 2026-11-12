@@ -31,6 +31,7 @@ import tempfile
 import threading
 import time
 import urllib.parse
+import urllib.request
 
 
 class SetupError(Exception):
@@ -38,10 +39,12 @@ class SetupError(Exception):
 
 
 ROOT = pathlib.Path(__file__).resolve().parent
-ARCHIVES = {
-    "amd64": "fb09ca2cc567f61d85958703440c0b56f1fbda9d5c618a6800111266c99d7264",
-    "arm64": "15b244e4a051ee763792d1f7083e5ccff7cc6ea70265e95d4ae7b31b4c96616a",
-}
+ARCHIVES = ("amd64", "arm64")
+VERSION = "0.9.2"
+SEQUENCE = 3
+REPOSITORY = "IKUNHEIHIE/ServerFleet"
+RAW_ORIGIN = f"https://raw.githubusercontent.com/{REPOSITORY}/v{VERSION}/deployment"
+RAW_INSTALLER = RAW_ORIGIN + "/raw-install.sh"
 DOMAIN = b"serverfleet.installation.v1\0"
 MAX_TOTAL = 650 << 20
 SERVICE = "serverfleet-distribution.service"
@@ -208,21 +211,110 @@ def manifest_files(directory, architecture):
     return manifest, files
 
 
+class HTTPSRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, request, fp, code, message, headers, newurl):
+        parsed = urllib.parse.urlsplit(newurl)
+        require(parsed.scheme == "https" and not parsed.username and not parsed.password,
+                "发行下载不允许重定向到非 HTTPS 或包含凭据的地址。")
+        return super().redirect_request(request, fp, code, message, headers, newurl)
+
+
+def download(url, limit, target=None):
+    parsed = urllib.parse.urlsplit(url)
+    require(parsed.scheme == "https" and parsed.hostname and not parsed.username and not parsed.password,
+            "下载地址必须是 HTTPS。")
+    context = ssl.create_default_context()
+    context.minimum_version = ssl.TLSVersion.TLSv1_3
+    opener = urllib.request.build_opener(urllib.request.ProxyHandler({}), HTTPSRedirect(),
+                                        urllib.request.HTTPSHandler(context=context))
+    started, total, parts = time.monotonic(), 0, []
+    request = urllib.request.Request(url, headers={"User-Agent": "ServerFleet-Installer/" + VERSION})
+    with opener.open(request, timeout=30) as response:
+        require(response.status == 200, "发行下载返回非 200。")
+        with contextlib.ExitStack() as stack:
+            output = stack.enter_context(target.open("xb")) if target else None
+            if output:
+                os.fchmod(output.fileno(), 0o600)
+            while True:
+                block = response.read(min(1 << 20, limit + 1 - total))
+                if not block:
+                    break
+                total += len(block)
+                require(total <= limit and time.monotonic() - started < 300, "发行下载超出大小或时间限制。")
+                if output:
+                    output.write(block)
+                else:
+                    parts.append(block)
+    return b"".join(parts) if target is None else None
+
+
+def release_checksums(path, expected):
+    require(re.fullmatch(r"[0-9a-f]{64}", expected or "") and file_hash(path) == expected,
+            "SHA256SUMS 与下载阶段独立保存的指纹不符。")
+    with path.open("rb") as stream:
+        raw = stream.read(4097)
+    require(len(raw) <= 4096, "发行摘要文件过大。")
+    result = {}
+    for line in raw.decode("ascii").splitlines():
+        match = re.fullmatch(r"([0-9a-f]{64})  ([A-Za-z0-9_.-]+)", line)
+        require(match is not None and match[2] not in result, "发行摘要格式或文件名重复。")
+        result[match[2]] = match[1]
+    names = {f"serverfleet_{VERSION}_linux_{arch}.tar.gz" for arch in ARCHIVES} | {"build-manifest.json"}
+    require(set(result) == names, "不是本版本的完整官方发行摘要。")
+    return result
+
+
+def fetch(args):
+    require(os.geteuid() != 0, "请以普通用户下载离线材料，避免离线签名阶段所有者不匹配。")
+    output = absolute(ask(args.output, "新的发行下载目录", f"~/serverfleet-download-{VERSION}"))
+    require(not output.exists(), "下载目录必须为新目录。")
+    api = f"https://api.github.com/repos/{REPOSITORY}"
+    release = json.loads(download(api + f"/releases/tags/v{VERSION}", 256 << 10), object_pairs_hook=unique_object)
+    require(release.get("tag_name") == "v" + VERSION and not release.get("draft") and not release.get("prerelease"), "正式发行尚未就绪。")
+    assets = {entry["name"]: entry for entry in release["assets"]}
+    require("SHA256SUMS" in assets, "发行缺少摘要。")
+    output.mkdir(mode=0o700)
+    asset = assets["SHA256SUMS"]
+    require(re.fullmatch(r"sha256:[0-9a-f]{64}", asset.get("digest", "")), "GitHub 未提供发行摘要文件的可信下载摘要。")
+    download(asset["browser_download_url"], 4096, output / "SHA256SUMS")
+    fingerprint = asset["digest"][7:]
+    hashes = release_checksums(output / "SHA256SUMS", fingerprint)
+    for name, sha in hashes.items():
+        require(name in assets and assets[name].get("digest") == "sha256:" + sha, "发行 API 与 SHA256SUMS 不一致。")
+        download(assets[name]["browser_download_url"], 256 << 20, output / name)
+        require(file_hash(output / name) == sha, "发行文件下载摘要不匹配。")
+    manifest = read_json(output / "build-manifest.json", 1 << 20)
+    tag = json.loads(download(api + f"/git/ref/tags/v{VERSION}", 16384))
+    require(manifest["version"] == VERSION and manifest["sequence"] == SEQUENCE
+            and tag["object"]["type"] == "commit" and manifest["commit"] == tag["object"]["sha"], "发行与标签源码不一致。")
+    files = {entry["path"]: entry for entry in manifest["files"]}
+    for name in ("setup.py", "install.sh", "raw-install.sh"):
+        data = download(RAW_ORIGIN + "/" + name, 128 << 10)
+        entry = files["deployment/" + name]
+        require(len(data) == entry["bytes"] and digest(data) == entry["sha256"], "raw 安装脚本与发行源码不一致。")
+        write_new(output / name, data)
+    print("发行与安装脚本下载完成：", output)
+    print("请独立保存 SHA256SUMS SHA256:", fingerprint)
+    print("将该目录带入离线环境，普通用户运行：python3 setup.py prepare --offline-ack")
+
+
 def prepare(args):
     require(args.offline_ack, "签名仅在离线机器执行：断网后使用 prepare --offline-ack。")
     require(os.geteuid() != 0, "离线签名请使用普通用户运行，不能使用 sudo。")
-    version = "0.9.1"
+    version = VERSION
+    checksums = absolute(ask(args.checksums, "下载的 SHA256SUMS 文件", str(ROOT / "SHA256SUMS")))
+    pinned = release_checksums(checksums, ask(args.checksums_sha256, "下载阶段独立记录的 SHA256SUMS SHA256"))
     sources = {arch: absolute(ask(getattr(args, arch), f"{arch} 发行压缩包路径",
-                                f"serverfleet_{version}_linux_{arch}.tar.gz")) for arch in ARCHIVES}
+                                str(ROOT / f"serverfleet_{version}_linux_{arch}.tar.gz"))) for arch in ARCHIVES}
     for arch, path in sources.items():
-        require(path.is_file() and file_hash(path) == ARCHIVES[arch], f"{arch} 压缩包与 v0.9.1 官方固定摘要不符。")
+        require(path.is_file() and file_hash(path) == pinned[f"serverfleet_{version}_linux_{arch}.tar.gz"], f"{arch} 压缩包与固定发行摘要不符。")
     output = absolute(ask(args.output, "新的公开文件包输出目录", "serverfleet-installation-public"))
     key_dir = absolute(ask(args.key_directory, "离线发行密钥目录（不能上传）", "~/serverfleet-offline/keys"))
     key_id = ask(args.key_id, "发行密钥 ID", "release-2026")
     require(re.fullmatch(r"[A-Za-z0-9_-]{1,128}", key_id), "发行密钥 ID 无效。")
     require(not output.exists() and output != key_dir and output not in key_dir.parents and key_dir not in output.parents,
             "输出必须是新的目录，且与离线密钥目录互不包含。")
-    installer = absolute(ask(args.installer, "与本脚本同一提交的 install.sh 路径", str(ROOT / "install.sh")))
+    installer = absolute(ask(args.installer, "与本脚本同一提交的 raw-install.sh 路径", str(ROOT / "raw-install.sh")))
     require(installer.is_file() and installer.stat().st_size <= 128 << 10, "安装器文件无效。")
     with tempfile.TemporaryDirectory(prefix="sf-offline-") as temp:
         work = pathlib.Path(temp)
@@ -235,7 +327,7 @@ def prepare(args):
                     "发行压缩包顶层目录不符合官方格式。")
             private_tree(extracted[arch])
             manifest, _ = manifest_files(extracted[arch], arch)
-            require(manifest["version"] == version and manifest["sequence"] == 2, "不是预期的 v0.9.1 / sequence 2。")
+            require(manifest["version"] == version and manifest["sequence"] == SEQUENCE, "不是本次修复发行的版本与 sequence。")
         native_arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
         require(native_arch is not None, "离线主机需要 Linux amd64/arm64。")
         controller = extracted[native_arch] / "controller"
@@ -261,7 +353,7 @@ def prepare(args):
         for file in sorted(publish.rglob("*")):
             if file.is_file():
                 inventory[file.relative_to(publish).as_posix()] = {"sha256": file_hash(file), "bytes": file.stat().st_size}
-        trust = {"format": 1, "version": version, "minimumSequence": 2, "keyId": key_id,
+        trust = {"format": 1, "version": version, "minimumSequence": SEQUENCE, "keyId": key_id,
                  "publicKey": keys[key_id], "files": inventory}
         write_json(output / "trust.json", trust)
         verify_bundle(output, file_hash(output / "trust.json"))
@@ -344,7 +436,7 @@ def systemd_word(value):
     return '"' + value.replace("\\", "\\\\").replace('"', '\\"').replace("%", "%%").replace("$", "$$") + '"'
 
 
-def controller_state(service):
+def controller_state(service, allow_catalog=False):
     require(re.fullmatch(r"[A-Za-z0-9_.@-]+\.service", service) and service != SERVICE, "主控服务名无效。")
     data = run(["systemctl", "show", service, "--property=MainPID,User,Group,FragmentPath,ActiveState,RootDirectory,RootImage,DynamicUser,Type,ExecStart"])
     properties = dict(line.split("=", 1) for line in data.decode().splitlines() if "=" in line)
@@ -364,7 +456,7 @@ def controller_state(service):
     values = flag_values(argv)
     require(not values.get("resident-supervisor") and "db" in values and "origin" in values
             and values.get("agent-pki-mode", "provisioned") == "provisioned", "需要直接运行、已配置离线 Root/在线 Intermediate 的正式 Controller。")
-    require("installation-catalog" not in values, "服务已配置 installation-catalog；请检查原目录，向导不覆盖已有配置。")
+    require(allow_catalog or "installation-catalog" not in values, "服务已配置 installation-catalog；升级本向导创建的分发请使用 update。")
     for name in ("db", "tls-cert", "tls-key"):
         require(name in values and pathlib.Path(values[name]).is_absolute(), "主控 db/tls-cert/tls-key 必须使用绝对路径。")
     require(re.fullmatch(r"[0-9a-f]{64}", values.get("agent-root-pin", "")), "主控缺少已核对的内部 Root 指纹。")
@@ -438,6 +530,16 @@ def pinned_get(url, ips, ca, limit):
     raise SetupError("固定 IP / TLS1.3 / 证书链验证失败；请核对地址和服务端日志。") from last
 
 
+def wait_pinned_get(url, ips, ca, limit):
+    for attempt in range(20):
+        try:
+            return pinned_get(url, ips, ca, limit)
+        except SetupError:
+            if attempt == 19:
+                raise
+            time.sleep(1)
+
+
 def owned_root_parent(path):
     require(path == path.resolve() and not path.exists(), "安装目录必须为不含链接的新绝对路径。")
     for ancestor in path.parents:
@@ -468,7 +570,7 @@ def configure(args):
     authority = values.get("agent-authority")
     require(authority is not None and authority == controller.netloc
             and values.get("agent-server-name", controller.hostname) == controller.hostname,
-            "v0.9.1 的 catalog 绑定管理 Origin：须为相同直连 mTLS 域名/端口。分离入口不能自动套用。")
+            "当前 catalog 绑定管理 Origin：须为相同直连 mTLS 域名/端口。分离入口不能自动套用。")
     # Reachability is tested against actual pinned addresses, never environment proxies.
     ips = addresses(ask(args.addresses, "主控可直达的固定 IP（多个用逗号分隔）"))
     require(any(ipaddress.ip_address(ip).version == 4 for ip in ips), "当前分发服务至少需要一个可直达的固定 IPv4。")
@@ -510,9 +612,11 @@ def configure(args):
                    "version": trust["version"], "keyId": trust["keyId"], "publicKey": trust["publicKey"],
                    "minimumSequence": trust["minimumSequence"]}, "identityRootPem": identity, "httpsRootPem": ca,
                    "controllerOrigin": values["origin"], "controllerAddresses": ips, "rootPin": values["agent-root-pin"],
-                   "installerScript": downloads("install.sh"),
+                   "installerScript": {"url": args.installer_url or RAW_INSTALLER, "sha256": trust["files"]["install.sh"]["sha256"]},
                    "bootstrap": {arch: downloads(trust["version"] + "/" + arch + "/controller") for arch in ARCHIVES}}
         print(f"校验通过：{service}；发行 {trust['version']}；分发入口 {source_origin}")
+        script = download(catalog["installerScript"]["url"], 128 << 10)
+        require(digest(script) == catalog["installerScript"]["sha256"], "raw 安装入口与离线固定的脚本摘要不符。")
         if args.check:
             print("CHECK_OK：未修改主控配置或 systemd。")
             return
@@ -594,6 +698,124 @@ def configure(args):
             raise
 
 
+def atomic_json(path, value, uid, gid, mode):
+    """Replace a known config through a pinned directory, never chown a path."""
+    parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+    name = ".sf-next-" + os.urandom(12).hex()
+    try:
+        fd = os.open(name, os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW, mode, dir_fd=parent)
+        with os.fdopen(fd, "wb") as stream:
+            os.fchmod(stream.fileno(), mode)
+            os.fchown(stream.fileno(), uid, gid)
+            stream.write((json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode())
+            stream.flush()
+            os.fsync(stream.fileno())
+        os.replace(name, path.name, src_dir_fd=parent, dst_dir_fd=parent)
+        os.fsync(parent)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.unlink(name, dir_fd=parent)
+        os.close(parent)
+
+
+def update(args):
+    require(os.geteuid() == 0, "分发更新需要 sudo。")
+    service = ask(args.service, "原主控 systemd 服务名", "serverfleet-controller.service")
+    properties, user, argv, values = controller_state(service, allow_catalog=True)
+    base = absolute(args.directory or "/var/lib/serverfleet-installation")
+    require(base.is_dir() and base.stat().st_uid == 0 and not base.stat().st_mode & 0o022, "需要原向导创建的 root 所有目录。")
+    receipt_file = base / "receipt.json"
+    require(receipt_file.stat().st_uid == 0 and not receipt_file.is_symlink(), "原安装回执所有者或类型异常。")
+    receipt = read_json(receipt_file)
+    require(receipt.get("service") == service and receipt.get("state") == "READY_PENDING_NODE_ACCEPTANCE", "原分发未完成或服务不匹配。")
+    catalog_file = base / "controller-config/installation-catalog.json"
+    require(values.get("installation-catalog") == str(catalog_file), "实际主控没有绑定本目录的 catalog。")
+    require(not catalog_file.is_symlink() and catalog_file.stat().st_uid == user.pw_uid
+            and stat.S_IMODE(catalog_file.stat().st_mode) == 0o600, "原 catalog 类型、所有者或权限异常。")
+    old_catalog, old_server = read_json(catalog_file), read_json(base / "server.json", 1 << 20)
+    require(old_catalog["rootPin"] == values["agent-root-pin"] and old_catalog["controllerOrigin"] == values["origin"]
+            and old_server["directory"] == str(base / "publish"), "原信任或分发目录绑定异常。")
+    bundle = absolute(ask(args.bundle, "新的签名公开文件包路径"))
+    expected = ask(args.trust_sha256, "新的离线 trust.json SHA256")
+    with tempfile.TemporaryDirectory(prefix="sf-update-") as temp:
+        stage = pathlib.Path(temp) / "bundle"
+        extract(bundle, stage)
+        trust = verify_bundle(stage, expected)
+        old_version = tuple(map(int, old_catalog["source"]["version"].split(".")))
+        require(tuple(map(int, trust["version"].split("."))) > old_version
+                and trust["minimumSequence"] > old_catalog["source"]["minimumSequence"], "分发更新必须提升版本和 sequence。")
+        script_url = args.installer_url or RAW_INSTALLER
+        require(digest(download(script_url, 128 << 10)) == trust["files"]["install.sh"]["sha256"], "新的 raw 安装器摘要不符。")
+        catalog = json.loads(json.dumps(old_catalog))
+        catalog["source"].update(version=trust["version"], minimumSequence=trust["minimumSequence"],
+                                 keyId=trust["keyId"], publicKey=trust["publicKey"])
+        catalog["installerScript"] = {"url": script_url, "sha256": trust["files"]["install.sh"]["sha256"]}
+        for arch in ARCHIVES:
+            name = trust["version"] + "/" + arch + "/controller"
+            catalog["bootstrap"][arch] = {"url": catalog["source"]["origin"] + "/" + name,
+                                           "sha256": trust["files"][name]["sha256"]}
+        server = json.loads(json.dumps(old_server))
+        server["files"].update({name: item for name, item in trust["files"].items() if name != "install.sh"})
+        target = base / "publish" / trust["version"]
+        require(not target.exists() and not target.is_symlink(), "版本目录已存在，拒绝覆盖。")
+        if args.check:
+            print("UPDATE_CHECK_OK：未修改既有分发或服务。")
+            return
+        require(controller_state(service, allow_catalog=True)[2] == argv, "校验期间主控启动参数变化。")
+        shutil.copytree(stage / "publish" / trust["version"], target)
+        for path in [target, *target.rglob("*")]:
+            path.chmod(0o555 if path.is_dir() else 0o444)
+        try:
+            atomic_json(base / "server.json", server, 0, 0, 0o644)
+            run(["systemctl", "restart", SERVICE])
+            for arch in ARCHIVES:
+                name = trust["version"] + "/" + arch + "/installation.manifest.json"
+                raw = wait_pinned_get(catalog["source"]["origin"] + "/" + name,
+                                 catalog["source"]["addresses"], catalog["source"]["rootPem"], 256 << 10)
+                require(digest(raw) == trust["files"][name]["sha256"], "新的分发 HTTPS 清单验证失败。")
+            atomic_json(catalog_file, catalog, user.pw_uid, user.pw_gid, 0o600)
+            run(["systemctl", "restart", service])
+            ready = json.loads(wait_pinned_get(values["origin"] + "/readyz", catalog["controllerAddresses"], catalog["httpsRootPem"], 8192))
+            require(ready.get("status") == "ready" and running_argv(service) == argv, "主控未恢复原参数及就绪状态。")
+            receipt.update(trustSha256=expected, version=trust["version"])
+            atomic_json(receipt_file, receipt, 0, 0, 0o600)
+            print("分发已更新；旧版本文件保留，刷新“添加节点”取得 raw 安装命令。")
+            print("这不会替换正在运行的 Controller 程序；主控本身须升级到修复版。")
+        except BaseException:
+            atomic_json(catalog_file, old_catalog, user.pw_uid, user.pw_gid, 0o600)
+            atomic_json(base / "server.json", old_server, 0, 0, 0o644)
+            subprocess.run(["systemctl", "restart", SERVICE], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            subprocess.run(["systemctl", "restart", service], check=False, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            print("更新失败，已尝试恢复原 catalog 和分发索引；新版本文件保留供检查。", file=sys.stderr)
+            raise
+
+
+def install_controller(args):
+    require(os.geteuid() == 0, "主控系统服务安装需要 sudo。")
+    config = absolute(ask(args.config, "已准备的私有 Controller 安装 JSON 路径"))
+    doc = read_json(config, 128 << 10)
+    require(doc.get("provision", {}).get("component") == "controller", "此入口只安装 Controller。")
+    bundle = absolute(ask(args.bundle, "签名公开文件包路径"))
+    expected = ask(args.trust_sha256, "离线 trust.json SHA256")
+    user = ask(args.system_user, "专用普通服务账户", "serverfleet")
+    with tempfile.TemporaryDirectory(prefix="sf-controller-") as temp:
+        stage = pathlib.Path(temp) / "bundle"
+        extract(bundle, stage)
+        trust = verify_bundle(stage, expected)
+        require(doc["source"]["version"] == trust["version"] and doc["source"]["publicKey"] == trust["publicKey"]
+                and doc["source"]["keyId"] == trust["keyId"] and doc["source"]["minimumSequence"] == trust["minimumSequence"],
+                "安装配置与签名公开文件包的信任绑定不一致。")
+        arch = {"x86_64": "amd64", "aarch64": "arm64"}.get(platform.machine())
+        require(arch is not None, "只支持 Linux amd64/arm64。")
+        binary = stage / "publish" / trust["version"] / arch / "controller"
+        binary.chmod(0o700)
+        command = [binary, "install", "-component", "controller", "-config", config, "-system-user", user]
+        if args.check:
+            command.append("-check")
+        # Preserve the terminal for the existing installer; never capture tokens.
+        require(subprocess.run(list(map(str, command)), check=False).returncode == 0, "主控安装未完成，保留原运行目录并按原配置续装。")
+
+
 class PublicServer(http.server.ThreadingHTTPServer):
     daemon_threads = True
     request_queue_size = 16
@@ -667,7 +889,7 @@ def public_handler(directory, files):
 
 def serve(args):
     require(os.geteuid() != 0, "分发服务必须以普通用户运行。")
-    config = read_json(absolute(args.config))
+    config = read_json(absolute(args.config), 1 << 20)
     directory = absolute(config["directory"])
     for name, entry in config["files"].items():
         require(relative_name(name) and file_hash(directory / name) == entry["sha256"], "分发文件启动校验失败。")
@@ -687,28 +909,43 @@ def main(argv=None):
     sub = parser.add_subparsers(dest="command")
     prep = sub.add_parser("prepare", help="离线：验证官方包并生成仅含公开材料的签名包")
     prep.add_argument("--offline-ack", action="store_true")
-    for option in ("amd64", "arm64", "output", "key-directory", "key-id", "installer"):
+    for option in ("amd64", "arm64", "output", "key-directory", "key-id", "installer", "checksums", "checksums-sha256"):
         prep.add_argument("--" + option)
     config = sub.add_parser("configure", help="在线：识别已有主控，部署 HTTPS 分发并启用 catalog")
     for option in ("service", "bundle", "trust-sha256", "addresses", "https-root", "directory"):
         config.add_argument("--" + option)
     config.add_argument("--port", type=int)
     config.add_argument("--check", action="store_true", help="只校验输入，不修改服务")
+    config.add_argument("--installer-url", help="默认使用本版本 raw.githubusercontent.com 安装入口")
+    updater = sub.add_parser("update", help="更新原向导创建的分发，保留旧版本文件与原主控身份")
+    for option in ("service", "bundle", "trust-sha256", "directory", "installer-url"):
+        updater.add_argument("--" + option)
+    updater.add_argument("--check", action="store_true")
+    downloader = sub.add_parser("fetch", help="在线下载并校验官方发行与离线签名工具")
+    downloader.add_argument("--output")
+    controller = sub.add_parser("install-controller", help="用已核对的签名包引导原生 Controller 安装器")
+    for option in ("config", "bundle", "trust-sha256", "system-user"):
+        controller.add_argument("--" + option)
+    controller.add_argument("--check", action="store_true")
     server = sub.add_parser("serve", help=argparse.SUPPRESS)
     server.add_argument("--config", required=True)
     args = parser.parse_args(argv)
     if args.command is None:
-        print("Server Fleet 安装向导\n1. 为已有主控启用节点一键安装\n2. 在离线机器制作签名公开文件包")
+        print("Server Fleet 安装向导\n1. 为已有主控启用节点一键安装\n2. 在离线机器制作签名公开文件包\n3. 在线下载发行与签名工具\n4. 更新已有安装分发")
         choice = ask(None, "选择", "1")
-        require(choice in ("1", "2"), "无效选项。")
+        require(choice in ("1", "2", "3", "4"), "无效选项。")
         if choice == "2":
             print("离线机器使用普通用户运行；仅在已经断网时确认。")
             require(ask(None, "输入 OFFLINE 确认本机已断网") == "OFFLINE", "取消签名。")
-        return main(["configure"] if choice == "1" else ["prepare", "--offline-ack"])
+        return main({"1": ["configure"], "2": ["prepare", "--offline-ack"], "3": ["fetch"], "4": ["update"]}[choice])
     if args.command == "prepare":
         return prepare(args)
     if args.command == "serve":
         return serve(args)
+    if args.command == "fetch":
+        return fetch(args)
+    if args.command == "install-controller":
+        return install_controller(args)
     lock_path = "/run/serverfleet-installation-setup.lock"
     require(os.geteuid() == 0, "请使用 sudo 运行在线配置。")
     with os.fdopen(os.open(lock_path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW, 0o600), "w") as lock:
@@ -716,7 +953,7 @@ def main(argv=None):
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         except BlockingIOError:
             raise SetupError("另一个安装向导正在运行。") from None
-        return configure(args)
+        return update(args) if args.command == "update" else configure(args)
 
 
 if __name__ == "__main__":

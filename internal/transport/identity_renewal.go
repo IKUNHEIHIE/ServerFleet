@@ -85,6 +85,11 @@ func (s *EnrollmentService) RenewIdentity(ctx context.Context, state tls.Connect
 				return ErrEnrollmentRejected
 			}
 			out = renewalResult(prior.Certificate, id.NodeID, s.issuer.generation)
+			var err error
+			out.CertificatePEM, err = s.issuer.responsePEM(prior.Certificate)
+			if err != nil {
+				return err
+			}
 			return nil
 		}
 		// Do not issue hours early on every heartbeat. A retry returns the same leaf.

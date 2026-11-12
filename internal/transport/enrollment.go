@@ -324,7 +324,11 @@ func (s *EnrollmentService) Submit(ctx context.Context, input AgentEnrollmentInp
 					return nil
 				}
 				result.NodeID = id.NodeID
-				result.CertificatePEM = record.Certificate.PEM
+				var err error
+				result.CertificatePEM, err = s.issuer.responsePEM(record.Certificate)
+				if err != nil {
+					return err
+				}
 				result.TrustGeneration = id.TrustGeneration
 				result.ExpiresAt = record.Certificate.Expires
 			}
