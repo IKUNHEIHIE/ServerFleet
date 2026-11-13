@@ -1,5 +1,7 @@
 # Server Fleet：核心代码运行说明
 
+主控与 Agent 共用 [raw 安装入口](RAW-INSTALL.md)。v0.9.2 修复 provisioned 证书链重复 Intermediate/缺 Root；不要继续用 v0.9.1 包安装新主控，原部署先按 [UPGRADE.md](UPGRADE.md) 升级实际程序，原签名分发再用 `update-distribution` 更新。
+
 已有主控的“尚未配置可信安装分发”可用[安装向导](QUICK-SETUP.md)处理：`sudo python3 deployment/setup.py`。离线签名准备与在线启用均自动整理文件，不手写 catalog；全新主控初始化仍见下文。
 
 五项核心功能的正式源码、Web入口与本机部署工具一并交付；实际联调、找bug与故障演练由操作者执行。程序在Linux amd64/arm64普通用户下运行。发布签名、Root权限和恢复激活仍有各自的显式授权边界，不因代码交付自动放行。
@@ -8,11 +10,11 @@
 
 ## 构建与目录
 
-准备Go1.27.3、Node24.22.1、npm11，在干净且已提交的源码目录执行：
+准备Go1.27.4、Node24.22.1、npm11，在干净且已提交的源码目录执行：
 
 ```sh
 npm ci
-node scripts/build-release.mjs --version=0.9.0 --sequence=1 --output=/home/serverfleet/release
+node scripts/build-release.mjs --version=0.9.2 --sequence=3 --output=/home/serverfleet/release
 ```
 
 输出两个架构的controller、agent、正式web、规范manifest及本说明/示例；不会签名、启动或安装服务。输出父目录需已存在；runtime安装父目录由运行用户所有、0700，配置/CA/令牌文件0600。runtime必须是新目录，路径为规范绝对路径，仅含字母/数字/下划线/点/斜杠/横杠，以供生成的shell和用户服务安全引用。示例中的域名、IP、nodeId、公钥和指纹均须替换。

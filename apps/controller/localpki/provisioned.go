@@ -258,7 +258,7 @@ func LoadProvisioned(directory, expectedRootPin string) (*Material, error) {
 	}
 	roots := x509.NewCertPool()
 	roots.AddCert(anchor)
-	signer, err := transport.NewCertificateIssuer(issuer.Raw, key, roots, [][]byte{issuer.Raw}, pin, document.Generation, IssuerLifetime)
+	signer, err := transport.NewCertificateIssuer(issuer.Raw, key, roots, [][]byte{anchor.Raw}, pin, document.Generation, IssuerLifetime)
 	if err != nil {
 		return nil, err
 	}

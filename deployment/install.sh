@@ -10,7 +10,10 @@ ARM64_SHA=
 SYSTEM_USER=
 CONFIG=
 CHECK=
+BOOTSTRAP_CA=
+COMPONENT=
 while [ "$#" -gt 0 ]; do
+ [ "$#" -ge 2 ] || [ "$1" = --check ] || { printf '%s\n' 'Installer option requires a value.' >&2; exit 2; }
  case "$1" in
   --config-base64) CONFIG_BASE64=$2; shift 2 ;;
   --config) CONFIG=$2; shift 2 ;;
@@ -19,6 +22,8 @@ while [ "$#" -gt 0 ]; do
   --arm64-url) ARM64_URL=$2; shift 2 ;;
   --arm64-sha256) ARM64_SHA=$2; shift 2 ;;
   --system-user) SYSTEM_USER=$2; shift 2 ;;
+  --bootstrap-ca-base64) BOOTSTRAP_CA=$2; shift 2 ;;
+  --component) COMPONENT=$2; shift 2 ;;
   --check) CHECK=1; shift ;;
   *) printf '%s\n' 'Invalid installer option.' >&2; exit 2 ;;
  esac
@@ -45,11 +50,19 @@ if [ -n "$CONFIG_BASE64" ]; then
  CONFIG=$TEMP/install.json
 fi
 [ -n "$CONFIG" ] || { printf '%s\n' 'A private installation config is required.' >&2; exit 2; }
+case "$COMPONENT" in ''|controller|agent) ;; *) printf '%s\n' 'Invalid installation component.' >&2; exit 2 ;; esac
+set --
+if [ -n "$BOOTSTRAP_CA" ]; then
+ printf '%s' "$BOOTSTRAP_CA" | base64 --decode > "$TEMP/bootstrap-ca.pem"
+ chmod 600 "$TEMP/bootstrap-ca.pem"
+ set -- --cacert "$TEMP/bootstrap-ca.pem"
+fi
 # No redirect, environment proxy, retry or insecure TLS fallback.
-curl --fail --silent --show-error --proto '=https' --tlsv1.3 --noproxy '*' --max-time 180 --max-filesize 268435456 "$URL" --output "$TEMP/controller"
+curl --fail --silent --show-error --proto '=https' --tlsv1.3 --noproxy '*' --max-time 180 --max-filesize 268435456 "$@" "$URL" --output "$TEMP/controller"
 printf '%s  %s\n' "$SHA" "$TEMP/controller" | sha256sum --check --status
 chmod 700 "$TEMP/controller"
 set -- install -config "$CONFIG"
 [ -z "$SYSTEM_USER" ] || set -- "$@" -system-user "$SYSTEM_USER"
+[ -z "$COMPONENT" ] || set -- "$@" -component "$COMPONENT"
 [ -z "$CHECK" ] || set -- "$@" -check
 "$TEMP/controller" "$@"

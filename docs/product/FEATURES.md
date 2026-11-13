@@ -1,5 +1,7 @@
 # v0.9 现行功能说明
 
+> v0.9.2 / R39：修复正式 provisioned 入网/续期的重复 Intermediate 与缺 Root；历史有效回执保留同一叶证书修复公开链。新增 [raw 主控/Agent 安装入口](../../deployment/RAW-INSTALL.md)、发行材料下载/校验及既有分发升级；离线密钥、权限/审批与 UNKNOWN 约束不变，无新迁移。真实 Agent CLI 入网回归不替代真实 VPS/root 验收。
+
 > v0.9.1 / R37：新增 Agent 身份续期与安全切换、明确接入读取授权、只读升级预检、通用就绪和有界节点诊断。现行迁移共50项（旧49项不变）。行为与接口见 [身份运维说明](../development/IDENTITY-OPERATIONS.md)，升级/反代见仓库 deployment/UPGRADE.md 与 deployment/REVERSE-PROXY.md；旧审计/CI记录仅说明其当时基线。
 
 

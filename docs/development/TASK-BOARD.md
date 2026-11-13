@@ -1,5 +1,13 @@
 # 任务登记板
 
+## 当前：provisioned 证书链与 raw 安装入口（2026-11-13 R39）
+
+V09-PKI-RAW-01 / chatgpt-pki-raw-20261113，单会话主控；独立 ServerFleet-pki-raw / fix/pki-chain-raw-installer-20261113，从 main e1acfbd / Git tree98d1c27f核对恢复，旧目录不改。用户明确修复 provisioned 重复 Intermediate/缺少 Root 的阻断，并要求 raw.githubusercontent.com 脚本安装主控和 Agent。允许 localpki/transport 证书链构造与同叶旧回执响应修复、bootstrap 安装组件绑定、真实跨层回归、根安装入口/原生安装器/分发向导及其公开下载、现有分发升级和界面生成命令、现行产品/API/部署/升级说明与 v0.9.2 sequence3 发行/必要 CI，由主控协调共享文件。保持原迁移/SQL/checksum/锁/Proto/gen/批准 ADR 不变；不启其他 Agent、不引入运行时依赖、不访问真实 VPS/供应商或生产 Root/发行私钥。
+
+签发链必须唯一、按签发关系有序并以固定自签 Root 结尾；历史错误回执只允许对已确认的重复 Intermediate 形态补齐公开根链，不重签 leaf/改身份/绕过失效或撤销。raw 只作为安装脚本入口，继续固定安装器/引导程序摘要、验签和 Root pin；离线签名材料不搬上主控。发布新的双架构核心包，不覆盖 v0.9.1。集中编写后做必要专项及最终精确 head CI/安全、COMMENT 复审和 expected-SHA 正常合并；远端状态每十分钟查询。停止于代码、文档、检查、合并、v0.9.2 实际资产核验与可复制命令；实机部署由用户/Qoder执行。
+
+本地集中专项已通过：构造器缺根/重复/乱序/外来根拒绝，旧批准与续期回执同叶修复/证据保留/过期撤销门，显式安装组件绑定和真实 provisioned loader→HTTPS→Agent CLI→持久身份重载（Go race）；24项 Python 安装/下载/独立摘要/raw helper pin/私有 CA/既有分发升级回退检查，8项 Web 命令/旧目录兼容/审批测试，类型检查与7项打包/源码完整性/接口索引/actionlint通过。没有修改迁移或依赖；最终精确 head 的完整 CI、安全、COMMENT 复审、合并与实际 v0.9.2 资产回执在 PR 评论登记，不预先宣称实机已部署。
+
 ## 当前：已有主控的可信安装分发向导（2026-11-13 R38）
 
 V09-INSTALL-WIZARD-01 / chatgpt-install-wizard-20261113，主控单会话；独立 ServerFleet-installer / feature/install-wizard-20261113，从 main8d6b926 的完整 Git 树006e3647恢复。用户因“尚未配置可信安装分发”要求编写一键安装脚本；当前范围为已部署主控启用节点一键安装的交互向导。允许 deployment/setup.py、标准库专项、部署/README/产品/API使用说明、发行打包收录与 CI 专项，由主控协调共享文件。保留原 install.sh/Controller 安装接口、离线 Root/发行签名约束、既有数据库与身份；不引入依赖、不启动其他 Agent，不访问真实 VPS、Root/发行私钥或绕过签名。不把向导称为全新主控零准备安装，不自动接管容器/root服务/冻结监督策略，不覆盖已有配置或 tag/Release。

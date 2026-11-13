@@ -29,4 +29,18 @@ describe("trusted installation", () => {
  it("keeps shell exit inside a subshell and quotes names", () => {
   const cmd = installationCommand(catalog, "serverfleet", "node ' quoted"); expect(cmd.startsWith("(")).toBe(true); expect(cmd.endsWith(")")).toBe(true); expect(cmd).not.toContain("node ' quoted");
  });
+ it("uses a pinned raw entry and passes only the public bootstrap CA", () => {
+  const raw = { ...catalog, source: { ...catalog.source, version: "0.9.2" }, installerScript: { ...catalog.installerScript, url: "https://raw.githubusercontent.com/IKUNHEIHIE/ServerFleet/v0.9.2/deployment/raw-install.sh" } };
+  const command = installationCommand(raw, "serverfleet", "node");
+  expect(command).toContain(raw.installerScript.url);
+  expect(command).toContain(`--bootstrap-ca-base64 '${btoa(catalog.source.rootPem)}'`);
+  expect(command).not.toContain('--cacert "$_sf_install/source-ca.pem"');
+  expect(command).not.toContain("enrollmentToken");
+ });
+ it("preserves old installer flags and supplies a same-origin script CA", () => {
+  const legacy = { ...catalog, source: { ...catalog.source, version: "0.9.1", origin: "https://release.example:443" } };
+  const command = installationCommand(legacy, "serverfleet", "node");
+  expect(command).not.toContain("--bootstrap-ca-base64");
+  expect(command).toContain('--cacert "$_sf_install/source-ca.pem"');
+ });
 });

@@ -14,12 +14,12 @@ on:
       version:
         description: Stable version (without v)
         required: true
-        default: '0.9.1'
+        default: '0.9.2'
         type: string
       sequence:
         description: Positive release sequence
         required: true
-        default: '2'
+        default: '3'
         type: string
 
 permissions:

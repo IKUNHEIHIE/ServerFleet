@@ -6,10 +6,10 @@
       "192.0.2.20"
     ],
     "rootPem": "REPLACE_WITH_RELEASE_HTTPS_CA_PEM",
-    "version": "1.2.3",
+    "version": "0.9.2",
     "keyId": "release-2026",
     "publicKey": "REPLACE_WITH_BASE64_ED25519_PUBLIC_KEY",
-    "minimumSequence": 1
+    "minimumSequence": 3
   },
   "identityRootPem": "REPLACE_WITH_INTERNAL_OFFLINE_ROOT_CA_PEM",
   "httpsRootPem": "REPLACE_WITH_CONTROLLER_HTTPS_CA_PEM",
@@ -19,16 +19,16 @@
   ],
   "rootPin": "REPLACE_WITH_INTERNAL_ROOT_SPKI_SHA256",
   "installerScript": {
-    "url": "https://releases.example.com/install.sh",
+    "url": "https://raw.githubusercontent.com/IKUNHEIHIE/ServerFleet/v0.9.2/deployment/raw-install.sh",
     "sha256": "REPLACE_WITH_SCRIPT_SHA256"
   },
   "bootstrap": {
     "amd64": {
-      "url": "https://releases.example.com/1.2.3/amd64/controller",
+      "url": "https://releases.example.com/0.9.2/amd64/controller",
       "sha256": "REPLACE_WITH_BOOTSTRAP_SHA256"
     },
     "arm64": {
-      "url": "https://releases.example.com/1.2.3/arm64/controller",
+      "url": "https://releases.example.com/0.9.2/arm64/controller",
       "sha256": "REPLACE_WITH_BOOTSTRAP_SHA256"
     }
   }

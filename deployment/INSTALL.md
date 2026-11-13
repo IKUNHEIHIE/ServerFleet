@@ -1,5 +1,7 @@
 # 一键安装与可信发行
 
+v0.9.2 新增同一 [raw.githubusercontent.com 主控/Agent 安装入口](RAW-INSTALL.md)，默认安装目录使用固定版本 raw URL，并验证后续脚本/引导程序摘要及原离线签名。正式 PKI 链与旧回执已修复；先升级实际 Controller，再更新原安装分发。
+
 R31 提供 Linux amd64 / arm64 的 Controller、Agent 安装器与「添加节点 → 生成一键安装命令」正式入口。安装先验证外部提供的安装器 SHA256，再验证离线 Ed25519 签名覆盖的二进制、组件清单和整个 Web 目录。Release 构建不会自动签名或发布。
 
 **已有主控显示“尚未配置可信安装分发”**：优先使用 [setup.py 安装向导](QUICK-SETUP.md)，自动制作离线签名公开包，并在线创建 HTTPS 分发、catalog 与 systemd drop-in。支持条件与不接管的运行方式见该文档；以下保留手动配置说明。

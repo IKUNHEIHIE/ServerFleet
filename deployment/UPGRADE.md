@@ -1,4 +1,14 @@
-# 升级与身份恢复（v0.9.1）
+# 升级与身份恢复（v0.9.2）
+
+## v0.9.2 正式 PKI 证书链修复
+
+先升级实际运行的 Controller，再升级签名安装分发。旧 v0.9.1 Controller 会签出重复 Intermediate，安装向导或新 Agent 不能替代主控程序修复；Root/Intermediate/原数据库和 keyring 不需重建，本版没有新增迁移。
+
+使用新预编译包，核对 SHA256SUMS 并执行下文只读预检，保留原状态备份；已有受监督 runtime 继续通过其受控签名更新/健康检查流程升级，不用另建 runtime 覆盖原数据。由 Qoder 手工维护的直接 systemd 部署，须停止原服务、按原部署记录替换为已校验的新 Controller 程序并保留原参数，再启动核对 `/readyz`；不要仅改 catalog 就认定主控已修复。
+
+旧批准入网或续期回执仍有效时，新 Controller 在响应中把确定的重复 Intermediate 链补齐，保留原 leaf/serial/fingerprint/期限，不重复签发、不改原记录。使用原请求重试即可。**已过期的十分钟入网令牌仍拒绝**：管理员按显式重新接入/替换流程签发新令牌，旧目录保留；尚未完成安装的失败意图需使用新的接入意图/目录，旧 RequestID 不会因换令牌被自动复活。已运行节点则按下文恢复流程保留账本，不清空身份或自动重放任务。
+
+然后用本版 `raw-install.sh download` 获取材料，在离线环境签署 v0.9.2 / sequence3，原向导分发可用 `update-distribution` 更新目录与 catalog，详见 [RAW-INSTALL.md](RAW-INSTALL.md)。旧 v0.9.1 tag/资产不覆盖，不能再作为新主控安装源。
 
 ## 升级前
 

@@ -127,12 +127,16 @@ func RunInstallCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 	systemUser := flags.String("system-user", "", "explicit root-only dedicated service account wrapper")
 	verifyHealth := flags.Bool("verify-health", false, "finish an externally started service using fresh product readiness")
 	checkOnly := flags.Bool("check", false, "preflight inputs and environment without download or installation")
+	expectedComponent := flags.String("component", "", "optional explicit controller/agent binding for the raw installer")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || ctx == nil || ctx.Err() != nil {
 		return errInstallation
 	}
 	d, raw, e := installationReadConfig(*config)
 	if e != nil {
 		return e
+	}
+	if *expectedComponent != "" && (*expectedComponent != "controller" && *expectedComponent != "agent" || d.Provision.Component != *expectedComponent) {
+		return errInstallation
 	}
 	if *systemUser != "" {
 		return runSystemInstallation(ctx, *config, *systemUser, *checkOnly, stdout, stderr)

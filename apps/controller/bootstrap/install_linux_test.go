@@ -36,6 +36,31 @@ func installationFixture(t *testing.T) (installationManifest, map[string][]byte)
 	}
 	return m, files
 }
+
+func TestInstallationExplicitComponentBindingBeforeChanges(t *testing.T) {
+	base := installationPrivateTemp(t)
+	cfg := installationDocument{Format: 1, Directory: filepath.Join(base, "new-install"),
+		Source:      installationSource{Origin: "https://releases.test", Addresses: []string{"192.0.2.1"}, Version: "0.9.2", KeyID: "test", PublicKey: base64.StdEncoding.EncodeToString(make([]byte, 32)), MinimumSequence: 3},
+		ServiceMode: "external", WaitSeconds: 10, Provision: provisionDocument{Component: "controller", RootPin: strings.Repeat("a", 64)}}
+	raw, _ := json.Marshal(cfg)
+	file := filepath.Join(base, "install.json")
+	if err := os.WriteFile(file, raw, 0600); err != nil {
+		t.Fatal(err)
+	}
+	for _, component := range []string{"agent", "other"} {
+		if err := RunInstallCommand(context.Background(), []string{"-config", file, "-component", component, "-check"}, io.Discard, io.Discard); err == nil {
+			t.Fatal("wrong component accepted")
+		}
+		if _, err := os.Stat(cfg.Directory); !os.IsNotExist(err) {
+			t.Fatal("component mismatch changed runtime")
+		}
+	}
+	if os.Geteuid() != 0 {
+		if err := RunInstallCommand(context.Background(), []string{"-config", file, "-component", "controller", "-check"}, io.Discard, io.Discard); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
 func TestInstallationRejectsUntrustedBundlesBeforeExecution(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("requires ordinary user")

@@ -19,8 +19,12 @@ function base64UTF8(s: string) { return btoa(Array.from(new TextEncoder().encode
 export function installationCommand(c: Catalog, user: string, name: string): string {
  const config = { format: 1, directory: `/var/lib/${user}/fleet`, source: c.source, provision: { format: 1, component: "agent", directory: "", artifact: "", manifest: "", supervisorExecutable: "", rootCertificate: "", rootPin: c.rootPin, controllerOrigin: c.controllerOrigin, controllerAddresses: c.controllerAddresses, releaseKeys: {}, agent: { nodeId: "", identityDir: "", name } }, httpsRootPem: c.httpsRootPem, identityRootPem: c.identityRootPem, serviceMode: "external", waitSeconds: 300 };
  const script = c.installerScript;
- const flags = `--config-base64 ${quote(base64UTF8(JSON.stringify(config)))} --amd64-url ${quote(c.bootstrap.amd64.url)} --amd64-sha256 ${quote(c.bootstrap.amd64.sha256)} --arm64-url ${quote(c.bootstrap.arm64.url)} --arm64-sha256 ${quote(c.bootstrap.arm64.sha256)} --system-user ${quote(user)}`;
- return `(_sf_install=$(mktemp -d) && chmod 700 "$_sf_install" && curl --fail --silent --show-error --proto '=https' --tlsv1.3 --noproxy '*' --max-time 60 --max-filesize 131072 ${quote(script.url)} -o "$_sf_install/install.sh" && printf '%s  %s\\n' ${quote(script.sha256)} "$_sf_install/install.sh" | sha256sum --check --status && sh "$_sf_install/install.sh" ${flags}; _sf_result=$?; [ -z "\${_sf_install:-}" ] || rm -rf -- "$_sf_install"; exit "$_sf_result")`;
+ const [major = 0, minor = 0, patch = 0] = c.source.version.split(".").map(Number);
+ const modern = major > 0 || minor > 9 || minor === 9 && patch >= 2;
+ const ca = quote(base64UTF8(c.source.rootPem));
+ const localScriptCA = new URL(script.url).origin === new URL(c.source.origin).origin ? `--cacert "$_sf_install/source-ca.pem" ` : "";
+ const flags = `--config-base64 ${quote(base64UTF8(JSON.stringify(config)))} --amd64-url ${quote(c.bootstrap.amd64.url)} --amd64-sha256 ${quote(c.bootstrap.amd64.sha256)} --arm64-url ${quote(c.bootstrap.arm64.url)} --arm64-sha256 ${quote(c.bootstrap.arm64.sha256)} --system-user ${quote(user)}${modern ? ` --bootstrap-ca-base64 ${ca}` : ""}`;
+ return `(_sf_install=$(mktemp -d) && chmod 700 "$_sf_install" && printf '%s' ${ca} | base64 --decode > "$_sf_install/source-ca.pem" && chmod 600 "$_sf_install/source-ca.pem" && curl --fail --silent --show-error --proto '=https' --tlsv1.3 --noproxy '*' --max-time 60 --max-filesize 131072 ${localScriptCA}${quote(script.url)} -o "$_sf_install/install.sh" && printf '%s  %s\\n' ${quote(script.sha256)} "$_sf_install/install.sh" | sha256sum --check --status && sh "$_sf_install/install.sh" ${flags}; _sf_result=$?; [ -z "\${_sf_install:-}" ] || rm -rf -- "$_sf_install"; exit "$_sf_result")`;
 }
 function InstallationContent() {
  const session = useSession();
