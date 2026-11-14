@@ -2,6 +2,8 @@
 
 **v0.9.2 · 正式 PKI 入网与 raw 安装修复版**
 
+接手开发请先读 **[开发交接入口](docs/development/HANDOFF.md)** 与 **[当前状态及未收尾事项](docs/development/CURRENT-STATE.md)**。完整文档分类见 [文档导航](docs/README.md)；旧任务和原型不代表当前实现状态。
+
 轻量、可自托管的服务器群控系统。通过统一 Web 控制台管理节点、文件、服务、证书、任务与 AI 运维，让多台服务器的日常管理、变更执行和异常处置集中在同一套权限与审计体系中。
 
 ## 核心能力
@@ -21,7 +23,7 @@
 
 各功能的配置前提、实际行为和实现边界见[功能说明](docs/product/FEATURES.md)。
 
-当前补丁修复 Agent 身份自动续期，补充接入读取授权、升级预检、就绪检查与节点诊断。升级和已过期身份恢复请先阅读[升级说明](deployment/UPGRADE.md)，反代部署见[HTTPS 与 mTLS 参考](deployment/REVERSE-PROXY.md)。
+v0.9.1 已加入 Agent 身份自动续期、接入读取授权、升级预检、就绪检查与节点诊断，v0.9.2 继续修复下述正式 PKI 链问题。升级和已过期身份恢复请先阅读[升级说明](deployment/UPGRADE.md)，反代部署见[HTTPS 与 mTLS 参考](deployment/REVERSE-PROXY.md)。
 
 v0.9.2 修复 provisioned 模式重复 Intermediate、缺少 Root 导致 Agent 拒绝入网/续期的问题；旧批准回执保留原 leaf 并修复公开响应链。主控/Agent 共用 [raw 安装入口](deployment/RAW-INSTALL.md)：
 
@@ -96,9 +98,11 @@ node scripts/build-release.mjs --version=0.9.2 --sequence=3 --output=/home/serve
 - 真实供应商、提权、双机灾备、物理 ARM 与硬限制 1 核 1 GB 环境仍需实机联调。首个正式版的命名不表示这些场景或完整 G2／发布验收已经完成。
 - 前端计划进行独立 UI 重构；后续界面变化应保持现有会话、权限、审批和 UNKNOWN 等业务语义，并同步功能及接口文档。
 
-当前核心代码接收基线为 [PR #25](https://github.com/IKUNHEIHIE/ServerFleet/pull/25)。其[精确提交 CI](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/43064893665)通过：Go **1056 PASS／11 SKIP／0 FAIL**，Web **437 PASS**，安全扫描及 Linux 双架构构建通过。交叉构建和自动检查不替代上述实机验收；后续提交以各自 CI 结果为准。
+当前代码/发布证据基线为 [PR #31](https://github.com/IKUNHEIHIE/ServerFleet/pull/31)，main `c6204762c7fb285c475b619886474351c26dca31`。[最终 PR head CI](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/43286304878)、[合并后 CI](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/43366199102)与[发行工作流](https://github.com/IKUNHEIHIE/ServerFleet/actions/runs/43366199340)成功。历史测试计数不挪作本次结果，自动检查不替代实机验收；后续 main 变化以各自证据为准，详见[当前状态](docs/development/CURRENT-STATE.md)。
 
 ## 开发与贡献
+
+先读 [HANDOFF](docs/development/HANDOFF.md)。以下是代码检查命令；纯文档变更按用户要求仅做文档核对，不运行完整 CI。
 
 ```sh
 npm ci

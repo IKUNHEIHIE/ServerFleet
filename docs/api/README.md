@@ -1,5 +1,7 @@
 # 当前接口说明
 
+核对：2026-11-14 / v0.9.2。先读 [开发交接](../development/HANDOFF.md)、[当前状态](../development/CURRENT-STATE.md)。本文及增量修订用于定位实际接口，未宣称统一 OpenAPI 已全字段核验/冻结。
+
 v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完整证书链及有效旧回执的公开 PEM 响应，不新增业务路由或字段；撤销/过期/代次校验不变。安装 catalog 的既有 url/sha256 默认用于固定版本 raw 安装入口，新版命令增加公开 bootstrap CA，令牌仍不进入命令。
 
 安装目录的 `GET /api/v1/installations/catalog` 仍须管理员会话；未配置时返回 `200 {"available":false}`，不是注册失败或应跳过的安全门。符合条件的已有主控可用[安装向导](../../deployment/QUICK-SETUP.md)生成公开信任材料与私有 catalog 配置；向导不新增业务接口，不代替管理员登录、令牌生成或节点审批。完成后须登录确认 `available:true` 并实际接入节点，不能仅凭 systemd 启动成功判定安装完成。
@@ -7,7 +9,7 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 > v0.9.1 / R37：新增 Agent 身份续期与安全切换、明确接入读取授权、只读升级预检、通用就绪和有界节点诊断。现行迁移共50项（旧49项不变）。行为与接口见 [身份运维说明](../development/IDENTITY-OPERATIONS.md)，升级/反代见仓库 deployment/UPGRADE.md 与 deployment/REVERSE-PROXY.md；旧审计/CI记录仅说明其当时基线。
 
 
-2026-11-12 / R34。供前端/脚本/联调定位实际接口；不是G2冻结声明。先读安全和状态语义，再从[路由索引](ROUTES.md)进入实际处理器及对应候选。可机读索引：[route-inventory.json](route-inventory.json)。
+供前端/脚本/联调定位实际接口；先读安全和状态语义，再从[路由索引](ROUTES.md)进入实际处理器及对应候选。可机读索引：[route-inventory.json](route-inventory.json)，数量以生成结果为准，不沿用 R34 旧计数。
 
 ## 入口与认证
 
@@ -15,7 +17,7 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 - 全局功能权限与节点资源权限同时生效。管理员没有隐式的所有节点授权。服务组任务使用冻结成员/修订；每次执行、帧和敏感响应还要复核当前授权、隔离门、审批与凭据版本。
 - 受限令牌管理使用Cookie会话：`GET/POST /auth/tokens`、`DELETE /auth/tokens/{tokenId}`。目前正式节点/任务HTTP仍使用Cookie认证，**尚无生产Bearer读取适配**；`AuthorizeRestrictedToken`/`BearerCommitGate`属于校验端口，不能将管理成功等同于Bearer可用。令牌仅设计为script-read、nodes.read/tasks.read、1—200显式节点、60—3600秒，不允许写入/AI/插件/注册/执行。
 - Agent的 `/api/v1/agent/link` 是WSS+Protobuf协议入口，需实际mTLS身份/能力协商与逐帧授权，不是浏览器REST。`POST /api/v1/agent/enroll` 是严格HTTPS首次注册协议，令牌/CSR/Root信任校验独立于Cookie。两者通过无method的转发挂载进入专用协议处理器，因此不列入AST的method/path声明计数。
-- `/healthz`仅表示活性，不能代替部署、节点、权威或业务健康。更新readiness还有独立本地监督进程nonce条件。
+- `/healthz`仅表示活性；通用 `/readyz`检查启动及子系统就绪，不能代替业务或节点健康。更新还有独立本地监督进程 nonce 就绪条件，不能相互替代；详见[身份运维](../development/IDENTITY-OPERATIONS.md)。
 
 ## 请求与响应规则
 
@@ -61,6 +63,8 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 2. `api/openapi/revisions/v09-r6`至`v09-r33`是各次独立增量：AI/预算、文件、加密备份、可信发行、PKI/DNS/发布、受控命令、续传、监督更新、灾备、续签、AI循环、异地备份/处置、续签安装、一键安装、持续监控、节点探测。
 3. [R34运行接口补充](../../api/openapi/revisions/v09-r34/runtime-additions-candidate.json)补令牌/工作流、默认DNS、网关调度、插件状态/拒绝式激活、发布取消和活性等此前缺说明的真实入口。别名由索引链接同一规范操作，不复制相互漂移的schema。
 4. [R34兼容与审计记录](../contracts/revisions/v09-r34-audit.md)说明本次变化和剩余不一致。路径参考覆盖不等于字段覆盖、更不等于生产验收。
+5. v0.9.1 / R37 的身份续期、读取授权、就绪/诊断及升级接口见 [身份运维](../development/IDENTITY-OPERATIONS.md)、[R37 修订](../contracts/revisions/v09-r37-identity-operations.md)与[候选](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json)；不能继续用旧候选推断“无续期/无 readyz”。
+6. [R39](../contracts/revisions/v09-r39-pki-raw.md)修复链与安装命令，不新增业务字段。前端重构按当前 DTO/处理器交叉核验候选，现有客户端只是消费方，不反向定义服务端契约。
 
 ## 维护索引
 

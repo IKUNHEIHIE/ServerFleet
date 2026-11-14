@@ -4,9 +4,9 @@
 
 已有主控的“尚未配置可信安装分发”可用[安装向导](QUICK-SETUP.md)处理：`sudo python3 deployment/setup.py`。离线签名准备与在线启用均自动整理文件，不手写 catalog；全新主控初始化仍见下文。
 
-五项核心功能的正式源码、Web入口与本机部署工具一并交付；实际联调、找bug与故障演练由操作者执行。程序在Linux amd64/arm64普通用户下运行。发布签名、Root权限和恢复激活仍有各自的显式授权边界，不因代码交付自动放行。
+核心源码、Web入口与本机部署工具已交付，范围见[现行功能](../docs/product/FEATURES.md)与[当前状态](../docs/development/CURRENT-STATE.md)；实际联调、找bug与故障演练由操作者执行。程序在Linux amd64/arm64普通用户下运行。发布签名、Root权限和恢复激活仍有各自的显式授权边界，不因代码交付自动放行。
 
-异常／UNKNOWN的证据登记、后续任务、快照和独立复核流程见[人工处置闭环](../docs/development/INCIDENT-CLOSURE.md)。R30仅追加第43项迁移，升级前按现有流程备份；无需清库，不回写旧迁移。
+异常／UNKNOWN的证据登记、后续任务、快照和独立复核流程见[人工处置闭环](../docs/development/INCIDENT-CLOSURE.md)。当前共有50项迁移，升级前备份并按[升级说明](UPGRADE.md)预检；保留原数据库与密钥，不通过清库或回写旧迁移解决问题。
 
 ## 构建与目录
 
@@ -98,7 +98,7 @@ serverfleet ALL=(root) NOPASSWD: /usr/local/libexec/serverfleet-agent-root root-
 
 不授予ALL/shell/通配参数。每次Root执行仍读Root侧策略、精确任务/参数/真人审批与mTLS实时复权；更换程序或策略必须重新核对摘要。
 
-## 五项功能的实际入口
+## 核心执行与恢复入口
 
 | 核心功能 | 操作入口 |
 |---|---|
@@ -118,7 +118,7 @@ R29支持在正式备份页配置S3兼容／WebDAV HTTPS密文上传、定时备
 
 ## R31 安装与证书编排
 
-[可信一键安装与发行](INSTALL.md)包括两种架构、服务账户、签名清单、接入审批与续装。[续签安装发布](../docs/development/RENEWAL-DELIVERY.md)包括真实回执、HTTPS核验、后继发布与人工修复采用。当前迁移总数45，历史SQL不变。
+[可信一键安装与发行](INSTALL.md)包括两种架构、服务账户、签名清单、接入审批与续装。[续签安装发布](../docs/development/RENEWAL-DELIVERY.md)包括真实回执、HTTPS核验、后继发布与人工修复采用。当前迁移总数50，历史SQL不变。项目状态与未验收范围以[当前状态](../docs/development/CURRENT-STATE.md)为准；旧启动专题只追溯特定实现阶段，不提供当前安装版本或完整功能清单。
 
 ## v0.9.1 升级与运维
 
