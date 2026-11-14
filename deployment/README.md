@@ -86,6 +86,8 @@ controller provision -config /home/serverfleet/config/agent.json
 
 主控默认生成runtime/file-deployment.json、0700 file-spool和显式allowEmpty:true的空表，对任何节点文件操作均拒绝。节点注册后，参照examples/file-deployment.json，在原nodeRoots填实际nodeId和logicalRoot（如/files），保留原spoolDir和固定文件路径，再停启同一监督程序。/files是网页逻辑根，映射到该Agent的实际fileRoot，不访问Controller上的/files，也不自动给予用户/AI权限。已有实例不要更换supervisor路径/argv、用provision覆盖原目录或沿用旧摘要伪称策略未变。
 
+Agent安装器默认启用文件profile（自动填fileRoot，协议minor=1），与主控默认一致。若主控刻意不带-file-deployment启动（minor=0），在Agent安装配置provision.agent设disableFiles:true即可装一个minor=0、无文件能力的纯节点与之匹配；disableFiles不能与fileRoot或gatewayPrefix同时设置。此为显式选择，不放宽任何握手校验，minor仍须两端精确相等。
+
 普通命令参照紧凑examples/command-profiles.json：固定程序、真实sha256sum、工作目录、前缀参数和数量/超时上限；填nodeId并保持字段顺序，文件0600/父0700。用`agent command-policy -file /private/command-profiles.json -node 实际nodeId`取得公开policySha256，Agent配置增加commandProfiles路径；网页只提交profile/公开摘要/argv/超时。
 
 Root是显式可选配置。管理员将独立Agent副本安装为/usr/local/libexec/serverfleet-agent-root（Root所有0755，祖先均Root所有且普通用户不可写）；/etc/serverfleet和/var/lib/serverfleet-root为Root所有0700。按照root-executor/root-command-profiles示例设置Root侧0600配置、内部Root、HTTPS根、同一已注册nodeId的完整客户端证书链及匹配私钥。私钥由管理员本机处理，不在线上传或经对话传递。示例仅固定df -h；实际profile逐一限制程序/摘要/工作目录/前缀参数和上限。

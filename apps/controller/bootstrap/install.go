@@ -62,6 +62,23 @@ func installationDirExists(root *os.Root, name string) bool {
 	i, e := root.Lstat(name)
 	return e == nil && i.IsDir() && i.Mode().Perm() == 0700 && i.Mode()&os.ModeSymlink == 0
 }
+
+// defaultAgentFileProfile defaults files on; disableFiles opts out to a minor=0 Agent matching a Controller without -file-deployment.
+func defaultAgentFileProfile(root *os.Root, agent *provisionAgent, dir string) error {
+	if agent.DisableFiles {
+		if agent.FileRoot != "" || agent.GatewayPrefix != "" {
+			return errInstallation
+		}
+		return nil
+	}
+	if agent.FileRoot == "" {
+		if e := root.Mkdir("files", 0700); e != nil && !installationDirExists(root, "files") {
+			return e
+		}
+		agent.FileRoot = filepath.Join(dir, "files")
+	}
+	return nil
+}
 func installationWrite(root *os.Root, name string, raw []byte) error {
 	if _, e := root.Lstat(name + ".next"); e == nil {
 		return errInstallation
@@ -320,11 +337,8 @@ func RunInstallCommand(ctx context.Context, args []string, stdout, stderr io.Wri
 		}
 		provision.Agent.NodeID = node
 		state.NodeID = node
-		if provision.Agent.FileRoot == "" {
-			if e = root.Mkdir("files", 0700); e != nil && !installationDirExists(root, "files") {
-				return e
-			}
-			provision.Agent.FileRoot = filepath.Join(d.Directory, "files")
+		if e = defaultAgentFileProfile(root, provision.Agent, d.Directory); e != nil {
+			return e
 		}
 		if provision.Agent.CertificateRoot == "" {
 			if e = root.Mkdir("website-keys", 0700); e != nil && !installationDirExists(root, "website-keys") {

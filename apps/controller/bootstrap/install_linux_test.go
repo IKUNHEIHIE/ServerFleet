@@ -5,12 +5,16 @@ package bootstrap
 import (
 	"bytes"
 	"context"
+	"crypto/ecdsa"
 	"crypto/ed25519"
+	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
 	"io"
+	"math/big"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -20,6 +24,7 @@ import (
 	"serverfleet.local/serverfleet/internal/updates"
 	"strings"
 	"testing"
+	"time"
 )
 
 func installationFixture(t *testing.T) (installationManifest, map[string][]byte) {
@@ -221,4 +226,87 @@ func installationPrivateTemp(t *testing.T) string {
 		t.Fatal(e)
 	}
 	return p
+}
+
+func TestInstallationAgentFileProfileOptOut(t *testing.T) {
+	dir := installationPrivateTemp(t)
+	root, e := os.OpenRoot(dir)
+	if e != nil {
+		t.Fatal(e)
+	}
+	defer root.Close()
+	defaulted := &provisionAgent{}
+	if e := defaultAgentFileProfile(root, defaulted, dir); e != nil || defaulted.FileRoot != filepath.Join(dir, "files") {
+		t.Fatalf("default profile = %q, %v", defaulted.FileRoot, e)
+	}
+	if !installationDirExists(root, "files") {
+		t.Fatal("default files dir not private 0700")
+	}
+	optOut := &provisionAgent{DisableFiles: true}
+	if e := defaultAgentFileProfile(root, optOut, dir); e != nil || optOut.FileRoot != "" {
+		t.Fatalf("opt-out profile = %q, %v", optOut.FileRoot, e)
+	}
+	for _, bad := range []*provisionAgent{
+		{DisableFiles: true, FileRoot: filepath.Join(dir, "custom")},
+		{DisableFiles: true, GatewayPrefix: filepath.Join(dir, "gw")},
+	} {
+		if e := defaultAgentFileProfile(root, bad, dir); e == nil {
+			t.Fatalf("contradictory opt-out accepted: %+v", bad)
+		}
+	}
+	explicit := &provisionAgent{FileRoot: filepath.Join(dir, "custom")}
+	if e := defaultAgentFileProfile(root, explicit, dir); e != nil || explicit.FileRoot != filepath.Join(dir, "custom") {
+		t.Fatalf("explicit root = %q, %v", explicit.FileRoot, e)
+	}
+}
+
+func provisionAgentFixture(t *testing.T) string {
+	t.Helper()
+	base := installationPrivateTemp(t)
+	key, e := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	if e != nil {
+		t.Fatal(e)
+	}
+	ca := &x509.Certificate{SerialNumber: big.NewInt(1), NotBefore: time.Now().Add(-time.Minute), NotAfter: time.Now().Add(time.Hour), IsCA: true, BasicConstraintsValid: true, KeyUsage: x509.KeyUsageCertSign | x509.KeyUsageCRLSign}
+	der, e := x509.CreateCertificate(rand.Reader, ca, ca, &key.PublicKey, key)
+	if e != nil {
+		t.Fatal(e)
+	}
+	caPath := filepath.Join(base, "ca.pem")
+	if e = os.WriteFile(caPath, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: der}), 0600); e != nil {
+		t.Fatal(e)
+	}
+	program := []byte("#!/bin/sh\nexit 0\n")
+	artPath, supPath := filepath.Join(base, "agent"), filepath.Join(base, "supervisor")
+	for _, p := range []string{artPath, supPath} {
+		if e = os.WriteFile(p, program, 0700); e != nil {
+			t.Fatal(e)
+		}
+	}
+	manifest, _ := json.Marshal(updates.ReleaseManifest{Format: 1, Component: "agent", OS: "linux", Architecture: runtime.GOARCH, Version: "1.2.3", Sequence: 5, SHA256: recoveryDigest(program), Bytes: int64(len(program))})
+	manPath := filepath.Join(base, "agent.manifest.json")
+	if e = os.WriteFile(manPath, manifest, 0600); e != nil {
+		t.Fatal(e)
+	}
+	pub, _, e := ed25519.GenerateKey(rand.Reader)
+	if e != nil {
+		t.Fatal(e)
+	}
+	doc := provisionDocument{Format: 1, Component: "agent", Directory: filepath.Join(base, "runtime"), Artifact: artPath, Manifest: manPath, SupervisorExecutable: supPath, RootCertificate: caPath, RootPin: strings.Repeat("a", 64), ControllerOrigin: "https://releases.test", ControllerAddresses: []string{"192.0.2.1"}, ReleaseKeys: map[string]string{"release": base64.StdEncoding.EncodeToString(pub)}, Agent: &provisionAgent{NodeID: "node-a", IdentityDir: filepath.Join(base, "identity"), DisableFiles: true, FileRoot: filepath.Join(base, "files")}}
+	raw, _ := json.Marshal(doc)
+	cfgPath := filepath.Join(base, "provision.json")
+	if e = os.WriteFile(cfgPath, raw, 0600); e != nil {
+		t.Fatal(e)
+	}
+	return cfgPath
+}
+
+func TestProvisionRejectsDisableFilesWithFileRoot(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("requires ordinary user")
+	}
+	cfg := provisionAgentFixture(t)
+	if e := RunProvisionCommand(context.Background(), []string{"-config", cfg}, io.Discard, io.Discard); e == nil {
+		t.Fatal("disableFiles with explicit fileRoot accepted")
+	}
 }
