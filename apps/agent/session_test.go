@@ -10,6 +10,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/hex"
+	"errors"
 	"io"
 	"math/big"
 	"os"
@@ -20,6 +21,7 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 	"serverfleet.local/serverfleet/internal/transport"
 )
@@ -273,6 +275,74 @@ func TestAgentSessionProductionLoopDedupeCancelSyncAndRevocation(t *testing.T) {
 	case <-controllerDone:
 	case <-ctx.Done():
 		t.Fatal("Controller did not observe disconnect")
+	}
+}
+
+func TestControllerLinkRejectionRecordsProtocolMismatch(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	_, serverState, _ := sessionTLSStates(t)
+	fp := sha256.Sum256(serverState.PeerCertificates[0].Raw)
+	verifier, _ := transport.NewPeerVerifier(func(context.Context, string) (transport.AgentIdentity, error) {
+		return transport.AgentIdentity{NodeID: "node-a", FingerprintSHA256: hex.EncodeToString(fp[:]), Serial: "3", Enabled: true, TrustGeneration: 1}, nil
+	})
+	semantic, frames := sessionLimits()
+	type rejection struct{ node, code string }
+	rejections := make(chan rejection, 4)
+	handshakeCalled := atomic.Bool{}
+	// Controller expects minor 0; the Agent hello carries minor 1, so validation
+	// must reject it (no relaxation) AND leave a queryable reason code.
+	hub, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{
+		ProtocolMajor: 1, ProtocolMinor: 0, Semantic: semantic, Frames: frames, HeartbeatInterval: time.Second, MaxConnections: 1,
+		Handshake: func(context.Context, transport.LinkObservation, *agentv1.AgentHello) ([]string, error) {
+			handshakeCalled.Store(true)
+			return []string{"test.write-marker"}, nil
+		},
+		Admit:        func(context.Context, transport.LinkObservation, *agentv1.Envelope) error { return nil },
+		Event:        func(context.Context, transport.LinkObservation, *agentv1.Envelope) error { return nil },
+		Disconnected: func(context.Context, transport.LinkObservation) error { return nil },
+		Rejected: func(_ context.Context, o transport.LinkObservation, code string) {
+			rejections <- rejection{o.Identity.NodeID, code}
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, b := sessionFramePair()
+	controllerDone := make(chan error, 1)
+	go func() { controllerDone <- hub.Serve(ctx, b, serverState, "connection-a") }()
+	hello := &agentv1.Envelope{
+		MessageId: "hello-1", ConnectionId: "connection-a", NodeId: "node-a",
+		Sequence: 1, ProtocolMajor: 1, ProtocolMinor: 1, SentAtUnixMs: time.Now().UnixMilli(),
+		Message: &agentv1.Envelope_AgentHello{AgentHello: &agentv1.AgentHello{
+			AgentVersion: "test-v1", Platform: "linux", BootId: "boot-a", CapabilityIds: []string{"test.write-marker"},
+		}},
+	}
+	raw, err := proto.Marshal(hello)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = a.Write(ctx, raw); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-controllerDone:
+		if !errors.Is(err, transport.ErrLinkRejected) {
+			t.Fatalf("Serve err = %v, want ErrLinkRejected", err)
+		}
+	case <-ctx.Done():
+		t.Fatal("controller did not reject mismatched hello")
+	}
+	select {
+	case r := <-rejections:
+		if r.node != "node-a" || r.code != "INVALID_PROTOCOL" {
+			t.Fatalf("rejection = %+v, want node-a/INVALID_PROTOCOL", r)
+		}
+	case <-ctx.Done():
+		t.Fatal("no rejection diagnostic recorded")
+	}
+	if handshakeCalled.Load() {
+		t.Fatal("handshake ran despite protocol mismatch")
 	}
 }
 

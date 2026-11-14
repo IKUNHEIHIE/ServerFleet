@@ -32,3 +32,39 @@ func TestConnectionDiagnosticsAreBoundedPersistentAndResourceScoped(t *testing.T
 		t.Fatal("diagnostics leaked hidden node")
 	}
 }
+
+func TestRecordRejectionIsQueryableAndValidated(t *testing.T) {
+	ctx := context.Background()
+	h := newServiceFixture(t, authorizerFunc(func(context.Context, auth.Check) error { return nil }), readPolicy("reader", []string{"n1"}, []string{"n1"}), nodes.ServiceActions()...)
+	seedNode(t, h.db, h.repo, "n1", "Visible")
+	at := time.Now().UTC()
+	if e := h.repo.RecordRejection(ctx, "n1", at, "INVALID_PROTOCOL"); e != nil {
+		t.Fatal(e)
+	}
+	record, e := h.repo.ConnectionDiagnostics(ctx, "n1")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if record.Recorded {
+		t.Fatal("rejection must not fabricate an authenticated observation")
+	}
+	if len(record.History) != 1 || record.History[0].Code != "rejected:INVALID_PROTOCOL" {
+		t.Fatalf("rejection not queryable: %+v", record.History)
+	}
+	if _, e = h.svc.ConnectionDiagnostics(ctx, "reader", "n1"); e != nil {
+		t.Fatal(e)
+	}
+	for _, bad := range []struct {
+		node, code string
+		at         time.Time
+	}{
+		{"", "INVALID_PROTOCOL", at},
+		{"n1", "", at},
+		{"n1", "bad code", at},
+		{"n1", "INVALID_PROTOCOL", time.Time{}},
+	} {
+		if e := h.repo.RecordRejection(ctx, bad.node, bad.at, bad.code); e == nil {
+			t.Fatalf("accepted invalid rejection %+v", bad)
+		}
+	}
+}

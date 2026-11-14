@@ -105,6 +105,11 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 	bridge.observeDisconnect = func(ctx context.Context, o transport.LinkObservation) error {
 		return s.NodesRepo.RecordDisconnect(ctx, o.Identity.NodeID, s.now().UTC())
 	}
+	bridge.observeRejection = func(ctx context.Context, o transport.LinkObservation, code string) {
+		// Best-effort diagnostic: the link is already rejected, so a persistence
+		// failure here must not change the outcome or block the handshake.
+		_ = s.NodesRepo.RecordRejection(ctx, o.Identity.NodeID, s.now().UTC(), code)
+	}
 	s.IdentityRenewalHTTP = transport.NewIdentityRenewalHTTP(service, cfg.AgentAuthority, cfg.AgentServerName, func(ctx context.Context, nodeID string) error {
 		n, e := s.NodesRepo.Get(ctx, nodeID)
 		if e != nil || n.Status == nodes.StatusRevoked || n.Status == nodes.StatusSuspended {
@@ -153,6 +158,7 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		Admit:             bridge.admit,
 		Event:             bridge.event,
 		Disconnected:      bridge.disconnected,
+		Rejected:          bridge.observeRejection,
 	})
 	if err != nil {
 		return nil, err
