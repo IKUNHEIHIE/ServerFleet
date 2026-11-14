@@ -102,6 +102,7 @@ type agentLinkBridge struct {
 	activateIdentity  func(context.Context, transport.AgentIdentity) error
 	observeConnection func(context.Context, transport.LinkObservation, *agentv1.AgentHello, []string) error
 	observeDisconnect func(context.Context, transport.LinkObservation) error
+	observeRejection  func(context.Context, transport.LinkObservation, string)
 
 	seqMu     sync.Mutex
 	sequences map[string]uint64

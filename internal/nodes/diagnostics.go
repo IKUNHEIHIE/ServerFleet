@@ -78,20 +78,35 @@ func (r *Repo) RecordDisconnect(ctx context.Context, node string, at time.Time) 
 		return appendConnectionEvent(ctx, tx, node, at, "disconnected")
 	})
 }
+
+// RecordRejection appends a bounded, queryable link-rejection event so a handshake
+// that closes before activation still leaves an operator-facing reason. code is a
+// stable category supplied by the trusted transport (e.g. INVALID_PROTOCOL), never
+// peer-controlled frame data. It does not alter the authenticated observation snapshot.
+func (r *Repo) RecordRejection(ctx context.Context, node string, at time.Time, code string) error {
+	if validateNodeID(node) != nil || at.IsZero() || !validDiagnosticText(code) {
+		return ErrInvalidNode
+	}
+	return r.db.InTx(ctx, func(ctx context.Context, tx storage.Tx) error {
+		return appendConnectionEvent(ctx, tx, node, at, "rejected:"+code)
+	})
+}
 func (r *Repo) ConnectionDiagnostics(ctx context.Context, node string) (ConnectionDiagnostics, error) {
 	out := ConnectionDiagnostics{History: []ConnectionEvent{}, ConnectionObservation: ConnectionObservation{Capabilities: []string{}}}
 	var payload []byte
 	e := r.db.QueryRow(ctx, `SELECT payload FROM node_connection_diagnostics WHERE node_id=?`, node).Scan(&payload)
-	if storage.IsNotFound(e) {
-		return out, nil
-	}
-	if e != nil {
+	switch {
+	case storage.IsNotFound(e):
+		// No authenticated snapshot yet; rejection/disconnect history may still
+		// exist and must remain queryable so a refused handshake is not silent.
+	case e != nil:
 		return out, e
+	default:
+		if len(payload) > 16<<10 || json.Unmarshal(payload, &out.ConnectionObservation) != nil {
+			return out, ErrInventoryUnavailable
+		}
+		out.Recorded = true
 	}
-	if len(payload) > 16<<10 || json.Unmarshal(payload, &out.ConnectionObservation) != nil {
-		return out, ErrInventoryUnavailable
-	}
-	out.Recorded = true
 	rows, e := r.db.Query(ctx, `SELECT at,code FROM node_connection_history WHERE node_id=? ORDER BY id DESC LIMIT 100`, node)
 	if e != nil {
 		return out, e
