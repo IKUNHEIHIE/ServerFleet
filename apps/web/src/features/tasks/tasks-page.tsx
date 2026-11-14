@@ -11,7 +11,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { groupsApi, nodesApi, serviceGroupsApi, tasksApi } from "@/lib/api/endpoints";
@@ -303,8 +303,6 @@ export function TasksPage() {
 
   return (
     <div className="space-y-5">
-      <IncidentPanel key={`incidents:${session.viewEpoch}`} />
-      <CommandProfilePanel key={session.viewEpoch} />
       <PageHeader
         title="批量任务"
         description="统一任务中心：冻结目标、分批/金丝雀、审批、逐节点结果与 SSE 进度。取消不等于回滚，未知结果不自动重跑。"
@@ -427,6 +425,13 @@ export function TasksPage() {
           )}
         </AsyncPanel>
       </Panel>
+
+      <SectionDivider label="受控命令与异常人工处置" caption="Command Profiles & Incident Ledger" />
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <CommandProfilePanel key={session.viewEpoch} />
+        <IncidentPanel key={`incidents:${session.viewEpoch}`} />
+      </div>
+
       <CreateTaskModal open={createOpen} onClose={() => setCreateOpen(false)} />
     </div>
   );

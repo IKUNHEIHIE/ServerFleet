@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { ApiError, describeApiError } from "@/lib/api/errors";
 import { filesApi, nodesApi, tasksApi, transfersApi } from "@/lib/api/endpoints";
@@ -995,7 +995,6 @@ export function FilesPage() {
 
   return (
     <div className="space-y-5">
-      <AgentResumePanel key={session.viewEpoch} />
       <PageHeader
         title="文件互传"
         description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；上传走真实字节通道（POST uploads → PUT content → POST complete 校验）。"
@@ -1109,6 +1108,9 @@ export function FilesPage() {
           )}
         </AsyncPanel>
       </Panel>
+
+      <SectionDivider label="断点偏移核验与节点恢复" caption="Agent Confirmed Offset Resume" />
+      <AgentResumePanel key={session.viewEpoch} />
 
       <Modal
         open={transferDetail !== null}

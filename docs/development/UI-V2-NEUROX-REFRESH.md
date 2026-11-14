@@ -76,3 +76,22 @@
    - 插件中心与 Xray 节点管理器新增 4 维状态 KPI 卡片与声明式标签页。
    - 文件互传升级双栏拖拽上传按钮、目录文件/文件夹图标、跨节点传输任务实时进度条。
    - 监控告警、DNS 管理、自动化工作流、更新中心、备份恢复、用户与权限、审计日志、系统设置全面统一 `PageHeader`、`Badge`、`GlowingEffect` 统计卡片与表格交互反馈。
+
+---
+
+## 5. 信息架构与页面排版统一重整（Layout & Hierarchy Overhaul）
+
+针对原版前端在迭代过程中产生的“治理/辅助面板直接堆叠在 `PageHeader` 或主表格上方、单列长表单排布松散、部分子面板未接入统一原语组件”问题，完成了全站统一的信息层级与网格重排：
+
+1. **严格的四层页面解剖结构（Four-Tier Page Anatomy）**：
+   - **Tier 1 · `PageHeader`**：所有页面统一以 `PageHeader` 作为顶部首元素，彻底移除原先散落在 `PageHeader` 上方的辅助面板（如 `TasksPage`、`TaskDetailPage`、`FilesPage` 顶部的插入面板）。
+   - **Tier 2 · `KPI Summary Strip`**：核心统计指标卡片紧随页头，提供首屏态势感知。
+   - **Tier 3 · `Primary Operational Workspace`**：各业务模块的主工作台（如任务历史表、双栏文件浏览器、DNS 账号/Zone/解析记录双栏工作台、主控升级检查与计划、加密备份列表）固定在首屏核心位置。
+   - **Tier 4 · `Governance & Auxiliary Bento Grid`**：通过统一的 `SectionDivider` 分区标题与双栏网格（`grid gap-5 xl:grid-cols-2`），将受控命令、UNKNOWN 人工处置、DNS 供应商任务、断点恢复、签名发行源与受监督更新、恢复权威与异地保留策略整齐收纳。
+2. **全部 16 个辅助子面板视觉与表单网格标准化**：
+   - **任务中心**：`CommandProfilePanel`（受控命令）与 `IncidentPanel`（异常与 UNKNOWN 人工处置）并列置于任务历史表下方；折叠态采用紧凑标题栏，展开态采用多列工具栏与 `neurox-subcard` 卡片。
+   - **公网 HTTPS 证书**：将 `NodeCSRPanel`、`PublicCertificatePanel`、`NodeCertificatePanel`、`PublicRenewalPanel` 重排为 **Step 01 → Step 04 的 2×2 生命周期矩阵**，并统一 `RenewalDeliveryPanel` 与 `RenewalRecoveryPanel` 的内部排版。
+   - **更新中心与系统设置**：重写原先无样式的 `ResidentUpdatePanel`，接入 `Panel`、`Field`、`Select`、`TextInput`、`Badge`，并与 `ReleaseSourcePanel` 并列排布；将 `ControllerUpdatePanel` 的“检查更新”与“升级计划与一键更新”重排为双栏并列工作流。
+   - **备份与灾难恢复**：将 `EncryptedBackupsPanel` 置顶为首屏核心面板，`RecoveryAuthorityPanel` 与 `BackupMaintenancePanel` 双栏并列，“校验备份”与“灾难恢复预演”、“恢复作业”与“演练说明”分别采用双栏对称网格。
+   - **AI 运维与节点接入**：将 `AI 模型设置` 与 `AI 预算窗口` 整合为左右分栏对照面板；将 `InstallationPanel` 与 `PublicationDNSPanel` 升级为统一卡片与子面板样式。
+

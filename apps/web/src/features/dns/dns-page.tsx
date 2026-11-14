@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { dnsApi, dnsRecordTasksApi, publicCertificateApi, type NodeCSRTask } from "@/lib/api/endpoints-infra";
@@ -365,13 +365,7 @@ export function DnsPage() {
         </div>
       </div>
 
-      <DNSProviderTaskPanel key={session.viewEpoch} />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
-      <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
-        <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
-          {data => <p className="px-5 py-4 text-sm">{data.items.map(provider => `${provider.displayName}（${provider.code}）· Zone 同步 ${provider.capabilities?.supportsZoneSync ? "支持" : "未声明"}`).join("；") || "没有供应商"}</p>}
-        </AsyncPanel>
-      </Panel>
       <div className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <Panel
           title="账号"
@@ -488,6 +482,22 @@ export function DnsPage() {
             )}
           </Panel>
         </div>
+      </div>
+
+      <SectionDivider label="DNS 供应商能力与批量任务" caption="Provider Capabilities & Inspection Tasks" />
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.5fr] xl:items-start">
+        <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
+          <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
+            {data => (
+              <p className="px-5 py-4 text-sm">
+                {data.items
+                  .map(provider => `${provider.displayName}（${provider.code}）· Zone 同步 ${provider.capabilities?.supportsZoneSync ? "支持" : "未声明"}`)
+                  .join("；") || "没有供应商"}
+              </p>
+            )}
+          </AsyncPanel>
+        </Panel>
+        <DNSProviderTaskPanel key={session.viewEpoch} />
       </div>
 
       <AccountEditor

@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, TextArea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { tasksApi } from "@/lib/api/endpoints";
@@ -136,7 +136,6 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
 
   return (
     <div className="space-y-5">
-      <IncidentPanel key={`incidents:${session.viewEpoch}`} taskId={taskId} />
       <PageHeader
         title={current ? `任务 ${current.taskId}` : "任务详情"}
         description="任务状态、目标快照、审批、逐节点执行与 SSE 事件。取消不冒充回滚；未知结果不自动重跑。"
@@ -297,6 +296,9 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
           </div>
         )}
       </AsyncPanel>
+
+      <SectionDivider label="异常与 UNKNOWN 人工处置" caption="Incident Verification & Manual Closure" />
+      <IncidentPanel key={`incidents:${session.viewEpoch}`} taskId={taskId} />
 
       <Modal
         open={decision !== null}

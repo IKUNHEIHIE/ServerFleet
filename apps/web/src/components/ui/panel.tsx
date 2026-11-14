@@ -93,3 +93,25 @@ export function PageHeader({
     </div>
   );
 }
+
+export function SectionDivider({
+  label,
+  caption,
+  badge,
+}: {
+  readonly label: string;
+  readonly caption?: string;
+  readonly badge?: ReactNode;
+}) {
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+      <div className="flex items-center gap-2.5">
+        <span className="h-4 w-1 rounded-full bg-gradient-to-b from-[#6658E8] to-[#3984E7]" aria-hidden="true" />
+        <span className="text-xs font-bold uppercase tracking-[0.12em] text-foreground/85">{label}</span>
+        {badge}
+        {caption ? <span className="text-xs text-muted-foreground">· {caption}</span> : null}
+      </div>
+      <div className="h-px flex-1 bg-gradient-to-r from-border/80 to-transparent" aria-hidden="true" />
+    </div>
+  );
+}

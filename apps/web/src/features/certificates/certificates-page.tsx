@@ -203,12 +203,16 @@ export function CertificatesPage() {
       />
 
       {tab === "public" ? (
-        <div className="space-y-4">
-          <NodeCSRPanel key={session.viewEpoch} />
-          <PublicCertificatePanel key={`public:${session.viewEpoch}`} />
-          <PublicRenewalPanel key={`renewal:${session.viewEpoch}`} />
-          <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
-          <Notice tone="info" title="网站证书签发与安装">公开 CSR 可供受控签发流程使用；完整 ACME 申请、证书安装和实际 HTTPS 结果需要分别核验。</Notice>
+        <div className="space-y-5">
+          <Notice tone="info" title="网站证书签发与安装">
+            公开 CSR 可供受控签发流程使用；完整 ACME 申请、证书安装和实际 HTTPS 结果需要分别核验。
+          </Notice>
+          <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+            <NodeCSRPanel key={session.viewEpoch} />
+            <PublicCertificatePanel key={`public:${session.viewEpoch}`} />
+            <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
+            <PublicRenewalPanel key={`renewal:${session.viewEpoch}`} />
+          </div>
         </div>
       ) : null}
 

@@ -184,7 +184,7 @@ function ModelSettingsPanel() {
       ) : null}
       <AsyncPanel state={settings.state} onRetry={settings.reload} errorTitle="模型设置加载失败">
         {data => (
-          <>
+          <div className="grid xl:grid-cols-[1fr_1.35fr] xl:divide-x xl:divide-border/80">
             <ModelSettingsForm
               key={data.revision}
               data={data}
@@ -201,11 +201,11 @@ function ModelSettingsPanel() {
                 modelEnabled={data.enabled}
               />
             ) : (
-              <p className="border-t px-5 py-4 text-xs text-muted-foreground">
+              <p className="border-t px-5 py-4 text-xs text-muted-foreground xl:border-t-0">
                 服务端未返回模型配置 profileId，无法读取或配置 owner 预算；先保存模型设置后再查看。
               </p>
             )}
-          </>
+          </div>
         )}
       </AsyncPanel>
     </Panel>
@@ -335,7 +335,7 @@ function ModelBudgetPanel({ profileId, modelEnabled }: { readonly profileId: str
   );
 
   return (
-    <section className="border-t" aria-labelledby="ai-budget-heading">
+    <section className="border-t xl:border-t-0" aria-labelledby="ai-budget-heading">
       <div className="px-5 py-4">
         <h3 id="ai-budget-heading" className="text-sm font-semibold">AI 预算窗口（当前用户）</h3>
         <p className="mt-1 text-xs text-muted-foreground">

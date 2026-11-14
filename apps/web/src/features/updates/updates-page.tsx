@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { updatesApi } from "@/lib/api/endpoints-system";
@@ -134,6 +134,7 @@ export function ControllerUpdatePanel() {
       {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
       {!canManage ? <Notice tone="warning" title="更新权限缺失">当前身份没有返回更新管理权限；服务端仍会独立校验。</Notice> : null}
 
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
       <Panel title="检查更新" description="POST /api/v1/system/updates/check；检查只读取版本清单，不安装、不自动重启、不静默升级。">
         <form onSubmit={runCheck} className="space-y-3 px-5 py-4">
           {checkAction.error ? <Notice tone="error" title="检查失败">{describeApiError(checkAction.error)}</Notice> : null}
@@ -255,6 +256,7 @@ export function ControllerUpdatePanel() {
           </div>
         ) : <p className="px-5 py-4 text-xs text-muted-foreground">尚未生成计划。</p>}
       </Panel>
+      </div>
 
       <Panel
         title="更新作业与历史"
@@ -371,7 +373,7 @@ export function ControllerUpdatePanel() {
 }
 
 export function UpdatesPage() {
-  const session=useSession();
+  const session = useSession();
   return (
     <div className="space-y-5">
       <PageHeader
@@ -379,9 +381,12 @@ export function UpdatesPage() {
         description="主控更新：检查 → 计划/预检 → 人工确认 → 异步作业 → 健康检查/回滚。第一版禁止默认静默安装。"
         badge={<Badge tone="primary" dot>Controller</Badge>}
       />
-      <ReleaseSourcePanel />
-      <ResidentUpdatePanel key={session.viewEpoch} />
       <ControllerUpdatePanel />
+      <SectionDivider label="签名工件与受监督升级" caption="Signed Artifact & Supervised Fleet Upgrade" />
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <ReleaseSourcePanel />
+        <ResidentUpdatePanel key={session.viewEpoch} />
+      </div>
     </div>
   );
 }

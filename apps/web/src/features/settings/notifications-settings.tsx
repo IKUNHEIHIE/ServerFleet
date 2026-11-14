@@ -199,46 +199,48 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
       </AsyncPanel>
 
       <Panel title="通知策略" description="GET/PUT /api/v1/notifications/settings">
-        <form onSubmit={submitSettings} className="space-y-3 px-5 py-4">
+        <form onSubmit={submitSettings} className="space-y-4 px-5 py-4">
           {saveSettings.error ? <Notice tone="error" title="保存失败">{describeApiError(saveSettings.error)}</Notice> : null}
           {draft ? (
             <>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-4 accent-[var(--primary)]"
-                  checked={draft.smtpFallbackOnQQFailure}
-                  onChange={event => setDraft({ ...draft, smtpFallbackOnQQFailure: event.target.checked })}
-                  disabled={!canManage || session.writesLocked}
-                />
-                QQ 失败时允许 SMTP 备用
-              </label>
-              <Field label="最大重试次数（0–5）">
-                {ids => (
-                  <TextInput
-                    id={ids.inputId}
-                    type="number"
-                    min={0}
-                    max={5}
-                    value={draft.maxRetryAttempts}
-                    onChange={event => setDraft({ ...draft, maxRetryAttempts: Number(event.target.value) })}
+              <div className="grid gap-3.5 sm:grid-cols-3 sm:items-end">
+                <label className="flex h-9 items-center gap-2 rounded-lg border border-border/70 bg-[#FAFBFD] px-3 text-sm font-medium">
+                  <input
+                    type="checkbox"
+                    className="size-4 accent-[var(--primary)]"
+                    checked={draft.smtpFallbackOnQQFailure}
+                    onChange={event => setDraft({ ...draft, smtpFallbackOnQQFailure: event.target.checked })}
                     disabled={!canManage || session.writesLocked}
                   />
-                )}
-              </Field>
-              <Field label="去重窗口（秒，可选）">
-                {ids => (
-                  <TextInput
-                    id={ids.inputId}
-                    type="number"
-                    min={0}
-                    max={86400}
-                    value={draft.deduplicationWindowSeconds ?? ""}
-                    onChange={event => setDraft({ ...draft, deduplicationWindowSeconds: event.target.value ? Number(event.target.value) : undefined })}
-                    disabled={!canManage || session.writesLocked}
-                  />
-                )}
-              </Field>
+                  QQ 失败时允许 SMTP 备用
+                </label>
+                <Field label="最大重试次数（0–5）">
+                  {ids => (
+                    <TextInput
+                      id={ids.inputId}
+                      type="number"
+                      min={0}
+                      max={5}
+                      value={draft.maxRetryAttempts}
+                      onChange={event => setDraft({ ...draft, maxRetryAttempts: Number(event.target.value) })}
+                      disabled={!canManage || session.writesLocked}
+                    />
+                  )}
+                </Field>
+                <Field label="去重窗口（秒，可选）">
+                  {ids => (
+                    <TextInput
+                      id={ids.inputId}
+                      type="number"
+                      min={0}
+                      max={86400}
+                      value={draft.deduplicationWindowSeconds ?? ""}
+                      onChange={event => setDraft({ ...draft, deduplicationWindowSeconds: event.target.value ? Number(event.target.value) : undefined })}
+                      disabled={!canManage || session.writesLocked}
+                    />
+                  )}
+                </Field>
+              </div>
               <Button type="submit" variant="primary" loading={saveSettings.pending} disabled={!canManage || session.writesLocked}>保存策略</Button>
             </>
           ) : (

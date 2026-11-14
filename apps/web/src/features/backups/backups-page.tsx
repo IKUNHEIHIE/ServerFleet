@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, TextInput } from "@/components/ui/form";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { recoveryApi } from "@/lib/api/endpoints-system";
@@ -139,14 +139,20 @@ export function BackupsPage() {
         description="备份校验 → 灾难恢复预演 → 恢复作业。恢复密钥只传引用，不传明文。"
         badge={<Badge tone="primary" dot>DR</Badge>}
       />
-      <RecoveryAuthorityPanel key={`authority:${session.viewEpoch}`} />
-      <EncryptedBackupsPanel key={session.viewEpoch} />
-      <BackupMaintenancePanel key={`maintenance:${session.viewEpoch}`} />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
 
+      <EncryptedBackupsPanel key={session.viewEpoch} />
+
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <RecoveryAuthorityPanel key={`authority:${session.viewEpoch}`} />
+        <BackupMaintenancePanel key={`maintenance:${session.viewEpoch}`} />
+      </div>
+
+      <SectionDivider label="灾难恢复预演与作业" caption="Disaster Recovery Verification & Execution" />
       <Notice tone="info" title="离线恢复">上方管理加密备份；下方恢复预演仅展示服务端校验。实际恢复密钥和 Root 私钥不进入网页。</Notice>
 
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
       <Panel title="校验备份" description="POST /api/v1/backups/{backupId}/verify → 返回恢复计划（202 表示已受理）。">
         <form onSubmit={verify} className="space-y-3 px-5 py-4">
           {verifyAction.error ? <Notice tone="error" title="校验失败">{describeApiError(verifyAction.error)}</Notice> : null}
@@ -204,7 +210,9 @@ export function BackupsPage() {
           ) : null}
         </form>
       </Panel>
+      </div>
 
+      <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr] xl:items-start">
       <Panel title="恢复作业" description="POST /api/v1/disaster-recovery/jobs（202）→ GET /api/v1/disaster-recovery/jobs/{jobId}。">
         <div className="space-y-3 px-5 py-4">
           {createAction.error ? <Notice tone="error" title="创建恢复作业失败">{describeApiError(createAction.error)}</Notice> : null}
@@ -257,6 +265,7 @@ export function BackupsPage() {
           <p className="text-xs text-muted-foreground">相关入口：<a className="text-primary underline" href="#/updates">更新中心（升级前备份要求）</a> · <a className="text-primary underline" href="#/audit">审计日志</a> · <a className="text-primary underline" href="#/nodes">节点状态</a></p>
         </div>
       </Panel>
+      </div>
     </div>
   );
 }

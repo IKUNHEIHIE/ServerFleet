@@ -108,6 +108,40 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Form & Disclosure Element Refinements */
+input[type="checkbox"] {
+  width: 1rem;
+  height: 1rem;
+  border-radius: 0.25rem;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+input[type="checkbox"]:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+details > summary {
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  color: var(--foreground);
+  transition: color 0.15s ease;
+}
+
+details > summary:hover {
+  color: var(--primary);
+}
+
+.neurox-subcard {
+  background: #FAFBFD;
+  border: 1px solid rgba(232, 234, 241, 0.9);
+  border-radius: 0.875rem;
+  padding: 1rem;
+}
+
 /* Custom Subtle Scrollbars */
 ::-webkit-scrollbar {
   width: 6px;
