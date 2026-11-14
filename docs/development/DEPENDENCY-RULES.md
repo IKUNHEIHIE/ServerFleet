@@ -1,6 +1,6 @@
 # 依赖与接口规则
 
-2026-11-12 R34。`dependencies.json`是实际Go包导入白名单，`go test ./tests/architecture`验证以下apps/internal/gen/tests根及子目录；编译器另外检查循环依赖。下表从当前清单整理，历史文档中的26项迁移/空壳/旧依赖描述不代表当前实现。
+2026-11-14 文档核对，代码基线见 [CURRENT-STATE](CURRENT-STATE.md)。`dependencies.json`是实际Go包导入白名单，`go test ./tests/architecture`验证以下apps/internal/gen/tests根及子目录；编译器另外检查循环依赖。表格是阅读辅助，修改前核对 JSON。历史迁移/空壳/旧依赖描述不代表当前实现。
 
 | 调用方 | 允许的跨模块方向 |
 |---|---|
@@ -36,7 +36,7 @@
 - Agent允许transport/gen及纯标准库netprobe，不导入Controller业务/DB；Web仅Controller REST/SSE。核心不能导入plugins/xray-manager、test/mock/fixture或参考资料。
 - transport通过上层注入回调交给任务/节点等业务；updates→transport只消费公开typed监督交接。netprobe没有业务或数据库依赖，不是插件运行时。
 - 子目录继承所属模块权限，不按相似前缀或`internal/*`通配放行。静态导入不证明运行时授权、SSRF、任务/凭据安全或沙箱隔离。
-- 当前正式49迁移，旧SQL/checksum不可改；追加需独立审查。公共端口、外部契约或依赖调整登记contract/integration差异，不能为消循环搬入通用大包或取消规则。
+- 当前正式50项迁移，旧SQL/checksum不可改；追加需独立审查。公共端口、外部契约或依赖调整登记contract/integration差异，不能为消循环搬入通用大包或取消规则。
 
 ## 维护
 

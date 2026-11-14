@@ -1,5 +1,19 @@
 # 任务登记板
 
+## 现行入口：文档交接整理（2026-11-14 R40）
+
+V09-DOCS-HANDOFF-01 / docs-handoff-20261114，单会话；独立 ServerFleet-docs-handoff / docs/successor-handoff-20261114。任务：清理现行文档过时状态，建立 HANDOFF/CURRENT-STATE 与历史分类，修正前端 Mock-only 旧规则、工具链、迁移数及协作入口。范围只限现行 Markdown/AGENTS 与可变进度索引导航；不改代码/脚本/锁/配置/迁移/生成索引/原始资料/历史证据，不访问生产、不新发 Release。按用户要求只做文档链接、来源、一致性、diff/范围检查，不运行完整 CI；提交/合并标记 [skip ci]。停止于文档审查与 expected-head 正常合并，结果写 PR 评论。
+
+当前实现及剩余工作统一见 [CURRENT-STATE](CURRENT-STATE.md)，后续 Agent 从 [HANDOFF](HANDOFF.md) 开始。下方原记录包含旧“当前”标题，仅表示其登记时点，不继承任务/模型分工/主机授权，不重新执行历史队列。
+
+文档核对：23个 Markdown/AGENTS 文件，200处相对链接无缺失，diff 空白检查通过；对照固定工具来源、正式 Web 路由/调用、R37/R39 增量及 v0.9.2 发布元数据，raw 入口摘要与源码一致。旧任务/进度正文逐字保留；完整 CI 未运行（纯文档）。最终 PR/head/合并回执补 PR 评论。
+
+### R39 交付回执补记
+
+[PR #31](https://github.com/IKUNHEIHIE/ServerFleet/pull/31) 已合入 main c6204762c7fb285c475b619886474351c26dca31，精确 head CI 43286304878、main CI 43366199102、Release 43366199340 成功；[v0.9.2](https://github.com/IKUNHEIHIE/ServerFleet/releases/tag/v0.9.2) 双架构包与清单已发布，实际资产/摘要见 [PR 评论](https://github.com/IKUNHEIHIE/ServerFleet/pull/31#issuecomment-6844271811)。保留原任务文本，不把发布当成实机部署验收。
+
+## 以下为历史任务记录
+
 ## 当前：provisioned 证书链与 raw 安装入口（2026-11-13 R39）
 
 V09-PKI-RAW-01 / chatgpt-pki-raw-20261113，单会话主控；独立 ServerFleet-pki-raw / fix/pki-chain-raw-installer-20261113，从 main e1acfbd / Git tree98d1c27f核对恢复，旧目录不改。用户明确修复 provisioned 重复 Intermediate/缺少 Root 的阻断，并要求 raw.githubusercontent.com 脚本安装主控和 Agent。允许 localpki/transport 证书链构造与同叶旧回执响应修复、bootstrap 安装组件绑定、真实跨层回归、根安装入口/原生安装器/分发向导及其公开下载、现有分发升级和界面生成命令、现行产品/API/部署/升级说明与 v0.9.2 sequence3 发行/必要 CI，由主控协调共享文件。保持原迁移/SQL/checksum/锁/Proto/gen/批准 ADR 不变；不启其他 Agent、不引入运行时依赖、不访问真实 VPS/供应商或生产 Root/发行私钥。

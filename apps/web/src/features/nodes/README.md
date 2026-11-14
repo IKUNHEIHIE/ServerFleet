@@ -1,177 +1,29 @@
-# `features/nodes` · 节点列表组件（W01 / W01-R1 / W02 / W03）
+# 节点前端模块
 
-只读展示节点列表的独立组件。**不接入 App**，不发起任何网络请求，不含 Agent WebSocket、
-数据库或真实节点依赖；`App`/全局样式/`components/ui`/依赖清单均未改动。
+更新：2026-11-14。正式页面已接入 App 与 Controller API；旧 W01—W05 的“不接入 App/只用 Mock/等 G2 才接网络”是早期阶段限制，已不适用。开发先读 [交接](../../../../../docs/development/HANDOFF.md)、[功能](../../../../../docs/product/FEATURES.md)、[API](../../../../../docs/api/README.md)。
 
-## 组成
+## 当前入口
 
 | 文件 | 职责 |
 |---|---|
-| `types.ts` | 局部 ViewModel 与质量类型；`NodeListState` 是 loading/error/ready 互斥联合 |
-| `candidate-adapter.ts` | 候选 G2 DTO → ViewModel 的纯映射 + 指标有效性/时效判定 |
-| `view-model.ts` | 状态元数据、指标展示判定、时间与计数格式化 |
-| `node-list.tsx` | 组件：四状态、表格、roving tabindex 键盘导航、选中行高亮 |
-| `node-filters.ts` | 搜索/状态筛选纯函数（不改输入、不排序、不访问网络） |
-| `node-list-panel.tsx` | W02 包装：搜索框、状态筛选、清空，组合 `NodeList` |
-| `node-detail.tsx` | W03 只读详情：状态/平台/Agent/最近在线 + CPU/内存质量 |
-| `node-list-workspace.tsx` | W03 包装：保存选中 ID，组合面板与详情 |
-| `node-loader.tsx` | W05 加载容器：注入只读来源，处理 loading/成功/安全失败/重试与竞态 |
-| `metric-value.tsx` / `node-status-badge.tsx` | 列表与详情共用的指标、状态展示 |
-| `test/fixtures.ts` | 合成数据与固定时钟（仅测试可用） |
+| nodes-page.tsx | 节点列表页，调用 nodesApi，组合当前列表/适配与状态 |
+| node-add-page.tsx / installation-panel.tsx | 令牌、审批、可信安装目录与安装命令 |
+| node-detail-page.tsx | 节点详情、身份、能力、诊断及配额等接口呈现 |
+| node-list-workspace.tsx / node-list-panel.tsx / node-list.tsx | 列表/筛选/选中与展示组件 |
+| node-detail.tsx | 列表内只读详情组件，与正式详情页不同 |
+| node-loader.tsx | 可注入 NodeSource 的加载组件，不代表整个模块没有网络 |
+| rich-adapter.ts / legacy-adapter.ts / candidate-adapter.ts | 已知形状适配；当前 HTTP 字段以 DTO/处理器核对 |
+| view-model.ts / metric-value.tsx / node-status-badge.tsx | 指标质量与状态展示 |
+| test/ 与 *.test.ts(x) | 合成用例，禁止生产导入 |
 
-## 异步加载容器（W05）
+App 挂载见 apps/web/src/app/routes.tsx；REST 客户端/DTO 见 apps/web/src/lib/api。不要根据旧候选单独猜测端点字段，也不通过删除旧适配器掩盖兼容问题。
 
-`NodeLoader` 在 `NodeListWorkspace` 之上接一个**调用方注入**的只读来源：
+## 展示与安全语义
 
-```ts
-interface NodeSource {
-  key: string;                                            // 稳定、非秘密的来源/作用域标识
-  load(o: { signal: AbortSignal }): Promise<readonly NodeListItemView[]>;
-}
-```
+- loading/error/empty 与真实 ready 分开；旧响应/旧作用域不覆盖新请求，撤权不继续显示旧数据。
+- 管理员无隐式节点通配；筛选和隐藏不是权限控制。缺权限、没有节点、筛选无结果按当前可获得事实解释，不伪造统计。
+- fresh/stale/invalid/missing 保持区别，真实 0% 有效，越界不夹取，未上报不补零。时效策略由调用方注入，不能把前端阈值当 Agent 协议采样周期。
+- 错误不展示秘密或原始供应商正文；“已批准/已提交”不等于在线或执行成功。
+- 键盘选择/关闭焦点回落、可访问名称、加载和失败状态在重构后保留。真实浏览器验收与 jsdom 测试分别记录，不以历史浏览器记录宣称新 UI 已验收。
 
-| 场景 | 行为 |
-|---|---|
-| 首次加载 | 直接渲染 loading（不显示表格、计数或详情） |
-| 成功 | 用返回的 ViewModel 集合渲染现有列表 |
-| 失败 | 只显示固定文案 `节点数据暂时无法加载，请稍后重试。`，重试按钮可用 |
-| 重试 | 当帧回到 loading，不保留成功节点/计数/详情 |
-| 来源/作用域切换 | 渲染期比对「精确 key + 世代编号」，**首个提交**就是 loading；不先闪一帧旧数据 |
-| 来源失效后恢复同一 key | 世代由「key + 可用性」共同决定：失效（含 `load` 变成非函数）即作废旧快照；恢复时首个提交仍是 loading，不会重新显示旧节点/计数/详情 |
-| 旧响应（成功或失败） | 每个请求带自增序号，过期响应即使来源忽略 `AbortSignal` 也会被丢弃 |
-| 卸载 | abort 本容器的请求；不做轮询、后台重试或跨用户缓存 |
-| 缺少有效来源 | `source` 为 null、key 为空/全空白、或 key 带首尾空白 → 安全失败，且不渲染重试按钮 |
-
-约束与边界：
-
-- **不读取异常原文**：错误对象只用来判定失败，`error.message` 既不展示也不记录（可能含路径或 token）。
-- **key 按精确字符串比较**：不做 `trim`，`"scope-a"` 与 `" scope-a "` 是两个不同来源；
-  带首尾空白的 key 直接判为无效来源（安全失败），不会静默规范化成另一个作用域。
-- `key` 不是凭证：身份或授权范围变化时调用方必须更换它；本容器不校验 RBAC，也不把它当缓存许可。
-- 切换 `key` 会重建工作区，因此不继承上一个来源的选中项与筛选条件。
-- 本模块不含任何网络代码；真实 `fetch` 适配要等 G2 契约与授权审查后由集成任务提供。
-  这是局部接缝，不是公开 API，也不绑定未评审的公开 DTO。
-
-
-## 列表选择与只读详情（W03）
-
-`NodeListWorkspace` 组合搜索面板与详情区：
-
-- **只保存选中 ID**：`useState<string | null>`，每次渲染都用调用方本轮的 ready 集合
-  `find(id)` 解析，不缓存节点对象。
-- **立即隐藏**：加载中、失败，或该 ID 已不在来源集合时，详情区直接消失；**不会**自动改选
-  其他节点，也不会回退展示上一轮的数据。
-- **同一 ID 更新**：重新解析到新记录（指标、状态、时间都取当前值），不会显示旧快照。
-- **重新出现**：选中 ID 会保留；若该 ID 之后又出现在新集合中，详情按当前记录重新呈现。
-- **与筛选的关系**：搜索/状态筛选只影响表格可见行，不改变授权范围；被筛掉的节点只要仍在
-  已加载集合内，详情继续可用（隐藏不是权限动作）。
-- **交互**：点击行或行上 `Enter`/`Space` 选择；详情区标题为“节点详情”（`region` 有可访问
-  名称）；`关闭详情` 按钮与 `Escape` 均可关闭。非模态，无弹窗库。
-- **只读**：仅展示 ViewModel 已有字段，不新增 IP/地区/凭据/连接诊断，不推断关机或认证状态；
-  除关闭外没有任何操作按钮。
-
-已知限制：详情出现时不会主动把焦点移入，也没有实时播报（未加 `aria-live`）；读屏用户需
-自行导航到“节点详情”区域。
-
-
-## 本地搜索与筛选（W02）
-
-`NodeListPanel` 在 `NodeList` 之上加了三个控件，均有可访问名称：
-搜索框（`搜索节点`，`type="search"`，位于命名 `search` 区域）、状态下拉（`状态筛选`）、
-`清空筛选` 按钮（无输入时禁用）。
-
-| 行为 | 约定 |
-|---|---|
-| 搜索范围 | 仅当前传入节点的 `name` 与 `id`，子串匹配 |
-| 大小写/空白 | 首尾空白裁剪、大小写不敏感；纯空白视为不筛选 |
-| 状态筛选 | `all` 或四个状态之一，选项文案与状态徽标一致 |
-| 顺序 | 保持调用方传入顺序，不排序、不去重 |
-| 不变性 | 返回新数组，元素引用与源数组内容都不改动（含传入冻结数组） |
-| 计数 | 只描述当前已加载集合：`共 N 个节点` / `显示 X / 共 N 个节点`；加载与失败不显示计数 |
-| 空状态 | 源列表为空 → `暂无节点`；有节点但筛选无命中 → `没有匹配结果`（两者互不替代） |
-| 权限 | 筛选只影响本视图，**不构成权限控制**，可见性完全由上游决定 |
-
-`NodeList` 为此新增两个可选属性，默认行为不变：`emptyContent`（替换空列表内容）与
-`description={null}`（隐藏副标题，避免筛选场景出现“已授权节点接入后…”这类误导摘要）。
-
-加载/失败时搜索与筛选控件禁用；已验收的离线、`0%`/`100%`、陈旧可见时间与键盘交互
-在筛选后仍保持不变（`node-list-panel.test.tsx` 有回归用例）。
-
-
-## 指标质量（W01-R1 的核心）
-
-`MetricReading.quality` 只有四种取值，`percent` 非 null 时必为 0–100 的有限数：
-
-| 判定 | 触发条件 | 展示 |
-|---|---|---|
-| `fresh` | 0–100 有限数，采样时间可解析、不晚于当前时间、年龄 ≤ 阈值 | 百分比 |
-| `stale` | 同上，但年龄 > 阈值 | 百分比 **+ 可见「陈旧 · 采样于 … UTC」** |
-| `invalid` | 非有限数、越界（<0 或 >100）、采样时间在未来 | `—` + 可访问原因，不显示数字 |
-| `missing` | 节点非在线、未上报、缺采样时间、采样时间无法解析 | `—` + 可访问原因，不显示数字 |
-
-规则细节：
-
-- **越界不夹取**：`-10` / `150` 不会变成 `0%` / `100%`，也不会被静默修正。
-- **零值不特殊化**：真实 `0%` 与 `100%` 是合法读数，照常显示。
-- **离线不猜数**：`offline`/`suspended`/`revoked`/`unknown` 即使上游给了新鲜样本也不展示读数。
-- **时效信息可见**：陈旧说明是文本节点，不使用 `title`/悬停承载，键盘与触摸同样可读。
-
-## 时效策略必须注入
-
-```ts
-import { toNodeListItems } from "@/features/nodes";
-
-const items = toNodeListItems(details, metricsById, {
-  now: Date.now(),          // 调用方提供，测试固定
-  maxSampleAgeMs: 5 * 60_000, // 由产品/契约确认，模块内没有默认值
-});
-```
-
-实现中**没有任何日期或采样周期常量**：G2 候选尚未冻结指标采样周期，这里只是可注入的
-展示策略。策略值非法（`maxSampleAgeMs <= 0` 或 `now` 非有限数）时退化为“一律陈旧”，
-保证配置错误不会把样本当作新鲜值展示。
-
-## 可访问性
-
-- 区块用 `<section aria-labelledby>`，表格可访问名称来自同一个 `<h2>`。
-- 状态同时有文字标签与颜色；指标缺失原因通过 `sr-only` 文本给出。
-- 行采用 roving tabindex：`ArrowUp/ArrowDown/Home/End` 移动，`Enter/Space` 激活。
-- 加载用 `role="status"` 且 `aria-busy`，失败用 `role="alert"`，失败分支不渲染任何行。
-
-## 键盘焦点（W04）
-
-非模态详情，不做焦点陷阱：
-
-| 场景 | 焦点落点 |
-|---|---|
-| 键盘 `Enter`/`Space` 选择行 | 移入详情区（`tabIndex=-1`，只作程序化焦点，不占 Tab 序列） |
-| 鼠标点击选择行 | 不搬动焦点，详情只是出现 |
-| 详情内按 `Tab` | 进入“关闭详情”，再按 `Tab` 正常离开（无陷阱） |
-| 关闭按钮 / `Escape` | 回到当前仍渲染的来源行；若该行已被本地筛选隐藏 → 搜索框；再不行 → 列表区域 |
-| 来源移除 / loading / error / 空列表使详情消失 | 若焦点原本在详情内，按上面同一条链落位；不保留旧详情内容 |
-
-链上的每一步都按“此刻 DOM 是否已挂载”判断（`focusNode` 检查 `isConnected` 与当前
-可见集合），因此不会指向旧节点或已卸载元素。列表区域本身 `tabIndex=-1`，作为
-加载/失败时控件被禁用后的稳定兜底，不增加额外 Tab 停靠点。
-
-**重复选择同一节点（W04-R1）**：`selectedId` 不变时 React 不会提交更新，
-依赖提交的 effect 不会执行，因此键盘激活走“同 ID 直接聚焦已挂载详情”的同步路径，
-鼠标选中后再按 `Enter`/`Space`、或键盘再次激活都会立即进入详情。未执行的聚焦意图在
-关闭、来源失效和指针操作时清除，不会被下一次后台刷新消费而抢走搜索框焦点。
-
-已知限制：详情出现时不做额外播报（没有 `aria-live`），也故意不逐格播报指标；后台数据
-更新不会重新抢焦点。jsdom 只能证明程序化焦点与事件处理，真实 Tab 顺序由
-`reports/_review/tab-check.mjs`（Chrome DevTools Protocol）在真实浏览器里验收，产物在
-`reports/`（git 忽略），不随提交发布。
-
-窄屏（420px）下表格使用 `[contain:paint]` + `overflow-x-auto`，让最小内容宽度只在卡片内
-滚动，不再把整页撑出横向滚动条。
-
-## 验证
-
-```bash
-npm run check:web     # typecheck + vitest + build
-npm run check:policy  # 前端 import 边界（生产不得 import test/）
-```
-
-测试固定时钟 `FIXED_NOW`（`test/fixtures.ts`），不读取机器日期。
+代码变化按影响运行根 check:web/check:policy 及接口专项；纯文档不运行完整 CI。UI 行为新增/修改/删除同步功能/API 文档；生产 Xray/Bearer 未装配边界不能仅靠界面绕过。

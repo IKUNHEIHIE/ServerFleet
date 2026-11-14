@@ -1,45 +1,17 @@
-# Worktree 操作指南
+# 分支与工作目录
 
-主目录保留给集成负责人。辅助脚本只操作当前仓库 `.worktrees/` 下的任务目录，不触碰其他项目；不自动启动 Agent、不推远程。无需 GitHub 账号。
+当前远程为公有 IKUNHEIHIE/ServerFleet；协作入口见 [HANDOFF](HANDOFF.md)。同一个 GitHub 账号可用于多个工作目录，各目录仍须独立分支/任务；同账号不构成独立审核。
 
-在主目录执行（PowerShell 与 shell 通用）：
-
-```sh
-node scripts/worktree.mjs list
-node scripts/worktree.mjs create feature/p2-nodes-ds01 main
-```
-
-脚本打印完整路径，例如 `<项目>/.worktrees/feature--p2-nodes-ds01`。将这个目录交给对应会话，不要把主目录交给多个写代码的会话。新会话必须核对 `git branch --show-current` 和 `git rev-parse --show-toplevel`，再读任务单。Worktree 不会自动复制未提交文件、本地依赖或 `.tools`；先安装工具，或在任务单中明确由负责人提供受控只读工具路径。
-
-任务内独立提交：
+开始先读取 git status、已有 Worktree 和远程 main。不要在他人目录切分支、自动 stash、删除数据、reset --hard 或 clean -fd。创建任务分支时使用当前 main，不使用历史文档中的固定 p1/p2 分支作为必选基线。
 
 ```sh
-git status --short
-npm run check
-git add internal/nodes
-git commit -m "feat(nodes): add reviewed inventory rules"
+git fetch origin
+git worktree list
+git worktree add ../ServerFleet-docs-task -b docs/task-name origin/main
 ```
 
-只添加明确属于任务的文件，勿把其他会话产物加入。提交身份缺失时由执行人提供自己的身份；P1 的本地构建提交用明确的占位本地构建身份，不冒充项目所有者。
+示例路径/分支须换成当前任务的唯一名称，不覆盖已有目录。首次 clone 的普通独立目录也可承载单任务；并行任务分开目录。
 
-集成负责人确认目标目录干净，在专用 integration Worktree 审查和合并：
+在任务目录检查与提交，通过 GitHub PR 审查；集成负责人以 expected head 合并。不要直接在主工作目录合并并推 main 来代替 PR。出现远程变化时先读差异并正常解决冲突，不强推覆盖。
 
-```sh
-node scripts/worktree.mjs create integration/p2-batch01 main
-git -C .worktrees/integration--p2-batch01 merge --no-ff feature/p2-nodes-ds01
-```
-
-在 integration 目录运行全量检查，检查合同/生成代码并完成 INTEGRATION-CHECKLIST；主目录 main 干净时再由集成负责人 `git merge --ff-only integration/p2-batch01`。不得在未完成审查时执行示例合并。
-
-发生冲突时，用 `git status` 查看文件；由各 owner 决定保留的语义，手工合并后重新测试。不可用 `--ours/--theirs` 整体丢弃对方改动、强推、硬重置。无法继续时保留现场与冲突说明；`git merge --abort` 仅在确认没有需保留的新工作后使用。
-
-清理：
-
-```sh
-node scripts/worktree.mjs remove feature/p2-nodes-ds01 main
-node scripts/worktree.mjs list
-```
-
-脚本会拒绝未合并分支，以及任何已修改、未跟踪或忽略文件（包括 node_modules、报告、数据库）。先保存有价值内容；若需清理任务生成依赖，只在该任务绝对目录经过核对后操作，不能删主目录或其他会话。脚本不强制删除、不自动删分支。确认不再需要时可用 `git branch -d <已合并分支>`，不用 `-D`。
-
-本地无远程也能完成上述流程。推送、建立远程仓库和 GitHub 设置必须由负责人明确授权。
+清理只针对自己已合并且确认无未提交/忽略数据的 Worktree；不能因分支已合并就删除运行数据库、私钥、下载材料或其他任务目录。历史平台的 Windows 路径/代理/SSH 别名不复制为当前环境配置。
