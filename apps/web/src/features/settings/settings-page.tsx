@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -10,6 +11,7 @@ import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { authApi, credentialsApi } from "@/lib/api/endpoints";
 import { NotificationsSettings } from "./notifications-settings";
+import { RestrictedTokensPanel } from "./restricted-tokens-panel";
 import { ControllerUpdatePanel } from "@/features/updates/updates-page";
 import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
@@ -222,7 +224,7 @@ export function SettingsPage() {
       <PageHeader
         title="系统设置"
         description="安全凭据、账号会话与系统级配置。秘密只写不读；页面不把隐藏按钮当作安全边界。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">设置</span>}
+        badge={<Badge tone="primary" dot>设置</Badge>}
       />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       <TabBar
@@ -356,6 +358,7 @@ export function SettingsPage() {
               )}
             </AsyncPanel>
           </Panel>
+          <RestrictedTokensPanel key={session.viewEpoch} />
         </div>
       ) : null}
 

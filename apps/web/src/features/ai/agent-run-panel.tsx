@@ -1,6 +1,10 @@
 import { useRef, useState, type FormEvent } from "react";
+import { Bot, Cpu, Loader2, ShieldAlert, Sparkles, Wrench } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
+import { TracingBeam } from "@/components/aceternity/tracing-beam";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextArea } from "@/components/ui/form";
@@ -94,26 +98,54 @@ function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { r
           const terminal = TERMINAL.has(data.state);
           const last = data.steps.at(-1);
           const stale = run.state.status === "ready" && run.state.refreshError !== null;
-          return <div className="space-y-4 px-5 py-4">
-            <p className="whitespace-pre-wrap text-sm">{data.goal}</p>
-            <div role="status" aria-live="polite" className="flex flex-wrap gap-3 text-sm">
-              <strong>{STATE_LABEL[data.state]}</strong><span>{data.steps.length} / {data.maxSteps} 步</span><span>截至 {formatDateTime(data.expiresAt) ?? "—"}</span>
+          return (
+            <div className="space-y-4 px-5 py-4">
+              <div className="rounded-xl border border-border/80 bg-[#FAFBFD] p-4">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-primary">
+                  <Sparkles aria-hidden="true" className="size-3.5" />
+                  <span>Agent Goal</span>
+                </div>
+                <p className="mt-1.5 whitespace-pre-wrap text-sm font-medium text-foreground">{data.goal}</p>
+              </div>
+              <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 text-sm shadow-2xs">
+                {!terminal ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /> : <Bot aria-hidden="true" className="size-4 text-emerald-600" />}
+                <strong className="text-foreground">{STATE_LABEL[data.state]}</strong>
+                <Badge variant="info">{data.steps.length} / {data.maxSteps} 步</Badge>
+                <span className="text-xs text-muted-foreground">截至 {formatDateTime(data.expiresAt) ?? "—"}</span>
+              </div>
+              {!terminal && !data.driverActive ? <Notice tone="warning" title="运行已暂停">主控重启或当前授权上下文结束后，需要点击继续。正在规划或提交时中断的步骤会停止并标记结果未知。</Notice> : null}
+              {data.state === "unknown" ? <Notice tone="warning" title="请人工核对关联任务">已有动作可能执行。此运行不会重放步骤；核对实际结果后再发起新的目标。</Notice> : null}
+              {!terminal ? (
+                <div className="flex flex-wrap gap-2">
+                  {!data.driverActive ? <Button type="button" variant="primary" loading={advance.pending} disabled={locked || pending || stale} onClick={() => void act(() => advance.run(data.revision))}>继续运行</Button> : null}
+                  <Button type="button" variant="danger" loading={cancel.pending} disabled={locked || pending || stale || data.state === "canceling"} onClick={() => void act(() => cancel.run(data.revision))}>取消运行</Button>
+                </div>
+              ) : null}
+              {data.state === "waiting_approval" && last?.approvalId ? (
+                <Notice tone="info" title="等待你批准本次工具调用">
+                  <p>请核对下方目标节点和参数。修改类和 Root 命令随后还需在关联任务页完成独立管理员审批。</p>
+                  {!canApprove ? <p className="mt-2">本次审批需要当前真人管理员。</p> : null}
+                  <div className="mt-3 flex gap-2">
+                    <Button type="button" variant="primary" disabled={locked || !canApprove || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "approve"))}>批准本次调用</Button>
+                    <Button type="button" variant="danger" disabled={locked || !canApprove || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "deny"))}>拒绝</Button>
+                  </div>
+                </Notice>
+              ) : null}
+              <TracingBeam className="pl-6">
+                <ol className="space-y-3" aria-label="Agent 执行步骤">{data.steps.map(step => <StepCard key={step.number} step={step} />)}</ol>
+              </TracingBeam>
+              {data.finalText ? (
+                <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.06] via-card to-primary/[0.03] p-4 shadow-[var(--shadow-card)]">
+                  <h3 className="flex items-center gap-2 font-semibold text-foreground">
+                    <Bot aria-hidden="true" className="size-4 text-emerald-600" />
+                    最终答复
+                  </h3>
+                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">{data.finalText}</p>
+                </GlowingEffect>
+              ) : null}
+              {data.stopReason ? <p className="break-all text-sm text-muted-foreground">停止原因：{data.stopReason}</p> : null}
             </div>
-            {!terminal && !data.driverActive ? <Notice tone="warning" title="运行已暂停">主控重启或当前授权上下文结束后，需要点击继续。正在规划或提交时中断的步骤会停止并标记结果未知。</Notice> : null}
-            {data.state === "unknown" ? <Notice tone="warning" title="请人工核对关联任务">已有动作可能执行。此运行不会重放步骤；核对实际结果后再发起新的目标。</Notice> : null}
-            {!terminal ? <div className="flex flex-wrap gap-2">
-              {!data.driverActive ? <Button type="button" variant="primary" loading={advance.pending} disabled={locked || pending || stale} onClick={() => void act(() => advance.run(data.revision))}>继续运行</Button> : null}
-              <Button type="button" variant="danger" loading={cancel.pending} disabled={locked || pending || stale || data.state === "canceling"} onClick={() => void act(() => cancel.run(data.revision))}>取消运行</Button>
-            </div> : null}
-            {data.state === "waiting_approval" && last?.approvalId ? <Notice tone="info" title="等待你批准本次工具调用">
-              <p>请核对下方目标节点和参数。修改类和 Root 命令随后还需在关联任务页完成独立管理员审批。</p>
-              {!canApprove ? <p className="mt-2">本次审批需要当前真人管理员。</p> : null}
-              <div className="mt-3 flex gap-2"><Button type="button" disabled={locked || !canApprove || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "approve"))}>批准本次调用</Button><Button type="button" variant="danger" disabled={locked || !canApprove || pending || stale} onClick={() => void act(() => decide.run(last.approvalId!, "deny"))}>拒绝</Button></div>
-            </Notice> : null}
-            <ol className="space-y-3" aria-label="Agent 执行步骤">{data.steps.map(step => <StepCard key={step.number} step={step} />)}</ol>
-            {data.finalText ? <section className="rounded-lg border bg-secondary/40 p-4"><h3 className="font-semibold">最终答复</h3><p className="mt-2 whitespace-pre-wrap text-sm">{data.finalText}</p></section> : null}
-            {data.stopReason ? <p className="break-all text-sm text-muted-foreground">停止原因：{data.stopReason}</p> : null}
-          </div>;
+          );
         }}
       </AsyncPanel>
     </Panel>
@@ -121,11 +153,46 @@ function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { r
 }
 
 function StepCard({ step }: { readonly step: AgentStep }) {
-  return <li className="min-w-0 rounded-lg border p-4 text-sm">
-    <div className="flex flex-wrap justify-between gap-2"><h3 className="font-semibold">第 {step.number} 步 · {step.toolName ?? "模型规划"}</h3><span>{STATE_LABEL[step.state]}</span></div>
-    {step.nodeIds.length > 0 ? <p className="mt-2 break-all text-xs">节点：{step.nodeIds.join("、")}</p> : null}
-    {step.parameters ? <details className="mt-2" open={step.state === "waiting_approval"}><summary className="cursor-pointer">调用参数</summary><pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded bg-secondary p-3 text-xs">{JSON.stringify(step.parameters, null, 2)}</pre></details> : null}
-    {step.taskId ? <p className="mt-2"><a className="text-primary underline" href={`#/tasks/${encodeURIComponent(step.taskId)}`}>查看关联任务与审批</a> · {step.taskState ?? "等待状态"}</p> : null}
-    {step.result ? <details className="mt-2"><summary className="cursor-pointer">实际结果（已脱敏）</summary><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded bg-secondary p-3 text-xs">{step.result}</pre></details> : null}
-  </li>;
+  const isRunning = step.state === "thinking" || step.state === "submitting" || step.state === "waiting_task";
+  const isWaitingApproval = step.state === "waiting_approval";
+  return (
+    <li className="min-w-0 rounded-xl border border-border/80 bg-card p-4 text-sm shadow-2xs transition-all hover:border-primary/25">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 font-semibold text-foreground">
+          {step.toolName ? (
+            <Wrench aria-hidden="true" className={`size-4 text-primary ${isRunning ? "animate-spin" : ""}`} />
+          ) : (
+            <Cpu aria-hidden="true" className={`size-4 text-primary ${isRunning ? "animate-pulse" : ""}`} />
+          )}
+          <span>第 {step.number} 步 · {step.toolName ?? "模型规划"}</span>
+        </h3>
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-[#FAFBFD] px-2.5 py-0.5 text-xs font-medium text-foreground">
+          {isWaitingApproval ? <ShieldAlert aria-hidden="true" className="size-3.5 text-amber-600" /> : null}
+          {STATE_LABEL[step.state]}
+        </span>
+      </div>
+      {step.nodeIds.length > 0 ? <p className="mt-2 break-all text-xs text-muted-foreground">节点：{step.nodeIds.join("、")}</p> : null}
+      {step.parameters ? (
+        <details className="mt-2.5" open={step.state === "waiting_approval"}>
+          <summary className="cursor-pointer text-xs font-semibold text-primary">调用参数</summary>
+          <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border/70 bg-[#141724] p-3 font-mono text-xs text-slate-100">
+            {JSON.stringify(step.parameters, null, 2)}
+          </pre>
+        </details>
+      ) : null}
+      {step.taskId ? (
+        <p className="mt-2 text-xs">
+          <a className="font-semibold text-primary underline" href={`#/tasks/${encodeURIComponent(step.taskId)}`}>查看关联任务与审批</a> · {step.taskState ?? "等待状态"}
+        </p>
+      ) : null}
+      {step.result ? (
+        <details className="mt-2.5">
+          <summary className="cursor-pointer text-xs font-semibold text-emerald-700">实际结果（已脱敏）</summary>
+          <pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap break-all rounded-lg border border-border/70 bg-[#141724] p-3 font-mono text-xs text-emerald-200">
+            {step.result}
+          </pre>
+        </details>
+      ) : null}
+    </li>
+  );
 }

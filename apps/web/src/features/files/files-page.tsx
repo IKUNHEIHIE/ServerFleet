@@ -1,12 +1,15 @@
 import { AgentResumePanel } from "./agent-resume-panel";
+import { FileDistributionPanel } from "./file-distribution-panel";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { Folder, FileText, UploadCloud, ArrowLeftRight, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { ApiError, describeApiError } from "@/lib/api/errors";
 import { filesApi, nodesApi, tasksApi, transfersApi } from "@/lib/api/endpoints";
@@ -602,17 +605,17 @@ function FilePane({
           <Button type="submit" size="sm" disabled={!state.nodeId}>跳转</Button>
         </form>
         <nav aria-label={`${label}面包屑`} className="mt-2 flex flex-wrap items-center gap-1 text-xs">
-          <button type="button" onClick={() => resetInteraction({ path: "/" })} disabled={!state.nodeId} className="rounded px-1 py-0.5 hover:bg-secondary disabled:opacity-50">
+          <Button type="button" size="sm" variant="ghost" onClick={() => resetInteraction({ path: "/" })} disabled={!state.nodeId} className="h-6 px-1.5 font-mono text-xs">
             /
-          </button>
+          </Button>
           {state.path.split("/").filter(Boolean).map((segment, index, parts) => {
             const target = `/${parts.slice(0, index + 1).join("/")}`;
             return (
               <span key={target} className="flex items-center gap-1">
                 <span aria-hidden="true">/</span>
-                <button type="button" onClick={() => resetInteraction({ path: target })} className="rounded px-1 py-0.5 hover:bg-secondary">
+                <Button type="button" size="sm" variant="ghost" onClick={() => resetInteraction({ path: target })} className="h-6 px-1.5 font-mono text-xs">
                   {segment}
-                </button>
+                </Button>
               </span>
             );
           })}
@@ -620,12 +623,12 @@ function FilePane({
         <form onSubmit={applySearch} className="mt-2 flex flex-wrap items-end gap-2">
           <div className="min-w-40 flex-1">
             <label htmlFor={`${label}-search`} className="block text-xs font-medium text-muted-foreground">当前目录搜索</label>
-            <input
+            <TextInput
               id={`${label}-search`}
               type="search"
               value={searchDraft}
               onChange={event => setSearchDraft(event.target.value)}
-              className="mt-1 h-8 w-full rounded-md border border-input bg-background px-2 text-sm"
+              className="h-8 px-2"
               disabled={!state.nodeId}
             />
           </div>
@@ -653,7 +656,8 @@ function FilePane({
               <option value="skip">跳过同名</option><option value="overwrite">覆盖同名</option><option value="rename">自动改名</option>
             </Select>}
           </Field>
-          <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
+          <label className={`inline-flex h-8 items-center gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 text-xs font-medium text-primary transition-colors ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-primary/10"}`}>
+            <UploadCloud className="size-3.5" />
             上传文件（按所选策略）
             <input
               type="file"
@@ -663,7 +667,8 @@ function FilePane({
               onChange={event => void handleFiles(event)}
             />
           </label>
-          <Button type="button" size="sm" onClick={() => setTransferOpen(true)} disabled={sendDisabled}>
+          <Button type="button" size="sm" variant="primary" onClick={() => setTransferOpen(true)} disabled={sendDisabled}>
+            <ArrowLeftRight className="size-3.5" />
             发送到另一侧（{selectedEntries.length}）
           </Button>
         </div>
@@ -676,7 +681,7 @@ function FilePane({
         {sizeResult ? <p role="status" className="text-xs text-muted-foreground">{sizeResult}</p> : null}
         {uploadBusy ? <p role="status" className="text-xs text-muted-foreground">正在核验或上传；仅服务端确认的字节计入进度。</p> : null}
         {uploadDrafts.length > 0 ? (
-          <div role="region" aria-label="可恢复上传" className="space-y-2 rounded-md border p-2 text-xs">
+          <SubCard role="region" aria-label="可恢复上传" className="space-y-2 p-2.5 text-xs">
             <p>本地仅保存待核验记录；续传使用创建时冻结的同名策略。重新选择原文件后核对摘要，从服务端确认的偏移继续；已派发或未知任务不会重放。仅恢复七天内的记录，最多32项。</p>
             {uploadDrafts.map(draft => (
               <div key={draft.uploadId} className="space-y-1 border-t pt-2">
@@ -699,10 +704,10 @@ function FilePane({
                 <p className="text-muted-foreground">移除本地记录不会取消服务端任务；取消仍使用统一任务入口。</p>
               </div>
             ))}
-          </div>
+          </SubCard>
         ) : null}
         {visiblePendingUploads.length > 0 ? (
-          <div className="rounded-md border p-2 text-xs" role="region" aria-label="待确认上传">
+          <SubCard className="p-2.5 text-xs" role="region" aria-label="待确认上传">
             <div className="flex items-center justify-between">
               <span className="font-medium">
                 待确认上传（{activePendingUploads(visiblePendingUploads).length} 项未到终态 / 共 {visiblePendingUploads.length} 项）
@@ -771,7 +776,7 @@ function FilePane({
             <p className="mt-2 text-muted-foreground">
               “已受理（排队）”不等于远端完成：只有本节点、本身份下服务端读回 completed 才显示已完成；缓存记录一律先显示“待核验”。
             </p>
-          </div>
+          </SubCard>
         ) : null}
       </div>
 
@@ -797,13 +802,11 @@ function FilePane({
                     key: "select",
                     header: "选择",
                     render: entry => (
-                      <input
-                        type="checkbox"
+                      <Checkbox
                         aria-label={`选择 ${entry.name}`}
                         checked={selected.has(entry.path)}
                         disabled={entry.type === "symlink"}
                         onChange={event => toggle(entry, event.target.checked)}
-                        className="size-4 accent-[var(--primary)]"
                       />
                     ),
                   },
@@ -812,11 +815,15 @@ function FilePane({
                     header: "名称",
                     render: entry =>
                       entry.type === "directory" ? (
-                        <button type="button" className="text-left text-primary underline-offset-2 hover:underline" onClick={() => openEntry(entry)}>
+                        <button type="button" className="inline-flex items-center gap-1.5 text-left font-medium text-primary underline-offset-2 hover:underline" onClick={() => openEntry(entry)}>
+                          <Folder className="size-3.5 text-primary" />
                           {entry.name}/
                         </button>
                       ) : (
-                        <span>{entry.name}</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <FileText className="size-3.5 text-muted-foreground" />
+                          {entry.name}
+                        </span>
                       ),
                   },
                   {
@@ -987,12 +994,11 @@ export function FilesPage() {
 
   return (
     <div className="space-y-5">
-      <AgentResumePanel key={session.viewEpoch} />
       <PageHeader
         title="文件互传"
         description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；上传走真实字节通道（POST uploads → PUT content → POST complete 校验）。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">异步复制</span>}
-        actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>异步复制</Badge>}
+        actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
       <Notice tone="info" title="能力边界">
         上传会话会真实传输文件字节并由服务端校验字节数与 SHA-256（`PUT …/content` → `POST …/complete`）；
@@ -1031,14 +1037,14 @@ export function FilesPage() {
           <>
             <label className="text-xs text-muted-foreground">
               状态
-              <select
+              <Select
                 value={transferFilter}
                 onChange={event => setTransferFilter(event.target.value)}
-                className="ml-2 h-8 rounded-md border border-input bg-background px-2 text-xs"
+                className="ml-2 mt-0 inline-block h-8 w-auto px-2 py-1 text-xs"
               >
                 <option value="">全部</option>
                 {Object.entries(TRANSFER_STATUS_TEXT).map(([value, text]) => <option key={value} value={value}>{text}</option>)}
-              </select>
+              </Select>
             </label>
             <Button size="sm" onClick={transfers.reload} loading={transfers.state.status === "loading"}>刷新</Button>
           </>
@@ -1060,7 +1066,22 @@ export function FilesPage() {
                 { key: "id", header: "任务", render: job => <span className="font-mono text-xs">{job.id}</span> },
                 { key: "route", header: "路径", render: job => `${job.sourceNodeId}:${job.sourcePaths.join(",")} → ${job.destinationNodeId}:${job.destinationDir}` },
                 { key: "status", header: "状态", render: job => TRANSFER_STATUS_TEXT[job.status] ?? job.status },
-                { key: "progress", header: "进度", align: "right", render: job => `${job.progressPercent}%` },
+                {
+                  key: "progress",
+                  header: "进度",
+                  align: "right",
+                  render: job => (
+                    <div className="inline-flex items-center justify-end gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-300"
+                          style={{ width: `${Math.max(0, Math.min(100, job.progressPercent))}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-xs">{`${job.progressPercent}%`}</span>
+                    </div>
+                  ),
+                },
                 { key: "bytes", header: "已复制", render: job => `${formatBytes(job.copiedBytes) ?? "0 B"} / ${formatBytes(job.totalBytes ?? null) ?? "未知"}` },
                 { key: "created", header: "创建", render: job => formatDateTime(job.createdAt) ?? "—" },
                 {
@@ -1087,6 +1108,12 @@ export function FilesPage() {
         </AsyncPanel>
       </Panel>
 
+      <SectionDivider label="多目标分发与断点偏移恢复" caption="Multi-Target Distribution & Offset Resume" />
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <FileDistributionPanel key={`dist:${session.viewEpoch}`} nodes={nodeItems} />
+        <AgentResumePanel key={session.viewEpoch} />
+      </div>
+
       <Modal
         open={transferDetail !== null}
         title={transferDetail ? `传输任务 ${transferDetail.id}` : "传输任务"}
@@ -1102,14 +1129,16 @@ export function FilesPage() {
             <p>目标：{transferDetail.destinationNodeId} · {transferDetail.destinationDir}</p>
             {transferDetail.error ? <Notice tone="error" title="传输错误">{transferDetail.error.code} · {transferDetail.error.message}</Notice> : null}
             {transferDetail.items?.length ? (
-              <ul className="divide-y rounded-md border">
-                {transferDetail.items.map((item, index) => (
-                  <li key={`${item.path ?? index}`} className="px-3 py-2 text-xs">
-                    <span className="font-mono">{item.path ?? "未知项目"}</span> · {item.state ?? "状态未提供"}
-                    {item.error ? ` · ${item.error}` : ""}
-                  </li>
-                ))}
-              </ul>
+              <SubCard className="p-0 overflow-hidden">
+                <ul className="divide-y divide-border/75">
+                  {transferDetail.items.map((item, index) => (
+                    <li key={`${item.path ?? index}`} className="px-3.5 py-2 text-xs">
+                      <span className="font-mono">{item.path ?? "未知项目"}</span> · {item.state ?? "状态未提供"}
+                      {item.error ? ` · ${item.error}` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </SubCard>
             ) : <p className="text-muted-foreground">服务端未返回逐项目结果；不能据此声称全部成功。</p>}
           </div>
         ) : null}

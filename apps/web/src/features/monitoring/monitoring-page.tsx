@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Activity, AlertTriangle, Radio, BellRing, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
@@ -234,13 +237,10 @@ function MonitorEditor({
           <Field label="连续失败判定">{ids => <TextInput id={ids.inputId} type="number" min={1} value={failureCount} onChange={event => setFailureCount(event.target.value)} />}</Field>
           <Field label="连续恢复判定">{ids => <TextInput id={ids.inputId} type="number" min={1} value={recoveryCount} onChange={event => setRecoveryCount(event.target.value)} />}</Field>
         </div>
-        <fieldset className="rounded-lg border px-4 py-3">
-          <legend className="px-1 text-sm font-medium">通知渠道</legend>
+        <FieldsetBox legend="通知渠道">
           {(["qqbot", "smtp"] as const).map(channel => (
             <label key={channel} className="mt-1 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-[var(--primary)]"
+              <Checkbox
                 checked={channels.has(channel)}
                 onChange={event => {
                   setChannels(current => {
@@ -254,7 +254,7 @@ function MonitorEditor({
               {channel === "qqbot" ? "QQ Bot" : "SMTP"}
             </label>
           ))}
-        </fieldset>
+        </FieldsetBox>
         <p className="text-xs text-muted-foreground">默认建议 60 秒间隔、5 秒超时、3 次失败判异常、2 次成功判恢复；服务端可设更严格上限。</p>
       </form>
     </Modal>
@@ -340,9 +340,53 @@ export function MonitoringPage() {
       <PageHeader
         title="监控告警"
         description="资源当前读数、HTTP/TCP/TLS 可用性监控（含真实检查历史与立即探测）与通知投递。资源历史趋势仍受当前契约限制，不能伪造。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">监控</span>}
-        actions={<Button type="button" onClick={() => { nodes.reload(); risks.reload(); monitors.reload(); channels.reload(); deliveries.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>监控</Badge>}
+        actions={<Button type="button" onClick={() => { nodes.reload(); risks.reload(); monitors.reload(); channels.reload(); deliveries.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">可见节点 / 在线</span>
+            <Activity className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">
+            {nodeItems.filter(n => n.online).length} <span className="text-sm font-normal text-muted-foreground">/ {nodeItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">流量与到期风险</span>
+            <AlertTriangle className="size-4 text-amber-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-amber-600">
+            {riskItems.length}
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">可用性监控</span>
+            <Radio className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">
+            {monitorItems.filter(m => m.state === "healthy").length} <span className="text-sm font-normal text-muted-foreground">/ {monitorItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">通知投递记录</span>
+            <BellRing className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">
+            {deliveryItems.length}
+          </p>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <TabBar
         label="监控告警分区"

@@ -1,12 +1,15 @@
 import { IncidentPanel } from "./incident-panel";
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Radio, Terminal } from "lucide-react";
 import { useSession } from "@/app/session";
+import { TracingBeam } from "@/components/aceternity/tracing-beam";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, TextArea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { tasksApi } from "@/lib/api/endpoints";
@@ -133,13 +136,12 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
 
   return (
     <div className="space-y-5">
-      <IncidentPanel key={`incidents:${session.viewEpoch}`} taskId={taskId} />
       <PageHeader
         title={current ? `任务 ${current.taskId}` : "任务详情"}
         description="任务状态、目标快照、审批、逐节点执行与 SSE 事件。取消不冒充回滚；未知结果不自动重跑。"
         actions={
           <>
-            <a href="#/tasks" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回任务中心</a>
+            <LinkButton href="#/tasks">返回任务中心</LinkButton>
             {current?.state === "awaiting_approval" ? (
               <>
                 <Button type="button" disabled={!canApprove || writesLocked || busy || !planDigest} onClick={() => openDecision("approve")}>批准</Button>
@@ -173,6 +175,30 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
         {data => (
           <div className="space-y-5">
             <Panel title="任务快照" description="GET /api/v1/tasks/{taskId}；状态与摘要以服务端为准。">
+              <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
+                <div className="grid gap-2.5 sm:grid-cols-4">
+                  {[
+                    { step: "01. 冻结目标快照", active: true },
+                    { step: "02. 权限与审批校验", active: data.state !== "awaiting_approval" },
+                    { step: "03. 节点分批派发", active: data.state === "running" || isTaskTerminal(data.state) },
+                    { step: "04. 终态审计结案", active: isTaskTerminal(data.state) },
+                  ].map(item => (
+                    <div
+                      key={item.step}
+                      className={`flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold ${
+                        item.active
+                          ? "border-primary/25 bg-primary-light/70 text-primary"
+                          : "border-border/70 bg-card text-muted-foreground"
+                      }`}
+                    >
+                      <span
+                        className={`size-2 rounded-full ${item.active ? "bg-primary" : "bg-muted-foreground/40"}`}
+                      />
+                      <span>{item.step}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
               <div className="grid gap-4 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <p>状态：<strong>{TASK_STATE_LABEL[data.state]}</strong></p>
                 <p>创建：{formatDateTime(data.createdAt) ?? "—"}</p>
@@ -182,7 +208,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                 <p>revision：{data.revision}</p>
                 <p>目标快照：{data.targetType === "controller" ? "1 个主控" : `${data.targetNodeIdsSnapshot.length} 台`}</p>
               </div>
-              <div className="border-t px-5 py-3 text-xs text-muted-foreground">
+              <div className="border-t border-border/70 bg-[#FAFBFD] px-5 py-3 text-xs text-muted-foreground">
                 目标集合：{data.targetType === "controller" ? `主控 ${data.targetControllerId ?? "身份未返回"}` : data.targetNodeIdsSnapshot.length > 0 ? data.targetNodeIdsSnapshot.join("、") : "空快照"}
               </div>
             </Panel>
@@ -191,31 +217,52 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
               title="实时事件"
               description="SSE 只投影已知字段；原始 data 不回显，避免命令输出或秘密进入界面。"
               actions={
-                <Button size="sm" onClick={stream.reconnect} disabled={terminal}>重连事件流</Button>
+                <Button size="sm" onClick={stream.reconnect} disabled={terminal}>
+                  <Radio aria-hidden="true" className="size-3.5" />
+                  重连事件流
+                </Button>
               }
             >
-              <div className="flex flex-wrap items-center gap-4 border-b px-5 py-3 text-xs text-muted-foreground">
-                <span>连接：{stream.state}</span>
+              <div className="flex flex-wrap items-center gap-4 border-b border-border/70 bg-[#FAFBFD] px-5 py-3 text-xs text-muted-foreground">
+                <Badge variant={stream.state === "open" ? "success" : "outline"}>连接：{stream.state}</Badge>
                 <span>游标：{stream.lastEventId ?? "尚未收到"}</span>
                 <span>最新进度：{hasProgress && latestProgress !== null ? `${latestProgress}%` : "未收到进度事件"}</span>
                 <span>事件中的状态：{latestState ? TASK_STATE_LABEL[latestState] : "未收到"}</span>
               </div>
+              {hasProgress && latestProgress !== null ? (
+                <div className="border-b border-border/70 bg-card px-5 py-2.5">
+                  <div className="h-2 overflow-hidden rounded-full bg-secondary">
+                    <div
+                      className="h-full rounded-full bg-gradient-to-r from-[#6658E8] via-[#3984E7] to-[#169B68] transition-all duration-500"
+                      style={{ width: `${Math.max(0, Math.min(100, latestProgress))}%` }}
+                    />
+                  </div>
+                </div>
+              ) : null}
               {liveEvents.length === 0 ? (
                 <p className="px-5 py-6 text-sm text-muted-foreground">
                   {terminal ? "任务已结束；不再订阅事件流。" : "尚未收到事件。任务执行状态以服务端快照与本表为准。"}
                 </p>
               ) : (
-                <ul className="max-h-72 divide-y overflow-y-auto">
-                  {liveEvents.map((event, index) => (
-                    <li key={`${event.id ?? "evt"}-${event.receivedAt}-${index}`} className="px-5 py-2 text-xs">
-                      <span className="font-mono">{event.id ?? "无游标"}</span> · {event.event}
-                      {event.state ? ` · ${TASK_STATE_LABEL[event.state]}` : ""}
-                      {event.progressPercent !== null ? ` · ${event.progressPercent}%` : ""}
-                      {event.nodeId ? ` · ${event.nodeId}` : ""}
-                      {event.message ? ` · ${event.message}` : ""}
-                    </li>
-                  ))}
-                </ul>
+                <div className="bg-[#141724] p-4 text-slate-100">
+                  <div className="mb-2 flex items-center gap-2 text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                    <Terminal className="size-3.5 text-emerald-400" />
+                    <span>Projected SSE Event Stream</span>
+                  </div>
+                  <TracingBeam className="pl-5">
+                    <ul className="max-h-72 divide-y divide-slate-800/80 overflow-y-auto">
+                      {liveEvents.map((event, index) => (
+                        <li key={`${event.id ?? "evt"}-${event.receivedAt}-${index}`} className="py-2 font-mono text-xs text-slate-200">
+                          <span className="text-violet-300">{event.id ?? "无游标"}</span> · {event.event}
+                          {event.state ? ` · ${TASK_STATE_LABEL[event.state]}` : ""}
+                          {event.progressPercent !== null ? ` · ${event.progressPercent}%` : ""}
+                          {event.nodeId ? ` · ${event.nodeId}` : ""}
+                          {event.message ? ` · ${event.message}` : ""}
+                        </li>
+                      ))}
+                    </ul>
+                  </TracingBeam>
+                </div>
               )}
             </Panel>
 
@@ -249,6 +296,9 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
           </div>
         )}
       </AsyncPanel>
+
+      <SectionDivider label="异常与 UNKNOWN 人工处置" caption="Incident Verification & Manual Closure" />
+      <IncidentPanel key={`incidents:${session.viewEpoch}`} taskId={taskId} />
 
       <Modal
         open={decision !== null}

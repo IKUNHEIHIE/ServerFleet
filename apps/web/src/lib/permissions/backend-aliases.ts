@@ -23,6 +23,7 @@ const BACKEND_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "group.manage": ["groups.write"],
   "servicegroup.manage": ["servicegroups.write"],
   "servicegroup.read": ["servicegroups.read"],
+  "publication.manage": ["publishing.write"],
   "gateway.read": ["gateway.read"],
   "gateway.manage": ["gateway.write"],
   "gateway.install": ["gateway.provision"],

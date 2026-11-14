@@ -1,4 +1,6 @@
 import { useId, type KeyboardEvent, type ReactNode, type Ref } from "react";
+import { Server, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView } from "./types";
 import { MetricValue } from "./metric-value";
@@ -17,9 +19,9 @@ export interface NodeDetailPanelProps {
 
 function Field({ term, children }: { readonly term: string; readonly children: ReactNode }) {
   return (
-    <div>
-      <dt className="text-xs text-muted-foreground">{term}</dt>
-      <dd className="mt-1 text-sm">{children}</dd>
+    <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{term}</dt>
+      <dd className="mt-1.5 text-sm font-medium text-foreground">{children}</dd>
     </div>
   );
 }
@@ -54,32 +56,41 @@ export function NodeDetailPanel({ node, onClose, className, ref }: NodeDetailPan
       aria-labelledby={headingId}
       onKeyDown={handleKeyDown}
       className={cn(
-        "rounded-xl border bg-card focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "relative overflow-hidden rounded-xl border border-primary/25 bg-card shadow-[var(--shadow-card-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         className,
       )}
     >
-      <header className="flex flex-wrap items-start justify-between gap-4 border-b px-6 py-4">
-        <div>
-          <h2 id={headingId} className="font-semibold">
-            节点详情
-          </h2>
-          <p className="mt-1 whitespace-nowrap font-medium">{node.name}</p>
-          {node.name === node.id ? null : (
-            <p className="whitespace-nowrap font-mono text-xs text-muted-foreground">{node.id}</p>
-          )}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-[#6658E8] via-[#3984E7] to-[#169B68]"
+      />
+      <header className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 bg-gradient-to-b from-primary/[0.03] to-transparent px-6 py-4">
+        <div className="flex items-start gap-3">
+          <span
+            aria-hidden="true"
+            className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-xl border border-primary/20 bg-primary-light text-primary"
+          >
+            <Server className="size-4" />
+          </span>
+          <div>
+            <h2 id={headingId} className="font-semibold text-foreground">
+              节点详情
+            </h2>
+            <p className="mt-1 whitespace-nowrap font-semibold text-foreground">{node.name}</p>
+            {node.name === node.id ? null : (
+              <p className="whitespace-nowrap font-mono text-xs text-muted-foreground">{node.id}</p>
+            )}
+          </div>
         </div>
         {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button type="button" onClick={onClose}>
+            <X aria-hidden="true" className="size-3.5 text-muted-foreground" />
             关闭详情
-          </button>
+          </Button>
         ) : null}
       </header>
 
-      <dl className="grid gap-x-6 gap-y-4 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3">
+      <dl className="grid gap-3.5 px-6 py-5 sm:grid-cols-2 lg:grid-cols-3">
         <Field term="状态">
           <NodeStatusBadge node={node} />
         </Field>
@@ -94,7 +105,7 @@ export function NodeDetailPanel({ node, onClose, className, ref }: NodeDetailPan
         </Field>
       </dl>
 
-      <p className="border-t px-6 py-3 text-xs text-muted-foreground">
+      <p className="border-t border-border/70 bg-[#FAFBFD] px-6 py-3 text-xs text-muted-foreground">
         只读视图：数据来自当前已加载的节点集合，不在此执行任何操作。
       </p>
     </section>

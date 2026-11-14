@@ -2,15 +2,19 @@ import { useId, type ComponentProps, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 export const controlClassName =
-  "mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm transition-colors " +
-  "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
-  "disabled:cursor-not-allowed disabled:opacity-50";
+  "mt-1 w-full rounded-lg border border-input bg-card px-3 py-2 text-sm text-foreground shadow-[0_1px_2px_rgba(28,32,48,0.03)] transition-all " +
+  "placeholder:text-muted-foreground/75 hover:border-[#6658E8]/40 focus-visible:border-[#6658E8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/25 " +
+  "disabled:cursor-not-allowed disabled:bg-secondary/60 disabled:opacity-50";
 
 export interface FieldProps {
   readonly label: string;
   readonly hint?: ReactNode;
   readonly error?: string | null;
-  readonly children: (ids: { readonly inputId: string; readonly hintId: string; readonly errorId: string }) => ReactNode;
+  readonly children: (ids: {
+    readonly inputId: string;
+    readonly hintId: string;
+    readonly errorId: string;
+  }) => ReactNode;
 }
 
 export function Field({ label, hint, error, children }: FieldProps) {
@@ -20,12 +24,12 @@ export function Field({ label, hint, error, children }: FieldProps) {
   const errorId = `${base}-error`;
   return (
     <div>
-      <label htmlFor={inputId} className="block text-sm font-medium">
+      <label htmlFor={inputId} className="block text-sm font-medium text-foreground">
         {label}
       </label>
       {children({ inputId, hintId, errorId })}
       {hint ? (
-        <p id={hintId} className="mt-1 text-xs text-muted-foreground">
+        <p id={hintId} className="mt-1 text-xs leading-relaxed text-muted-foreground">
           {hint}
         </p>
       ) : null}
@@ -51,5 +55,45 @@ export function Select({ className, children, ...props }: ComponentProps<"select
     <select {...props} className={cn(controlClassName, className)}>
       {children}
     </select>
+  );
+}
+
+export function Checkbox({ className, ...props }: ComponentProps<"input">) {
+  return (
+    <input
+      {...props}
+      type="checkbox"
+      className={cn(
+        "size-4 shrink-0 cursor-pointer rounded border border-input accent-[#6658E8] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      )}
+    />
+  );
+}
+
+export function FieldsetBox({
+  legend,
+  children,
+  className,
+  disabled,
+}: {
+  readonly legend?: ReactNode;
+  readonly children: ReactNode;
+  readonly className?: string;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <fieldset
+      disabled={disabled}
+      className={cn(
+        "rounded-xl border border-border/85 bg-[#FAFBFD] px-4 py-3 shadow-[0_1px_2px_rgba(28,32,48,0.02)]",
+        className,
+      )}
+    >
+      {legend !== undefined ? (
+        <legend className="px-1 text-xs font-semibold text-foreground">{legend}</legend>
+      ) : null}
+      {children}
+    </fieldset>
   );
 }

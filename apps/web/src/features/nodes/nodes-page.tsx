@@ -1,7 +1,11 @@
 import { useMemo, useState } from "react";
+import { Activity, Filter, RefreshCw, Server } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Notice } from "@/components/ui/feedback";
+import { Checkbox } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { TabBar } from "@/components/ui/table";
@@ -113,19 +117,18 @@ export function NodesPage() {
       <PageHeader
         title="节点列表"
         description="服务器资产、地区、云厂商、在线状态与资源。默认使用兼容接口字段；富化视图需要候选详情接口。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">只读</span>}
+        badge={<Badge tone="primary">只读</Badge>}
         actions={
           <>
-            <label className="inline-flex h-9 items-center gap-2 rounded-md border bg-card px-3 text-sm">
-              <input
-                type="checkbox"
+            <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-2xs transition-colors hover:bg-secondary/70">
+              <Checkbox
                 checked={onlineOnly}
                 onChange={event => setOnlineOnly(event.target.checked)}
-                className="size-4 accent-[var(--primary)]"
               />
               仅在线节点（服务端过滤）
             </label>
             <Button type="button" onClick={list.reload} loading={list.state.status === "loading"}>
+              <RefreshCw aria-hidden="true" className="size-3.5" />
               刷新
             </Button>
           </>
@@ -133,14 +136,29 @@ export function NodesPage() {
       />
 
       <Panel title="列表来源与范围" description="GET /api/v1/nodes；onlineOnly 直接作为查询参数，由服务端按当前身份返回可见范围。">
-        <div className="grid gap-3 px-5 py-4 text-sm sm:grid-cols-3">
-          <p>
-            当前返回：<strong>{list.state.status === "ready" ? `${items.length} 个节点` : "尚未取得"}</strong>
-          </p>
-          <p>
-            在线：<strong>{list.state.status === "ready" ? `${online} 个` : "—"}</strong>
-          </p>
-          <p className="text-muted-foreground">{onlineOnly ? "已请求仅在线集合；总数不代表全部资产。" : "未限制在线状态。"}</p>
+        <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-3">
+          <GlowingEffect className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+            <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+              <Server className="size-4" />
+            </span>
+            <p>
+              当前返回：<strong className="font-semibold text-foreground">{list.state.status === "ready" ? `${items.length} 个节点` : "尚未取得"}</strong>
+            </p>
+          </GlowingEffect>
+          <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+            <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
+              <Activity className="size-4" />
+            </span>
+            <p>
+              在线：<strong className="font-semibold text-emerald-700">{list.state.status === "ready" ? `${online} 个` : "—"}</strong>
+            </p>
+          </GlowingEffect>
+          <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+            <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
+              <Filter className="size-4" />
+            </span>
+            <p className="text-muted-foreground">{onlineOnly ? "已请求仅在线集合；总数不代表全部资产。" : "未限制在线状态。"}</p>
+          </GlowingEffect>
         </div>
       </Panel>
 

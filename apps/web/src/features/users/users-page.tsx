@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
@@ -120,13 +121,11 @@ function UserEditor({
             )}
           </Field>
         ) : null}
-        <fieldset className="rounded-lg border px-4 py-3">
-          <legend className="px-1 text-sm font-medium">角色</legend>
+        <FieldsetBox legend="角色">
           {roles.map(role => (
             <label key={role.roleId} className="mt-1 flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4 accent-[var(--primary)]"
+              <Checkbox
+                className="mt-0.5"
                 checked={roleIds.has(role.roleId)}
                 onChange={event => {
                   setRoleIds(current => {
@@ -143,9 +142,9 @@ function UserEditor({
               </span>
             </label>
           ))}
-        </fieldset>
+        </FieldsetBox>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
+          <Checkbox checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
           启用该用户
         </label>
       </form>
@@ -271,13 +270,11 @@ function GrantEditor({
           )}
         </Field>
         {permissions.length > 0 ? (
-          <fieldset className="max-h-56 overflow-y-auto rounded-lg border px-4 py-3">
-            <legend className="px-1 text-sm font-medium">权限</legend>
+          <FieldsetBox legend="权限" className="max-h-56 overflow-y-auto">
             {permissions.map(permission => (
               <label key={permission.key} className="mt-1 flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-0.5 size-4 accent-[var(--primary)]"
+                <Checkbox
+                  className="mt-0.5"
                   checked={selectedPermissions.has(permission.key)}
                   onChange={event => {
                     setSelectedPermissions(current => {
@@ -294,7 +291,7 @@ function GrantEditor({
                 </span>
               </label>
             ))}
-          </fieldset>
+          </FieldsetBox>
         ) : (
           <Field label="权限（逗号分隔）" hint="权限目录不可用时的降级输入；服务端仍会校验。">
             {ids => <TextInput id={ids.inputId} value={permissionText} onChange={event => setPermissionText(event.target.value)} />}
@@ -390,7 +387,7 @@ export function UsersPage() {
       <PageHeader
         title="用户与权限"
         description="用户、角色目录、资源授权与会话。客户端隐藏按钮不构成安全控制；所有访问由服务端重新校验。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">RBAC</span>}
+        badge={<Badge tone="primary" dot>RBAC</Badge>}
       />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <TabBar

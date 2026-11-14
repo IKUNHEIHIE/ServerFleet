@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -85,7 +86,7 @@ export function NodeAddPage() {
       <PageHeader
         title="添加节点"
         description="生成一次性短期接入凭证、审批接入请求并查看状态。凭证与节点身份不可永久共用。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">接入</span>}
+        badge={<Badge tone="primary">接入</Badge>}
       />
 
       {!canManage ? (
@@ -100,7 +101,6 @@ export function NodeAddPage() {
       ) : null}
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
 
-      <InstallationPanel key={session.viewEpoch} />
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel title="1. 生成短期接入凭证" description="POST /api/v1/node-enrollment-tokens。令牌只在创建响应显示一次，服务端不得支持后续列表读取明文。">
           <div className="space-y-4 px-5 py-4">
@@ -141,9 +141,11 @@ export function NodeAddPage() {
             </Button>
 
             {token ? (
-              <div className="rounded-lg border border-amber-600/30 bg-amber-50 px-4 py-3">
-                <p className="text-sm font-medium text-amber-900">接入令牌（仅显示这一次）</p>
-                <code className="mt-2 block break-all rounded-md border bg-card px-3 py-2 font-mono text-sm">{token.token}</code>
+              <div className="relative overflow-hidden rounded-xl border border-amber-500/35 bg-gradient-to-br from-amber-500/[0.08] via-card to-primary/[0.04] px-4 py-4 shadow-[var(--shadow-card)]">
+                <p className="text-sm font-semibold text-amber-900">接入令牌（仅显示这一次）</p>
+                <code className="mt-2 block break-all rounded-lg border border-amber-500/25 bg-card px-3.5 py-2.5 font-mono text-sm font-medium text-foreground shadow-2xs">
+                  {token.token}
+                </code>
                 <p className="mt-2 text-xs text-amber-900">
                   凭证 ID：{token.id} · 到期：{formatDateTime(token.expiresAt) ?? "无法解析"}
                   {formatDuration(Math.max(0, (Date.parse(token.expiresAt) - Date.now()) / 1000))
@@ -151,14 +153,14 @@ export function NodeAddPage() {
                     : ""}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={copyToken}>
+                  <Button type="button" size="sm" variant="primary" onClick={copyToken}>
                     复制令牌
                   </Button>
                   <Button type="button" size="sm" variant="ghost" onClick={() => { setToken(null); setCopyStatus(null); }}>
                     从页面移除
                   </Button>
                 </div>
-                {copyStatus ? <p role="status" className="mt-2 text-xs">{copyStatus}</p> : null}
+                {copyStatus ? <p role="status" className="mt-2 text-xs font-medium text-amber-950">{copyStatus}</p> : null}
               </div>
             ) : null}
           </div>
@@ -178,6 +180,8 @@ export function NodeAddPage() {
           </div>
         </Panel>
       </div>
+
+      <InstallationPanel key={session.viewEpoch} />
 
       <Panel
         title="待审批接入请求"
@@ -272,7 +276,12 @@ export function NodeAddPage() {
         }
       >
         {decide.error ? <Notice tone="error" title="审批未完成">{describeApiError(decide.error)}</Notice> : null}
-        {decision?.decision === "approve" ? <label className="mb-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={grantRead} onChange={event => setGrantRead(event.target.checked)} disabled={decide.pending} />授予当前账户该节点的读取权限（不授予执行权限）</label> : null}
+        {decision?.decision === "approve" ? (
+          <label className="mb-4 flex items-center gap-2 text-sm">
+            <Checkbox checked={grantRead} onChange={event => setGrantRead(event.target.checked)} disabled={decide.pending} />
+            授予当前账户该节点的读取权限（不授予执行权限）
+          </label>
+        ) : null}
         <Field label="原因（可选）" hint="服务端会写入审计；不要包含秘密或凭据。">
           {ids => (
             <TextArea

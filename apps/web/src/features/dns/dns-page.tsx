@@ -1,12 +1,15 @@
 import { DNSProviderTaskPanel } from "./provider-task-panel";
 import { useEffect, useState, type FormEvent } from "react";
+import { Globe2, Cloud, ListTree, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { dnsApi, dnsRecordTasksApi, publicCertificateApi, type NodeCSRTask } from "@/lib/api/endpoints-infra";
@@ -90,7 +93,7 @@ function AccountEditor({
         <Field label="显示名称">{ids => <TextInput id={ids.inputId} value={displayName} onChange={event => setDisplayName(event.target.value)} required disabled={disabled} />}</Field>
         <Field label="备注（可选）">{ids => <TextInput id={ids.inputId} value={note} onChange={event => setNote(event.target.value)} disabled={disabled} />}</Field>
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
+          <Checkbox checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
           启用账号
         </label>
         {!account ? (
@@ -204,7 +207,7 @@ function RecordEditor({
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="优先级（MX 等，可选）">{ids => <TextInput id={ids.inputId} type="number" min={0} value={priority} onChange={event => setPriority(event.target.value)} disabled={inputsLocked} />}</Field>
           <label className="mt-6 flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={proxied} onChange={event => setProxied(event.target.checked)} disabled={inputsLocked} />
+            <Checkbox checked={proxied} onChange={event => setProxied(event.target.checked)} disabled={inputsLocked} />
             Cloudflare 代理（供应商支持时）
           </label>
         </div>
@@ -331,16 +334,38 @@ export function DnsPage() {
       <PageHeader
         title="DNS 管理"
         description="首版仅 Cloudflare；账号、Zone 与记录严格按账号隔离。Token 只写不读，不进入浏览器存储。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">Cloudflare</span>}
-        actions={<Button type="button" onClick={() => { accounts.reload(); zones.reload(); records.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>Cloudflare</Badge>}
+        actions={<Button type="button" onClick={() => { accounts.reload(); zones.reload(); records.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
-      <DNSProviderTaskPanel key={session.viewEpoch} />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Cloudflare 账号</span>
+            <Cloud className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">{accountItems.length}</p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">当前账号可见 Zone</span>
+            <Globe2 className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">{zoneItems.length}</p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">当前 Zone 解析记录</span>
+            <ListTree className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-sky-600">{recordItems.length}</p>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
-      <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
-        <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
-          {data => <p className="px-5 py-4 text-sm">{data.items.map(provider => `${provider.displayName}（${provider.code}）· Zone 同步 ${provider.capabilities?.supportsZoneSync ? "支持" : "未声明"}`).join("；") || "没有供应商"}</p>}
-        </AsyncPanel>
-      </Panel>
       <div className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <Panel
           title="账号"
@@ -369,9 +394,9 @@ export function DnsPage() {
                       <Button size="sm" variant="danger" onClick={() => setDeletingAccount(account)} disabled={!canManageAccounts || session.writesLocked}>删除</Button>
                     </div>
                     {testResult?.accountId === account.id ? (
-                      <div className="mx-3 mb-3 rounded-md border bg-secondary/30 px-3 py-2 text-xs">
+                      <SubCard className="mx-3 mb-3 p-2.5 text-xs">
                         检查任务 {testResult.result.taskId} · {testResult.result.status}；请在任务列表核对实际结果。
-                      </div>
+                      </SubCard>
                     ) : null}
                   </li>
                 ))}
@@ -405,16 +430,18 @@ export function DnsPage() {
               <AsyncPanel state={zones.state} onRetry={zones.reload} errorTitle="Zone 加载失败" empty={<EmptyState title="该账号没有可见 Zone" description="可尝试同步；未授权 Zone 不会显示。" />} isEmpty={data => data.items.length === 0}>
                 {data => (
                   <div className="px-5 py-4">
-                    <label className="text-xs font-medium text-muted-foreground">
-                      Zone
-                      <select
-                        value={selectedZone?.id ?? ""}
-                        onChange={event => setSelectedZoneId(event.target.value)}
-                        className="mt-1 block h-9 w-full max-w-md rounded-md border border-input bg-background px-3 text-sm"
-                      >
-                        {data.items.map(zone => <option key={zone.id} value={zone.id}>{zone.name}{zone.status ? ` · ${zone.status}` : ""}</option>)}
-                      </select>
-                    </label>
+                    <Field label="Zone">
+                      {ids => (
+                        <Select
+                          id={ids.inputId}
+                          value={selectedZone?.id ?? ""}
+                          onChange={event => setSelectedZoneId(event.target.value)}
+                          className="max-w-md"
+                        >
+                          {data.items.map(zone => <option key={zone.id} value={zone.id}>{zone.name}{zone.status ? ` · ${zone.status}` : ""}</option>)}
+                        </Select>
+                      )}
+                    </Field>
                   </div>
                 )}
               </AsyncPanel>
@@ -457,6 +484,22 @@ export function DnsPage() {
             )}
           </Panel>
         </div>
+      </div>
+
+      <SectionDivider label="DNS 供应商能力与批量任务" caption="Provider Capabilities & Inspection Tasks" />
+      <div className="grid gap-5 xl:grid-cols-[1fr_1.5fr] xl:items-start">
+        <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
+          <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
+            {data => (
+              <p className="px-5 py-4 text-sm">
+                {data.items
+                  .map(provider => `${provider.displayName}（${provider.code}）· Zone 同步 ${provider.capabilities?.supportsZoneSync ? "支持" : "未声明"}`)
+                  .join("；") || "没有供应商"}
+              </p>
+            )}
+          </AsyncPanel>
+        </Panel>
+        <DNSProviderTaskPanel key={session.viewEpoch} />
       </div>
 
       <AccountEditor

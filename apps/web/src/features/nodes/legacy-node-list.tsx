@@ -1,4 +1,8 @@
 import { useId, useMemo, useState } from "react";
+import { Search, Server, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TextInput } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import { LegacyMetricCell } from "./metric-display";
 import type { LegacyNodeRow } from "./legacy-types";
@@ -17,16 +21,26 @@ export function filterLegacyRows(rows: readonly LegacyNodeRow[], query: string):
 
 function NameCell({ row }: { readonly row: LegacyNodeRow }) {
   return (
-    <th scope="row" className="px-4 py-3 text-left font-normal">
-      <span className="font-medium">{row.name}</span>
-      {row.nameIssue ? (
-        <span className="mt-0.5 block text-xs text-amber-700">
-          {row.nameIssue === "empty" ? "名称为空，显示节点 ID" : "名称字段非法，显示节点 ID"}
+    <th scope="row" className="px-4 py-3.5 text-left font-normal">
+      <div className="flex items-start gap-2.5">
+        <span
+          aria-hidden="true"
+          className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg border border-border/80 bg-[#F6F7FB] text-primary"
+        >
+          <Server className="size-3.5" />
         </span>
-      ) : null}
-      {row.name === row.id ? null : (
-        <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">{row.id}</span>
-      )}
+        <div>
+          <span className="font-semibold text-foreground">{row.name}</span>
+          {row.nameIssue ? (
+            <span className="mt-0.5 block text-xs text-amber-700">
+              {row.nameIssue === "empty" ? "名称为空，显示节点 ID" : "名称字段非法，显示节点 ID"}
+            </span>
+          ) : null}
+          {row.name === row.id ? null : (
+            <span className="mt-0.5 block break-all font-mono text-xs text-muted-foreground">{row.id}</span>
+          )}
+        </div>
+      </div>
     </th>
   );
 }
@@ -79,13 +93,13 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
         <table className="w-full border-collapse text-sm">
           <caption className="sr-only">兼容旧节点列表</caption>
           <thead>
-            <tr className="bg-secondary/60">
+            <tr className="border-b border-border/70 bg-[#F6F7FB]/90">
               {["节点", "状态", "地区", "云厂商", "CPU", "内存"].map((label, index) => (
                 <th
                   key={label}
                   scope="col"
                   className={cn(
-                    "whitespace-nowrap px-4 py-2.5 text-xs font-medium text-muted-foreground",
+                    "whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
                     index >= 4 ? "text-right" : "text-left",
                   )}
                 >
@@ -94,17 +108,35 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-border/60">
             {visible.map(row => (
-              <tr key={row.id} className="border-t align-top">
+              <tr key={row.id} className="align-top transition-colors hover:bg-primary/[0.025]">
                 <NameCell row={row} />
-                <td className="px-4 py-3">{row.online ? "在线" : "离线"}</td>
-                <td className="px-4 py-3">{row.region ?? <span className="text-muted-foreground">缺失</span>}</td>
-                <td className="px-4 py-3">{row.provider ?? <span className="text-muted-foreground">缺失</span>}</td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3.5">
+                  <span
+                    className={cn(
+                      "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-semibold",
+                      row.online
+                        ? "border-emerald-500/25 bg-emerald-500/10 text-emerald-800"
+                        : "border-border bg-secondary text-muted-foreground",
+                    )}
+                  >
+                    <span
+                      aria-hidden="true"
+                      className={cn(
+                        "size-1.5 rounded-full",
+                        row.online ? "bg-emerald-500" : "bg-muted-foreground/60",
+                      )}
+                    />
+                    {row.online ? "在线" : "离线"}
+                  </span>
+                </td>
+                <td className="px-4 py-3.5">{row.region ?? <span className="text-muted-foreground">缺失</span>}</td>
+                <td className="px-4 py-3.5">{row.provider ?? <span className="text-muted-foreground">缺失</span>}</td>
+                <td className="px-4 py-3.5 text-right">
                   <LegacyMetricCell metric={row.cpu} />
                 </td>
-                <td className="px-4 py-3 text-right">
+                <td className="px-4 py-3.5 text-right">
                   <LegacyMetricCell metric={row.memory} />
                 </td>
               </tr>
@@ -116,10 +148,13 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
   }
 
   return (
-    <section aria-labelledby={titleId} className={cn("overflow-hidden rounded-xl border bg-card", className)}>
-      <header className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
+    <section
+      aria-labelledby={titleId}
+      className={cn("overflow-hidden rounded-xl border border-border/80 bg-card shadow-[var(--shadow-card)]", className)}
+    >
+      <header className="flex flex-wrap items-start justify-between gap-3 border-b border-border/70 bg-gradient-to-b from-white to-[#FAFBFD] px-5 py-4">
         <div>
-          <h2 id={titleId} className="font-semibold">
+          <h2 id={titleId} className="font-semibold text-foreground">
             {title}
           </h2>
           <p className="mt-1 max-w-3xl text-sm leading-6 text-muted-foreground">
@@ -127,36 +162,41 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
               "来自兼容接口 GET /api/v1/nodes。旧 DTO 没有状态、版本与采样时间：离线行不显示历史百分比，在线数值只标“无采样时间”。"}
           </p>
         </div>
-        <span className="rounded-md border px-2 py-1 text-xs" role="status">{countLabel}</span>
+        <Badge tone="primary" role="status" className="py-1">
+          {countLabel}
+        </Badge>
       </header>
-      <div className="border-b px-5 py-3">
+      <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
         <div role="search" aria-label="兼容节点列表搜索" className="flex flex-wrap items-end gap-3">
           <div className="min-w-56 flex-1">
-            <label htmlFor={searchId} className="block text-xs font-medium text-muted-foreground">
+            <label htmlFor={searchId} className="block text-xs font-semibold text-muted-foreground">
               搜索名称或节点 ID
             </label>
-            <input
-              id={searchId}
-              type="search"
-              value={query}
-              onChange={event => setQuery(event.target.value)}
-              placeholder="仅搜索已加载的节点"
-              disabled={total === 0}
-              className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
-            />
+            <div className="relative mt-1">
+              <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+              <TextInput
+                id={searchId}
+                type="search"
+                value={query}
+                onChange={event => setQuery(event.target.value)}
+                placeholder="仅搜索已加载的节点"
+                disabled={total === 0}
+                className="mt-0 h-9 pl-8"
+              />
+            </div>
           </div>
-          <button
+          <Button
             type="button"
             onClick={() => setQuery("")}
             disabled={!filtering}
-            className="h-9 rounded-md border border-input bg-card px-3 text-sm font-medium hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
+            <X aria-hidden="true" className="size-3.5 text-muted-foreground" />
             清空搜索
-          </button>
+          </Button>
         </div>
       </div>
       {body}
-      <p className="border-t px-5 py-3 text-xs leading-5 text-muted-foreground">
+      <p className="border-t border-border/70 bg-[#FAFBFD] px-5 py-3 text-xs leading-5 text-muted-foreground">
         兼容视图不提供详情或操作；计数只描述当前参数集与搜索命中数，不推断全局或隐藏节点。真正的授权与状态由 Controller 返回。
       </p>
     </section>

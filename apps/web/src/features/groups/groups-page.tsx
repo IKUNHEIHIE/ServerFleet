@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { FolderTree, Layers, Plus, X } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { TabBar } from "@/components/ui/table";
@@ -256,9 +258,8 @@ function MembersDrawer({
           <Notice tone="warning" title="部分现有成员不在当前可见节点集合">
             有 {missing.length} 个成员 ID 未出现在当前返回的节点中（可能无权查看或已被移除）。继续保存会移除它们。
             <label className="mt-2 flex items-start gap-2 text-xs">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4 accent-[var(--primary)]"
+              <Checkbox
+                className="mt-0.5"
                 checked={acknowledgeRemoval}
                 onChange={event => setAcknowledgeRemoval(event.target.checked)}
               />
@@ -307,13 +308,52 @@ function MembersDrawer({
                   )}
                 </Field>
               </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <p className="text-xs text-muted-foreground">
-                  已选 {selected.size} · 当前筛选 {filtered.length} / 共 {candidates.length}
-                </p>
-                <Button type="button" size="sm" onClick={toggleAll} disabled={filtered.length === 0}>
-                  {allFilteredSelected ? "取消全选当前筛选" : "全选当前筛选"}
-                </Button>
+              <div
+                onDragOver={event => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                }}
+                onDrop={event => {
+                  event.preventDefault();
+                  const droppedId = event.dataTransfer.getData("text/plain").trim();
+                  if (droppedId && candidates.some(node => node.id === droppedId)) {
+                    toggle(droppedId, true);
+                  }
+                }}
+                className="rounded-xl border border-dashed border-primary/30 bg-primary-light/35 p-3.5 transition-colors"
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-foreground">
+                    已选 {selected.size} · 当前筛选 {filtered.length} / 共 {candidates.length}
+                    <span className="ml-2 font-normal text-muted-foreground">（支持将下方节点行拖入此处快速添加）</span>
+                  </p>
+                  <Button type="button" size="sm" onClick={toggleAll} disabled={filtered.length === 0}>
+                    {allFilteredSelected ? "取消全选当前筛选" : "全选当前筛选"}
+                  </Button>
+                </div>
+                {selected.size > 0 ? (
+                  <div className="mt-2.5 flex flex-wrap gap-1.5">
+                    {[...selected].map(id => {
+                      const matched = candidates.find(item => item.id === id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-card px-2.5 py-0.5 text-xs font-medium text-foreground shadow-2xs"
+                        >
+                          {matched?.name.trim() || id}
+                          <button
+                            type="button"
+                            aria-label={`移除已选节点 ${matched?.name.trim() || id}`}
+                            onClick={() => toggle(id, false)}
+                            className="rounded-full p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
               </div>
               {filtered.length === 0 ? (
                 <EmptyState title="没有匹配的节点" description="当前筛选条件下没有可选择的节点；不影响已保存的成员关系。" />
@@ -452,7 +492,7 @@ export function GroupsPage() {
       <PageHeader
         title="分组管理"
         description="自定义分组用于整理与筛选，可编辑成员；自动分类按节点属性实时计算，只读。二者都不是业务服务组。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">普通分组</span>}
+        badge={<Badge tone="primary">普通分组</Badge>}
         actions={
           <Button
             type="button"
@@ -460,6 +500,7 @@ export function GroupsPage() {
             disabled={!canManage || session.writesLocked}
             onClick={() => setEditor({ open: true, group: null })}
           >
+            <Plus aria-hidden="true" className="size-3.5" />
             新建自定义分组
           </Button>
         }
@@ -484,7 +525,7 @@ export function GroupsPage() {
         ]}
       />
 
-      <div className="grid min-w-0 gap-5 lg:grid-cols-[19rem_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <div className="min-w-0 space-y-4">
           {view === "manual" ? (
             <Panel
@@ -499,28 +540,40 @@ export function GroupsPage() {
                 isEmpty={data => data.items.length === 0}
               >
                 {data => (
-                  <ul className="divide-y">
-                    {data.items.map(group => {
-                      const active = group.id === effectiveGroupId;
-                      return (
-                        <li key={group.id}>
-                          <button
-                            type="button"
-                            onClick={() => selectGroup(group.id)}
-                            aria-current={active ? "true" : undefined}
-                            className={`w-full px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "bg-primary/10" : "hover:bg-secondary"}`}
-                          >
-                            <span className="flex items-center justify-between gap-2">
-                              <span className="truncate font-medium">{group.name}</span>
-                              <span className="text-xs text-muted-foreground">{group.memberCount ?? group.memberNodeIds?.length ?? 0} 台</span>
-                            </span>
-                            {group.description ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{group.description}</span> : null}
-                            <span className="mt-1 block text-xs text-muted-foreground">revision {group.revision}</span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div className="p-3">
+                    <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#F6F7FB] px-3 py-2 text-xs font-semibold text-muted-foreground">
+                      <FolderTree aria-hidden="true" className="size-3.5 text-primary" />
+                      <span>资产分组树 ({data.items.length})</span>
+                    </div>
+                    <ul className="ml-3 space-y-1 border-l-2 border-primary/20 pl-2.5">
+                      {data.items.map(group => {
+                        const active = group.id === effectiveGroupId;
+                        return (
+                          <li key={group.id}>
+                            <button
+                              type="button"
+                              onClick={() => selectGroup(group.id)}
+                              aria-current={active ? "true" : undefined}
+                              className={`w-full rounded-xl border px-3.5 py-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                active
+                                  ? "border-primary/35 bg-primary-light/85 shadow-2xs"
+                                  : "border-transparent hover:border-border/70 hover:bg-secondary/60"
+                              }`}
+                            >
+                              <span className="flex items-center justify-between gap-2">
+                                <span className="truncate font-semibold text-foreground">{group.name}</span>
+                                <span className="rounded-full border border-primary/20 bg-card px-2 py-0.5 text-xs font-medium text-primary">
+                                  {group.memberCount ?? group.memberNodeIds?.length ?? 0} 台
+                                </span>
+                              </span>
+                              {group.description ? <span className="mt-0.5 block truncate text-xs text-muted-foreground">{group.description}</span> : null}
+                              <span className="mt-1 block font-mono text-[11px] text-muted-foreground">revision {group.revision}</span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 )}
               </AsyncPanel>
             </Panel>
@@ -549,27 +602,41 @@ export function GroupsPage() {
                 isEmpty={data => data.items.length === 0}
               >
                 {data => (
-                  <ul className="divide-y">
-                    {data.items.map(item => {
-                      const active = item.value === effectiveFacet;
-                      return (
-                        <li key={item.value}>
-                          <button
-                            type="button"
-                            onClick={() => selectFacet(item.value)}
-                            aria-current={active ? "true" : undefined}
-                            className={`flex w-full items-center justify-between gap-2 px-4 py-3 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "bg-primary/10" : "hover:bg-secondary"}`}
-                          >
-                            <span className="truncate">{item.label ?? item.value}</span>
-                            <span className="text-xs text-muted-foreground">{item.nodeCount} 台</span>
-                          </button>
-                        </li>
-                      );
-                    })}
-                  </ul>
+                  <div className="p-3">
+                    <div className="mb-2 flex items-center gap-2 rounded-lg bg-[#F6F7FB] px-3 py-2 text-xs font-semibold text-muted-foreground">
+                      <Layers aria-hidden="true" className="size-3.5 text-primary" />
+                      <span>{DIMENSION_LABEL[dimension]}分类树 ({data.items.length})</span>
+                    </div>
+                    <ul className="ml-3 space-y-1 border-l-2 border-primary/20 pl-2.5">
+                      {data.items.map(item => {
+                        const active = item.value === effectiveFacet;
+                        return (
+                          <li key={item.value}>
+                            <button
+                              type="button"
+                              onClick={() => selectFacet(item.value)}
+                              aria-current={active ? "true" : undefined}
+                              className={`flex w-full items-center justify-between gap-2 rounded-xl border px-3.5 py-2.5 text-left transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                                active
+                                  ? "border-primary/35 bg-primary-light/85 font-semibold text-foreground shadow-2xs"
+                                  : "border-transparent hover:border-border/70 hover:bg-secondary/60"
+                              }`}
+                            >
+                              <span className="truncate">{item.label ?? item.value}</span>
+                              <span className="rounded-full border border-border/80 bg-card px-2 py-0.5 text-xs text-muted-foreground">
+                                {item.nodeCount} 台
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </div>
                 )}
               </AsyncPanel>
-              <p className="border-t px-4 py-3 text-xs text-muted-foreground">分类值不可创建、重命名或删除；修改归类请编辑节点属性。</p>
+              <p className="border-t border-border/70 bg-[#FAFBFD] px-4 py-3 text-xs text-muted-foreground">
+                分类值不可创建、重命名或删除；修改归类请编辑节点属性。
+              </p>
             </Panel>
           )}
         </div>
@@ -624,30 +691,30 @@ export function GroupsPage() {
                 <label htmlFor="group-node-search" className="block text-xs font-medium text-muted-foreground">
                   搜索名称或 IP
                 </label>
-                <input
+                <TextInput
                   id="group-node-search"
                   type="search"
                   value={searchDraft}
                   onChange={event => setSearchDraft(event.target.value)}
                   placeholder="服务端搜索当前分组"
-                  className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-9"
                 />
               </div>
               <div>
                 <label htmlFor="group-node-status" className="block text-xs font-medium text-muted-foreground">状态</label>
-                <select
+                <Select
                   id="group-node-status"
                   value={status}
                   onChange={event => {
                     setStatus(event.target.value as StatusFilter);
                     resetPage();
                   }}
-                  className="mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-9 w-auto py-1"
                 >
                   <option value="all">全部</option>
                   <option value="online">在线</option>
                   <option value="offline">离线</option>
-                </select>
+                </Select>
               </div>
               <Button type="submit" size="sm">搜索</Button>
               <Button type="button" size="sm" variant="ghost" onClick={clearSearch} disabled={!search && !searchDraft}>

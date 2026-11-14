@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { jsonResponse, type FetchRoutes } from "@/test/http";
+import { IDENTITY, jsonResponse, type FetchRoutes } from "@/test/http";
 import { renderAuthenticated } from "@/test/app";
 import type { AsyncOperation } from "@/lib/api/dto";
 
@@ -163,4 +163,14 @@ describe("gateway management", () => {
       expect(JSON.parse(String(call?.init?.body))).toEqual({ enabled: false });
     });
   });
+});
+
+it("allows explicitly granted backend publishing.write to cancel a plan", async () => {
+  const routes = publishRoutes();
+  routes["POST /api/v1/publications/pub-seed/cancel"] = () => jsonResponse({ ...SEEDED_PUBLICATION, status: "cancelled" });
+  const { calls } = await renderAuthenticated("/publishing", routes, { ...IDENTITY, isBootstrapAdmin: false, permissions: ["publishing.write"] });
+  const cancel = await screen.findByRole("button", { name: "取消计划" });
+  expect(cancel).toBeEnabled();
+  fireEvent.click(cancel);
+  await waitFor(() => expect(calls.some(call => call.method === "POST" && call.url === "/api/v1/publications/pub-seed/cancel")).toBe(true));
 });

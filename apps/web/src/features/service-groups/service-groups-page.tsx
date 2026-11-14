@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { Activity, Layers, Network, Plus, ShieldCheck, X } from "lucide-react";
 import { navigate } from "@/app/router";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, serviceGroupsApi, type ServiceGroupInput } from "@/lib/api/endpoints";
@@ -146,9 +149,9 @@ function ServiceGroupEditor({
         <Field label="健康检查说明（可选）">
           {ids => <TextInput id={ids.inputId} value={healthCheck} onChange={event => setHealthCheck(event.target.value)} maxLength={200} />}
         </Field>
-        <div className="rounded-lg border px-4 py-3">
+        <SubCard className="p-3.5">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={lbEnabled} onChange={event => setLbEnabled(event.target.checked)} />
+            <Checkbox checked={lbEnabled} onChange={event => setLbEnabled(event.target.checked)} />
             启用流量调度
           </label>
           <p className="mt-1 text-xs text-muted-foreground">未启用时，服务组只是资源集合，不参与网关负载均衡；默认不启用。</p>
@@ -161,9 +164,11 @@ function ServiceGroupEditor({
               </Select>
             )}
           </Field>
-        </div>
-        <fieldset className="max-h-56 overflow-y-auto rounded-lg border px-4 py-3">
-          <legend className="px-1 text-sm font-medium">成员节点（{memberIds.size} 已选）</legend>
+        </SubCard>
+        <FieldsetBox
+          legend={`成员节点（${memberIds.size} 已选）`}
+          className="max-h-56 overflow-y-auto"
+        >
           <p className="mb-1 text-xs text-muted-foreground">
             服务端按成员节点集合校验创建/修改权限；至少选择一个已授权节点。
           </p>
@@ -178,9 +183,7 @@ function ServiceGroupEditor({
               <>
                 {data.map(node => (
                   <label key={node.id} className="mt-1 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[var(--primary)]"
+                    <Checkbox
                       checked={memberIds.has(node.id)}
                       onChange={event => toggleMember(node.id, event.target.checked)}
                     />
@@ -190,7 +193,7 @@ function ServiceGroupEditor({
               </>
             )}
           </AsyncPanel>
-        </fieldset>
+        </FieldsetBox>
         <p className="text-xs text-muted-foreground">成员创建后仍可在详情页继续管理。</p>
       </form>
     </Modal>
@@ -281,7 +284,7 @@ function MemberEditor({
           <Notice tone="warning" title="部分现有成员不可见">
             有 {missing.length} 个成员不在当前可见节点集合；继续保存会移除它们。
             <label className="mt-2 flex items-center gap-2 text-xs">
-              <input type="checkbox" className="size-4" checked={acknowledge} onChange={event => setAcknowledge(event.target.checked)} />
+              <Checkbox checked={acknowledge} onChange={event => setAcknowledge(event.target.checked)} />
               我确认移除不可见成员。
             </label>
           </Notice>
@@ -300,7 +303,48 @@ function MemberEditor({
                   />
                 )}
               </Field>
-              <p className="text-xs text-muted-foreground">已选 {selected.size} · 当前 {filtered.length} / 共 {candidates.length}</p>
+              <div
+                onDragOver={event => {
+                  event.preventDefault();
+                  event.dataTransfer.dropEffect = "copy";
+                }}
+                onDrop={event => {
+                  event.preventDefault();
+                  const droppedId = event.dataTransfer.getData("text/plain").trim();
+                  if (droppedId && candidates.some(node => node.id === droppedId)) {
+                    toggle(droppedId, true);
+                  }
+                }}
+                className="rounded-xl border border-dashed border-primary/30 bg-primary-light/35 p-3"
+              >
+                <p className="text-xs font-semibold text-foreground">
+                  已选 {selected.size} · 当前 {filtered.length} / 共 {candidates.length}
+                  <span className="ml-2 font-normal text-muted-foreground">（支持将下方候选节点行拖入此处快速加入）</span>
+                </p>
+                {selected.size > 0 ? (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {[...selected].map(id => {
+                      const matched = candidates.find(item => item.id === id);
+                      return (
+                        <span
+                          key={id}
+                          className="inline-flex items-center gap-1 rounded-full border border-primary/25 bg-card px-2.5 py-0.5 text-xs font-medium text-foreground shadow-2xs"
+                        >
+                          {matched?.name.trim() || id}
+                          <button
+                            type="button"
+                            aria-label={`移除服务组成员 ${matched?.name.trim() || id}`}
+                            onClick={() => toggle(id, false)}
+                            className="rounded-full p-0.5 text-muted-foreground hover:bg-secondary hover:text-foreground"
+                          >
+                            <X className="size-3" />
+                          </button>
+                        </span>
+                      );
+                    })}
+                  </div>
+                ) : null}
+              </div>
               {filtered.length === 0 ? (
                 <EmptyState title="没有匹配节点" description="当前搜索没有命中；不影响已保存成员。" />
               ) : (
@@ -327,12 +371,16 @@ export function ServiceGroupsPage() {
     ? items.filter(group => `${group.name} ${group.description ?? ""}`.toLowerCase().includes(query.trim().toLowerCase()))
     : items;
 
+  const lbCount = items.filter(group => group.loadBalancing.enabled).length;
+  const totalMembers = items.reduce((acc, group) => acc + group.memberNodeIds.length, 0);
+  const totalHealthy = items.reduce((acc, group) => acc + (group.healthyNodeIds?.length ?? 0), 0);
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="服务组管理"
         description="独立业务资源：包含成员、端口、健康与调度状态。与“节点管理 → 分组管理”的普通分组不共用身份与权限。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">业务资源</span>}
+        badge={<Badge tone="primary">业务资源</Badge>}
         actions={
           <Button
             type="button"
@@ -340,6 +388,7 @@ export function ServiceGroupsPage() {
             disabled={!canManage || session.writesLocked}
             onClick={() => setEditor({ open: true, group: null })}
           >
+            <Plus aria-hidden="true" className="size-3.5" />
             新建服务组
           </Button>
         }
@@ -349,19 +398,56 @@ export function ServiceGroupsPage() {
           当前身份未返回服务组管理权限（`servicegroup.manage`/`node.manage`）；列表仍按可见范围显示。
         </Notice>
       ) : null}
+
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        <GlowingEffect className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+            <Layers className="size-5" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">已加载服务组</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+              {groups.state.status === "ready" ? `${items.length} 个` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+        <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
+            <Network className="size-5" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">启用流量调度</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+              {groups.state.status === "ready" ? `${lbCount} 个` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+        <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
+            <ShieldCheck className="size-5" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">健康 / 成员实例累计</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-700">
+              {groups.state.status === "ready" ? `${totalHealthy} / ${totalMembers}` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+      </div>
+
       <Panel
         title="服务组列表"
         description="GET /api/v1/service-groups。只有明确启用的网关联动服务组才参与调度；默认不启用负载均衡。"
         actions={<Button size="sm" onClick={groups.reload} loading={groups.state.status === "loading"}>刷新</Button>}
       >
-        <div className="border-b px-5 py-3">
-          <label htmlFor="servicegroup-search" className="block text-xs font-medium text-muted-foreground">本地筛选名称/用途</label>
-          <input
+        <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
+          <label htmlFor="servicegroup-search" className="block text-xs font-semibold text-muted-foreground">本地筛选名称/用途</label>
+          <TextInput
             id="servicegroup-search"
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            className="mt-1 h-9 w-full max-w-md rounded-md border border-input bg-background px-3 text-sm"
+            className="h-9 max-w-md"
             placeholder="仅筛选已加载服务组"
           />
         </div>
@@ -383,30 +469,75 @@ export function ServiceGroupsPage() {
                   key: "name",
                   header: "服务组",
                   render: group => (
-                    <a href={`#/service-groups/${encodeURIComponent(group.id)}`} className="font-medium text-primary underline-offset-2 hover:underline">
-                      {group.name}
-                    </a>
+                    <div>
+                      <a
+                        href={`#/service-groups/${encodeURIComponent(group.id)}`}
+                        className="font-semibold text-primary underline-offset-2 hover:underline"
+                      >
+                        {group.name}
+                      </a>
+                      {group.description ? (
+                        <span className="mt-0.5 block text-xs text-muted-foreground">{group.description}</span>
+                      ) : null}
+                    </div>
                   ),
                 },
-                { key: "members", header: "成员", render: group => `${group.memberNodeIds.length} 台` },
+                {
+                  key: "members",
+                  header: "成员",
+                  render: group => (
+                    <Badge variant="outline" className="font-mono">
+                      {group.memberNodeIds.length} 台
+                    </Badge>
+                  ),
+                },
                 {
                   key: "service",
                   header: "服务",
                   render: group =>
-                    group.service ? `${group.service.protocol ?? "—"} : ${group.service.port ?? "—"}` : "未配置",
+                    group.service ? (
+                      <Badge variant="info" className="font-mono">
+                        {`${group.service.protocol ?? "—"} : ${group.service.port ?? "—"}`}
+                      </Badge>
+                    ) : (
+                      "未配置"
+                    ),
                 },
                 {
                   key: "lb",
                   header: "调度",
                   render: group =>
-                    group.loadBalancing.enabled ? `启用 · ${group.loadBalancing.strategy ?? "未指定"}` : "未启用（仅资源集合）",
+                    group.loadBalancing.enabled ? (
+                      <Badge variant="success">{`启用 · ${group.loadBalancing.strategy ?? "未指定"}`}</Badge>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">未启用（仅资源集合）</span>
+                    ),
                 },
                 {
                   key: "health",
                   header: "健康/可调度",
-                  render: group => `${group.healthyNodeIds?.length ?? 0} / ${group.dispatchEligibleNodeIds?.length ?? 0}`,
+                  render: group => {
+                    const healthy = group.healthyNodeIds?.length ?? 0;
+                    const eligible = group.dispatchEligibleNodeIds?.length ?? 0;
+                    const total = Math.max(1, group.memberNodeIds.length);
+                    const pct = Math.min(100, Math.round((healthy / total) * 100));
+                    return (
+                      <div className="inline-flex items-center gap-2">
+                        <span
+                          aria-hidden="true"
+                          className="hidden h-1.5 w-14 overflow-hidden rounded-full bg-secondary sm:inline-block"
+                        >
+                          <span
+                            className="block h-full rounded-full bg-emerald-500 transition-all duration-500"
+                            style={{ width: `${pct}%` }}
+                          />
+                        </span>
+                        <span className="font-mono text-xs font-semibold">{`${healthy} / ${eligible}`}</span>
+                      </div>
+                    );
+                  },
                 },
-                { key: "rev", header: "revision", render: group => group.revision },
+                { key: "rev", header: "revision", render: group => <span className="font-mono text-xs">{group.revision}</span> },
               ]}
             />
           )}
@@ -505,7 +636,7 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
         description="成员、健康与调度资格。暂停成员只影响调度，不注销节点；成员变更不会扩大旧任务或旧 AI 授权。"
         actions={
           <>
-            <a href="#/service-groups" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回列表</a>
+            <LinkButton href="#/service-groups">返回列表</LinkButton>
             <Button
               type="button"
               disabled={!canManage || session.writesLocked || !current}
@@ -540,13 +671,25 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
         {data => (
           <div className="space-y-5">
             <Panel title="服务组定义" description="GET /api/v1/service-groups/{serviceGroupId}">
-              <div className="grid gap-4 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-                <p>用途：{data.description || "未填写"}</p>
-                <p>服务：{data.service ? `${data.service.protocol ?? "—"} : ${data.service.port ?? "—"}` : "未配置"}</p>
-                <p>健康检查：{data.service?.healthCheck || "未配置"}</p>
-                <p>调度：{data.loadBalancing.enabled ? `启用 · ${data.loadBalancing.strategy ?? "未指定"}` : "未启用（仅资源集合）"}</p>
-                <p>关联网关：{data.gatewayIds?.join("、") || "无"}</p>
-                <p>revision：{data.revision}</p>
+              <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+                <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">用途：{data.description || "未填写"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">服务：{data.service ? `${data.service.protocol ?? "—"} : ${data.service.port ?? "—"}` : "未配置"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">健康检查：{data.service?.healthCheck || "未配置"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">调度：{data.loadBalancing.enabled ? `启用 · ${data.loadBalancing.strategy ?? "未指定"}` : "未启用（仅资源集合）"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">关联网关：{data.gatewayIds?.join("、") || "无"}</p>
+                </div>
+                <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-mono font-medium text-foreground">revision：{data.revision}</p>
+                </div>
               </div>
             </Panel>
 
@@ -556,14 +699,17 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
               actions={
                 <>
                   <Button size="sm" onClick={() => { group.reload(); nodes.reload(); }}>刷新</Button>
-                  <Button size="sm" onClick={loadPreview}>调度预演</Button>
+                  <Button size="sm" variant="primary" onClick={loadPreview}>
+                    <Activity aria-hidden="true" className="size-3.5" />
+                    调度预演
+                  </Button>
                 </>
               }
             >
               {previewError ? <Notice tone="error" title="预演失败">{describeApiError(previewError)}</Notice> : null}
               {preview ? (
-                <div className="border-b px-5 py-3 text-sm">
-                  <p>网关可调度：{preview.gatewayEligible ? "是" : "否"}</p>
+                <div className="border-b border-border/70 bg-primary-light/35 px-5 py-3.5 text-sm">
+                  <p className="font-semibold text-foreground">网关可调度：{preview.gatewayEligible ? "是" : "否"}</p>
                   <p className="mt-1">可调度节点：{preview.eligibleNodeIds.length > 0 ? preview.eligibleNodeIds.join("、") : "无"}</p>
                   {preview.excludedNodes?.length ? (
                     <ul className="mt-1 list-disc pl-5 text-xs text-muted-foreground">

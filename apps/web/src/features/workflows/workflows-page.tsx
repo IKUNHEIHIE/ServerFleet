@@ -1,9 +1,11 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -190,8 +192,8 @@ export function WorkflowsPage() {
       <PageHeader
         title="自动化工作流"
         description="规则创建、启停与手动触发对接真实 Controller（GET/POST/PATCH /api/v1/workflows*）。步骤执行与人工审批始终经统一任务系统；本页不执行任何命令。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">自动化</span>}
-        actions={<Button type="button" onClick={list.reload} loading={list.state.status === "loading"}>刷新</Button>}
+        badge={<Badge tone="primary" dot>自动化</Badge>}
+        actions={<Button type="button" onClick={list.reload} loading={list.state.status === "loading"}><RefreshCw className="size-3.5" />刷新</Button>}
       />
       {outcome ? <Notice tone="success" title="操作结果" actions={<Button size="sm" onClick={() => setOutcome(null)}>关闭</Button>}>{outcome}</Notice> : null}
       {toggleAction.error ? <Notice tone="error" title="启停失败">{describeApiError(toggleAction.error)}</Notice> : null}
@@ -303,7 +305,7 @@ export function WorkflowsPage() {
             {ids => <TextArea id={ids.inputId} rows={3} value={parameters} onChange={event => setParameters(event.target.value)} placeholder={"command=uptime"} />}
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={humanApproval} onChange={event => setHumanApproval(event.target.checked)} />
+            <Checkbox checked={humanApproval} onChange={event => setHumanApproval(event.target.checked)} />
             需要人工审批（任务提交后进入审批流，由任务中心执行）
           </label>
           <Button type="submit" variant="primary" loading={createAction.pending} disabled={!canWrite || session.writesLocked}>创建工作流</Button>

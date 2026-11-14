@@ -41,10 +41,34 @@ export function MetricValue({ reading, revealReason = false, className }: Metric
     return <MissingValue label={reason} className={className} />;
   }
 
+  const clamped = reading.percent !== null ? Math.max(0, Math.min(100, Math.round(reading.percent))) : 0;
+  const barColor = metric.stale
+    ? "bg-amber-500"
+    : clamped >= 85
+      ? "bg-[#DE5555]"
+      : clamped >= 65
+        ? "bg-[#D89B2B]"
+        : "bg-[#6658E8]";
+
   return (
-    <span className={cn("inline-flex flex-col gap-0.5", className)}>
-      <span className="tabular-nums">{metric.value}</span>
-      {metric.note ? <span className="text-xs font-medium text-amber-700">{metric.note}</span> : null}
+    <span className={cn("inline-flex flex-col gap-1", className)}>
+      <span className="inline-flex items-center gap-2">
+        <span
+          aria-hidden="true"
+          className="hidden h-1.5 w-14 overflow-hidden rounded-full bg-secondary sm:inline-block"
+        >
+          <span
+            className={cn("block h-full rounded-full transition-all duration-500", barColor)}
+            style={{ width: `${clamped}%` }}
+          />
+        </span>
+        <span className="font-semibold tabular-nums text-foreground">{metric.value}</span>
+      </span>
+      {metric.note ? (
+        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
+          {metric.note}
+        </span>
+      ) : null}
     </span>
   );
 }

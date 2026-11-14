@@ -15,6 +15,7 @@ export interface RequestOptions {
   readonly accept?: string;
   /** 登录失败是凭据错误，不应触发全局“会话失效”处理。 */
   readonly authEvent?: boolean;
+  readonly acceptedStatuses?: readonly number[];
 }
 
 export interface ApiResponse<T> {
@@ -241,7 +242,7 @@ export class ApiClient {
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     headers: Headers,
     body: BodyInit | undefined,
-    options: { readonly query?: RequestOptions["query"]; readonly signal?: AbortSignal; readonly timeoutMs?: number; readonly authEvent?: boolean },
+    options: { readonly query?: RequestOptions["query"]; readonly signal?: AbortSignal; readonly timeoutMs?: number; readonly authEvent?: boolean; readonly acceptedStatuses?: readonly number[] },
   ): Promise<ApiResponse<T>> {
     const timeout = mergeSignals(options.signal, options.timeoutMs ?? this.defaultTimeoutMs);
     let response: Response;
@@ -271,7 +272,7 @@ export class ApiClient {
     const contentType = response.headers.get("Content-Type") ?? "";
     const isJson = /^application\/(?:[a-zA-Z0-9.+-]*\+)?json\b/.test(contentType);
 
-    if (!response.ok) {
+    if (!response.ok && !options.acceptedStatuses?.includes(response.status)) {
       let payload: ErrorPayload | null = null;
       if (isJson) {
         const parsed = await readJson(response);

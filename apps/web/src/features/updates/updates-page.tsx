@@ -1,13 +1,15 @@
 import { ResidentUpdatePanel } from "../settings/resident-update-panel";
+import { ReadinessPanel } from "./readiness-panel";
 import { ReleaseSourcePanel } from "./release-source-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { updatesApi } from "@/lib/api/endpoints-system";
@@ -133,6 +135,7 @@ export function ControllerUpdatePanel() {
       {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
       {!canManage ? <Notice tone="warning" title="更新权限缺失">当前身份没有返回更新管理权限；服务端仍会独立校验。</Notice> : null}
 
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
       <Panel title="检查更新" description="POST /api/v1/system/updates/check；检查只读取版本清单，不安装、不自动重启、不静默升级。">
         <form onSubmit={runCheck} className="space-y-3 px-5 py-4">
           {checkAction.error ? <Notice tone="error" title="检查失败">{describeApiError(checkAction.error)}</Notice> : null}
@@ -155,7 +158,7 @@ export function ControllerUpdatePanel() {
             </div>
           </div>
           {check ? (
-            <div className="rounded-lg border px-4 py-3 text-sm">
+            <SubCard className="p-3.5 text-sm">
               <p>当前版本：<span className="font-mono">{check.currentVersion}</span> · 通道 {check.channel} · 检查时间 {formatDateTime(check.checkedAt) ?? "—"}</p>
               <p>
                 最新版本：<span className="font-mono">{check.latestVersion ?? "未返回"}</span>
@@ -172,7 +175,7 @@ export function ControllerUpdatePanel() {
               {check.updateAvailable && check.signatureVerified === false ? (
                 <Notice tone="error" title="签名未验证">签名验证失败时不能创建升级作业；本页不会绕过该校验。</Notice>
               ) : null}
-            </div>
+            </SubCard>
           ) : <p className="text-xs text-muted-foreground">尚未检查；本页不缓存也不猜测版本号。</p>}
         </form>
       </Panel>
@@ -227,33 +230,35 @@ export function ControllerUpdatePanel() {
               />
             ) : <p className="text-xs text-muted-foreground">服务端未返回预检项；不能据此认定空间、任务或迁移兼容性已确认。</p>}
 
-            <form onSubmit={runApply} className="space-y-3 rounded-lg border px-4 py-3">
-              {applyAction.error ? <Notice tone="error" title="创建升级作业失败">{describeApiError(applyAction.error)}</Notice> : null}
-              {planBlocked ? <Notice tone="warning" title="计划不可执行">计划不合格或存在未通过的预检项；服务端应拒绝安装。</Notice> : null}
-              {backupPending ? (
-                <Notice tone="warning" title="本次升级需要备份">
-                  计划要求备份（backupMode 固定 `required`）；备份由服务端在 backing_up 阶段创建并回写 backupId，
-                  页面不预造备份记录，也不把“尚无 backupId”当成已经备份成功。
-                </Notice>
-              ) : null}
-              <Field label="确认文本" hint={`必须逐字输入目标版本 ${plan.targetVersion}；不得由模型或脚本自批准。`}>
-                {ids => <TextInput id={ids.inputId} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={!canManage || writesLocked} autoComplete="off" />}
-              </Field>
-              <label className="flex items-start gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="mt-1 size-4 accent-[var(--primary)]"
-                  checked={riskAccepted}
-                  disabled={!canManage || writesLocked}
-                  onChange={event => setRiskAccepted(event.target.checked)}
-                />
-                我确认升级会重启主控、期间管理面不可用，且失败时可能需要回滚或人工恢复。
-              </label>
-              <Button type="submit" variant="primary" loading={applyAction.pending} disabled={applyDisabled}>一键更新</Button>
-            </form>
+            <SubCard className="p-3.5">
+              <form onSubmit={runApply} className="space-y-3">
+                {applyAction.error ? <Notice tone="error" title="创建升级作业失败">{describeApiError(applyAction.error)}</Notice> : null}
+                {planBlocked ? <Notice tone="warning" title="计划不可执行">计划不合格或存在未通过的预检项；服务端应拒绝安装。</Notice> : null}
+                {backupPending ? (
+                  <Notice tone="warning" title="本次升级需要备份">
+                    计划要求备份（backupMode 固定 `required`）；备份由服务端在 backing_up 阶段创建并回写 backupId，
+                    页面不预造备份记录，也不把“尚无 backupId”当成已经备份成功。
+                  </Notice>
+                ) : null}
+                <Field label="确认文本" hint={`必须逐字输入目标版本 ${plan.targetVersion}；不得由模型或脚本自批准。`}>
+                  {ids => <TextInput id={ids.inputId} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={!canManage || writesLocked} autoComplete="off" />}
+                </Field>
+                <label className="flex items-start gap-2 text-sm">
+                  <Checkbox
+                    className="mt-1"
+                    checked={riskAccepted}
+                    disabled={!canManage || writesLocked}
+                    onChange={event => setRiskAccepted(event.target.checked)}
+                  />
+                  我确认升级会重启主控、期间管理面不可用，且失败时可能需要回滚或人工恢复。
+                </label>
+                <Button type="submit" variant="primary" loading={applyAction.pending} disabled={applyDisabled}>一键更新</Button>
+              </form>
+            </SubCard>
           </div>
         ) : <p className="px-5 py-4 text-xs text-muted-foreground">尚未生成计划。</p>}
       </Panel>
+      </div>
 
       <Panel
         title="更新作业与历史"
@@ -370,17 +375,21 @@ export function ControllerUpdatePanel() {
 }
 
 export function UpdatesPage() {
-  const session=useSession();
+  const session = useSession();
   return (
     <div className="space-y-5">
       <PageHeader
         title="更新中心"
         description="主控更新：检查 → 计划/预检 → 人工确认 → 异步作业 → 健康检查/回滚。第一版禁止默认静默安装。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">Controller</span>}
+        badge={<Badge tone="primary" dot>Controller</Badge>}
       />
-      <ReleaseSourcePanel />
-      <ResidentUpdatePanel key={session.viewEpoch} />
       <ControllerUpdatePanel />
+      <SectionDivider label="签名工件与受监督升级" caption="Signed Artifact & Supervised Fleet Upgrade" />
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <ReleaseSourcePanel />
+        <ResidentUpdatePanel key={session.viewEpoch} />
+      </div>
+      <ReadinessPanel />
     </div>
   );
 }

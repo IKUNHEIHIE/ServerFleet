@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { KeyRound, Lock, ShieldCheck, Sparkles } from "lucide-react";
+import { BackgroundBeams, GlowingEffect, SparklesCore, Spotlight } from "@/components/aceternity";
 import { useSession } from "@/app/session";
 import { Button } from "@/components/ui/button";
 import { Field, TextInput } from "@/components/ui/form";
@@ -18,28 +20,64 @@ export function AuthLayout({
   readonly footer?: ReactNode;
 }) {
   return (
-    <div className="flex min-h-screen flex-col bg-background">
-      <header className="border-b bg-card">
-        <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-5 py-4">
-          <span aria-hidden="true" className="grid size-8 place-items-center rounded-md bg-primary text-sm font-bold text-primary-foreground">
-            SF
-          </span>
-          <div>
-            <p className="font-semibold leading-5">Server Fleet</p>
-            <p className="text-xs text-muted-foreground">集中管理 · 安全授权</p>
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-background text-foreground neurox-grid-bg">
+      <Spotlight className="-top-36 left-0 md:left-32" />
+      <BackgroundBeams />
+      <div className="pointer-events-none absolute inset-0 opacity-60">
+        <SparklesCore particleDensity={22} particleColor="#6658E8" />
+      </div>
+
+      <header className="relative z-10 border-b border-border/85 bg-card/85 backdrop-blur-md">
+        <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-3 px-5 py-4">
+          <div className="flex items-center gap-3">
+            <span
+              aria-hidden="true"
+              className="grid size-9 place-items-center rounded-xl bg-gradient-to-br from-[#6658E8] to-[#3984E7] text-sm font-bold text-primary-foreground shadow-[0_4px_14px_-2px_rgba(102,88,232,0.45)]"
+            >
+              SF
+            </span>
+            <div>
+              <div className="flex items-center gap-1.5">
+                <p className="font-bold leading-5 tracking-tight text-foreground">Server Fleet</p>
+                <span className="rounded-full bg-[#F0EEFF] px-1.5 py-0.5 font-mono text-[10px] font-semibold text-[#6658E8]">
+                  v2.0
+                </span>
+              </div>
+              <p className="text-xs text-muted-foreground">集中管理 · 安全授权 · NEUROX Control Plane</p>
+            </div>
           </div>
+          <span className="hidden items-center gap-1.5 rounded-full border border-[#169B68]/25 bg-[#ECFDF5] px-2.5 py-1 text-xs font-medium text-[#169B68] sm:inline-flex">
+            <ShieldCheck className="size-3.5" aria-hidden="true" />
+            零信任服务端鉴权
+          </span>
         </div>
       </header>
-      <main className="mx-auto flex w-full max-w-6xl flex-1 items-center justify-center px-5 py-10">
-        <section className="w-full max-w-md rounded-xl border bg-card p-6 shadow-sm" aria-labelledby="auth-title">
-          <h1 id="auth-title" tabIndex={-1} className="text-xl font-semibold tracking-tight focus:outline-none">
-            {title}
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p>
-          <div className="mt-6">{children}</div>
+
+      <main className="relative z-10 mx-auto flex w-full max-w-6xl flex-1 items-center justify-center px-5 py-10">
+        <section className="w-full max-w-md" aria-labelledby="auth-title">
+          <GlowingEffect className="rounded-2xl p-6 sm:p-7 shadow-[0_24px_64px_-16px_rgba(102,88,232,0.18)]">
+            <div className="mb-3 inline-flex items-center gap-1.5 rounded-full border border-[#6658E8]/20 bg-[#F0EEFF] px-2.5 py-0.5 text-[11px] font-semibold text-[#6658E8]">
+              <Sparkles className="size-3" aria-hidden="true" />
+              <span>Security Gateway</span>
+            </div>
+            <h1
+              id="auth-title"
+              tabIndex={-1}
+              className="text-xl font-bold tracking-tight text-foreground focus:outline-none sm:text-2xl"
+            >
+              {title}
+            </h1>
+            <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p>
+            <div className="mt-6">{children}</div>
+          </GlowingEffect>
         </section>
       </main>
-      {footer ? <footer className="border-t px-5 py-3 text-center text-xs text-muted-foreground">{footer}</footer> : null}
+
+      {footer ? (
+        <footer className="relative z-10 border-t border-border/80 bg-card/70 px-5 py-3 text-center text-xs text-muted-foreground backdrop-blur-xs">
+          {footer}
+        </footer>
+      ) : null}
     </div>
   );
 }
@@ -71,7 +109,9 @@ export function LoginPage({ next }: { readonly next: string | null }) {
   const [password, setPassword] = useState("");
   const [secondFactor, setSecondFactor] = useState("");
   const notice =
-    session.state.kind === "anonymous" || session.state.kind === "authenticated" ? session.state.notice : null;
+    session.state.kind === "anonymous" || session.state.kind === "authenticated"
+      ? session.state.notice
+      : null;
 
   useEffect(() => {
     usernameRef.current?.focus();
@@ -97,7 +137,11 @@ export function LoginPage({ next }: { readonly next: string | null }) {
       }
       footer={<>当前仅连接本机 Controller；不使用生产凭据或远程云资源。</>}
     >
-      {notice ? <Notice tone="warning" title="会话提示" className="mb-4">{notice}</Notice> : null}
+      {notice ? (
+        <Notice tone="warning" title="会话提示" className="mb-4">
+          {notice}
+        </Notice>
+      ) : null}
       {error ? (
         <Notice tone="error" title="登录未完成" className="mb-4">
           {describeApiError(error)}
@@ -105,7 +149,7 @@ export function LoginPage({ next }: { readonly next: string | null }) {
       ) : null}
       <form onSubmit={submit} noValidate className="space-y-4">
         <div>
-          <label htmlFor={usernameId} className="block text-sm font-medium">
+          <label htmlFor={usernameId} className="block text-sm font-medium text-foreground">
             用户名
           </label>
           <TextInput
@@ -120,7 +164,7 @@ export function LoginPage({ next }: { readonly next: string | null }) {
           />
         </div>
         <div>
-          <label htmlFor={passwordId} className="block text-sm font-medium">
+          <label htmlFor={passwordId} className="block text-sm font-medium text-foreground">
             密码
           </label>
           <TextInput
@@ -135,7 +179,7 @@ export function LoginPage({ next }: { readonly next: string | null }) {
           />
         </div>
         <div>
-          <label htmlFor={secondFactorId} className="block text-sm font-medium">
+          <label htmlFor={secondFactorId} className="block text-sm font-medium text-foreground">
             二次验证码 <span className="font-normal text-muted-foreground">（如已启用）</span>
           </label>
           <TextInput
@@ -148,6 +192,7 @@ export function LoginPage({ next }: { readonly next: string | null }) {
           />
         </div>
         <Button type="submit" variant="primary" className="w-full" loading={busy}>
+          <Lock className="size-3.5" aria-hidden="true" />
           {alreadySignedIn ? "替换当前会话并登录" : "登录"}
         </Button>
       </form>
@@ -278,6 +323,7 @@ export function BootstrapPage({ available }: { readonly available: boolean }) {
             )}
           </Field>
           <Button type="submit" variant="primary" className="w-full" loading={busy}>
+            <KeyRound className="size-3.5" aria-hidden="true" />
             创建管理员并进入
           </Button>
         </form>

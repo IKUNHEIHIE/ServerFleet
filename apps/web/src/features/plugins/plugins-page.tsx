@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Blocks, PackageCheck, GitBranch, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -170,9 +173,41 @@ export function PluginsPage() {
       <PageHeader
         title="插件中心"
         description="可选插件不进入核心发布包；未安装/禁用时不显示业务菜单。唯一官方插件为 Xray 节点管理器。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">可选插件</span>}
-        actions={<Button type="button" onClick={() => { repository.reload(); catalog.reload(); installed.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>可选插件</Badge>}
+        actions={<Button type="button" onClick={() => { repository.reload(); catalog.reload(); installed.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">插件目录条目</span>
+            <Blocks className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">{catalogItems.length}</p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">已安装 / 已启用</span>
+            <PackageCheck className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">
+            {installedItems.filter(p => p.enabled).length} <span className="text-sm font-normal text-muted-foreground">/ {installedItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">目录来源</span>
+            <GitBranch className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-mono text-sm font-semibold text-foreground">
+            {repo ? `${repo.mode === "official" ? "Official" : "Custom Fork"} · ${repo.ref}` : "待加载"}
+          </p>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
 
       <Panel title="插件来源" description="GET/PUT /api/v1/plugins/repository；自定义来源必须显示为非官方并锁定不可变版本。">
@@ -315,14 +350,11 @@ export function PluginsPage() {
             {!installing.sourceCommit || !installing.artifactSha256 ? (
               <Notice tone="error" title="不可安装">目录条目缺少不可变 commit 或 SHA-256；不能声称验证通过。</Notice>
             ) : null}
-            <fieldset className="rounded-lg border px-4 py-3">
-              <legend className="px-1 font-medium">权限确认</legend>
+            <FieldsetBox legend="权限确认">
               {installing.permissions.length === 0 ? <p className="text-xs text-muted-foreground">该条目未声明权限；请核对来源。</p> : null}
               {installing.permissions.map(permission => (
                 <label key={permission} className="mt-1 flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-[var(--primary)]"
+                  <Checkbox
                     checked={accepted.has(permission)}
                     onChange={event => {
                       setAccepted(current => {
@@ -336,9 +368,9 @@ export function PluginsPage() {
                   {permission}
                 </label>
               ))}
-            </fieldset>
+            </FieldsetBox>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enableAfter} onChange={event => setEnableAfter(event.target.checked)} />
+              <Checkbox checked={enableAfter} onChange={event => setEnableAfter(event.target.checked)} />
               安装后启用
             </label>
           </form>

@@ -1,9 +1,12 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Globe, Network, RefreshCw, Server } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, DefinitionList, TabBar } from "@/components/ui/table";
@@ -22,6 +25,238 @@ const GATEWAY_STATE: Record<GatewayNode["status"], string> = {
   failed: "失败",
   maintenance: "维护中",
 };
+
+function GatewayTopologyCanvas({
+  gateways,
+  routes,
+  serviceGroups,
+}: {
+  readonly gateways: readonly GatewayNode[];
+  readonly routes: readonly GatewayRoute[];
+  readonly serviceGroups: readonly ServiceGroup[];
+}) {
+  if (gateways.length === 0 && routes.length === 0) {
+    return (
+      <div className="px-6 py-8 text-center text-sm text-muted-foreground">
+        当前尚无已登记网关或路由数据；接入网关并配置路由后将在此实时绘制真实流量拓扑。
+      </div>
+    );
+  }
+
+  const eligibleCount = gateways.filter(gw => gw.schedulingEligible).length;
+  const activeRouteCount = routes.filter(rt => rt.enabled).length;
+
+  return (
+    <div className="neurox-dot-bg relative overflow-hidden px-5 py-5">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-3 text-xs">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2.5 py-1 font-semibold text-emerald-800">
+            <span className="size-2 animate-pulse rounded-full bg-emerald-500" />
+            可调度网关: {eligibleCount} / {gateways.length}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary-light px-2.5 py-1 font-semibold text-primary">
+            已启用路由: {activeRouteCount} / {routes.length}
+          </span>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border/80 bg-card px-2.5 py-1 font-medium text-muted-foreground">
+            关联服务组: {serviceGroups.length}
+          </span>
+        </div>
+        <span className="text-[11px] text-muted-foreground">
+          拓扑连线 100% 由服务端真实网关、路由与服务组关系生成
+        </span>
+      </div>
+
+      <div className="relative grid gap-6 lg:grid-cols-[1fr_5rem_1.15fr_5rem_1fr] lg:items-center">
+        {/* Column 1: Ingress Routes */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Globe className="size-3.5 text-primary" />
+            <span>入口域名与路由 ({routes.length})</span>
+          </div>
+          {routes.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-card/80 p-3.5 text-xs text-muted-foreground">
+              暂无路由规则（请在“服务路由”标签页新建）
+            </div>
+          ) : (
+            routes.slice(0, 6).map(route => (
+              <div
+                key={route.id}
+                className="flex items-center justify-between gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-2.5 shadow-2xs"
+              >
+                <div className="min-w-0">
+                  <p className="truncate font-mono text-xs font-semibold text-foreground">
+                    {route.https ? "https://" : "http://"}
+                    {route.domain}
+                  </p>
+                  <p className="mt-0.5 truncate text-[11px] text-muted-foreground">
+                    归属网关: {route.gatewayId ?? "默认"}
+                  </p>
+                </div>
+                <Badge variant={route.enabled ? "success" : "outline"}>
+                  {route.enabled ? "流量生效" : "已停用"}
+                </Badge>
+              </div>
+            ))
+          )}
+        </div>
+
+        {/* Animated SVG Connector 1: Ingress -> Gateways */}
+        <div aria-hidden="true" className="hidden lg:flex lg:items-center lg:justify-center">
+          <svg viewBox="0 0 80 120" className="h-28 w-20 overflow-visible">
+            <defs>
+              <linearGradient id="gw-flow-1" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#6658E8" />
+                <stop offset="100%" stopColor="#3984E7" />
+              </linearGradient>
+            </defs>
+            <path d="M 0 30 C 40 30, 40 60, 80 60" fill="none" stroke="#E8EAF1" strokeWidth="2" />
+            <path d="M 0 60 C 40 60, 40 60, 80 60" fill="none" stroke="#E8EAF1" strokeWidth="2" />
+            <path d="M 0 90 C 40 90, 40 60, 80 60" fill="none" stroke="#E8EAF1" strokeWidth="2" />
+            {eligibleCount > 0 ? (
+              <>
+                <path
+                  d="M 0 30 C 40 30, 40 60, 80 60"
+                  fill="none"
+                  stroke="url(#gw-flow-1)"
+                  strokeWidth="2.2"
+                  className="animate-neurox-dash"
+                />
+                <path
+                  d="M 0 60 C 40 60, 40 60, 80 60"
+                  fill="none"
+                  stroke="url(#gw-flow-1)"
+                  strokeWidth="2.2"
+                  className="animate-neurox-dash"
+                />
+              </>
+            ) : null}
+          </svg>
+        </div>
+
+        {/* Column 2: Nginx Gateway Nodes */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Network className="size-3.5 text-primary" />
+            <span>Nginx 网关集群 ({gateways.length})</span>
+          </div>
+          {gateways.length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-card/80 p-3.5 text-xs text-muted-foreground">
+              暂无网关节点
+            </div>
+          ) : (
+            gateways.map(gw => (
+              <GlowingEffect
+                key={gw.id}
+                glowColor={gw.schedulingEligible ? "rgba(22, 155, 104, 0.16)" : "rgba(216, 155, 43, 0.15)"}
+                className="rounded-xl border border-border/80 bg-card p-3.5 shadow-[var(--shadow-card)]"
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`size-2.5 rounded-full ${
+                        gw.schedulingEligible
+                          ? "bg-emerald-500 ring-4 ring-emerald-500/15"
+                          : gw.online
+                            ? "bg-amber-500"
+                            : "bg-slate-400"
+                      }`}
+                    />
+                    <span className="font-semibold text-foreground">{`${gw.name} (${gw.id})`}</span>
+                  </div>
+                  <Badge variant={gw.schedulingEligible ? "success" : gw.online ? "warning" : "outline"}>
+                    {gw.schedulingEligible ? "调度就绪" : GATEWAY_STATE[gw.status]}
+                  </Badge>
+                </div>
+                <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                  <span className="font-mono">节点: {gw.nodeId}</span>
+                  <span>Nginx: {gw.nginxVersion ?? "未知"}</span>
+                  <span>健康探测: {gw.checksPassed ? "通过" : "未通过"}</span>
+                </div>
+              </GlowingEffect>
+            ))
+          )}
+        </div>
+
+        {/* Animated SVG Connector 2: Gateways -> Backends */}
+        <div aria-hidden="true" className="hidden lg:flex lg:items-center lg:justify-center">
+          <svg viewBox="0 0 80 120" className="h-28 w-20 overflow-visible">
+            <defs>
+              <linearGradient id="gw-flow-2" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" stopColor="#3984E7" />
+                <stop offset="100%" stopColor="#169B68" />
+              </linearGradient>
+            </defs>
+            <path d="M 0 60 C 40 60, 40 30, 80 30" fill="none" stroke="#E8EAF1" strokeWidth="2" />
+            <path d="M 0 60 C 40 60, 40 60, 80 60" fill="none" stroke="#E8EAF1" strokeWidth="2" />
+            <path d="M 0 60 C 40 60, 40 90, 80 90" fill="none" stroke="#E8EAF1" strokeWidth="2" />
+            {eligibleCount > 0 && (serviceGroups.length > 0 || routes.length > 0) ? (
+              <>
+                <path
+                  d="M 0 60 C 40 60, 40 30, 80 30"
+                  fill="none"
+                  stroke="url(#gw-flow-2)"
+                  strokeWidth="2.2"
+                  className="animate-neurox-dash"
+                />
+                <path
+                  d="M 0 60 C 40 60, 40 90, 80 90"
+                  fill="none"
+                  stroke="url(#gw-flow-2)"
+                  strokeWidth="2.2"
+                  className="animate-neurox-dash"
+                />
+              </>
+            ) : null}
+          </svg>
+        </div>
+
+        {/* Column 3: Target Service Groups & Upstreams */}
+        <div className="space-y-2.5">
+          <div className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
+            <Server className="size-3.5 text-emerald-600" />
+            <span>后端服务组与上游 ({serviceGroups.length + routes.filter(r => Boolean(r.upstream)).length})</span>
+          </div>
+          {serviceGroups.length === 0 && routes.filter(r => Boolean(r.upstream)).length === 0 ? (
+            <div className="rounded-xl border border-dashed border-border bg-card/80 p-3.5 text-xs text-muted-foreground">
+              暂无关联后端服务组或直接 upstream
+            </div>
+          ) : (
+            <>
+              {serviceGroups.slice(0, 4).map(sg => (
+                <div
+                  key={sg.id}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-2.5 shadow-2xs"
+                >
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-semibold text-foreground">{`服务组: ${sg.name} (${sg.id})`}</p>
+                    <p className="mt-0.5 text-[11px] text-muted-foreground">
+                      健康实例 {sg.healthyNodeIds?.length ?? 0} / 成员 {sg.memberNodeIds.length} 台
+                    </p>
+                  </div>
+                  <Badge variant={sg.loadBalancing.enabled ? "info" : "outline"}>
+                    {sg.service ? `${sg.service.protocol}:${sg.service.port}` : "未配端口"}
+                  </Badge>
+                </div>
+              ))}
+              {routes
+                .filter(r => Boolean(r.upstream))
+                .slice(0, 3)
+                .map(r => (
+                  <div
+                    key={`up-${r.id}`}
+                    className="flex items-center justify-between gap-2 rounded-xl border border-border/80 bg-card px-3.5 py-2.5 shadow-2xs"
+                  >
+                    <span className="truncate font-mono text-xs text-foreground">{`直连: ${r.upstream}`}</span>
+                    <Badge variant="outline">Upstream</Badge>
+                  </div>
+                ))}
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ChecksBody({ checks }: { readonly checks: GatewayHealthChecks }) {
   const items = [
@@ -152,11 +387,11 @@ function RouteEditor({
         )}
         <div className="flex flex-wrap gap-4">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={https} onChange={event => setHttps(event.target.checked)} disabled={disabled} />
+            <Checkbox checked={https} onChange={event => setHttps(event.target.checked)} disabled={disabled} />
             HTTPS
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
+            <Checkbox checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
             启用
           </label>
         </div>
@@ -254,10 +489,23 @@ export function GatewaysPage() {
       <PageHeader
         title="网关管理"
         description="Nginx 应用网关：安装/检测、健康检查、维护与调度资格。安装失败或检查未通过不可调度。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">应用网关</span>}
-        actions={<Button type="button" onClick={() => { gateways.reload(); routes.reload(); nodes.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary">应用网关</Badge>}
+        actions={
+          <Button type="button" onClick={() => { gateways.reload(); routes.reload(); nodes.reload(); }}>
+            <RefreshCw aria-hidden="true" className="size-3.5" />
+            刷新
+          </Button>
+        }
       />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
+
+      <Panel
+        title="实时网络拓扑视图"
+        description="基于当前服务端返回的网关、路由与后端服务组真实数据渲染动态流量路径。"
+      >
+        <GatewayTopologyCanvas gateways={gatewayItems} routes={routeItems} serviceGroups={groupItems} />
+      </Panel>
+
       <TabBar
         label="网关管理分区"
         active={tab}
@@ -364,7 +612,7 @@ export function GatewaysPage() {
             )}
           </Field>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4 accent-[var(--primary)]" checked={ack} onChange={event => setAck(event.target.checked)} />
+            <Checkbox className="mt-1" checked={ack} onChange={event => setAck(event.target.checked)} />
             我确认安装 Nginx 可能影响节点现有服务；服务端会保留现有配置并先检测。
           </label>
         </form>
@@ -462,7 +710,7 @@ export function GatewayDetailPage({ gatewayId }: { readonly gatewayId: string })
         description="网关准入由在线、就绪、Nginx 安装、配置/健康检查和管理员启用共同决定。"
         actions={
           <>
-            <a href="#/gateways" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回网关列表</a>
+            <LinkButton href="#/gateways">返回网关列表</LinkButton>
             <Button type="button" disabled={!canManage || session.writesLocked || !gateway.state.status || gateway.state.status !== "ready"} onClick={() => gateway.state.status === "ready" && void dispatch(!gateway.state.data.enabled)}>
               {gateway.state.status === "ready" && gateway.state.data.enabled ? "停用调度" : "启用调度"}
             </Button>

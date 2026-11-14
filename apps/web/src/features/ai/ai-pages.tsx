@@ -1,10 +1,15 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
+import { Bot, CheckCircle2, GripVertical, Layers, Loader2, Server, ShieldAlert, Sparkles, User, Zap } from "lucide-react";
 import { navigate } from "@/app/router";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
+import { SparklesCore } from "@/components/aceternity/sparkles";
+import { Spotlight } from "@/components/aceternity/spotlight";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
@@ -84,25 +89,34 @@ export function AIPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader
-        title="AI 运维"
-        description="每个会话默认零资源授权、每次审批。审批模式只改变人工批准策略，绝不扩大节点/RBAC 权限。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">默认拒绝</span>}
-        actions={
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canUse || session.writesLocked}
-            loading={create.pending}
-            onClick={async () => {
-              const result = await create.run();
-              if (result.ok && result.data) navigate(`/ai/${encodeURIComponent(result.data.data.id)}`);
-            }}
-          >
-            新建 AI 会话
-          </Button>
-        }
-      />
+      <div className="relative overflow-hidden rounded-2xl">
+        <Spotlight className="-top-24 left-12 opacity-60" fill="#6658E8" />
+        <SparklesCore
+          className="pointer-events-none absolute inset-0 z-0 opacity-45"
+          particleDensity={18}
+          particleColor="#6658E8"
+        />
+        <PageHeader
+          title="AI 运维"
+          description="每个会话默认零资源授权、每次审批。审批模式只改变人工批准策略，绝不扩大节点/RBAC 权限。"
+          badge={<Badge tone="primary">默认拒绝</Badge>}
+          actions={
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!canUse || session.writesLocked}
+              loading={create.pending}
+              onClick={async () => {
+                const result = await create.run();
+                if (result.ok && result.data) navigate(`/ai/${encodeURIComponent(result.data.data.id)}`);
+              }}
+            >
+              <Sparkles aria-hidden="true" className="size-3.5" />
+              新建 AI 会话
+            </Button>
+          }
+        />
+      </div>
       {create.error ? <Notice tone="error" title="创建会话失败">{describeApiError(create.error)}</Notice> : null}
       <Notice tone="info" title="会话列表契约缺口">
         当前 OpenAPI 只有创建会话与按 ID 读取，没有“列出我的 AI 会话”端点。本页不伪造历史列表；请使用创建后返回的会话或已知会话链接。
@@ -110,13 +124,25 @@ export function AIPage() {
       <Panel title="服务端安全策略声明" description="GET /api/v1/ai/security-policy；声明不等于实际校验，实际仍由后端逐目标执行。">
         <AsyncPanel state={policy.state} onRetry={policy.reload} errorTitle="安全策略加载失败">
           {data => (
-            <div className="grid gap-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <p>默认拒绝：{data.defaultDeny ? "是" : "否"}</p>
-              <p>服务端强制：{data.serverSideEnforced ? "是" : "否"}</p>
-              <p>未授权发现：{data.allowUnscopedDiscovery ? "允许" : "禁止"}</p>
-              <p>scopeRevision 必需：{data.scopeRevisionRequired ? "是" : "未声明"}</p>
-              <p>横向移动限制：{data.lateralMovementRestricted ? "是" : "未声明"}</p>
-              <p>授权与会话交集：{data.groupGrantMemberPolicy ?? "未声明"}</p>
+            <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
+              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                <p className="font-medium text-foreground">默认拒绝：{data.defaultDeny ? "是" : "否"}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                <p className="font-medium text-foreground">服务端强制：{data.serverSideEnforced ? "是" : "否"}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                <p className="font-medium text-foreground">未授权发现：{data.allowUnscopedDiscovery ? "允许" : "禁止"}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                <p className="font-medium text-foreground">scopeRevision 必需：{data.scopeRevisionRequired ? "是" : "未声明"}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                <p className="font-medium text-foreground">横向移动限制：{data.lateralMovementRestricted ? "是" : "未声明"}</p>
+              </div>
+              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                <p className="font-medium text-foreground">授权与会话交集：{data.groupGrantMemberPolicy ?? "未声明"}</p>
+              </div>
             </div>
           )}
         </AsyncPanel>
@@ -158,7 +184,7 @@ function ModelSettingsPanel() {
       ) : null}
       <AsyncPanel state={settings.state} onRetry={settings.reload} errorTitle="模型设置加载失败">
         {data => (
-          <>
+          <div className="grid xl:grid-cols-[1fr_1.35fr] xl:divide-x xl:divide-border/80">
             <ModelSettingsForm
               key={data.revision}
               data={data}
@@ -175,11 +201,11 @@ function ModelSettingsPanel() {
                 modelEnabled={data.enabled}
               />
             ) : (
-              <p className="border-t px-5 py-4 text-xs text-muted-foreground">
+              <p className="border-t px-5 py-4 text-xs text-muted-foreground xl:border-t-0">
                 服务端未返回模型配置 profileId，无法读取或配置 owner 预算；先保存模型设置后再查看。
               </p>
             )}
-          </>
+          </div>
         )}
       </AsyncPanel>
     </Panel>
@@ -265,8 +291,7 @@ function ModelSettingsForm({
         </Field>
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={enabled}
           onChange={event => setEnabled(event.target.checked)}
           disabled={!isAdmin || writesLocked}
@@ -309,7 +334,7 @@ function ModelBudgetPanel({ profileId, modelEnabled }: { readonly profileId: str
   );
 
   return (
-    <section className="border-t" aria-labelledby="ai-budget-heading">
+    <section className="border-t xl:border-t-0" aria-labelledby="ai-budget-heading">
       <div className="px-5 py-4">
         <h3 id="ai-budget-heading" className="text-sm font-semibold">AI 预算窗口（当前用户）</h3>
         <p className="mt-1 text-xs text-muted-foreground">
@@ -352,25 +377,51 @@ function ModelBudgetPanel({ profileId, modelEnabled }: { readonly profileId: str
 
 function BudgetSummary({ data, modelEnabled }: { readonly data: AIModelBudget; readonly modelEnabled: boolean }) {
   const policy = data.policy;
+  const reqPct = policy && policy.requestLimit > 0 ? Math.min(100, Math.round((data.usage.requests / policy.requestLimit) * 100)) : 0;
+  const outPct = policy && policy.outputTokenLimit > 0 ? Math.min(100, Math.round((data.usage.outputTokens / policy.outputTokenLimit) * 100)) : 0;
   return (
-    <div className="grid gap-3 px-5 pb-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-      <p>预算配置：{data.configured ? "已配置" : "未配置"}</p>
-      <p>窗口状态：{data.active ? "当前窗口内" : "不在当前窗口"}</p>
-      <p>模型生成：{modelEnabled ? "已启用" : "未启用（预算不参与生成）"}</p>
-      <p>策略修订：{policy ? policy.revision : "—"}</p>
-      <p>窗口 ID：{policy ? policy.windowId : "—"}</p>
-      <p>窗口开始：{policy ? formatDateTime(policy.startsAt) ?? "—" : "—"}</p>
-      <p>窗口结束：{policy ? formatDateTime(policy.endsAt) ?? "—" : "—"}</p>
-      <p>输出预留 token：{data.outputReservationTokens.toLocaleString("zh-CN")}</p>
-      <p>请求限额：{policy ? policy.requestLimit.toLocaleString("zh-CN") : "—"}</p>
-      <p>输入字节限额：{policy ? policy.inputByteLimit.toLocaleString("zh-CN") : "—"}</p>
-      <p>输出 token 限额：{policy ? policy.outputTokenLimit.toLocaleString("zh-CN") : "—"}</p>
-      <p>已用请求：{data.usage.requests.toLocaleString("zh-CN")} / 剩余 {data.remaining.requests.toLocaleString("zh-CN")}</p>
-      <p>已用输入字节：{data.usage.inputBytes.toLocaleString("zh-CN")} / 剩余 {data.remaining.inputBytes.toLocaleString("zh-CN")}</p>
-      <p>已用输出 token：{data.usage.outputTokens.toLocaleString("zh-CN")} / 剩余 {data.remaining.outputTokens.toLocaleString("zh-CN")}</p>
-      <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
-        计数、剩余与活跃状态均为服务端快照；重新配置同一窗口不会重置已用计数。
-      </p>
+    <div className="space-y-3 px-5 pb-4 text-sm">
+      {policy ? (
+        <div className="grid gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5 sm:grid-cols-2">
+          <div>
+            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+              <span>请求预算消耗</span>
+              <span className="tabular-nums text-foreground">{reqPct}%</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
+              <div className="h-full rounded-full bg-[#6658E8] transition-all duration-500" style={{ width: `${reqPct}%` }} />
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
+              <span>输出 Token 预算消耗</span>
+              <span className="tabular-nums text-foreground">{outPct}%</span>
+            </div>
+            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
+              <div className="h-full rounded-full bg-[#3984E7] transition-all duration-500" style={{ width: `${outPct}%` }} />
+            </div>
+          </div>
+        </div>
+      ) : null}
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <p>预算配置：{data.configured ? "已配置" : "未配置"}</p>
+        <p>窗口状态：{data.active ? "当前窗口内" : "不在当前窗口"}</p>
+        <p>模型生成：{modelEnabled ? "已启用" : "未启用（预算不参与生成）"}</p>
+        <p>策略修订：{policy ? policy.revision : "—"}</p>
+        <p>窗口 ID：{policy ? policy.windowId : "—"}</p>
+        <p>窗口开始：{policy ? formatDateTime(policy.startsAt) ?? "—" : "—"}</p>
+        <p>窗口结束：{policy ? formatDateTime(policy.endsAt) ?? "—" : "—"}</p>
+        <p>输出预留 token：{data.outputReservationTokens.toLocaleString("zh-CN")}</p>
+        <p>请求限额：{policy ? policy.requestLimit.toLocaleString("zh-CN") : "—"}</p>
+        <p>输入字节限额：{policy ? policy.inputByteLimit.toLocaleString("zh-CN") : "—"}</p>
+        <p>输出 token 限额：{policy ? policy.outputTokenLimit.toLocaleString("zh-CN") : "—"}</p>
+        <p>已用请求：{data.usage.requests.toLocaleString("zh-CN")} / 剩余 {data.remaining.requests.toLocaleString("zh-CN")}</p>
+        <p>已用输入字节：{data.usage.inputBytes.toLocaleString("zh-CN")} / 剩余 {data.remaining.inputBytes.toLocaleString("zh-CN")}</p>
+        <p>已用输出 token：{data.usage.outputTokens.toLocaleString("zh-CN")} / 剩余 {data.remaining.outputTokens.toLocaleString("zh-CN")}</p>
+        <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
+          计数、剩余与活跃状态均为服务端快照；重新配置同一窗口不会重置已用计数。
+        </p>
+      </div>
     </div>
   );
 }
@@ -533,9 +584,10 @@ function ModeCards({
   return (
     <div className="space-y-3 px-5 py-4">
       {error ? <Notice tone="error" title="切换失败">{describeApiError(error)}</Notice> : null}
-      <div className="grid gap-3 md:grid-cols-3">
+      <div className="grid gap-3.5 md:grid-cols-3">
         {modes.map(mode => {
           const active = policy?.mode === mode;
+          const ModeIcon = mode === "per_action" ? ShieldAlert : mode === "automatic" ? CheckCircle2 : Zap;
           return (
             <button
               key={mode}
@@ -543,11 +595,24 @@ function ModeCards({
               aria-pressed={active}
               disabled={!canManage || writesLocked}
               onClick={() => (mode === "full_access" ? setFullOpen(true) : onChange(mode))}
-              className={`rounded-lg border px-4 py-3 text-left text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${active ? "border-primary bg-primary/10" : "bg-card hover:bg-secondary"}`}
+              className={`group relative overflow-hidden rounded-xl border p-4 text-left text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                active
+                  ? "border-primary bg-primary-light/85 shadow-[var(--shadow-card-hover)] ring-1 ring-primary/35"
+                  : "border-border/80 bg-card shadow-[var(--shadow-card)] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-secondary/40"
+              }`}
             >
-              <span className="font-medium">{MODE_LABEL[mode]}</span>
-              <span className="mt-1 block text-xs text-muted-foreground">{MODE_DESCRIPTION[mode]}</span>
-              {active ? <span className="mt-2 block text-xs text-primary">当前模式</span> : null}
+              <span className="flex items-center justify-between gap-2">
+                <span className="inline-flex items-center gap-2 font-semibold text-foreground">
+                  <ModeIcon aria-hidden="true" className={`size-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
+                  {MODE_LABEL[mode]}
+                </span>
+                {active ? (
+                  <Badge className="bg-primary text-white border-primary">
+                    当前模式
+                  </Badge>
+                ) : null}
+              </span>
+              <span className="mt-2 block text-xs leading-5 text-muted-foreground">{MODE_DESCRIPTION[mode]}</span>
             </button>
           );
         })}
@@ -591,7 +656,7 @@ function ModeCards({
             )}
           </Field>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4 accent-[var(--destructive)]" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />
+            <Checkbox className="mt-1 accent-[var(--destructive)]" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />
             我理解：完全访问只在当前资源授权和 RBAC 范围内生效，到期恢复每次审批；root Shell 仍需真人确认。
           </label>
         </div>
@@ -909,7 +974,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
         description="默认零资源授权、每次审批；授权变化会递增 scopeRevision，旧计划与旧审批不能继续执行。"
         actions={
           <>
-            <a href="#/ai" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回 AI 入口</a>
+            <LinkButton href="#/ai">返回 AI 入口</LinkButton>
             <Button type="button" onClick={() => { session.reload(); policy.reload(); messages.reload(); }}>刷新</Button>
           </>
         }
@@ -922,22 +987,32 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
         {data => (
           <div className="space-y-5">
             <Panel title="会话快照" description="GET /api/v1/ai/sessions/{sessionId}；allowedNodeIds 由服务端计算。">
-              <div className="grid gap-3 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <p>状态：{data.status}</p>
-                <p>scopeRevision：{data.scopeRevision}</p>
-                <p>授权数：{data.resourceGrants.length}</p>
-                <p>创建者：{data.createdBy ?? "—"}</p>
-                <p className="lg:col-span-4">有效节点：{data.allowedNodeIds?.join("、") || "空（默认无资源）"}</p>
+              <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                <GlowingEffect className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">状态：{data.status}</p>
+                </GlowingEffect>
+                <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-mono font-medium text-foreground">scopeRevision：{data.scopeRevision}</p>
+                </GlowingEffect>
+                <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">授权数：{data.resourceGrants.length}</p>
+                </GlowingEffect>
+                <GlowingEffect className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+                  <p className="font-medium text-foreground">创建者：{data.createdBy ?? "—"}</p>
+                </GlowingEffect>
+                <div className="rounded-xl border border-primary/20 bg-primary-light/55 p-3.5 lg:col-span-4">
+                  <p className="font-medium text-foreground">有效节点：{data.allowedNodeIds?.join("、") || "空（默认无资源）"}</p>
+                </div>
               </div>
-              <div className="border-t px-5 py-2 text-xs text-muted-foreground">
+              <div className="border-t border-border/70 bg-[#FAFBFD] px-5 py-2.5 text-xs text-muted-foreground">
                 事件流：{stream.state} · 游标 {stream.lastEventId ?? "尚未收到"} · 事件 {events.length} 条（只显示投影字段）
                 <Button size="sm" className="ml-2" onClick={stream.reconnect}>重连</Button>
               </div>
               {events.length ? (
-                <ul className="max-h-40 divide-y overflow-y-auto border-t">
+                <ul className="max-h-40 divide-y divide-slate-800/80 overflow-y-auto border-t bg-[#141724] text-slate-200">
                   {events.map((event, index) => (
-                    <li key={`${event.id ?? "e"}-${event.receivedAt}-${index}`} className="px-5 py-1.5 text-xs">
-                      {event.event} {event.toolName ? `· ${event.toolName}` : ""} {event.state ? `· ${event.state}` : ""} {event.message ? `· ${event.message}` : ""}
+                    <li key={`${event.id ?? "e"}-${event.receivedAt}-${index}`} className="px-5 py-2 font-mono text-xs">
+                      <span className="text-violet-300">{event.event}</span> {event.toolName ? `· ${event.toolName}` : ""} {event.state ? `· ${event.state}` : ""} {event.message ? `· ${event.message}` : ""}
                     </li>
                   ))}
                 </ul>
@@ -980,7 +1055,72 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                   )}
                 </Panel>
                 <Panel title="添加资源授权" description="显式由管理员加入；AI 模型不能自行调用此入口扩大授权。">
-                  <form onSubmit={addGrant} className="space-y-3 px-5 py-4">
+                  {(nodeItems.length > 0 || groupItems.length > 0) ? (
+                    <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3">
+                      <p className="text-xs font-semibold text-muted-foreground">
+                        可拖拽资源池（将节点或服务组胶囊拖入下方授权表单即可自动预填，仍需管理员点击「添加授权」提交）：
+                      </p>
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {nodeItems.map(node => (
+                          <span
+                            key={`drag-node-${node.id}`}
+                            draggable
+                            onDragStart={event => {
+                              event.dataTransfer.setData("text/plain", `node:${node.id}`);
+                              event.dataTransfer.effectAllowed = "copy";
+                            }}
+                            onClick={() => {
+                              setResourceType("node");
+                              setResourceId(node.id);
+                            }}
+                            className="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground shadow-2xs transition-colors hover:border-primary/40 hover:bg-primary-light/60 active:cursor-grabbing"
+                          >
+                            <GripVertical aria-hidden="true" className="size-3 text-muted-foreground" />
+                            <Server aria-hidden="true" className="size-3 text-primary" />
+                            <span>{`节点:${node.id}`}</span>
+                          </span>
+                        ))}
+                        {groupItems.map(group => (
+                          <span
+                            key={`drag-sg-${group.id}`}
+                            draggable
+                            onDragStart={event => {
+                              event.dataTransfer.setData("text/plain", `service_group:${group.id}`);
+                              event.dataTransfer.effectAllowed = "copy";
+                            }}
+                            onClick={() => {
+                              setResourceType("service_group");
+                              setResourceId(group.id);
+                            }}
+                            className="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground shadow-2xs transition-colors hover:border-primary/40 hover:bg-primary-light/60 active:cursor-grabbing"
+                          >
+                            <GripVertical aria-hidden="true" className="size-3 text-muted-foreground" />
+                            <Layers aria-hidden="true" className="size-3 text-blue-600" />
+                            <span>{`服务组:${group.id}`}</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <form
+                    onSubmit={addGrant}
+                    onDragOver={event => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "copy";
+                    }}
+                    onDrop={event => {
+                      event.preventDefault();
+                      const raw = event.dataTransfer.getData("text/plain").trim();
+                      if (raw.startsWith("node:")) {
+                        setResourceType("node");
+                        setResourceId(raw.slice(5));
+                      } else if (raw.startsWith("service_group:")) {
+                        setResourceType("service_group");
+                        setResourceId(raw.slice(14));
+                      }
+                    }}
+                    className="space-y-3 px-5 py-4"
+                  >
                     {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
                     {grant.error ? <Notice tone="error" title="授权失败">{describeApiError(grant.error)}</Notice> : null}
                     <div className="grid gap-3 sm:grid-cols-2">
@@ -1076,27 +1216,51 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                 >
                   <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="暂无消息" />} isEmpty={page => page.items.length === 0}>
                     {() => (
-                      <ul className="max-h-80 divide-y overflow-y-auto">
-                        {messageItems.map(message => (
-                          <li key={message.messageId} className="px-5 py-3 text-sm">
-                            <p className="text-xs text-muted-foreground">{message.role} · {formatDateTime(message.createdAt) ?? "—"}</p>
-                            <p className="mt-1 whitespace-pre-wrap">{message.redactedContent ?? "服务端未返回内容"}</p>
-                            {message.taskIds?.length ? <p className="mt-1 text-xs">任务：{message.taskIds.join("、")}</p> : null}
-                            {message.role === "user" && !message.agentRunId ? (
-                              <div className="mt-2">
-                                <Button
-                                  type="button"
-                                  size="sm"
-                                  loading={generatingMessageId === message.messageId}
-                                  disabled={writesLocked || !canUse || generatingMessageId !== null}
-                                  onClick={() => void runGenerate(message.messageId)}
-                                >
-                                  生成回复
-                                </Button>
+                      <ul className="max-h-96 space-y-3 overflow-y-auto bg-[#FAFBFD] px-5 py-4">
+                        {messageItems.map(message => {
+                          const isUser = message.role === "user";
+                          const isGenerating = generatingMessageId === message.messageId;
+                          return (
+                            <li
+                              key={message.messageId}
+                              className={`rounded-2xl border p-4 text-sm shadow-2xs ${
+                                isUser
+                                  ? "ml-6 border-primary/25 bg-primary-light/75"
+                                  : "mr-6 border-border/80 bg-card"
+                              }`}
+                            >
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                                  {isUser ? <User aria-hidden="true" className="size-3.5 text-primary" /> : <Bot aria-hidden="true" className="size-3.5 text-emerald-600" />}
+                                  {message.role} · {formatDateTime(message.createdAt) ?? "—"}
+                                </span>
+                                {isGenerating ? (
+                                  <Badge variant="info" className="gap-1">
+                                    <Loader2 aria-hidden="true" className="size-3 animate-spin" />
+                                    模型思考与生成中
+                                  </Badge>
+                                ) : null}
                               </div>
-                            ) : null}
-                          </li>
-                        ))}
+                              <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{message.redactedContent ?? "服务端未返回内容"}</p>
+                              {message.taskIds?.length ? <p className="mt-1.5 text-xs text-muted-foreground">任务：{message.taskIds.join("、")}</p> : null}
+                              {message.role === "user" && !message.agentRunId ? (
+                                <div className="mt-3">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="primary"
+                                    loading={isGenerating}
+                                    disabled={writesLocked || !canUse || generatingMessageId !== null}
+                                    onClick={() => void runGenerate(message.messageId)}
+                                  >
+                                    <Sparkles aria-hidden="true" className="size-3.5" />
+                                    生成回复
+                                  </Button>
+                                </div>
+                              ) : null}
+                            </li>
+                          );
+                        })}
                       </ul>
                     )}
                   </AsyncPanel>
@@ -1104,9 +1268,62 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                   <p className="px-5 pt-2 text-xs text-muted-foreground">
                     生成说明：点击「生成回复」向 POST …/messages/{"{messageId}"}/generate 显式发起；响应为服务端缓冲上游 SSE 至终态并复核撤权/配额后的完整脱敏消息，不是浏览器逐 token 流。重复对 generating/unknown 消息发起会被服务端拒绝。
                   </p>
-                  <form onSubmit={sendMessage} className="space-y-3 border-t px-5 py-4">
+                  <form
+                    onSubmit={sendMessage}
+                    onDragOver={event => {
+                      event.preventDefault();
+                      event.dataTransfer.dropEffect = "copy";
+                    }}
+                    onDrop={event => {
+                      event.preventDefault();
+                      const raw = event.dataTransfer.getData("text/plain").trim();
+                      if (raw) {
+                        setMessageText(prev => (prev ? `${prev} [${raw}]` : `[${raw}] `));
+                      }
+                    }}
+                    className="space-y-3 border-t border-border/70 bg-card px-5 py-4"
+                  >
+                    {(nodeItems.length > 0 || groupItems.length > 0) ? (
+                      <div className="rounded-xl border border-dashed border-primary/25 bg-primary-light/30 p-3">
+                        <p className="text-[11px] font-semibold text-muted-foreground">
+                          资源上下文快捷拖入（拖入下方输入框仅插入文本引用，实际访问权限仍由会话授权与后端强制校验）：
+                        </p>
+                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                          {nodeItems.map(node => (
+                            <span
+                              key={`chat-node-${node.id}`}
+                              draggable
+                              onDragStart={event => {
+                                event.dataTransfer.setData("text/plain", `节点:${node.id}`);
+                                event.dataTransfer.effectAllowed = "copy";
+                              }}
+                              onClick={() => setMessageText(prev => (prev ? `${prev} [节点:${node.id}]` : `[节点:${node.id}] `))}
+                              className="inline-flex cursor-grab items-center gap-1 rounded-full border border-border/80 bg-card px-2 py-0.5 text-[11px] font-medium text-foreground shadow-2xs hover:border-primary/40"
+                            >
+                              <Server aria-hidden="true" className="size-3 text-primary" />
+                              <span>{`@${node.id}`}</span>
+                            </span>
+                          ))}
+                          {groupItems.map(group => (
+                            <span
+                              key={`chat-sg-${group.id}`}
+                              draggable
+                              onDragStart={event => {
+                                event.dataTransfer.setData("text/plain", `服务组:${group.id}`);
+                                event.dataTransfer.effectAllowed = "copy";
+                              }}
+                              onClick={() => setMessageText(prev => (prev ? `${prev} [服务组:${group.id}]` : `[服务组:${group.id}] `))}
+                              className="inline-flex cursor-grab items-center gap-1 rounded-full border border-border/80 bg-card px-2 py-0.5 text-[11px] font-medium text-foreground shadow-2xs hover:border-primary/40"
+                            >
+                              <Layers aria-hidden="true" className="size-3 text-blue-600" />
+                              <span>{`#${group.id}`}</span>
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
                     {send.error ? <Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice> : null}
-                    <Field label="消息内容" hint="每次提交带 clientMessageId 与当前 scopeRevision；过期会被拒绝。">
+                    <Field label="消息内容" hint="每次提交带 clientMessageId 与当前 scopeRevision；过期会被拒绝。支持将上方节点或服务组胶囊拖入此处。">
                       {ids => <TextArea id={ids.inputId} value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={32000} />}
                     </Field>
                     <Button type="submit" variant="primary" loading={send.pending} disabled={writesLocked || !canUse || !messageText.trim()}>发送消息</Button>

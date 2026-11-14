@@ -1,4 +1,7 @@
 import { useId, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import { Button } from "@/components/ui/button";
+import { Select, TextInput } from "@/components/ui/form";
+import { SubCard } from "@/components/ui/panel";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView, NodeListState } from "./types";
 import { NodeList, type NodeActivateOrigin, type NodeListHandle } from "./node-list";
@@ -103,23 +106,18 @@ export function NodeListPanel({
 
   const clear = () => setCriteria({ query: "", status: "all" });
 
-  const controlClassName =
-    "mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm transition-colors " +
-    "placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring " +
-    "disabled:cursor-not-allowed disabled:opacity-50";
-
   let emptyContent: ReactNode;
   if (noMatch) emptyContent = <NoMatches />;
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-4", className)}>
-      <div className="rounded-xl border bg-card px-6 py-4">
+      <SubCard className="bg-gradient-to-b from-white to-[#FAFBFD] px-6 py-4 shadow-[var(--shadow-card)]">
         <div role="search" aria-label="节点搜索与筛选" className="flex flex-wrap items-end gap-3">
           <div className="min-w-56 flex-1">
-            <label htmlFor={searchId} className="block text-xs font-medium text-muted-foreground">
+            <label htmlFor={searchId} className="block text-xs font-semibold text-muted-foreground">
               搜索节点
             </label>
-            <input
+            <TextInput
               ref={searchRef}
               id={searchId}
               type="search"
@@ -127,19 +125,19 @@ export function NodeListPanel({
               disabled={controlsDisabled}
               onChange={event => update({ query: event.target.value })}
               placeholder="输入名称或节点 ID"
-              className={cn(controlClassName, "w-full")}
+              className="h-9"
             />
           </div>
           <div>
-            <label htmlFor={statusId} className="block text-xs font-medium text-muted-foreground">
+            <label htmlFor={statusId} className="block text-xs font-semibold text-muted-foreground">
               状态筛选
             </label>
-            <select
+            <Select
               id={statusId}
               value={criteria.status}
               disabled={controlsDisabled}
               onChange={event => update({ status: event.target.value as NodeStatusFilter })}
-              className={controlClassName}
+              className="h-9 w-auto py-1"
             >
               <option value="all">全部状态</option>
               {FILTERABLE_STATUSES.map(status => (
@@ -147,26 +145,21 @@ export function NodeListPanel({
                   {nodeStatusMeta[status].label}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
-          <button
-            type="button"
-            onClick={clear}
-            disabled={!filtering}
-            className="inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
-          >
+          <Button type="button" onClick={clear} disabled={!filtering}>
             清空筛选
-          </button>
+          </Button>
         </div>
         {summary ? (
-          <p role="status" className="mt-3 text-xs text-muted-foreground">
+          <p role="status" className="mt-3 text-xs font-medium text-foreground/85">
             {summary}
           </p>
         ) : null}
         <p className="mt-2 text-xs text-muted-foreground">
           筛选只作用于当前已加载的节点，不改变任何授权范围。
         </p>
-      </div>
+      </SubCard>
 
       <NodeList
         ref={listRef}

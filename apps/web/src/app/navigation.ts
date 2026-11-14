@@ -31,6 +31,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     id: "core",
     label: "核心功能",
+    collapsible: true,
     items: [
       { path: "/files", label: "文件互传", description: "双栏目录浏览、上传下载与跨节点复制任务。" },
       { path: "/tasks", label: "批量任务", description: "冻结目标快照、分批/金丝雀、审批与进度。" },
@@ -44,6 +45,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     id: "extensions",
     label: "扩展能力",
+    collapsible: true,
     items: [
       { path: "/workflows", label: "自动化工作流", description: "触发器、条件、操作、人工审批与通知。" },
       { path: "/plugins", label: "插件中心", description: "来源仓库、目录、安装启停升级与卸载。" },
@@ -54,6 +56,7 @@ export const NAV_GROUPS: readonly NavGroup[] = [
   {
     id: "system",
     label: "系统维护",
+    collapsible: true,
     items: [
       { path: "/updates", label: "更新中心", description: "主控与 Agent 更新状态、失败恢复。" },
       { path: "/backups", label: "备份与恢复", description: "备份校验与主控灾难恢复。" },
