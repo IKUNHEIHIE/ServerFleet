@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { RecoveryAuthorityPanel } from "./recovery-authority-panel";
 import { EncryptedBackupsPanel } from "./encrypted-backups-panel";
 import { useSession } from "@/app/session";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, TextInput } from "@/components/ui/form";
@@ -136,7 +137,7 @@ export function BackupsPage() {
       <PageHeader
         title="备份与恢复"
         description="备份校验 → 灾难恢复预演 → 恢复作业。恢复密钥只传引用，不传明文。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">DR</span>}
+        badge={<Badge tone="primary" dot>DR</Badge>}
       />
       <RecoveryAuthorityPanel key={`authority:${session.viewEpoch}`} />
       <EncryptedBackupsPanel key={session.viewEpoch} />

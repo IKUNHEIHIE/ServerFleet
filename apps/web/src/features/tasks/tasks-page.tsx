@@ -1,9 +1,12 @@
 import { IncidentPanel } from "./incident-panel";
 import { CommandProfilePanel } from "./command-profile-panel";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { CheckCircle2, Clock, ListChecks, PlayCircle, Plus, RefreshCw } from "lucide-react";
 import { navigate } from "@/app/router";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
@@ -12,10 +15,18 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { groupsApi, nodesApi, serviceGroupsApi, tasksApi } from "@/lib/api/endpoints";
-import type { BatchTaskPreview, NodeGroup, ServiceGroup } from "@/lib/api/dto";
+import type { BatchTaskPreview, NodeGroup, ServiceGroup, TaskState } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 import { TASK_STATE_LABEL, TERMINAL_STATES } from "./task-state";
+
+function taskBadgeVariant(state: TaskState): "default" | "success" | "warning" | "destructive" | "info" | "outline" {
+  if (state === "completed") return "success";
+  if (state === "failed" || state === "expired" || state === "canceled") return "destructive";
+  if (state === "awaiting_approval" || state === "paused" || state === "unknown" || state === "partially_failed") return "warning";
+  if (state === "running" || state === "queued" || state === "waiting_node" || state === "canceling") return "info";
+  return "outline";
+}
 
 type TargetType = "node_ids" | "node_group" | "service_group";
 
@@ -286,6 +297,10 @@ export function TasksPage() {
     return items.filter(task => !TERMINAL_STATES.includes(task.state));
   }, [items, filter]);
 
+  const activeCount = items.filter(task => !TERMINAL_STATES.includes(task.state)).length;
+  const awaitingCount = items.filter(task => task.state === "awaiting_approval").length;
+  const finishedCount = items.filter(task => TERMINAL_STATES.includes(task.state)).length;
+
   return (
     <div className="space-y-5">
       <IncidentPanel key={`incidents:${session.viewEpoch}`} />
@@ -293,27 +308,79 @@ export function TasksPage() {
       <PageHeader
         title="批量任务"
         description="统一任务中心：冻结目标、分批/金丝雀、审批、逐节点结果与 SSE 进度。取消不等于回滚，未知结果不自动重跑。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">统一任务</span>}
+        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">统一任务</span>}
         actions={
           <>
-            <Button type="button" onClick={tasks.reload} loading={tasks.state.status === "loading"}>刷新</Button>
+            <Button type="button" onClick={tasks.reload} loading={tasks.state.status === "loading"}>
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+              刷新
+            </Button>
             <Button type="button" variant="primary" disabled={!canSubmit || session.writesLocked} onClick={() => setCreateOpen(true)}>
+              <Plus aria-hidden="true" className="size-3.5" />
               创建任务
             </Button>
           </>
         }
       />
       {!canSubmit ? <Notice tone="warning" title="提交入口已锁定">当前身份未返回任务提交权限（`task.submit`/`task.manage`）。</Notice> : null}
+
+      <div className="grid gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
+        <GlowingEffect className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
+            <ListChecks className="size-4" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">已加载任务</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-foreground">
+              {tasks.state.status === "ready" ? `${items.length}` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+        <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
+            <PlayCircle className="size-4" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">活跃 / 执行中</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-blue-700">
+              {tasks.state.status === "ready" ? `${activeCount}` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+        <GlowingEffect glowColor="rgba(216, 155, 43, 0.15)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700">
+            <Clock className="size-4" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">待人工审批</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-amber-700">
+              {tasks.state.status === "ready" ? `${awaitingCount}` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+        <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+          <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
+            <CheckCircle2 className="size-4" />
+          </span>
+          <div>
+            <p className="text-xs font-medium text-muted-foreground">已终态结案</p>
+            <p className="mt-0.5 text-lg font-bold tabular-nums text-emerald-700">
+              {tasks.state.status === "ready" ? `${finishedCount}` : "—"}
+            </p>
+          </div>
+        </GlowingEffect>
+      </div>
+
       <Panel
         title="任务历史"
         description="GET /api/v1/tasks；状态筛选只作用于已加载页。"
         actions={
-          <label className="text-xs text-muted-foreground">
+          <label className="text-xs font-medium text-muted-foreground">
             状态
             <select
               value={filter}
               onChange={event => setFilter(event.target.value as typeof filter)}
-              className="ml-2 h-8 rounded-md border border-input bg-background px-2 text-xs"
+              className="ml-2 h-8 rounded-lg border border-input bg-card px-2.5 text-xs font-medium text-foreground shadow-2xs"
             >
               <option value="all">全部</option>
               <option value="active">进行中</option>
@@ -341,12 +408,16 @@ export function TasksPage() {
                   key: "id",
                   header: "任务",
                   render: task => (
-                    <a href={`#/tasks/${encodeURIComponent(task.taskId)}`} className="font-mono text-xs text-primary underline-offset-2 hover:underline">
+                    <a href={`#/tasks/${encodeURIComponent(task.taskId)}`} className="font-mono text-xs font-semibold text-primary underline-offset-2 hover:underline">
                       {task.taskId}
                     </a>
                   ),
                 },
-                { key: "state", header: "状态", render: task => TASK_STATE_LABEL[task.state] },
+                {
+                  key: "state",
+                  header: "状态",
+                  render: task => <Badge variant={taskBadgeVariant(task.state)}>{TASK_STATE_LABEL[task.state]}</Badge>,
+                },
                 { key: "targets", header: "目标快照", align: "right", render: task => task.targetType === "controller" ? `主控 ${task.targetControllerId ?? "身份未返回"}` : `${task.targetNodeIdsSnapshot.length} 台` },
                 { key: "created", header: "创建时间", render: task => formatDateTime(task.createdAt) ?? "—" },
                 { key: "expires", header: "到期", render: task => formatDateTime(task.expiresAt) ?? "—" },

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -79,7 +80,7 @@ export function AuditPage() {
       <PageHeader
         title="审计日志"
         description="查询脱敏的服务端审计事件；不展示秘密、凭据或原始文件内容。浏览器日志不能替代服务端审计。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">只读</span>}
+        badge={<Badge tone="info" dot>只读</Badge>}
       />
       <Panel title="筛选" description="GET /api/v1/audit/events；时间按 UTC 提交。">
         <form onSubmit={apply} className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3">

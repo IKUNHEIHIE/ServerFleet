@@ -1,25 +1,59 @@
 @import "tailwindcss";
 
 :root {
-  --background: oklch(0.985 0.003 260);
-  --foreground: oklch(0.20 0.02 260);
-  --card: oklch(1 0 0);
-  --card-foreground: var(--foreground);
-  --primary: oklch(0.40 0.12 260);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.95 0.01 260);
-  --secondary-foreground: var(--foreground);
-  --muted: var(--secondary);
-  --muted-foreground: oklch(0.48 0.02 260);
-  --accent: var(--secondary);
-  --accent-foreground: var(--foreground);
-  --destructive: oklch(0.58 0.22 25);
-  --border: oklch(0.90 0.01 260);
-  --input: var(--border);
-  --ring: var(--primary);
-  --popover: var(--card);
-  --popover-foreground: var(--foreground);
+  color-scheme: light;
+
+  /* Server Fleet v2.0 — NEUROX Light Theme Design Tokens */
+  --background: #F6F7FB;
+  --foreground: #1C2030;
+  --card: #FFFFFF;
+  --card-foreground: #1C2030;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C2030;
+
+  --primary: #6658E8;
+  --primary-hover: #5647DC;
+  --primary-light: #F0EEFF;
+  --primary-foreground: #FFFFFF;
+
+  --secondary: #EEF0F7;
+  --secondary-foreground: #1C2030;
+
+  --muted: #F1F3F9;
+  --muted-foreground: #737B8C;
+
+  --accent: #F0EEFF;
+  --accent-foreground: #4C3FD1;
+
+  --border: #E8EAF1;
+  --border-strong: #D5D9E6;
+  --input: #DDE1EC;
+  --ring: #6658E8;
+
+  /* Semantic Status Tokens */
+  --success: #169B68;
+  --success-light: #ECFDF5;
+  --warning: #D89B2B;
+  --warning-light: #FFFBEB;
+  --danger: #DE5555;
+  --danger-light: #FEF2F2;
+  --destructive: #DE5555;
+  --destructive-foreground: #FFFFFF;
+  --info: #3984E7;
+  --info-light: #EFF6FF;
+
   --radius: 0.75rem;
+
+  /* Typography Stack */
+  --font-display: "Plus Jakarta Sans", "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-body: "Inter", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Mono", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+  /* Elevation & Glow Tokens */
+  --shadow-card: 0 1px 3px rgba(28, 32, 48, 0.04), 0 6px 20px -4px rgba(102, 88, 232, 0.04);
+  --shadow-card-hover: 0 4px 12px rgba(28, 32, 48, 0.06), 0 16px 36px -8px rgba(102, 88, 232, 0.12);
+  --shadow-glow-primary: 0 0 24px -4px rgba(102, 88, 232, 0.28);
+  --shadow-glow-success: 0 0 16px -2px rgba(22, 155, 104, 0.28);
 }
 
 @theme inline {
@@ -27,7 +61,10 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
+  --color-primary-light: var(--primary-light);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
@@ -36,18 +73,140 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-info: var(--info);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --font-display: var(--font-display);
+  --font-sans: var(--font-body);
+  --font-mono: var(--font-mono);
 }
 
-@layer base {
-  * { @apply border-border; }
-  body { @apply m-0 bg-background text-foreground antialiased; font-family: system-ui, sans-serif; }
+* {
+  border-color: var(--border);
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: var(--background);
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -15%, rgba(102, 88, 232, 0.08), transparent),
+    radial-gradient(ellipse 50% 40% at 90% 10%, rgba(57, 132, 231, 0.05), transparent);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Custom Subtle Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #D5D9E6;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #6658E8;
+}
+
+/* NEUROX Surface & Pattern Utilities */
+.neurox-grid-bg {
+  background-size: 32px 32px;
+  background-image:
+    linear-gradient(to right, rgba(102, 88, 232, 0.045) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(102, 88, 232, 0.045) 1px, transparent 1px);
+}
+
+.neurox-dot-bg {
+  background-image: radial-gradient(rgba(102, 88, 232, 0.14) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.neurox-glass {
+  background: rgba(255, 255, 255, 0.84);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+}
+
+.neurox-card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-card);
+  transition: transform 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+              box-shadow 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+              border-color 0.22s ease;
+}
+
+.neurox-card-interactive:hover {
+  transform: translateY(-2px);
+  border-color: rgba(102, 88, 232, 0.32);
+  box-shadow: var(--shadow-card-hover);
+}
+
+@keyframes neurox-shimmer {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(200%);
+  }
+}
+
+@keyframes neurox-pulse-ring {
+  0% {
+    transform: scale(0.95);
+    opacity: 0.75;
+  }
+  70% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+  100% {
+    transform: scale(1.75);
+    opacity: 0;
+  }
+}
+
+@keyframes neurox-dash-flow {
+  to {
+    stroke-dashoffset: -24;
+  }
+}
+
+.animate-neurox-shimmer {
+  animation: neurox-shimmer 2.4s infinite linear;
+}
+
+.animate-neurox-dash {
+  animation: neurox-dash-flow 1.2s infinite linear;
+}
+
+/* Respect prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -390,7 +391,7 @@ export function UsersPage() {
       <PageHeader
         title="用户与权限"
         description="用户、角色目录、资源授权与会话。客户端隐藏按钮不构成安全控制；所有访问由服务端重新校验。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">RBAC</span>}
+        badge={<Badge tone="primary" dot>RBAC</Badge>}
       />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <TabBar

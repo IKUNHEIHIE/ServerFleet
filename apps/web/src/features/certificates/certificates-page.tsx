@@ -3,8 +3,11 @@ import { PublicRenewalPanel } from "./public-renewal-panel";
 import { NodeCertificatePanel } from "./node-certificate-panel";
 import { NodeCSRPanel } from "./node-csr-panel";
 import { useEffect, useState, type FormEvent } from "react";
+import { ShieldCheck, KeyRound, Lock, RefreshCw, ArrowRight } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -135,9 +138,59 @@ export function CertificatesPage() {
       <PageHeader
         title="证书管理"
         description="内部 TLS 下发与节点本地网站 CSR；执行结果以统一任务和实际证书回执为准。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">TLS</span>}
-        actions={<Button type="button" onClick={() => jobs.reload()} loading={jobs.state.status === "loading"}>刷新</Button>}
+        badge={<Badge tone="primary" dot>PKI · mTLS</Badge>}
+        actions={<Button type="button" onClick={() => jobs.reload()} loading={jobs.state.status === "loading"}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      {/* PKI Trust Hierarchy Visual Architecture */}
+      <div className="grid gap-3 md:grid-cols-3">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+                <Lock className="size-3.5 text-primary" />
+                Root Authority
+              </div>
+              <p className="mt-1 font-display text-sm font-bold text-foreground">离线自签 Root CA</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                私钥离线冷存储，仅签发在线 Intermediate CA，构成全网唯一信任锚点。
+              </p>
+            </div>
+            <ArrowRight className="mt-1 hidden size-4 shrink-0 text-muted-foreground/50 md:block" />
+          </div>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-start justify-between gap-2">
+            <div>
+              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+                <ShieldCheck className="size-3.5 text-emerald-600" />
+                Intermediate Authority
+              </div>
+              <p className="mt-1 font-display text-sm font-bold text-foreground">在线 Intermediate CA</p>
+              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+                Controller 在线持有，按冻结服务组成员快照签发信任包与逐节点身份证书。
+              </p>
+            </div>
+            <ArrowRight className="mt-1 hidden size-4 shrink-0 text-muted-foreground/50 md:block" />
+          </div>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10">
+            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
+              <KeyRound className="size-3.5 text-sky-600" />
+              Node Leaf Identity & CSR
+            </div>
+            <p className="mt-1 font-display text-sm font-bold text-foreground">逐节点独立私钥与本地 CSR</p>
+            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
+              节点本地生成私钥与 CSR，主控永不导出节点私钥；已完成 {jobItems.filter(j => j.state === "completed").length} / {jobItems.length} 项下发任务。
+            </p>
+          </div>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       <TabBar
         label="证书分区"

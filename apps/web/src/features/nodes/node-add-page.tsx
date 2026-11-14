@@ -141,9 +141,11 @@ export function NodeAddPage() {
             </Button>
 
             {token ? (
-              <div className="rounded-lg border border-amber-600/30 bg-amber-50 px-4 py-3">
-                <p className="text-sm font-medium text-amber-900">接入令牌（仅显示这一次）</p>
-                <code className="mt-2 block break-all rounded-md border bg-card px-3 py-2 font-mono text-sm">{token.token}</code>
+              <div className="relative overflow-hidden rounded-xl border border-amber-500/35 bg-gradient-to-br from-amber-500/[0.08] via-card to-primary/[0.04] px-4 py-4 shadow-[var(--shadow-card)]">
+                <p className="text-sm font-semibold text-amber-900">接入令牌（仅显示这一次）</p>
+                <code className="mt-2 block break-all rounded-lg border border-amber-500/25 bg-card px-3.5 py-2.5 font-mono text-sm font-medium text-foreground shadow-2xs">
+                  {token.token}
+                </code>
                 <p className="mt-2 text-xs text-amber-900">
                   凭证 ID：{token.id} · 到期：{formatDateTime(token.expiresAt) ?? "无法解析"}
                   {formatDuration(Math.max(0, (Date.parse(token.expiresAt) - Date.now()) / 1000))
@@ -151,14 +153,14 @@ export function NodeAddPage() {
                     : ""}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Button type="button" size="sm" onClick={copyToken}>
+                  <Button type="button" size="sm" variant="primary" onClick={copyToken}>
                     复制令牌
                   </Button>
                   <Button type="button" size="sm" variant="ghost" onClick={() => { setToken(null); setCopyStatus(null); }}>
                     从页面移除
                   </Button>
                 </div>
-                {copyStatus ? <p role="status" className="mt-2 text-xs">{copyStatus}</p> : null}
+                {copyStatus ? <p role="status" className="mt-2 text-xs font-medium text-amber-950">{copyStatus}</p> : null}
               </div>
             ) : null}
           </div>

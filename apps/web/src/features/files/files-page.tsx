@@ -1,7 +1,9 @@
 import { AgentResumePanel } from "./agent-resume-panel";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
+import { Folder, FileText, UploadCloud, ArrowLeftRight, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -653,7 +655,8 @@ function FilePane({
               <option value="skip">跳过同名</option><option value="overwrite">覆盖同名</option><option value="rename">自动改名</option>
             </Select>}
           </Field>
-          <label className={`inline-flex h-8 items-center rounded-md border px-2.5 text-xs font-medium ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-secondary"}`}>
+          <label className={`inline-flex h-8 items-center gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 text-xs font-medium text-primary transition-colors ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-primary/10"}`}>
+            <UploadCloud className="size-3.5" />
             上传文件（按所选策略）
             <input
               type="file"
@@ -663,7 +666,8 @@ function FilePane({
               onChange={event => void handleFiles(event)}
             />
           </label>
-          <Button type="button" size="sm" onClick={() => setTransferOpen(true)} disabled={sendDisabled}>
+          <Button type="button" size="sm" variant="primary" onClick={() => setTransferOpen(true)} disabled={sendDisabled}>
+            <ArrowLeftRight className="size-3.5" />
             发送到另一侧（{selectedEntries.length}）
           </Button>
         </div>
@@ -812,11 +816,15 @@ function FilePane({
                     header: "名称",
                     render: entry =>
                       entry.type === "directory" ? (
-                        <button type="button" className="text-left text-primary underline-offset-2 hover:underline" onClick={() => openEntry(entry)}>
+                        <button type="button" className="inline-flex items-center gap-1.5 text-left font-medium text-primary underline-offset-2 hover:underline" onClick={() => openEntry(entry)}>
+                          <Folder className="size-3.5 text-primary" />
                           {entry.name}/
                         </button>
                       ) : (
-                        <span>{entry.name}</span>
+                        <span className="inline-flex items-center gap-1.5">
+                          <FileText className="size-3.5 text-muted-foreground" />
+                          {entry.name}
+                        </span>
                       ),
                   },
                   {
@@ -991,8 +999,8 @@ export function FilesPage() {
       <PageHeader
         title="文件互传"
         description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；上传走真实字节通道（POST uploads → PUT content → POST complete 校验）。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">异步复制</span>}
-        actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>异步复制</Badge>}
+        actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
       <Notice tone="info" title="能力边界">
         上传会话会真实传输文件字节并由服务端校验字节数与 SHA-256（`PUT …/content` → `POST …/complete`）；
@@ -1060,7 +1068,22 @@ export function FilesPage() {
                 { key: "id", header: "任务", render: job => <span className="font-mono text-xs">{job.id}</span> },
                 { key: "route", header: "路径", render: job => `${job.sourceNodeId}:${job.sourcePaths.join(",")} → ${job.destinationNodeId}:${job.destinationDir}` },
                 { key: "status", header: "状态", render: job => TRANSFER_STATUS_TEXT[job.status] ?? job.status },
-                { key: "progress", header: "进度", align: "right", render: job => `${job.progressPercent}%` },
+                {
+                  key: "progress",
+                  header: "进度",
+                  align: "right",
+                  render: job => (
+                    <div className="inline-flex items-center justify-end gap-2">
+                      <div className="h-1.5 w-16 overflow-hidden rounded-full bg-secondary">
+                        <div
+                          className="h-full rounded-full bg-primary transition-all duration-300"
+                          style={{ width: `${Math.max(0, Math.min(100, job.progressPercent))}%` }}
+                        />
+                      </div>
+                      <span className="font-mono text-xs">{`${job.progressPercent}%`}</span>
+                    </div>
+                  ),
+                },
                 { key: "bytes", header: "已复制", render: job => `${formatBytes(job.copiedBytes) ?? "0 B"} / ${formatBytes(job.totalBytes ?? null) ?? "未知"}` },
                 { key: "created", header: "创建", render: job => formatDateTime(job.createdAt) ?? "—" },
                 {

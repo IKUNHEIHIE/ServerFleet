@@ -128,13 +128,13 @@ function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId, rowRefs }: N
     <div className="overflow-x-auto [contain:paint]">
       <table aria-labelledby={labelledBy} className="w-full border-collapse text-sm">
         <thead>
-          <tr className="bg-secondary/60">
+          <tr className="border-b border-border/70 bg-[#F6F7FB]/90">
             {COLUMNS.map(column => (
               <th
                 key={column.key}
                 scope="col"
                 className={cn(
-                  "whitespace-nowrap px-4 py-2.5 text-xs font-medium text-muted-foreground",
+                  "whitespace-nowrap px-4 py-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground",
                   column.align === "right" ? "text-right" : "text-left",
                 )}
               >
@@ -143,7 +143,7 @@ function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId, rowRefs }: N
             ))}
           </tr>
         </thead>
-        <tbody>
+        <tbody className="divide-y divide-border/60">
           {nodes.map((node, index) => (
             <tr
               key={node.id}
@@ -156,37 +156,37 @@ function NodeTable({ labelledBy, nodes, onNodeActivate, selectedId, rowRefs }: N
               onFocus={() => setActiveId(node.id)}
               onKeyDown={event => handleKeyDown(event, index)}
               className={cn(
-                "border-t align-top transition-colors",
-                onNodeActivate && "cursor-pointer hover:bg-secondary/40",
-                index === activeIndex && "bg-secondary/30",
-                node.id === selectedId && "bg-primary/10 ring-1 ring-inset ring-primary/30",
+                "align-top transition-colors",
+                onNodeActivate && "cursor-pointer hover:bg-primary/[0.03]",
+                index === activeIndex && "bg-secondary/35",
+                node.id === selectedId && "bg-primary/10 ring-1 ring-inset ring-primary/35",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
               )}
             >
-              <th scope="row" className="px-4 py-3 text-left font-normal">
-                <span className="whitespace-nowrap font-medium">{node.name}</span>
+              <th scope="row" className="px-4 py-3.5 text-left font-normal">
+                <span className="whitespace-nowrap font-semibold text-foreground">{node.name}</span>
                 {node.name === node.id ? null : (
                   <span className="mt-0.5 block whitespace-nowrap font-mono text-xs text-muted-foreground">
                     {node.id}
                   </span>
                 )}
               </th>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3.5">
                 <NodeStatusBadge node={node} />
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3.5">
                 {node.platform ?? <MissingValue label="未知" />}
               </td>
-              <td className="px-4 py-3">
+              <td className="px-4 py-3.5">
                 {node.agentVersion ?? <MissingValue label="未知" />}
               </td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-4 py-3.5 text-right">
                 <MetricValue reading={node.cpu} className="items-end" />
               </td>
-              <td className="px-4 py-3 text-right">
+              <td className="px-4 py-3.5 text-right">
                 <MetricValue reading={node.memory} className="items-end" />
               </td>
-              <td className="px-4 py-3 whitespace-nowrap">
+              <td className="px-4 py-3.5 whitespace-nowrap">
                 {formatLastSeen(node.lastSeenAt) ?? <MissingValue label="未知" />}
               </td>
             </tr>

@@ -166,10 +166,27 @@ export function PublishingPage() {
       <PageHeader
         title="服务发布"
         description="将现有服务组发布到合格网关、Cloudflare DNS 与证书。多步骤不是原子事务，局部失败不会显示全部完成。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">发布向导</span>}
+        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">发布向导</span>}
         actions={<Button type="button" onClick={() => { groups.reload(); gateways.reload(); publications.reload(); }}>刷新</Button>}
       />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
+
+      <div className="grid gap-3.5 sm:grid-cols-3">
+        {[
+          { step: "STEP 01", title: "编排发布草案", desc: "选择服务组、合格网关、域名与证书引用" },
+          { step: "STEP 02", title: "服务端变更预检", desc: "校验调度资格、目标快照与配置差异" },
+          { step: "STEP 03", title: "分阶段执行与补偿", desc: "按 DNS/证书/网关阶段执行并支持显式回滚" },
+        ].map(item => (
+          <div
+            key={item.step}
+            className="rounded-xl border border-border/80 bg-gradient-to-br from-white to-[#FAFBFD] p-4 shadow-[var(--shadow-card)]"
+          >
+            <span className="font-mono text-[11px] font-bold tracking-wider text-primary">{item.step}</span>
+            <p className="mt-1 text-sm font-semibold text-foreground">{item.title}</p>
+            <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
+          </div>
+        ))}
+      </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_26rem]">
         <Panel title="发布配置" description="GET 服务组/网关/DNS 列表；POST /api/v1/publications/preview 与 /publications。">

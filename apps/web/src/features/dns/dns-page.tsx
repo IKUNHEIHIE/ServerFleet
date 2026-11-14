@@ -1,7 +1,10 @@
 import { DNSProviderTaskPanel } from "./provider-task-panel";
 import { useEffect, useState, type FormEvent } from "react";
+import { Globe2, Cloud, ListTree, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -331,9 +334,37 @@ export function DnsPage() {
       <PageHeader
         title="DNS 管理"
         description="首版仅 Cloudflare；账号、Zone 与记录严格按账号隔离。Token 只写不读，不进入浏览器存储。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">Cloudflare</span>}
-        actions={<Button type="button" onClick={() => { accounts.reload(); zones.reload(); records.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>Cloudflare</Badge>}
+        actions={<Button type="button" onClick={() => { accounts.reload(); zones.reload(); records.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">Cloudflare 账号</span>
+            <Cloud className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">{accountItems.length}</p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">当前账号可见 Zone</span>
+            <Globe2 className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">{zoneItems.length}</p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">当前 Zone 解析记录</span>
+            <ListTree className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-sky-600">{recordItems.length}</p>
+        </div>
+      </div>
+
       <DNSProviderTaskPanel key={session.viewEpoch} />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">

@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Activity, AlertTriangle, Radio, BellRing, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -340,9 +343,53 @@ export function MonitoringPage() {
       <PageHeader
         title="监控告警"
         description="资源当前读数、HTTP/TCP/TLS 可用性监控（含真实检查历史与立即探测）与通知投递。资源历史趋势仍受当前契约限制，不能伪造。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">监控</span>}
-        actions={<Button type="button" onClick={() => { nodes.reload(); risks.reload(); monitors.reload(); channels.reload(); deliveries.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>监控</Badge>}
+        actions={<Button type="button" onClick={() => { nodes.reload(); risks.reload(); monitors.reload(); channels.reload(); deliveries.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">可见节点 / 在线</span>
+            <Activity className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">
+            {nodeItems.filter(n => n.online).length} <span className="text-sm font-normal text-muted-foreground">/ {nodeItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">流量与到期风险</span>
+            <AlertTriangle className="size-4 text-amber-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-amber-600">
+            {riskItems.length}
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">可用性监控</span>
+            <Radio className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">
+            {monitorItems.filter(m => m.state === "healthy").length} <span className="text-sm font-normal text-muted-foreground">/ {monitorItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">通知投递记录</span>
+            <BellRing className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">
+            {deliveryItems.length}
+          </p>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <TabBar
         label="监控告警分区"

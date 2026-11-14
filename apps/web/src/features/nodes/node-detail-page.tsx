@@ -132,8 +132,37 @@ function QuotaBody({ quota }: { readonly quota: TrafficQuota }) {
   const sourceText = quota.source === "agent_estimate"
     ? "Agent 估算（非云账单）"
     : quota.source === "provider_billing" ? "供应商账单" : quota.source === "manual_correction" ? "人工修正" : "未返回";
+  const usedRatio =
+    quota.usedGb !== undefined && quota.quotaGb > 0
+      ? Math.max(0, Math.min(100, Math.round((quota.usedGb / quota.quotaGb) * 100)))
+      : null;
+  const barColor =
+    usedRatio === null
+      ? "bg-muted"
+      : usedRatio >= 85
+        ? "bg-[#DE5555]"
+        : usedRatio >= 65
+          ? "bg-[#D89B2B]"
+          : "bg-[#6658E8]";
+
   return (
-    <div className="space-y-3 px-5 py-4 text-sm">
+    <div className="space-y-4 px-5 py-4 text-sm">
+      {usedRatio !== null ? (
+        <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+          <div className="flex items-center justify-between text-xs font-semibold">
+            <span className="text-muted-foreground">流量使用进度</span>
+            <span className="tabular-nums text-foreground">
+              {quota.usedGb} / {quota.quotaGb} GB ({usedRatio}%)
+            </span>
+          </div>
+          <div className="mt-2 h-2 overflow-hidden rounded-full bg-secondary">
+            <div
+              className={`h-full rounded-full transition-all duration-700 ${barColor}`}
+              style={{ width: `${usedRatio}%` }}
+            />
+          </div>
+        </div>
+      ) : null}
       <DefinitionList
         className="px-0 py-0"
         items={[

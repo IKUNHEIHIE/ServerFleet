@@ -1,6 +1,9 @@
 import { useState, type FormEvent } from "react";
+import { Radio, Users, Activity, ShieldCheck, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
@@ -293,9 +296,53 @@ function XrayConsole() {
       <PageHeader
         title="Xray 节点管理器"
         description="第一版唯一官方可选插件。声明式界面由核心 manifest 渲染，不执行插件脚本；未启用时不可操作。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">声明式插件 UI</span>}
-        actions={<Button type="button" onClick={() => { nodes.reload(); users.reload(); traffic.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>声明式插件 UI</Badge>}
+        actions={<Button type="button" onClick={() => { nodes.reload(); users.reload(); traffic.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">可见节点 / 在线</span>
+            <Radio className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">
+            {nodeItems.filter(n => n.online).length} <span className="text-sm font-normal text-muted-foreground">/ {nodeItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">已托管实例</span>
+            <ShieldCheck className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">
+            {nodeItems.filter(n => n.managed).length}
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">托管用户 / 启用</span>
+            <Users className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-sky-600">
+            {userItems.filter(u => u.enabled).length} <span className="text-sm font-normal text-muted-foreground">/ {userItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">代理流量样本</span>
+            <Activity className="size-4 text-amber-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">
+            {trafficItems.length}
+          </p>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       <TabBar label="Xray 插件页面" active={tab} onChange={setTab} tabs={XRAY_MANIFEST.map(item => ({ id: item.id, label: item.label }))} />
       <p className="text-xs text-muted-foreground">{XRAY_MANIFEST.find(item => item.id === tab)?.description}</p>

@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { useEffect } from "react";
+import { motion } from "motion/react";
 import { matchPath, useLocation } from "@/app/router";
 import { ROUTE_META } from "@/app/navigation";
 import { useSession } from "@/app/session";
@@ -94,7 +95,16 @@ export function RouterContent() {
   }, [title, location.path]);
 
   if (!route || !match) return <NotFoundPage path={location.path} />;
-  return <>{route.render({ params: match.params, search: new URLSearchParams(location.search) })}</>;
+  return (
+    <motion.div
+      key={location.path}
+      initial={{ y: 6 }}
+      animate={{ y: 0 }}
+      transition={{ duration: 0.22, ease: [0.22, 1, 0.36, 1] }}
+    >
+      {route.render({ params: match.params, search: new URLSearchParams(location.search) })}
+    </motion.div>
+  );
 }
 
 export function AppFrame() {

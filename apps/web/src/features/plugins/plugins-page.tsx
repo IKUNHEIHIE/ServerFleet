@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { Blocks, PackageCheck, GitBranch, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
@@ -170,9 +173,41 @@ export function PluginsPage() {
       <PageHeader
         title="插件中心"
         description="可选插件不进入核心发布包；未安装/禁用时不显示业务菜单。唯一官方插件为 Xray 节点管理器。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">可选插件</span>}
-        actions={<Button type="button" onClick={() => { repository.reload(); catalog.reload(); installed.reload(); }}>刷新</Button>}
+        badge={<Badge tone="primary" dot>可选插件</Badge>}
+        actions={<Button type="button" onClick={() => { repository.reload(); catalog.reload(); installed.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">插件目录条目</span>
+            <Blocks className="size-4 text-primary" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">{catalogItems.length}</p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">已安装 / 已启用</span>
+            <PackageCheck className="size-4 text-emerald-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">
+            {installedItems.filter(p => p.enabled).length} <span className="text-sm font-normal text-muted-foreground">/ {installedItems.length}</span>
+          </p>
+        </div>
+        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
+          <GlowingEffect />
+          <div className="relative z-10 flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">目录来源</span>
+            <GitBranch className="size-4 text-sky-600" />
+          </div>
+          <p className="relative z-10 mt-1.5 font-mono text-sm font-semibold text-foreground">
+            {repo ? `${repo.mode === "official" ? "Official" : "Custom Fork"} · ${repo.ref}` : "待加载"}
+          </p>
+        </div>
+      </div>
+
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
 
       <Panel title="插件来源" description="GET/PUT /api/v1/plugins/repository；自定义来源必须显示为非官方并锁定不可变版本。">
