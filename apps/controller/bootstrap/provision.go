@@ -51,6 +51,7 @@ type provisionAgent struct {
 	IdentityDir     string `json:"identityDir"`
 	Name            string `json:"name,omitempty"`
 	FileRoot        string `json:"fileRoot,omitempty"`
+	DisableFiles    bool   `json:"disableFiles,omitempty"`
 	CertificateRoot string `json:"certificateRoot,omitempty"`
 	CertificateCA   string `json:"certificateCa,omitempty"`
 	CommandProfiles string `json:"commandProfiles,omitempty"`
@@ -192,7 +193,7 @@ func RunProvisionCommand(ctx context.Context, args []string, stdout, stderr io.W
 				return errProvision
 			}
 		}
-		if a.CertificateCA != "" && a.CertificateRoot == "" || a.NginxBinary != "" && a.GatewayPrefix == "" || a.GatewayPrefix != "" && (a.FileRoot == "" || !provisionWithin(a.FileRoot, a.GatewayPrefix)) || a.CertificateRoot != "" && a.FileRoot != "" && (provisionWithin(a.FileRoot, a.CertificateRoot) || provisionWithin(a.CertificateRoot, a.FileRoot)) {
+		if a.DisableFiles && a.FileRoot != "" || a.CertificateCA != "" && a.CertificateRoot == "" || a.NginxBinary != "" && a.GatewayPrefix == "" || a.GatewayPrefix != "" && (a.FileRoot == "" || !provisionWithin(a.FileRoot, a.GatewayPrefix)) || a.CertificateRoot != "" && a.FileRoot != "" && (provisionWithin(a.FileRoot, a.CertificateRoot) || provisionWithin(a.CertificateRoot, a.FileRoot)) {
 			return errProvision
 		}
 	}
