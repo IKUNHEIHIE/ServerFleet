@@ -127,4 +127,3 @@
    - 将壳层异常兜底（`error-boundary.tsx`）及各业务模块（`overview`、`nodes`、`groups`、`service-groups`、`files`、`tasks`、`monitoring`、`ai`、`gateways`、`publishing`、`dns`、`certificates`、`plugins`、`workflows`、`updates`、`backups`、`users`、`settings`）中的原生按钮、动作链接、输入框、选择框、复选框、分组框、`neurox-subcard` 容器与徽章统一迁移至 `@/components/ui/*`（`LinkButton`、`Checkbox`、`FieldsetBox`、`SubCard`、`Badge`、`Button`、`TextInput`、`Select`、`Panel`）。
 3. **测试补充（新增，`apps/web/src/app/router.test.tsx`, `apps/web/src/App.test.tsx`）**：
    - 在 `router.test.tsx` 增加主导航 4 个分组全部启用 `collapsible: true` 的断言；在 `App.test.tsx` 增加登录后 `节点管理`、`核心功能`、`扩展能力`、`系统维护` 折叠/展开状态切换测试。
-

@@ -1,4 +1,4 @@
-import { useState, type ChangeEvent, type FormEvent } from "react";
+import { useEffect, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { RefreshCw, SendToBack } from "lucide-react";
 import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { DataTable } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 import type { NodeSummary } from "@/lib/api/dto";
 import { fileDistributionsApi, type FileDistributionView } from "@/lib/api/endpoints";
-import { describeApiError } from "@/lib/api/errors";
+import { ApiError, describeApiError } from "@/lib/api/errors";
 import { useAction } from "@/lib/data/use-resource";
 import { formatBytes } from "@/lib/format";
 
@@ -39,18 +39,40 @@ export function FileDistributionPanel({ nodes }: { readonly nodes: readonly Node
 
   const canManage = session.can("file.write") || session.can("file.manage") || session.can("file.transfer");
 
+  const access = useRef({ epoch: session.viewEpoch, writable: canManage && !session.writesLocked });
+  access.current = { epoch: session.viewEpoch, writable: canManage && !session.writesLocked };
+  const operation = useRef(new AbortController());
+  useEffect(() => {
+    operation.current = new AbortController();
+    const controller = operation.current;
+    return () => controller.abort();
+  }, [session.viewEpoch]);
+
   const startAction = useAction(async (file: File, dir: string, targetNodes: readonly string[]) => {
+    const controller = operation.current;
+    const epoch = session.viewEpoch;
+    function requireCurrent() {
+      if (controller.signal.aborted || operation.current !== controller || access.current.epoch !== epoch || !access.current.writable) {
+        throw new ApiError({ kind: "aborted", status: 0 });
+      }
+    }
+    requireCurrent();
     const buffer = await file.arrayBuffer();
+    requireCurrent();
     const sha256 = await computeSha256Hex(buffer);
+    requireCurrent();
     const created = await fileDistributionsApi.create({
       destinationDir: dir,
       targetNodes,
       files: [{ name: file.name, sizeBytes: buffer.byteLength, sha256 }],
-    });
+    }, controller.signal);
+    requireCurrent();
     const distId = created.data.distributionId;
     setLookupId(distId);
-    await fileDistributionsApi.uploadContent(distId, buffer, 0);
-    const completed = await fileDistributionsApi.complete(distId);
+    await fileDistributionsApi.uploadContent(distId, buffer, 0, controller.signal);
+    requireCurrent();
+    const completed = await fileDistributionsApi.complete(distId, controller.signal);
+    requireCurrent();
     return completed.data;
   });
 

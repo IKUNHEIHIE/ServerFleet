@@ -1,3 +1,4 @@
+import { ApiError } from "./errors";
 import { apiClient, type RequestOptions } from "./client";
 import { normalizeListPage, normalizeTaskExecutions, normalizeTransferItem, requireTaskIdentifier } from "./compat";
 import type {
@@ -99,7 +100,18 @@ export const authApi = {
 
 export const systemApi = {
   health: (signal?: AbortSignal) => apiClient.request<HealthPayload>("/healthz", { csrf: false, signal }),
-  readiness: (signal?: AbortSignal) => apiClient.request<ReadinessPayload>("/readyz", { csrf: false, signal }),
+  readiness: async (signal?: AbortSignal) => {
+    const result = await apiClient.request<ReadinessPayload>("/readyz", { csrf: false, signal, acceptedStatuses: [503] });
+    const payload = result.data;
+    const categories = ["database", "authority", "scheduler", "agentTransport", "pki"];
+    if (!payload || (payload.status !== "ready" && payload.status !== "not_ready") ||
+        (result.status === 503 && payload.status !== "not_ready") ||
+        !payload.checks || typeof payload.checks !== "object" ||
+        categories.some(key => !["ready", "unavailable", "not_configured"].includes(payload.checks[key]))) {
+      throw new ApiError({ kind: "invalid", status: result.status });
+    }
+    return { ...result, data: { status: payload.status, checks: Object.fromEntries(categories.map(key => [key, payload.checks[key]])) } };
+  },
 };
 
 export const nodesApi = {

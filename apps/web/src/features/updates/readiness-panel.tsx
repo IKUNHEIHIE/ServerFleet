@@ -98,7 +98,7 @@ export function ReadinessPanel() {
                       {snapshot.readiness.status}
                     </Badge>
                   ) : (
-                    <Badge tone="danger" dot>不可用 / HTTP 503</Badge>
+                    <Badge tone="danger" dot>探测失败</Badge>
                   )}
                 </div>
                 {snapshot.readinessError ? (

@@ -139,7 +139,7 @@ export function OverviewPage() {
   const offlineCount = nodeItems.length - onlineCount;
   const taskItems: readonly TaskSummary[] = tasks.state.status === "ready" ? tasks.state.data.items : [];
   const runningTasks = taskItems.filter(item =>
-    ["queued", "awaiting_approval", "approved", "dispatching", "running"].includes(item.state),
+    ["queued", "awaiting_approval", "waiting_node", "running", "paused", "canceling"].includes(item.state),
   ).length;
 
   const onlineRatio = nodeItems.length > 0 ? Math.round((onlineCount / nodeItems.length) * 100) : 0;
@@ -147,24 +147,17 @@ export function OverviewPage() {
   // 真实在线节点瞬时负载（仅包含在线且服务端返回有限数值的节点，不编造离线或历史趋势）
   const telemetryChartData = useMemo(() => {
     return nodeItems
-      .filter(
-        node =>
-          node.online &&
-          ((typeof node.cpuPercent === "number" && Number.isFinite(node.cpuPercent)) ||
-            (typeof node.memoryPercent === "number" && Number.isFinite(node.memoryPercent))),
-      )
-      .slice(0, 8)
-      .map(node => ({
-        name: (node.name.trim() || node.id).slice(0, 12),
-        cpu:
-          typeof node.cpuPercent === "number" && Number.isFinite(node.cpuPercent)
-            ? Math.round(node.cpuPercent)
-            : 0,
-        memory:
-          typeof node.memoryPercent === "number" && Number.isFinite(node.memoryPercent)
-            ? Math.round(node.memoryPercent)
-            : 0,
-      }));
+      .map(node => {
+        const cpu = adaptMetric(node.cpuPercent, node.online);
+        const memory = adaptMetric(node.memoryPercent, node.online);
+        return {
+          name: (node.name.trim() || node.id).slice(0, 12),
+          cpu: cpu.kind === "value" ? Math.round(cpu.percent) : null,
+          memory: memory.kind === "value" ? Math.round(memory.percent) : null,
+        };
+      })
+      .filter(node => node.cpu !== null || node.memory !== null)
+      .slice(0, 8);
   }, [nodeItems]);
 
   const regionDistribution = useMemo(() => {

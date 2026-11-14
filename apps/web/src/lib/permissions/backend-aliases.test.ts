@@ -16,6 +16,8 @@ describe("hasPermission", () => {
     expect(hasPermission(["groups.write"], "group.manage")).toBe(true);
     expect(hasPermission(["servicegroups.write"], "servicegroup.manage")).toBe(true);
     expect(hasPermission(["gateway.write"], "gateway.manage")).toBe(true);
+    expect(hasPermission(["publishing.write"], "publication.manage")).toBe(true);
+    expect(hasPermission(["publishing.read"], "publication.manage")).toBe(false);
     expect(hasPermission(["gateway.provision"], "gateway.install")).toBe(true);
     expect(hasPermission(["files.transfer"], "file.transfer")).toBe(true);
     expect(hasPermission(["dns.record.delete"], "dns.record.manage")).toBe(true);
