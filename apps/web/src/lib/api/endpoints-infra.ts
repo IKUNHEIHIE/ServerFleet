@@ -229,6 +229,10 @@ export const publicationsApi = {
       method: "POST",
     }),
   rollbackAll: (publicationId:string)=>apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/rollback-all`,{method:"POST"}),
+  cancel: (publicationId: string) =>
+    apiClient.request<AsyncOperation>(`/api/v1/publications/${encodeURIComponent(publicationId)}/cancel`, {
+      method: "POST",
+    }),
   dnsTasks: (publicationId:string,signal?:AbortSignal)=>apiClient.request<PublicationDNSBatch>(`/api/v1/publications/${encodeURIComponent(publicationId)}/dns-tasks`,{signal}),
 
   rollback: (publicationId: string, stage: string) =>
@@ -376,3 +380,30 @@ export interface PublicationDNSBatch {
  readonly descriptor:{readonly planId:string;readonly planSha256:string;readonly zoneId:string;readonly records:readonly {readonly type:string;readonly name:string;readonly content:string;readonly existingId?:string}[]};
  readonly observations:readonly {readonly state:string;readonly recordId?:string;readonly recordSha256?:string}[];
 }
+
+export interface CertificateCleanupRecord {
+  readonly id: number;
+  readonly domain?: string;
+  readonly fqdn: string;
+  readonly recordId: string;
+  readonly state: string;
+  readonly attempts: number;
+  readonly lastErrorCode?: string;
+  readonly nextAttemptAt?: string;
+  readonly updatedAt: string;
+}
+
+export const certificateCleanupApi = {
+  list: (signal?: AbortSignal) =>
+    apiClient.request<readonly CertificateCleanupRecord[]>("/api/v1/certificates/cleanup", { signal }),
+  retry: (cleanupId: number | string) =>
+    apiClient.request<CertificateCleanupRecord>(
+      `/api/v1/certificates/cleanup/${encodeURIComponent(String(cleanupId))}/retry`,
+      { method: "POST" },
+    ),
+  cancel: (cleanupId: number | string) =>
+    apiClient.request<CertificateCleanupRecord>(
+      `/api/v1/certificates/cleanup/${encodeURIComponent(String(cleanupId))}/cancel`,
+      { method: "POST" },
+    ),
+};

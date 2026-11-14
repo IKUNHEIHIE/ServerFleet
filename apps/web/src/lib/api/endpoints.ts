@@ -47,6 +47,35 @@ function authPost<T>(path: string, body: unknown, idempotencyKey?: string): Prom
   return apiClient.request<T>(path, { method: "POST", body, csrf: false, authEvent: false, idempotencyKey });
 }
 
+export interface RestrictedTokenInput {
+  readonly name: string;
+  readonly purpose: "script-read";
+  readonly actions: readonly ("nodes.read" | "tasks.read")[];
+  readonly nodeIds: readonly string[];
+  readonly ttlSeconds: number;
+}
+
+export interface RestrictedTokenMetadata {
+  readonly tokenId: string;
+  readonly name: string;
+  readonly purpose: string;
+  readonly actions: readonly string[];
+  readonly nodeIds: readonly string[];
+  readonly createdAt: string;
+  readonly expiresAt: string;
+  readonly revoked: boolean;
+}
+
+export interface IssuedRestrictedToken {
+  readonly metadata: RestrictedTokenMetadata;
+  readonly token: string;
+}
+
+export interface ReadinessPayload {
+  readonly status: "ready" | "not_ready" | string;
+  readonly checks: Readonly<Record<string, string>>;
+}
+
 export const authApi = {
   bootstrapStatus: () => apiClient.request<BootstrapState>("/api/v1/auth/bootstrap-status", { csrf: false }),
   bootstrap: (
@@ -60,10 +89,17 @@ export const authApi = {
     apiClient.request<ItemList<Session>>("/api/v1/auth/sessions", { query, signal }),
   revokeSession: (sessionId: string) =>
     apiClient.request<void>(`/api/v1/auth/sessions/${encodeURIComponent(sessionId)}`, { method: "DELETE" }),
+  tokens: (signal?: AbortSignal) =>
+    apiClient.request<{ items: readonly RestrictedTokenMetadata[] }>("/api/v1/auth/tokens", { signal }),
+  issueToken: (body: RestrictedTokenInput) =>
+    apiClient.request<IssuedRestrictedToken>("/api/v1/auth/tokens", { method: "POST", body }),
+  revokeToken: (tokenId: string) =>
+    apiClient.request<void>(`/api/v1/auth/tokens/${encodeURIComponent(tokenId)}`, { method: "DELETE" }),
 };
 
 export const systemApi = {
-  health: () => apiClient.request<HealthPayload>("/healthz", { csrf: false }),
+  health: (signal?: AbortSignal) => apiClient.request<HealthPayload>("/healthz", { csrf: false, signal }),
+  readiness: (signal?: AbortSignal) => apiClient.request<ReadinessPayload>("/readyz", { csrf: false, signal }),
 };
 
 export const nodesApi = {
@@ -571,5 +607,66 @@ function parseTransferJob(value: unknown): TransferJob {
   if (typeof record.completedAt === "string" && record.completedAt.length > 0) job.completedAt = record.completedAt;
   return job;
 }
+
+export interface FileDistributionTarget {
+  readonly nodeId: string;
+  readonly status: string;
+  readonly bytes: number;
+  readonly sha256?: string;
+  readonly error?: { readonly code: string; readonly message: string };
+}
+
+export interface FileDistributionView {
+  readonly distributionId: string;
+  readonly status: string;
+  readonly destination: string;
+  readonly targetNodes: readonly FileDistributionTarget[];
+  readonly bytesReceived: number;
+  readonly taskId?: string;
+  readonly sizeBytes?: number;
+  readonly sha256?: string;
+  readonly error?: { readonly code: string; readonly message: string };
+}
+
+export const fileDistributionsApi = {
+  create: (
+    body: {
+      destinationDir: string;
+      targetNodes: readonly string[];
+      files: readonly { name: string; sizeBytes: number; sha256: string }[];
+    },
+    signal?: AbortSignal,
+  ) =>
+    apiClient.request<{ distributionId: string; status: string }>("/api/v1/files/distributions", {
+      method: "POST",
+      body,
+      signal,
+    }),
+  get: (distributionId: string, signal?: AbortSignal) =>
+    apiClient.request<FileDistributionView>(`/api/v1/files/distributions/${encodeURIComponent(distributionId)}`, {
+      signal,
+    }),
+  uploadContent: (
+    distributionId: string,
+    body: ArrayBuffer | Uint8Array | string,
+    offset = 0,
+    signal?: AbortSignal,
+  ) =>
+    apiClient.requestRaw<FileDistributionView>(
+      `/api/v1/files/distributions/${encodeURIComponent(distributionId)}/content?offset=${offset}`,
+      body,
+      { method: "PUT", signal },
+    ),
+  complete: (distributionId: string, signal?: AbortSignal) =>
+    apiClient.request<FileDistributionView>(
+      `/api/v1/files/distributions/${encodeURIComponent(distributionId)}/complete`,
+      { method: "POST", signal },
+    ),
+  cancel: (distributionId: string, signal?: AbortSignal) =>
+    apiClient.request<FileDistributionView>(
+      `/api/v1/files/distributions/${encodeURIComponent(distributionId)}/cancel`,
+      { method: "POST", signal },
+    ),
+};
 
 export type { RequestOptions };

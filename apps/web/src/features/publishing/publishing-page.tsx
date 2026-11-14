@@ -64,6 +64,7 @@ export function PublishingPage() {
   const previewAction = useAction((body: Parameters<typeof publicationsApi.preview>[0]) => publicationsApi.preview(body));
   const createAction = useAction((body: Parameters<typeof publicationsApi.create>[0]) => publicationsApi.create(body));
   const runAction = useAction((publicationId: string) => publicationsApi.run(publicationId));
+  const cancelAction = useAction((publicationId: string) => publicationsApi.cancel(publicationId));
   const rollbackAllAction=useAction((id:string)=>publicationsApi.rollbackAll(id));
   const rollbackAction = useAction((publicationId: string, stage: string) => publicationsApi.rollback(publicationId, stage));
 
@@ -112,6 +113,18 @@ export function PublishingPage() {
    const result=await rollbackAllAction.run(publicationId);
    if(result.ok&&result.data){setDetail(result.data.data);setOutcome(`逆序补偿已受理：${result.data.data.status}；需审批的 DNS 补偿请在任务列表处理。`);publications.reload();}
    else if(result.error){setOutcome(describeApiError(result.error));await refreshDetail(publicationId);}
+  }
+
+  async function cancelPublication(publicationId: string) {
+    const result = await cancelAction.run(publicationId);
+    if (result.ok && result.data) {
+      setDetail(result.data.data);
+      setOutcome(`发布 ${publicationId} 已取消（状态 ${result.data.data.status}）。取消仅终止未开始阶段，不代表已执行阶段回滚。`);
+      publications.reload();
+    } else if (result.error) {
+      setOutcome(describeApiError(result.error));
+      await refreshDetail(publicationId);
+    }
   }
 
   function draft() {
@@ -332,6 +345,14 @@ export function PublishingPage() {
                       >
                         继续发布
                       </Button>
+                      <Button
+                        size="sm"
+                        disabled={!canManage || session.writesLocked || cancelAction.pending}
+                        onClick={() => void cancelPublication(operation.id)}
+                        loading={cancelAction.pending}
+                      >
+                        取消计划
+                      </Button>
                     </div>
                   ),
                 },
@@ -360,7 +381,16 @@ export function PublishingPage() {
               >
                 继续发布
               </Button>
+              <Button
+                size="sm"
+                disabled={!canManage || session.writesLocked || cancelAction.pending}
+                onClick={() => void cancelPublication(detail.id)}
+                loading={cancelAction.pending}
+              >
+                取消计划
+              </Button>
               <Button size="sm" variant="danger" onClick={()=>void rollbackAll(detail.id)} disabled={!canManage||session.writesLocked||rollbackAllAction.pending} loading={rollbackAllAction.pending}>逆序补偿已执行阶段</Button>
+              {cancelAction.error ? <span className="text-xs text-red-700">{describeApiError(cancelAction.error)}</span> : null}
               {rollbackAllAction.error?<span className="text-xs text-red-700">{describeApiError(rollbackAllAction.error)}</span>:null}
               {rollbackAction.error ? <span className="text-xs text-red-700">{describeApiError(rollbackAction.error)}</span> : null}
             </div>

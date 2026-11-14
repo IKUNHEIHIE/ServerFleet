@@ -1,4 +1,5 @@
 import { AgentResumePanel } from "./agent-resume-panel";
+import { FileDistributionPanel } from "./file-distribution-panel";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
 import { Folder, FileText, UploadCloud, ArrowLeftRight, RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
@@ -1109,8 +1110,11 @@ export function FilesPage() {
         </AsyncPanel>
       </Panel>
 
-      <SectionDivider label="断点偏移核验与节点恢复" caption="Agent Confirmed Offset Resume" />
-      <AgentResumePanel key={session.viewEpoch} />
+      <SectionDivider label="多目标分发与断点偏移恢复" caption="Multi-Target Distribution & Offset Resume" />
+      <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
+        <FileDistributionPanel key={`dist:${session.viewEpoch}`} nodes={nodeItems} />
+        <AgentResumePanel key={session.viewEpoch} />
+      </div>
 
       <Modal
         open={transferDetail !== null}

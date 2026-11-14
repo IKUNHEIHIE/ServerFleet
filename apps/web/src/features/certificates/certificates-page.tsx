@@ -2,6 +2,7 @@ import { PublicCertificatePanel } from "./public-certificate-panel";
 import { PublicRenewalPanel } from "./public-renewal-panel";
 import { NodeCertificatePanel } from "./node-certificate-panel";
 import { NodeCSRPanel } from "./node-csr-panel";
+import { CertificateCleanupPanel } from "./certificate-cleanup-panel";
 import { useEffect, useState, type FormEvent } from "react";
 import { ShieldCheck, KeyRound, Lock, RefreshCw, ArrowRight } from "lucide-react";
 import { useSession } from "@/app/session";
@@ -12,7 +13,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { certificatesApi } from "@/lib/api/endpoints-infra";
@@ -213,6 +214,8 @@ export function CertificatesPage() {
             <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
             <PublicRenewalPanel key={`renewal:${session.viewEpoch}`} />
           </div>
+          <SectionDivider label="ACME 验证记录清理队列" caption="Durable DNS Challenge Cleanup" />
+          <CertificateCleanupPanel key={`cleanup:${session.viewEpoch}`} />
         </div>
       ) : null}
 

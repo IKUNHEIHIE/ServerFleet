@@ -11,6 +11,7 @@ import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { authApi, credentialsApi } from "@/lib/api/endpoints";
 import { NotificationsSettings } from "./notifications-settings";
+import { RestrictedTokensPanel } from "./restricted-tokens-panel";
 import { ControllerUpdatePanel } from "@/features/updates/updates-page";
 import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
@@ -357,6 +358,7 @@ export function SettingsPage() {
               )}
             </AsyncPanel>
           </Panel>
+          <RestrictedTokensPanel key={session.viewEpoch} />
         </div>
       ) : null}
 

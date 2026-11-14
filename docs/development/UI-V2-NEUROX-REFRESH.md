@@ -95,3 +95,21 @@
    - **备份与灾难恢复**：将 `EncryptedBackupsPanel` 置顶为首屏核心面板，`RecoveryAuthorityPanel` 与 `BackupMaintenancePanel` 双栏并列，“校验备份”与“灾难恢复预演”、“恢复作业”与“演练说明”分别采用双栏对称网格。
    - **AI 运维与节点接入**：将 `AI 模型设置` 与 `AI 预算窗口` 整合为左右分栏对照面板；将 `InstallationPanel` 与 `PublicationDNSPanel` 升级为统一卡片与子面板样式。
 
+---
+
+## 6. 接口文档全覆盖补齐（Browser API Route Coverage）
+
+围绕 `docs/api/ROUTES.md` 与 `docs/api/route-inventory.json` 中声明的全部 267 个 HTTP 路由进行了前端对照审计，并将最后一批浏览器可调用接口接入统一视觉体系，实现 **246 / 246** 浏览器可用路由全覆盖（其余 21 项为 18 个后端兼容性路径别名与 3 个 Agent 内部准入路由；`docs/api/README.md` 另记录 `/api/v1/agent/link` 与 `/api/v1/agent/enroll` 等 Agent 传输接口）：
+
+1. **受限脚本令牌治理（`apps/web/src/features/settings/restricted-tokens-panel.tsx`, `settings-page.tsx`, `endpoints.ts`）**：
+   - 在系统设置 `安全设置` 页签接入 `RestrictedTokensPanel`（折叠入口“管理受限脚本令牌”），封装 `authApi.tokens`、`authApi.issueToken`、`authApi.revokeToken`（`GET/POST /api/v1/auth/tokens`、`DELETE /api/v1/auth/tokens/{tokenId}`）。
+   - 支持一次性明文令牌安全提示横幅，并保留后端尚无 `Bearer` 读接口运行时适配器的语义边界说明。
+2. **ACME DNS 清理队列（`apps/web/src/features/certificates/certificate-cleanup-panel.tsx`, `certificates-page.tsx`, `endpoints-infra.ts`）**：
+   - 在 `CertificatesPage` 公网证书页签底部接入 `CertificateCleanupPanel`（折叠入口“查看 ACME 清理队列”），对接 `certificateCleanupApi`（`list`、`retry`、`cancel`，对应 `GET /api/v1/certificates/cleanup` 及其重试/取消接口）。
+3. **多目标文件分发任务（`apps/web/src/features/files/file-distribution-panel.tsx`, `files-page.tsx`, `endpoints.ts`）**：
+   - 在 `FilesPage` 与 `AgentResumePanel` 并排接入双栏 `FileDistributionPanel`（折叠入口“打开多目标文件分发”），对接 `fileDistributionsApi`（`create`、`uploadContent`、`complete`、`get`、`cancel`），内置 SHA-256 校验与逐节点分发状态表。
+4. **一键发布计划取消（`apps/web/src/features/publishing/publishing-page.tsx`, `endpoints-infra.ts`）**：
+   - 接入 `publicationsApi.cancel`（`POST /api/v1/publications/{publicationId}/cancel`），在发布列表与发布详情弹窗提供“取消计划”操作。
+5. **主控就绪与活性探测（`apps/web/src/features/updates/readiness-panel.tsx`, `updates-page.tsx`, `endpoints.ts`）**：
+   - 在 `UpdatesPage` 新增 `ReadinessPanel`，按需通过 `systemApi.readiness` 与 `systemApi.health` 并行探测 `GET /readyz` 与 `GET /healthz`，展示 `database`、`authority`、`scheduler`、`agentTransport`、`pki` 子系统检查状态与语义边界提示。
+

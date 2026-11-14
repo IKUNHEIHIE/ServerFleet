@@ -1,4 +1,5 @@
 import { ResidentUpdatePanel } from "../settings/resident-update-panel";
+import { ReadinessPanel } from "./readiness-panel";
 import { ReleaseSourcePanel } from "./release-source-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
@@ -387,6 +388,7 @@ export function UpdatesPage() {
         <ReleaseSourcePanel />
         <ResidentUpdatePanel key={session.viewEpoch} />
       </div>
+      <ReadinessPanel />
     </div>
   );
 }
