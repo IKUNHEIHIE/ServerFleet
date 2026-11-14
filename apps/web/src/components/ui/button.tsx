@@ -22,6 +22,25 @@ const SIZES: Record<Size, string> = {
   md: "h-9 px-3.5 text-sm",
 };
 
+export function buttonClassName({
+  variant = "outline",
+  size = "md",
+  className,
+}: {
+  readonly variant?: Variant;
+  readonly size?: Size;
+  readonly className?: string;
+} = {}) {
+  return cn(
+    "inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium transition-all duration-150 active:scale-[0.985]",
+    "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+    "disabled:cursor-not-allowed disabled:opacity-50",
+    VARIANTS[variant],
+    SIZES[size],
+    className,
+  );
+}
+
 export interface ButtonProps extends ComponentProps<"button"> {
   readonly variant?: Variant;
   readonly size?: Size;
@@ -43,14 +62,7 @@ export function Button({
       {...props}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      className={cn(
-        "inline-flex items-center justify-center gap-1.5 rounded-lg border font-medium transition-all duration-150 active:scale-[0.985]",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        VARIANTS[variant],
-        SIZES[size],
-        className,
-      )}
+      className={buttonClassName({ variant, size, className })}
     >
       {loading ? (
         <span
@@ -60,5 +72,24 @@ export function Button({
       ) : null}
       {children}
     </button>
+  );
+}
+
+export interface LinkButtonProps extends ComponentProps<"a"> {
+  readonly variant?: Variant;
+  readonly size?: Size;
+}
+
+export function LinkButton({
+  variant = "outline",
+  size = "md",
+  className,
+  children,
+  ...props
+}: LinkButtonProps) {
+  return (
+    <a {...props} className={buttonClassName({ variant, size, className })}>
+      {children}
+    </a>
   );
 }

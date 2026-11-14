@@ -6,9 +6,9 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SubCard } from "@/components/ui/panel";
 import { CodeBlock, DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { pluginsApi } from "@/lib/api/endpoints-ai";
@@ -373,20 +373,19 @@ function XrayConsole() {
         <Panel title="安装预检与任务" description="POST installations/preview → installations；校验版本、端口、磁盘与架构。">
           <form onSubmit={runInstallPreview} className="space-y-3 px-5 py-4">
             {installPreview.error ? <Notice tone="error" title="预检失败">{describeApiError(installPreview.error)}</Notice> : null}
-            <fieldset className="max-h-40 overflow-y-auto rounded-lg border px-4 py-3">
-              <legend className="px-1 text-sm font-medium">目标节点</legend>
+            <FieldsetBox legend="目标节点" className="max-h-40 overflow-y-auto">
               {nodeItems.map(node => (
                 <label key={node.nodeId} className="mt-1 flex items-center gap-2 text-sm">
-                  <input type="checkbox" className="size-4" checked={installNodes.has(node.nodeId)} onChange={event => toggle(installNodes, setInstallNodes, node.nodeId, event.target.checked)} />
+                  <Checkbox checked={installNodes.has(node.nodeId)} onChange={event => toggle(installNodes, setInstallNodes, node.nodeId, event.target.checked)} />
                   {node.name} {node.online ? "" : "（离线）"} {node.xrayDetected ? "（已有 Xray）" : ""}
                 </label>
               ))}
-            </fieldset>
+            </FieldsetBox>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="固定目标版本">{ids => <TextInput id={ids.inputId} value={targetVersion} onChange={event => setTargetVersion(event.target.value)} placeholder="例如 25.3.6" />}</Field>
               <Field label="端口（可选）">{ids => <TextInput id={ids.inputId} type="number" min={1} max={65535} value={installPort} onChange={event => setInstallPort(event.target.value)} />}</Field>
               <label className="mt-6 flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4" checked={manageExisting} onChange={event => setManageExisting(event.target.checked)} />
+                <Checkbox checked={manageExisting} onChange={event => setManageExisting(event.target.checked)} />
                 接管已有实例（需确认）
               </label>
             </div>
@@ -418,15 +417,14 @@ function XrayConsole() {
               {validate.error ? <Notice tone="error" title="预检失败">{describeApiError(validate.error)}</Notice> : null}
               {previewDeploy.error ? <Notice tone="error" title="部署预览失败">{describeApiError(previewDeploy.error)}</Notice> : null}
               {deploy.error ? <Notice tone="error" title="部署失败">{describeApiError(deploy.error)}</Notice> : null}
-              <fieldset className="max-h-32 overflow-y-auto rounded-lg border px-4 py-3">
-                <legend className="px-1 text-sm font-medium">目标节点</legend>
+              <FieldsetBox legend="目标节点" className="max-h-32 overflow-y-auto">
                 {nodeItems.map(node => (
                   <label key={node.nodeId} className="mt-1 flex items-center gap-2 text-sm">
-                    <input type="checkbox" className="size-4" checked={configNodes.has(node.nodeId)} onChange={event => toggle(configNodes, setConfigNodes, node.nodeId, event.target.checked)} />
+                    <Checkbox checked={configNodes.has(node.nodeId)} onChange={event => toggle(configNodes, setConfigNodes, node.nodeId, event.target.checked)} />
                     {node.name}
                   </label>
                 ))}
-              </fieldset>
+              </FieldsetBox>
               <div className="grid gap-3 sm:grid-cols-3">
                 <Field label="模板">
                   {ids => (
@@ -451,20 +449,20 @@ function XrayConsole() {
                 {deployPreview ? <Button type="button" variant="primary" onClick={runDeploy} loading={deploy.pending} disabled={!deployPreview.valid || !canManage || writesLocked}>创建部署任务</Button> : null}
               </div>
               {validation ? (
-                <div className="rounded-lg border px-4 py-3 text-sm">
+                <SubCard className="p-3.5 text-sm">
                   <p>配置有效：{validation.valid ? "是" : "否"} · 支持：{validation.supported === undefined ? "未返回" : validation.supported ? "是" : "否"}</p>
                   {validation.notes?.length ? <ul className="mt-1 list-disc pl-5 text-xs">{validation.notes.map(note => <li key={note}>{note}</li>)}</ul> : null}
                   {validation.sanitizedDiff ? <CodeBlock label="脱敏差异">{validation.sanitizedDiff}</CodeBlock> : null}
-                </div>
+                </SubCard>
               ) : null}
               {deployPreview ? (
-                <div className="rounded-lg border px-4 py-3 text-sm">
+                <SubCard className="p-3.5 text-sm">
                   <p>部署预览：{deployPreview.valid ? "有效" : "无效"} · planHash <span className="break-all font-mono text-xs">{deployPreview.planHash}</span></p>
                   {deployPreview.sanitizedDiff ? <CodeBlock label="预部署差异">{deployPreview.sanitizedDiff}</CodeBlock> : null}
                   <ul className="mt-2 space-y-1 text-xs">
                     {deployPreview.checks?.map(check => <li key={check.nodeId}>{check.nodeId}：{check.eligible ? "可部署" : "不可部署"}{check.issues?.length ? ` · ${check.issues.map(issue => issue.message ?? "问题").join("；")}` : ""}</li>)}
                   </ul>
-                </div>
+                </SubCard>
               ) : null}
             </div>
           </Panel>

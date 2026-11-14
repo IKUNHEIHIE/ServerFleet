@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { Button } from "@/components/ui/button";
-import { Field, TextInput, TextArea } from "@/components/ui/form";
+import { Checkbox, Field, TextInput, TextArea } from "@/components/ui/form";
 import { Notice } from "@/components/ui/feedback";
 import { apiClient } from "@/lib/api/client";
 import { describeApiError } from "@/lib/api/errors";
@@ -75,11 +75,11 @@ export function RenewalRecoveryPanel({
         {a => <TextArea id={a.inputId} value={note} onChange={e => setNote(e.target.value)} rows={2} />}
       </Field>
       <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-        <input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} />
+        <Checkbox checked={enabled} onChange={e => setEnabled(e.target.checked)} />
         <span>采用后启用未来周期的安装发布编排</span>
       </label>
       <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-        <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+        <Checkbox checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
         <span>我已核对新签发、安装与站点状态，确认采用这些成功结果</span>
       </label>
       <Button

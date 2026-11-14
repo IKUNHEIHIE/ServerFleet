@@ -1,6 +1,7 @@
 import { useEffect, useState, type ReactNode } from "react";
 import {
   Bell,
+  ChevronDown,
   ChevronLeft,
   ChevronRight,
   Command,
@@ -11,11 +12,11 @@ import {
 } from "lucide-react";
 import { motion } from "motion/react";
 import { useLocation } from "@/app/router";
-import { NAV_GROUPS, OVERVIEW, ROUTE_META, findNavItem } from "@/app/navigation";
+import { NAV_GROUPS, OVERVIEW, ROUTE_META, findNavItem, type NavGroup } from "@/app/navigation";
 import { useSession } from "@/app/session";
 import { CommandPalette, getRouteIcon } from "./command-palette";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { Modal } from "@/components/ui/modal";
 import { Notice } from "@/components/ui/feedback";
 import { describeApiError } from "@/lib/api/errors";
@@ -93,7 +94,25 @@ export function NavList({
   readonly collapsed?: boolean;
 }) {
   const location = useLocation();
-  const [nodesOpen, setNodesOpen] = useState(true);
+  const [openGroups, setOpenGroups] = useState<Readonly<Record<NavGroup["id"], boolean>>>({
+    nodes: true,
+    core: true,
+    extensions: true,
+    system: true,
+  });
+  const [pluginsOpen, setPluginsOpen] = useState(true);
+
+  useEffect(() => {
+    for (const group of NAV_GROUPS) {
+      if (group.items.some(item => isActive(location.path, item.path))) {
+        setOpenGroups(prev => (prev[group.id] ? prev : { ...prev, [group.id]: true }));
+      }
+    }
+    if (pluginLinks.some(link => isActive(location.path, link.path))) {
+      setPluginsOpen(true);
+    }
+  }, [location.path, pluginLinks]);
+
   return (
     <nav aria-label="主导航" className="flex flex-col gap-1">
       <ul className="space-y-0.5">
@@ -106,23 +125,32 @@ export function NavList({
         />
       </ul>
       {NAV_GROUPS.map(group => {
-        const groupCollapsed = group.collapsible === true && !nodesOpen;
+        const isOpen = openGroups[group.id] ?? true;
+        const groupCollapsed = group.collapsible === true && !isOpen;
+        const listId = `nav-group-${group.id}`;
         return (
           <div key={group.id} className="pt-3">
             {group.collapsible ? (
               <button
                 type="button"
-                aria-expanded={nodesOpen}
-                aria-controls="nav-group-nodes"
-                onClick={() => setNodesOpen(value => !value)}
+                aria-expanded={isOpen}
+                aria-controls={listId}
+                onClick={() =>
+                  setOpenGroups(prev => ({ ...prev, [group.id]: !(prev[group.id] ?? true) }))
+                }
                 className={cn(
-                  "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                  "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-[#F6F7FB] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
                   collapsed && "sr-only",
                 )}
               >
-                {group.label}
-                <span aria-hidden="true" className="text-[10px]">
-                  {nodesOpen ? "−" : "+"}
+                <span>{group.label}</span>
+                <span className="flex items-center gap-1.5" aria-hidden="true">
+                  <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                    {group.items.length}
+                  </span>
+                  <ChevronDown
+                    className={cn("size-3.5 transition-transform duration-200", !isOpen && "-rotate-90")}
+                  />
                 </span>
               </button>
             ) : (
@@ -136,7 +164,7 @@ export function NavList({
               </p>
             )}
             <ul
-              id={group.collapsible ? "nav-group-nodes" : undefined}
+              id={group.collapsible ? listId : undefined}
               hidden={groupCollapsed}
               className="mt-0.5 space-y-0.5"
             >
@@ -156,15 +184,27 @@ export function NavList({
       })}
       {pluginLinks.length > 0 ? (
         <div className="pt-3">
-          <p
+          <button
+            type="button"
+            aria-expanded={pluginsOpen}
+            aria-controls="nav-group-plugins"
+            onClick={() => setPluginsOpen(value => !value)}
             className={cn(
-              "px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/85",
+              "flex w-full items-center justify-between rounded-lg px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground transition-colors hover:bg-[#F6F7FB] hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               collapsed && "sr-only",
             )}
           >
-            已启用插件
-          </p>
-          <ul className="mt-0.5 space-y-0.5">
+            <span>已启用插件</span>
+            <span className="flex items-center gap-1.5" aria-hidden="true">
+              <span className="rounded-full bg-secondary px-1.5 py-0.5 text-[10px] font-medium text-muted-foreground">
+                {pluginLinks.length}
+              </span>
+              <ChevronDown
+                className={cn("size-3.5 transition-transform duration-200", !pluginsOpen && "-rotate-90")}
+              />
+            </span>
+          </button>
+          <ul id="nav-group-plugins" hidden={!pluginsOpen} className="mt-0.5 space-y-0.5">
             {pluginLinks.map(link => (
               <NavLink
                 key={link.path}
@@ -430,12 +470,9 @@ export function Shell({ children }: { readonly children: ReactNode }) {
               <Button type="button" size="sm" onClick={() => session.revalidate()}>
                 同步身份
               </Button>
-              <a
-                href="#/login"
-                className="inline-flex h-8 items-center rounded-lg border border-input bg-card px-2.5 text-xs font-medium hover:border-[#6658E8]/35 hover:bg-[#F6F7FB] hover:text-[#6658E8] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              >
+              <LinkButton href="#/login" size="sm">
                 重新登录
-              </a>
+              </LinkButton>
               <Button type="button" size="sm" variant="outline" onClick={handleLogout} loading={loggingOut}>
                 退出
               </Button>
@@ -464,12 +501,9 @@ export function Shell({ children }: { readonly children: ReactNode }) {
                 tone="warning"
                 title="安全写入已锁定"
                 actions={
-                  <a
-                    href="#/login"
-                    className="inline-flex h-8 items-center rounded-lg border border-input bg-card px-2.5 text-xs font-medium hover:bg-secondary"
-                  >
+                  <LinkButton href="#/login" size="sm">
                     重新登录以获取 CSRF 令牌
-                  </a>
+                  </LinkButton>
                 }
               >
                 页面刷新后，服务端会话仍有效，但当前 Identity 契约未返回 CSRF 令牌。只读页面可用；创建、修改、审批、退出等写操作会保持禁用，直到重新登录。

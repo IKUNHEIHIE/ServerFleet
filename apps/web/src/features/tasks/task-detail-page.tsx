@@ -5,7 +5,7 @@ import { useSession } from "@/app/session";
 import { TracingBeam } from "@/components/aceternity/tracing-beam";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, TextArea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
@@ -141,7 +141,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
         description="任务状态、目标快照、审批、逐节点执行与 SSE 事件。取消不冒充回滚；未知结果不自动重跑。"
         actions={
           <>
-            <a href="#/tasks" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回任务中心</a>
+            <LinkButton href="#/tasks">返回任务中心</LinkButton>
             {current?.state === "awaiting_approval" ? (
               <>
                 <Button type="button" disabled={!canApprove || writesLocked || busy || !planDigest} onClick={() => openDecision("approve")}>批准</Button>

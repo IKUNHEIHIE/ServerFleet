@@ -2,9 +2,10 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { FolderTree, Layers, Plus, X } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { TabBar } from "@/components/ui/table";
@@ -257,9 +258,8 @@ function MembersDrawer({
           <Notice tone="warning" title="部分现有成员不在当前可见节点集合">
             有 {missing.length} 个成员 ID 未出现在当前返回的节点中（可能无权查看或已被移除）。继续保存会移除它们。
             <label className="mt-2 flex items-start gap-2 text-xs">
-              <input
-                type="checkbox"
-                className="mt-0.5 size-4 accent-[var(--primary)]"
+              <Checkbox
+                className="mt-0.5"
                 checked={acknowledgeRemoval}
                 onChange={event => setAcknowledgeRemoval(event.target.checked)}
               />
@@ -492,7 +492,7 @@ export function GroupsPage() {
       <PageHeader
         title="分组管理"
         description="自定义分组用于整理与筛选，可编辑成员；自动分类按节点属性实时计算，只读。二者都不是业务服务组。"
-        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">普通分组</span>}
+        badge={<Badge tone="primary">普通分组</Badge>}
         actions={
           <Button
             type="button"
@@ -691,30 +691,30 @@ export function GroupsPage() {
                 <label htmlFor="group-node-search" className="block text-xs font-medium text-muted-foreground">
                   搜索名称或 IP
                 </label>
-                <input
+                <TextInput
                   id="group-node-search"
                   type="search"
                   value={searchDraft}
                   onChange={event => setSearchDraft(event.target.value)}
                   placeholder="服务端搜索当前分组"
-                  className="mt-1 h-9 w-full rounded-md border border-input bg-background px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className="h-9"
                 />
               </div>
               <div>
                 <label htmlFor="group-node-status" className="block text-xs font-medium text-muted-foreground">状态</label>
-                <select
+                <Select
                   id="group-node-status"
                   value={status}
                   onChange={event => {
                     setStatus(event.target.value as StatusFilter);
                     resetPage();
                   }}
-                  className="mt-1 h-9 rounded-md border border-input bg-background px-3 text-sm"
+                  className="h-9 w-auto py-1"
                 >
                   <option value="all">全部</option>
                   <option value="online">在线</option>
                   <option value="offline">离线</option>
-                </select>
+                </Select>
               </div>
               <Button type="submit" size="sm">搜索</Button>
               <Button type="button" size="sm" variant="ghost" onClick={clearSearch} disabled={!search && !searchDraft}>

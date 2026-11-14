@@ -6,8 +6,8 @@ import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, TextInput } from "@/components/ui/form";
-import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
+import { Field, Checkbox, TextInput } from "@/components/ui/form";
+import { PageHeader, Panel, SectionDivider, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { recoveryApi } from "@/lib/api/endpoints-system";
@@ -165,11 +165,11 @@ export function BackupsPage() {
             </div>
           </div>
           {plan ? (
-            <div className="space-y-3 rounded-lg border px-4 py-3 text-sm">
+            <SubCard className="space-y-3 p-3.5 text-sm">
               <p>备份：<span className="font-mono text-xs">{plan.backupId}</span> · 目标主控 <span className="font-mono text-xs">{plan.targetControllerId}</span> · 期望版本 {plan.expectedVersion ?? "未返回"}</p>
               <p>期望节点：{plan.expectedNodeIds?.join("、") || "未返回"} · 密钥引用：<span className="font-mono text-xs">{plan.recoveryKeyReference ?? "未返回"}</span></p>
               <ChecksTable checks={plan.checks} caption="备份校验检查项" />
-            </div>
+            </SubCard>
           ) : <p className="text-xs text-muted-foreground">尚未校验任何备份。</p>}
         </form>
       </Panel>
@@ -192,9 +192,8 @@ export function BackupsPage() {
             </Field>
           </div>
           <label className="flex items-start gap-2 text-sm">
-            <input
-              type="checkbox"
-              className="mt-1 size-4 accent-[var(--primary)]"
+            <Checkbox
+              className="mt-1"
               checked={fenced}
               disabled={!plan || !canManage || writesLocked}
               onChange={event => setFenced(event.target.checked)}
@@ -203,10 +202,10 @@ export function BackupsPage() {
           </label>
           <Button type="submit" loading={previewAction.pending} disabled={!plan || !canManage || writesLocked || !targetControllerId.trim()}>执行预演</Button>
           {preview ? (
-            <div className="space-y-2 rounded-lg border px-4 py-3">
+            <SubCard className="space-y-2 p-3.5">
               <p className="text-sm">预演返回：备份 <span className="font-mono text-xs">{preview.backupId}</span> · 目标 {preview.targetControllerId} · fenced {preview.oldControllerFenced ? "是" : "否"}</p>
               <ChecksTable checks={preview.checks} caption="恢复预演检查项" />
-            </div>
+            </SubCard>
           ) : null}
         </form>
       </Panel>
@@ -224,7 +223,7 @@ export function BackupsPage() {
             创建恢复作业
           </Button>
           {operation ? (
-            <div className="space-y-2 rounded-lg border px-4 py-3 text-sm">
+            <SubCard className="space-y-2 p-3.5 text-sm">
               <p>作业 <span className="font-mono text-xs">{operation.id}</span> · 状态 {OPERATION_STATUS[operation.status] ?? operation.status} · 创建 {formatDateTime(operation.createdAt) ?? "—"}</p>
               {operation.auditId ? <p className="text-xs text-muted-foreground">审计 {operation.auditId}</p> : null}
               {operation.stages && operation.stages.length ? (
@@ -254,7 +253,7 @@ export function BackupsPage() {
               <p className="text-xs text-muted-foreground">
                 契约没有恢复作业列表端点，刷新页面后无法从服务端找回历史作业；本页不本地存储作业记录。
               </p>
-            </div>
+            </SubCard>
           ) : null}
         </div>
       </Panel>

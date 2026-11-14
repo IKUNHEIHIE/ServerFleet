@@ -5,7 +5,7 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, TextArea, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { authApi, type IssuedRestrictedToken, type RestrictedTokenMetadata } from "@/lib/api/endpoints";
@@ -151,12 +151,10 @@ function RestrictedTokensContent() {
           </Field>
         </div>
         <div className="grid gap-3.5 sm:grid-cols-2">
-          <fieldset className="space-y-2 rounded-xl border border-border/70 bg-white px-3.5 py-2.5">
-            <legend className="px-1 text-xs font-medium text-muted-foreground">允许只读权限</legend>
+          <FieldsetBox legend="允许只读权限" className="space-y-2 bg-white px-3.5 py-2.5">
             <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={readNodes}
                   onChange={event => setReadNodes(event.target.checked)}
                   disabled={session.writesLocked || issueAction.pending}
@@ -164,8 +162,7 @@ function RestrictedTokensContent() {
                 <span>nodes.read</span>
               </label>
               <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                <input
-                  type="checkbox"
+                <Checkbox
                   checked={readTasks}
                   onChange={event => setReadTasks(event.target.checked)}
                   disabled={session.writesLocked || issueAction.pending}
@@ -173,7 +170,7 @@ function RestrictedTokensContent() {
                 <span>tasks.read</span>
               </label>
             </div>
-          </fieldset>
+          </FieldsetBox>
           <Field label="显式节点 ID（1—200 个，空格或逗号分隔）">
             {ids => (
               <TextArea

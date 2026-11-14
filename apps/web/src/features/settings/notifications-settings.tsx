@@ -3,7 +3,7 @@ import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
@@ -85,7 +85,7 @@ function ChannelForm({ channel, credentials, onChanged, onOpenCredentials }: { r
         {save.error || saveSecret.error ? <Notice tone="error" title="保存失败">{describeApiError(save.error ?? saveSecret.error)}</Notice> : null}
         {test.error ? <Notice tone="error" title="测试失败">{describeApiError(test.error)}</Notice> : null}
         <label className="flex items-center gap-2 text-sm">
-          <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
+          <Checkbox checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
           启用该渠道
         </label>
         {channel.channel === "smtp" ? (
@@ -205,9 +205,7 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
             <>
               <div className="grid gap-3.5 sm:grid-cols-3 sm:items-end">
                 <label className="flex h-9 items-center gap-2 rounded-lg border border-border/70 bg-[#FAFBFD] px-3 text-sm font-medium">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-[var(--primary)]"
+                  <Checkbox
                     checked={draft.smtpFallbackOnQQFailure}
                     onChange={event => setDraft({ ...draft, smtpFallbackOnQQFailure: event.target.checked })}
                     disabled={!canManage || session.writesLocked}

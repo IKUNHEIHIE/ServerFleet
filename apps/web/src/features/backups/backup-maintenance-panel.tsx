@@ -4,7 +4,7 @@ import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { backupMaintenanceApi as api, type BackupPolicy, type BackupPolicyInput, type CleanupPlan, type OperationTask } from "@/lib/api/endpoints-operations";
@@ -85,19 +85,19 @@ function PolicyForm({ initial, credentials, onSaved }: { readonly initial: Backu
         <legend className="text-sm font-semibold text-foreground">备份策略 · 修订 {initial.revision}</legend>
         <div className="grid gap-2 sm:grid-cols-2">
           <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-medium">
-            <input type="checkbox" checked={value.scheduledBackups} onChange={e => setValue(v => ({ ...v, scheduledBackups: e.target.checked }))} />
+            <Checkbox checked={value.scheduledBackups} onChange={e => setValue(v => ({ ...v, scheduledBackups: e.target.checked }))} />
             <span>定时生成加密备份</span>
           </label>
           <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-medium">
-            <input type="checkbox" checked={remoteEnabled} onChange={e => setRemoteEnabled(e.target.checked)} />
+            <Checkbox checked={remoteEnabled} onChange={e => setRemoteEnabled(e.target.checked)} />
             <span>配置异地存储</span>
           </label>
           <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-medium">
-            <input type="checkbox" checked={value.autoUpload} disabled={!remoteEnabled} onChange={e => setValue(v => ({ ...v, autoUpload: e.target.checked }))} />
+            <Checkbox checked={value.autoUpload} disabled={!remoteEnabled} onChange={e => setValue(v => ({ ...v, autoUpload: e.target.checked }))} />
             <span>自动上传并读回校验</span>
           </label>
           <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-medium">
-            <input type="checkbox" checked={value.scheduleCleanup} onChange={e => setValue(v => ({ ...v, scheduleCleanup: e.target.checked }))} />
+            <Checkbox checked={value.scheduleCleanup} onChange={e => setValue(v => ({ ...v, scheduleCleanup: e.target.checked }))} />
             <span>自动发起清理审批</span>
           </label>
         </div>
@@ -109,7 +109,7 @@ function PolicyForm({ initial, credentials, onSaved }: { readonly initial: Backu
           {number("remoteKeep", "异地最少份数", 1000)}
         </div>
         <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-card px-3 py-2 text-xs font-medium">
-          <input type="checkbox" checked={value.requireVerifiedRemote} onChange={e => setValue(v => ({ ...v, requireVerifiedRemote: e.target.checked }))} />
+          <Checkbox checked={value.requireVerifiedRemote} onChange={e => setValue(v => ({ ...v, requireVerifiedRemote: e.target.checked }))} />
           <span>删除本地副本前必须再次验证异地副本</span>
         </label>
         {remoteEnabled ? (
@@ -336,7 +336,7 @@ function MaintenanceContent() {
                 </ul>
               </details>
               <label className="flex items-center gap-2 text-xs font-medium text-foreground">
-                <input type="checkbox" checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
+                <Checkbox checked={confirmed} onChange={e => setConfirmed(e.target.checked)} />
                 <span>已核对候选清单，提交独立审批</span>
               </label>
               <Button

@@ -1,5 +1,6 @@
 import { useId, type KeyboardEvent, type ReactNode, type Ref } from "react";
 import { Server, X } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView } from "./types";
 import { MetricValue } from "./metric-value";
@@ -82,14 +83,10 @@ export function NodeDetailPanel({ node, onClose, className, ref }: NodeDetailPan
           </div>
         </div>
         {onClose ? (
-          <button
-            type="button"
-            onClick={onClose}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-3 text-sm font-medium shadow-2xs transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          >
+          <Button type="button" onClick={onClose}>
             <X aria-hidden="true" className="size-3.5 text-muted-foreground" />
             关闭详情
-          </button>
+          </Button>
         ) : null}
       </header>
 

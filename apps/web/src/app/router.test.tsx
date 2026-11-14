@@ -68,4 +68,11 @@ describe("navigation registry", () => {
       expect(ROUTE_META[route.path], `missing meta for ${route.path}`).toBeTruthy();
     }
   });
+
+  it("marks all primary navigation groups as collapsible", () => {
+    expect(NAV_GROUPS.map(group => group.id)).toEqual(["nodes", "core", "extensions", "system"]);
+    for (const group of NAV_GROUPS) {
+      expect(group.collapsible, `expected ${group.id} to be collapsible`).toBe(true);
+    }
+  });
 });

@@ -2,9 +2,10 @@ import { formatDateTime } from "@/lib/format";
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Button, LinkButton } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, TextArea } from "@/components/ui/form";
+import { Checkbox, Field, TextArea } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { DefinitionList } from "@/components/ui/table";
 import { PageHeader, Panel } from "@/components/ui/panel";
@@ -70,8 +71,10 @@ function CapabilitiesBody({ capabilities }: { readonly capabilities: NodeCapabil
       ) : (
         <ul className="flex flex-wrap gap-2">
           {capabilities.capabilities.map(capability => (
-            <li key={capability} className="rounded-md border px-2 py-1 font-mono text-xs">
-              {capability}
+            <li key={capability}>
+              <Badge variant="outline" className="font-mono">
+                {capability}
+              </Badge>
             </li>
           ))}
         </ul>
@@ -266,12 +269,9 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
         description="节点元数据、身份、能力、诊断与流量配额。所有字段来自服务端；失联不推断关机。"
         actions={
           <>
-            <a
-              href="#/nodes"
-              className="inline-flex h-9 items-center rounded-md border border-input bg-card px-3 text-sm hover:bg-secondary"
-            >
+            <LinkButton href="#/nodes">
               返回节点列表
-            </a>
+            </LinkButton>
             <Button
               type="button"
               disabled={locked}
@@ -451,9 +451,8 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
           </Field>
           {actionKind === "revoke" ? (
             <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="mt-1 size-4 accent-[var(--destructive)]"
+              <Checkbox
+                className="mt-1 accent-[var(--destructive)]"
                 checked={confirmRevoke}
                 onChange={event => setConfirmRevoke(event.target.checked)}
                 disabled={actionPending}

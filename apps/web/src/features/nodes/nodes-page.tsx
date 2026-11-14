@@ -3,7 +3,9 @@ import { Activity, Filter, RefreshCw, Server } from "lucide-react";
 import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Notice } from "@/components/ui/feedback";
+import { Checkbox } from "@/components/ui/form";
 import { Button } from "@/components/ui/button";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { TabBar } from "@/components/ui/table";
@@ -115,15 +117,13 @@ export function NodesPage() {
       <PageHeader
         title="节点列表"
         description="服务器资产、地区、云厂商、在线状态与资源。默认使用兼容接口字段；富化视图需要候选详情接口。"
-        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">只读</span>}
+        badge={<Badge tone="primary">只读</Badge>}
         actions={
           <>
             <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-2xs transition-colors hover:bg-secondary/70">
-              <input
-                type="checkbox"
+              <Checkbox
                 checked={onlineOnly}
                 onChange={event => setOnlineOnly(event.target.checked)}
-                className="size-4 accent-[var(--primary)]"
               />
               仅在线节点（服务端过滤）
             </label>

@@ -113,3 +113,18 @@
 5. **主控就绪与活性探测（`apps/web/src/features/updates/readiness-panel.tsx`, `updates-page.tsx`, `endpoints.ts`）**：
    - 在 `UpdatesPage` 新增 `ReadinessPanel`，按需通过 `systemApi.readiness` 与 `systemApi.health` 并行探测 `GET /readyz` 与 `GET /healthz`，展示 `database`、`authority`、`scheduler`、`agentTransport`、`pki` 子系统检查状态与语义边界提示。
 
+---
+
+## 7. 侧边栏全分组折叠与共享组件库全面统一
+
+围绕侧边栏交互一致性与全局 UI 原语收口，完成以下更新（新增/修改）：
+
+1. **全侧边栏分组折叠支持（新增，`apps/web/src/app/navigation.ts`, `apps/web/src/app/shell.tsx`）**：
+   - 为 `核心功能`（`core`）、`扩展能力`（`extensions`）、`系统维护`（`system`）补充 `collapsible: true`，与 `节点管理`（`nodes`）保持一致；同时为动态挂载的 `已启用插件`（`pluginsOpen`）接入折叠控制。
+   - 更新 `NavList`，维护逐组展开状态 `openGroups`，并在路由切换到分组内页面时自动展开对应分组；折叠按钮提供 `aria-expanded`、`aria-controls="nav-group-<id>"` 与仅视觉可见（`aria-hidden="true"`）的条目计数及旋转指示图标。
+2. **共享组件库扩展与全页面控件标准化（新增/修改，`apps/web/src/components/ui/*`, `apps/web/src/app/*`, `apps/web/src/features/*`）**：
+   - 在 `button.tsx` 导出 `buttonClassName` 与 `<LinkButton>`；在 `form.tsx` 新增 `<Checkbox>` 与 `<FieldsetBox>`；在 `panel.tsx` 新增 `<SubCard>`。
+   - 将壳层异常兜底（`error-boundary.tsx`）及各业务模块（`overview`、`nodes`、`groups`、`service-groups`、`files`、`tasks`、`monitoring`、`ai`、`gateways`、`publishing`、`dns`、`certificates`、`plugins`、`workflows`、`updates`、`backups`、`users`、`settings`）中的原生按钮、动作链接、输入框、选择框、复选框、分组框、`neurox-subcard` 容器与徽章统一迁移至 `@/components/ui/*`（`LinkButton`、`Checkbox`、`FieldsetBox`、`SubCard`、`Badge`、`Button`、`TextInput`、`Select`、`Panel`）。
+3. **测试补充（新增，`apps/web/src/app/router.test.tsx`, `apps/web/src/App.test.tsx`）**：
+   - 在 `router.test.tsx` 增加主导航 4 个分组全部启用 `collapsible: true` 的断言；在 `App.test.tsx` 增加登录后 `节点管理`、`核心功能`、`扩展能力`、`系统维护` 折叠/展开状态切换测试。
+

@@ -41,6 +41,24 @@ describe("management console shell", () => {
     await waitFor(() => expect(calls.some(call => call.url.startsWith("/api/v1/nodes"))).toBe(true));
   });
 
+  it("collapses and expands all primary sidebar navigation groups", async () => {
+    installFetch(coreRoutes());
+    render(<App />);
+    fireEvent.change(await screen.findByLabelText("用户名"), { target: { value: "admin" } });
+    fireEvent.change(screen.getByLabelText("密码"), { target: { value: "secret" } });
+    fireEvent.click(screen.getByRole("button", { name: "登录" }));
+    expect(await screen.findByRole("heading", { level: 1, name: "概览仪表盘" })).toBeVisible();
+
+    for (const groupName of ["节点管理", "核心功能", "扩展能力", "系统维护"]) {
+      const toggle = screen.getByRole("button", { name: groupName });
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+    }
+  });
+
   it("keeps the existing badge semantics", () => {
     render(<Badge aria-label="stage" variant="outline" className="text-lg">候选</Badge>);
     expect(screen.getByLabelText("stage")).toHaveClass("text-lg");

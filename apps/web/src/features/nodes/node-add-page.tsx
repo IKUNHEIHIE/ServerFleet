@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -85,7 +86,7 @@ export function NodeAddPage() {
       <PageHeader
         title="添加节点"
         description="生成一次性短期接入凭证、审批接入请求并查看状态。凭证与节点身份不可永久共用。"
-        badge={<span className="rounded-md border px-2 py-1 text-xs">接入</span>}
+        badge={<Badge tone="primary">接入</Badge>}
       />
 
       {!canManage ? (
@@ -275,7 +276,12 @@ export function NodeAddPage() {
         }
       >
         {decide.error ? <Notice tone="error" title="审批未完成">{describeApiError(decide.error)}</Notice> : null}
-        {decision?.decision === "approve" ? <label className="mb-4 flex items-center gap-2 text-sm"><input type="checkbox" checked={grantRead} onChange={event => setGrantRead(event.target.checked)} disabled={decide.pending} />授予当前账户该节点的读取权限（不授予执行权限）</label> : null}
+        {decision?.decision === "approve" ? (
+          <label className="mb-4 flex items-center gap-2 text-sm">
+            <Checkbox checked={grantRead} onChange={event => setGrantRead(event.target.checked)} disabled={decide.pending} />
+            授予当前账户该节点的读取权限（不授予执行权限）
+          </label>
+        ) : null}
         <Field label="原因（可选）" hint="服务端会写入审计；不要包含秘密或凭据。">
           {ids => (
             <TextArea

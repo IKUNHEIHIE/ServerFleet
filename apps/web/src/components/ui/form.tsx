@@ -57,3 +57,43 @@ export function Select({ className, children, ...props }: ComponentProps<"select
     </select>
   );
 }
+
+export function Checkbox({ className, ...props }: ComponentProps<"input">) {
+  return (
+    <input
+      {...props}
+      type="checkbox"
+      className={cn(
+        "size-4 shrink-0 cursor-pointer rounded border border-input accent-[#6658E8] transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/35 disabled:cursor-not-allowed disabled:opacity-50",
+        className,
+      )}
+    />
+  );
+}
+
+export function FieldsetBox({
+  legend,
+  children,
+  className,
+  disabled,
+}: {
+  readonly legend?: ReactNode;
+  readonly children: ReactNode;
+  readonly className?: string;
+  readonly disabled?: boolean;
+}) {
+  return (
+    <fieldset
+      disabled={disabled}
+      className={cn(
+        "rounded-xl border border-border/85 bg-[#FAFBFD] px-4 py-3 shadow-[0_1px_2px_rgba(28,32,48,0.02)]",
+        className,
+      )}
+    >
+      {legend !== undefined ? (
+        <legend className="px-1 text-xs font-semibold text-foreground">{legend}</legend>
+      ) : null}
+      {children}
+    </fieldset>
+  );
+}

@@ -6,7 +6,7 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -350,14 +350,11 @@ export function PluginsPage() {
             {!installing.sourceCommit || !installing.artifactSha256 ? (
               <Notice tone="error" title="不可安装">目录条目缺少不可变 commit 或 SHA-256；不能声称验证通过。</Notice>
             ) : null}
-            <fieldset className="rounded-lg border px-4 py-3">
-              <legend className="px-1 font-medium">权限确认</legend>
+            <FieldsetBox legend="权限确认">
               {installing.permissions.length === 0 ? <p className="text-xs text-muted-foreground">该条目未声明权限；请核对来源。</p> : null}
               {installing.permissions.map(permission => (
                 <label key={permission} className="mt-1 flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    className="size-4 accent-[var(--primary)]"
+                  <Checkbox
                     checked={accepted.has(permission)}
                     onChange={event => {
                       setAccepted(current => {
@@ -371,9 +368,9 @@ export function PluginsPage() {
                   {permission}
                 </label>
               ))}
-            </fieldset>
+            </FieldsetBox>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enableAfter} onChange={event => setEnableAfter(event.target.checked)} />
+              <Checkbox checked={enableAfter} onChange={event => setEnableAfter(event.target.checked)} />
               安装后启用
             </label>
           </form>

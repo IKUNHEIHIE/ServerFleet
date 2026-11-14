@@ -4,7 +4,7 @@ import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { incidentsApi as api, type IncidentAction, type IncidentChecks, type IncidentDecision, type IncidentTaskReceipt, type OperatorIncident } from "@/lib/api/endpoints-operations";
@@ -400,7 +400,7 @@ function IncidentDetail({ id, onChanged }: { readonly id: string; readonly onCha
                       ["impactChecked", "已核对影响范围与补偿结果"],
                     ] as const).map(([key, label]) => (
                       <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-[#FAFBFD] px-3 py-2 text-xs font-medium" key={key}>
-                        <input type="checkbox" checked={checks[key]} onChange={e => changeChecks({ [key]: e.target.checked })} />
+                        <Checkbox checked={checks[key]} onChange={e => changeChecks({ [key]: e.target.checked })} />
                         <span>{label}</span>
                       </label>
                     ))}
@@ -408,7 +408,7 @@ function IncidentDetail({ id, onChanged }: { readonly id: string; readonly onCha
                   {outcome === "accepted_unresolved" ? (
                     <>
                       <label className="flex items-center gap-2 text-xs font-medium">
-                        <input type="checkbox" checked={checks.unknownAccepted} onChange={e => changeChecks({ unknownAccepted: e.target.checked })} />
+                        <Checkbox checked={checks.unknownAccepted} onChange={e => changeChecks({ unknownAccepted: e.target.checked })} />
                         <span>已明确接受未查明的风险，并登记风险控制措施</span>
                       </label>
                       <Field label="剩余风险与接受理由">
@@ -429,7 +429,7 @@ function IncidentDetail({ id, onChanged }: { readonly id: string; readonly onCha
               ) : null}
               {selected === "approve" ? (
                 <label className="flex items-center gap-2 rounded-lg border border-border/70 bg-[#FAFBFD] px-3 py-2 text-xs font-medium">
-                  <input type="checkbox" checked={reviewedBinding === reviewBinding} onChange={e => setReviewedBinding(e.target.checked ? reviewBinding : "")} />
+                  <Checkbox checked={reviewedBinding === reviewBinding} onChange={e => setReviewedBinding(e.target.checked ? reviewBinding : "")} />
                   <span>已独立核对本次提案的证据、快照与后续任务结果</span>
                 </label>
               ) : null}

@@ -6,7 +6,7 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
@@ -237,13 +237,10 @@ function MonitorEditor({
           <Field label="连续失败判定">{ids => <TextInput id={ids.inputId} type="number" min={1} value={failureCount} onChange={event => setFailureCount(event.target.value)} />}</Field>
           <Field label="连续恢复判定">{ids => <TextInput id={ids.inputId} type="number" min={1} value={recoveryCount} onChange={event => setRecoveryCount(event.target.value)} />}</Field>
         </div>
-        <fieldset className="rounded-lg border px-4 py-3">
-          <legend className="px-1 text-sm font-medium">通知渠道</legend>
+        <FieldsetBox legend="通知渠道">
           {(["qqbot", "smtp"] as const).map(channel => (
             <label key={channel} className="mt-1 flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
-                className="size-4 accent-[var(--primary)]"
+              <Checkbox
                 checked={channels.has(channel)}
                 onChange={event => {
                   setChannels(current => {
@@ -257,7 +254,7 @@ function MonitorEditor({
               {channel === "qqbot" ? "QQ Bot" : "SMTP"}
             </label>
           ))}
-        </fieldset>
+        </FieldsetBox>
         <p className="text-xs text-muted-foreground">默认建议 60 秒间隔、5 秒超时、3 次失败判异常、2 次成功判恢复；服务端可设更严格上限。</p>
       </form>
     </Modal>

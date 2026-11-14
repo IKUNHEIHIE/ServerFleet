@@ -2,9 +2,10 @@ import { PublicationDNSPanel } from "./publication-dns-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -179,7 +180,7 @@ export function PublishingPage() {
       <PageHeader
         title="服务发布"
         description="将现有服务组发布到合格网关、Cloudflare DNS 与证书。多步骤不是原子事务，局部失败不会显示全部完成。"
-        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">发布向导</span>}
+        badge={<Badge tone="primary">发布向导</Badge>}
         actions={<Button type="button" onClick={() => { groups.reload(); gateways.reload(); publications.reload(); }}>刷新</Button>}
       />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
@@ -223,14 +224,12 @@ export function PublishingPage() {
                 。PublicationDraft 没有独立端口字段，本页不伪造端口覆盖。
               </p>
             ) : null}
-            <fieldset className="rounded-lg border px-4 py-3">
-              <legend className="px-1 text-sm font-medium">网关（只列服务端声明可调度的网关）</legend>
+            <FieldsetBox legend="网关（只列服务端声明可调度的网关）">
               {gatewayItems.length === 0 ? <p className="text-xs text-muted-foreground">没有可用网关或列表未加载。</p> : null}
               {gatewayItems.map(gateway => (
                 <label key={gateway.id} className={`mt-1 flex items-start gap-2 text-sm ${gateway.schedulingEligible ? "" : "opacity-60"}`}>
-                  <input
-                    type="checkbox"
-                    className="mt-0.5 size-4 accent-[var(--primary)]"
+                  <Checkbox
+                    className="mt-0.5"
                     disabled={!gateway.schedulingEligible}
                     checked={gatewayIds.has(gateway.id)}
                     onChange={event => {
@@ -246,7 +245,7 @@ export function PublishingPage() {
                   {gateway.name} {gateway.schedulingEligible ? "" : "（不可调度）"}
                 </label>
               ))}
-            </fieldset>
+            </FieldsetBox>
             <Field label="访问域名">{ids => <TextInput id={ids.inputId} value={domain} onChange={event => { setDomain(event.target.value); setPreview(null); }} required />}</Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Cloudflare 账号（可选）">
@@ -271,16 +270,16 @@ export function PublishingPage() {
             </Field>
             <div className="flex flex-wrap gap-4">
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={https} onChange={event => { setHttps(event.target.checked); setPreview(null); }} />
+                <Checkbox checked={https} onChange={event => { setHttps(event.target.checked); setPreview(null); }} />
                 HTTPS
               </label>
               <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={createMonitor} onChange={event => { setCreateMonitor(event.target.checked); setPreview(null); }} />
+                <Checkbox checked={createMonitor} onChange={event => { setCreateMonitor(event.target.checked); setPreview(null); }} />
                 生成服务监控草案
               </label>
             </div>
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox" className="mt-1 size-4 accent-[var(--primary)]" checked={confirm} onChange={event => setConfirm(event.target.checked)} />
+              <Checkbox className="mt-1" checked={confirm} onChange={event => setConfirm(event.target.checked)} />
               我确认已查看变更预览；部分失败不会自动全量回滚，DNS 缓存可能延迟。
             </label>
             <div className="flex flex-wrap gap-2">

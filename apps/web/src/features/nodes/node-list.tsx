@@ -8,6 +8,7 @@ import {
   type Ref,
 } from "react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import type { NodeListItemView, NodeListState } from "./types";
 import { MetricValue, MissingValue } from "./metric-value";
@@ -229,13 +230,9 @@ function ErrorState({ message, onRetry }: { readonly message?: string; readonly 
         </p>
       </div>
       {onRetry ? (
-        <button
-          type="button"
-          onClick={onRetry}
-          className="mt-4 inline-flex items-center rounded-md border border-input bg-card px-3 py-1.5 text-sm font-medium transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-        >
+        <Button type="button" onClick={onRetry} className="mt-4">
           重新加载
-        </button>
+        </Button>
       ) : null}
     </div>
   );

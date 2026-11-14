@@ -7,9 +7,9 @@ import { SparklesCore } from "@/components/aceternity/sparkles";
 import { Spotlight } from "@/components/aceternity/spotlight";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
@@ -99,7 +99,7 @@ export function AIPage() {
         <PageHeader
           title="AI 运维"
           description="每个会话默认零资源授权、每次审批。审批模式只改变人工批准策略，绝不扩大节点/RBAC 权限。"
-          badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">默认拒绝</span>}
+          badge={<Badge tone="primary">默认拒绝</Badge>}
           actions={
             <Button
               type="button"
@@ -291,8 +291,7 @@ function ModelSettingsForm({
         </Field>
       </div>
       <label className="flex items-center gap-2 text-sm">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={enabled}
           onChange={event => setEnabled(event.target.checked)}
           disabled={!isAdmin || writesLocked}
@@ -608,9 +607,9 @@ function ModeCards({
                   {MODE_LABEL[mode]}
                 </span>
                 {active ? (
-                  <span className="rounded-full bg-primary px-2 py-0.5 text-[11px] font-semibold text-white">
+                  <Badge className="bg-primary text-white border-primary">
                     当前模式
-                  </span>
+                  </Badge>
                 ) : null}
               </span>
               <span className="mt-2 block text-xs leading-5 text-muted-foreground">{MODE_DESCRIPTION[mode]}</span>
@@ -657,7 +656,7 @@ function ModeCards({
             )}
           </Field>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4 accent-[var(--destructive)]" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />
+            <Checkbox className="mt-1 accent-[var(--destructive)]" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />
             我理解：完全访问只在当前资源授权和 RBAC 范围内生效，到期恢复每次审批；root Shell 仍需真人确认。
           </label>
         </div>
@@ -975,7 +974,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
         description="默认零资源授权、每次审批；授权变化会递增 scopeRevision，旧计划与旧审批不能继续执行。"
         actions={
           <>
-            <a href="#/ai" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回 AI 入口</a>
+            <LinkButton href="#/ai">返回 AI 入口</LinkButton>
             <Button type="button" onClick={() => { session.reload(); policy.reload(); messages.reload(); }}>刷新</Button>
           </>
         }

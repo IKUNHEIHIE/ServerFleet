@@ -5,7 +5,7 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -305,7 +305,7 @@ export function WorkflowsPage() {
             {ids => <TextArea id={ids.inputId} rows={3} value={parameters} onChange={event => setParameters(event.target.value)} placeholder={"command=uptime"} />}
           </Field>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={humanApproval} onChange={event => setHumanApproval(event.target.checked)} />
+            <Checkbox checked={humanApproval} onChange={event => setHumanApproval(event.target.checked)} />
             需要人工审批（任务提交后进入审批流，由任务中心执行）
           </label>
           <Button type="submit" variant="primary" loading={createAction.pending} disabled={!canWrite || session.writesLocked}>创建工作流</Button>

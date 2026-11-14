@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { Server } from "lucide-react";
+import { Checkbox } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import type { NodeSummary } from "@/lib/api/dto";
 import { adaptMetric } from "./legacy-adapter";
@@ -64,12 +65,10 @@ export function NodeSummaryTable({ rows, caption, empty, selectedIds, onToggle }
               >
                 {selectable ? (
                   <td className="px-3 py-3.5">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`选择节点 ${name}`}
                       checked={isSelected}
                       onChange={event => onToggle?.(node.id, event.target.checked)}
-                      className="size-4 accent-[var(--primary)]"
                     />
                   </td>
                 ) : null}

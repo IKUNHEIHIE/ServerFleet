@@ -11,7 +11,7 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
@@ -300,7 +300,7 @@ export function CertificatesPage() {
             {ids => <TextInput id={ids.inputId} type="number" min={1} max={8760} value={validityHours} onChange={event => setValidityHours(event.target.value)} />}
           </Field>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4 accent-[var(--primary)]" checked={confirmImpact} onChange={event => setConfirmImpact(event.target.checked)} />
+            <Checkbox className="mt-1" checked={confirmImpact} onChange={event => setConfirmImpact(event.target.checked)} />
             我确认该操作会影响所选服务组成员，并由服务端逐节点执行。
           </label>
         </form>

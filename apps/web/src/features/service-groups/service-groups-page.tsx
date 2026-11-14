@@ -5,11 +5,11 @@ import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel } from "@/components/ui/panel";
+import { PageHeader, Panel, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, serviceGroupsApi, type ServiceGroupInput } from "@/lib/api/endpoints";
@@ -149,9 +149,9 @@ function ServiceGroupEditor({
         <Field label="健康检查说明（可选）">
           {ids => <TextInput id={ids.inputId} value={healthCheck} onChange={event => setHealthCheck(event.target.value)} maxLength={200} />}
         </Field>
-        <div className="rounded-lg border px-4 py-3">
+        <SubCard className="p-3.5">
           <label className="flex items-center gap-2 text-sm font-medium">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={lbEnabled} onChange={event => setLbEnabled(event.target.checked)} />
+            <Checkbox checked={lbEnabled} onChange={event => setLbEnabled(event.target.checked)} />
             启用流量调度
           </label>
           <p className="mt-1 text-xs text-muted-foreground">未启用时，服务组只是资源集合，不参与网关负载均衡；默认不启用。</p>
@@ -164,9 +164,11 @@ function ServiceGroupEditor({
               </Select>
             )}
           </Field>
-        </div>
-        <fieldset className="max-h-56 overflow-y-auto rounded-lg border px-4 py-3">
-          <legend className="px-1 text-sm font-medium">成员节点（{memberIds.size} 已选）</legend>
+        </SubCard>
+        <FieldsetBox
+          legend={`成员节点（${memberIds.size} 已选）`}
+          className="max-h-56 overflow-y-auto"
+        >
           <p className="mb-1 text-xs text-muted-foreground">
             服务端按成员节点集合校验创建/修改权限；至少选择一个已授权节点。
           </p>
@@ -181,9 +183,7 @@ function ServiceGroupEditor({
               <>
                 {data.map(node => (
                   <label key={node.id} className="mt-1 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      className="size-4 accent-[var(--primary)]"
+                    <Checkbox
                       checked={memberIds.has(node.id)}
                       onChange={event => toggleMember(node.id, event.target.checked)}
                     />
@@ -193,7 +193,7 @@ function ServiceGroupEditor({
               </>
             )}
           </AsyncPanel>
-        </fieldset>
+        </FieldsetBox>
         <p className="text-xs text-muted-foreground">成员创建后仍可在详情页继续管理。</p>
       </form>
     </Modal>
@@ -284,7 +284,7 @@ function MemberEditor({
           <Notice tone="warning" title="部分现有成员不可见">
             有 {missing.length} 个成员不在当前可见节点集合；继续保存会移除它们。
             <label className="mt-2 flex items-center gap-2 text-xs">
-              <input type="checkbox" className="size-4" checked={acknowledge} onChange={event => setAcknowledge(event.target.checked)} />
+              <Checkbox checked={acknowledge} onChange={event => setAcknowledge(event.target.checked)} />
               我确认移除不可见成员。
             </label>
           </Notice>
@@ -380,7 +380,7 @@ export function ServiceGroupsPage() {
       <PageHeader
         title="服务组管理"
         description="独立业务资源：包含成员、端口、健康与调度状态。与“节点管理 → 分组管理”的普通分组不共用身份与权限。"
-        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">业务资源</span>}
+        badge={<Badge tone="primary">业务资源</Badge>}
         actions={
           <Button
             type="button"
@@ -442,12 +442,12 @@ export function ServiceGroupsPage() {
       >
         <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
           <label htmlFor="servicegroup-search" className="block text-xs font-semibold text-muted-foreground">本地筛选名称/用途</label>
-          <input
+          <TextInput
             id="servicegroup-search"
             type="search"
             value={query}
             onChange={event => setQuery(event.target.value)}
-            className="mt-1 h-9 w-full max-w-md rounded-lg border border-input bg-card px-3 text-sm shadow-2xs"
+            className="h-9 max-w-md"
             placeholder="仅筛选已加载服务组"
           />
         </div>
@@ -636,7 +636,7 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
         description="成员、健康与调度资格。暂停成员只影响调度，不注销节点；成员变更不会扩大旧任务或旧 AI 授权。"
         actions={
           <>
-            <a href="#/service-groups" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回列表</a>
+            <LinkButton href="#/service-groups">返回列表</LinkButton>
             <Button
               type="button"
               disabled={!canManage || session.writesLocked || !current}

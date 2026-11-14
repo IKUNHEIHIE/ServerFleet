@@ -4,9 +4,10 @@ import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, TextArea, TextInput } from "@/components/ui/form";
+import { controlClassName, Field, TextArea, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
+import { cn } from "@/lib/utils";
 import type { NodeSummary } from "@/lib/api/dto";
 import { fileDistributionsApi, type FileDistributionView } from "@/lib/api/endpoints";
 import { describeApiError } from "@/lib/api/errors";
@@ -167,7 +168,7 @@ export function FileDistributionPanel({ nodes }: { readonly nodes: readonly Node
                     type="file"
                     onChange={handleFileChange}
                     disabled={!canManage || session.writesLocked || startAction.pending}
-                    className="block w-full rounded-xl border border-input bg-background px-3 py-1.5 text-xs text-foreground file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-primary"
+                    className={cn(controlClassName, "py-1.5 text-xs file:mr-3 file:rounded-lg file:border-0 file:bg-primary/10 file:px-2.5 file:py-1 file:text-xs file:font-semibold file:text-primary")}
                   />
                 )}
               </Field>

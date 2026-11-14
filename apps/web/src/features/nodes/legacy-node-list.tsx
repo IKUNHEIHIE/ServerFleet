@@ -1,5 +1,8 @@
 import { useId, useMemo, useState } from "react";
 import { Search, Server, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { TextInput } from "@/components/ui/form";
 import { cn } from "@/lib/utils";
 import { LegacyMetricCell } from "./metric-display";
 import type { LegacyNodeRow } from "./legacy-types";
@@ -159,9 +162,9 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
               "来自兼容接口 GET /api/v1/nodes。旧 DTO 没有状态、版本与采样时间：离线行不显示历史百分比，在线数值只标“无采样时间”。"}
           </p>
         </div>
-        <span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-1 text-xs font-semibold text-primary" role="status">
+        <Badge tone="primary" role="status" className="py-1">
           {countLabel}
-        </span>
+        </Badge>
       </header>
       <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
         <div role="search" aria-label="兼容节点列表搜索" className="flex flex-wrap items-end gap-3">
@@ -171,26 +174,25 @@ export function LegacyNodeList({ rows, title = "兼容旧列表", description, c
             </label>
             <div className="relative mt-1">
               <Search aria-hidden="true" className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
-              <input
+              <TextInput
                 id={searchId}
                 type="search"
                 value={query}
                 onChange={event => setQuery(event.target.value)}
                 placeholder="仅搜索已加载的节点"
                 disabled={total === 0}
-                className="h-9 w-full rounded-lg border border-input bg-card pl-8 pr-3 text-sm shadow-2xs transition-all focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/30 disabled:opacity-50"
+                className="mt-0 h-9 pl-8"
               />
             </div>
           </div>
-          <button
+          <Button
             type="button"
             onClick={() => setQuery("")}
             disabled={!filtering}
-            className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-input bg-card px-3 text-sm font-medium shadow-2xs transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X aria-hidden="true" className="size-3.5 text-muted-foreground" />
             清空搜索
-          </button>
+          </Button>
         </div>
       </div>
       {body}

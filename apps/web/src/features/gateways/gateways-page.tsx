@@ -4,9 +4,9 @@ import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, DefinitionList, TabBar } from "@/components/ui/table";
@@ -387,11 +387,11 @@ function RouteEditor({
         )}
         <div className="flex flex-wrap gap-4">
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={https} onChange={event => setHttps(event.target.checked)} disabled={disabled} />
+            <Checkbox checked={https} onChange={event => setHttps(event.target.checked)} disabled={disabled} />
             HTTPS
           </label>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
+            <Checkbox checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={disabled} />
             启用
           </label>
         </div>
@@ -489,7 +489,7 @@ export function GatewaysPage() {
       <PageHeader
         title="网关管理"
         description="Nginx 应用网关：安装/检测、健康检查、维护与调度资格。安装失败或检查未通过不可调度。"
-        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">应用网关</span>}
+        badge={<Badge tone="primary">应用网关</Badge>}
         actions={
           <Button type="button" onClick={() => { gateways.reload(); routes.reload(); nodes.reload(); }}>
             <RefreshCw aria-hidden="true" className="size-3.5" />
@@ -612,7 +612,7 @@ export function GatewaysPage() {
             )}
           </Field>
           <label className="flex items-start gap-2 text-sm">
-            <input type="checkbox" className="mt-1 size-4 accent-[var(--primary)]" checked={ack} onChange={event => setAck(event.target.checked)} />
+            <Checkbox className="mt-1" checked={ack} onChange={event => setAck(event.target.checked)} />
             我确认安装 Nginx 可能影响节点现有服务；服务端会保留现有配置并先检测。
           </label>
         </form>
@@ -710,7 +710,7 @@ export function GatewayDetailPage({ gatewayId }: { readonly gatewayId: string })
         description="网关准入由在线、就绪、Nginx 安装、配置/健康检查和管理员启用共同决定。"
         actions={
           <>
-            <a href="#/gateways" className="inline-flex h-9 items-center rounded-md border bg-card px-3 text-sm hover:bg-secondary">返回网关列表</a>
+            <LinkButton href="#/gateways">返回网关列表</LinkButton>
             <Button type="button" disabled={!canManage || session.writesLocked || !gateway.state.status || gateway.state.status !== "ready"} onClick={() => gateway.state.status === "ready" && void dispatch(!gateway.state.data.enabled)}>
               {gateway.state.status === "ready" && gateway.state.data.enabled ? "停用调度" : "启用调度"}
             </Button>

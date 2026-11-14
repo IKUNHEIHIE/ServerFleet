@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import { Sparkles } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -90,6 +90,24 @@ export function PageHeader({
         </div>
         {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
       </div>
+    </div>
+  );
+}
+
+export function SubCard({
+  children,
+  className,
+  ...props
+}: ComponentProps<"div">) {
+  return (
+    <div
+      {...props}
+      className={cn(
+        "rounded-xl border border-border/85 bg-[#FAFBFD] p-4 shadow-[0_1px_2px_rgba(28,32,48,0.02)] transition-colors",
+        className,
+      )}
+    >
+      {children}
     </div>
   );
 }

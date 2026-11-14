@@ -29,7 +29,7 @@ import { AnimatedNumber, GlowingEffect, Spotlight } from "@/components/aceternit
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/feedback";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -196,13 +196,13 @@ export function OverviewPage() {
           }
           actions={
             <div className="flex flex-wrap items-center gap-2">
-              <a
+              <LinkButton
                 href="#/ai"
-                className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-[#6658E8]/30 bg-[#F0EEFF]/80 px-3 text-xs font-semibold text-[#6658E8] transition-colors hover:bg-[#6658E8] hover:text-white"
+                className="border-[#6658E8]/30 bg-[#F0EEFF]/80 text-xs font-semibold text-[#6658E8] hover:bg-[#6658E8] hover:text-white"
               >
                 <Bot className="size-3.5" aria-hidden="true" />
                 AI 运维工作台
-              </a>
+              </LinkButton>
               <Button type="button" variant="primary" onClick={reloadAll}>
                 <RefreshCw className="size-3.5" aria-hidden="true" />
                 刷新全部

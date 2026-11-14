@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ShieldCheck } from "lucide-react";
 import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
@@ -134,12 +134,12 @@ export function ResidentUpdatePanel() {
                 </Button>
               ) : null}
               {taskId ? (
-                <a
+                <LinkButton
                   href="#/tasks"
-                  className="inline-flex h-9 items-center rounded-lg border border-primary/25 bg-primary-light px-3 text-xs font-semibold text-primary transition-colors hover:bg-primary/15"
+                  className="border-primary/25 bg-primary-light text-xs font-semibold text-primary hover:bg-primary/15"
                 >
                   查看任务与逐节点结果
-                </a>
+                </LinkButton>
               ) : null}
             </div>
             <pre

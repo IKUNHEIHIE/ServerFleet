@@ -9,7 +9,7 @@ import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, FieldsetBox, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
@@ -189,15 +189,15 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
         {targetType === "node_ids" ? (
           <AsyncPanel state={nodes.state} onRetry={nodes.reload} errorTitle="节点列表加载失败">
             {() => (
-              <fieldset className="max-h-56 overflow-y-auto rounded-lg border px-4 py-3">
-                <legend className="px-1 text-sm font-medium">目标节点（{selectedNodes.size} 已选）</legend>
+              <FieldsetBox
+                legend={`目标节点（${selectedNodes.size} 已选）`}
+                className="max-h-56 overflow-y-auto"
+              >
                 {nodeItems.map(node => (
                   <label key={node.id} className="mt-1 flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       value={node.id}
                       aria-label={`${node.name.trim() || node.id} (${node.id})`}
-                      className="size-4 accent-[var(--primary)]"
                       checked={selectedNodes.has(node.id)}
                       onChange={event => {
                         setSelectedNodes(current => {
@@ -213,7 +213,7 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
                     <span className="font-mono text-xs text-muted-foreground">({node.id})</span>
                   </label>
                 ))}
-              </fieldset>
+              </FieldsetBox>
             )}
           </AsyncPanel>
         ) : targetType === "node_group" ? (
@@ -262,7 +262,7 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
             )}
           </Field>
           <label className="mt-6 flex items-center gap-2 text-sm">
-            <input type="checkbox" className="size-4 accent-[var(--primary)]" checked={dryRun} onChange={event => setDryRun(event.target.checked)} />
+            <Checkbox checked={dryRun} onChange={event => setDryRun(event.target.checked)} />
             预演（dryRun）
           </label>
         </div>
@@ -306,7 +306,7 @@ export function TasksPage() {
       <PageHeader
         title="批量任务"
         description="统一任务中心：冻结目标、分批/金丝雀、审批、逐节点结果与 SSE 进度。取消不等于回滚，未知结果不自动重跑。"
-        badge={<span className="rounded-full border border-primary/20 bg-primary-light px-2.5 py-0.5 text-xs font-semibold text-primary">统一任务</span>}
+        badge={<Badge tone="primary">统一任务</Badge>}
         actions={
           <>
             <Button type="button" onClick={tasks.reload} loading={tasks.state.status === "loading"}>
@@ -375,16 +375,16 @@ export function TasksPage() {
         actions={
           <label className="text-xs font-medium text-muted-foreground">
             状态
-            <select
+            <Select
               value={filter}
               onChange={event => setFilter(event.target.value as typeof filter)}
-              className="ml-2 h-8 rounded-lg border border-input bg-card px-2.5 text-xs font-medium text-foreground shadow-2xs"
+              className="ml-2 mt-0 inline-block h-8 w-auto py-1 text-xs font-medium shadow-2xs"
             >
               <option value="all">全部</option>
               <option value="active">进行中</option>
               <option value="awaiting">等待审批</option>
               <option value="finished">已结束</option>
-            </select>
+            </Select>
           </label>
         }
       >
