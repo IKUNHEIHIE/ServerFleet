@@ -205,6 +205,8 @@ type Envelope struct {
 	//	*Envelope_FileChunkReply
 	//	*Envelope_FileOpenRequest
 	//	*Envelope_FileOpenReply
+	//	*Envelope_FileOpRequest
+	//	*Envelope_FileOpReply
 	Message       isEnvelope_Message `protobuf_oneof:"message"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -449,6 +451,24 @@ func (x *Envelope) GetFileOpenReply() *FileOpenReply {
 	return nil
 }
 
+func (x *Envelope) GetFileOpRequest() *FileOpRequest {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_FileOpRequest); ok {
+			return x.FileOpRequest
+		}
+	}
+	return nil
+}
+
+func (x *Envelope) GetFileOpReply() *FileOpReply {
+	if x != nil {
+		if x, ok := x.Message.(*Envelope_FileOpReply); ok {
+			return x.FileOpReply
+		}
+	}
+	return nil
+}
+
 type isEnvelope_Message interface {
 	isEnvelope_Message()
 }
@@ -521,6 +541,14 @@ type Envelope_FileOpenReply struct {
 	FileOpenReply *FileOpenReply `protobuf:"bytes,36,opt,name=file_open_reply,json=fileOpenReply,proto3,oneof"`
 }
 
+type Envelope_FileOpRequest struct {
+	FileOpRequest *FileOpRequest `protobuf:"bytes,37,opt,name=file_op_request,json=fileOpRequest,proto3,oneof"`
+}
+
+type Envelope_FileOpReply struct {
+	FileOpReply *FileOpReply `protobuf:"bytes,38,opt,name=file_op_reply,json=fileOpReply,proto3,oneof"`
+}
+
 func (*Envelope_AgentHello) isEnvelope_Message() {}
 
 func (*Envelope_ControllerHello) isEnvelope_Message() {}
@@ -554,6 +582,10 @@ func (*Envelope_FileChunkReply) isEnvelope_Message() {}
 func (*Envelope_FileOpenRequest) isEnvelope_Message() {}
 
 func (*Envelope_FileOpenReply) isEnvelope_Message() {}
+
+func (*Envelope_FileOpRequest) isEnvelope_Message() {}
+
+func (*Envelope_FileOpReply) isEnvelope_Message() {}
 
 type AgentHello struct {
 	state                       protoimpl.MessageState `protogen:"open.v1"`
@@ -2173,11 +2205,243 @@ func (x *FileOpenReply) GetPlanDigestSha256() string {
 	return ""
 }
 
+// Ad-hoc, approval-free directory operation correlated by request_id (never a
+// task reservation). The agent performs the op strictly under the private file
+// root and replies with a bounded listing; raw file bytes never cross here.
+// Every frame <=65536; entries <=512; IDs use [A-Za-z0-9_-]{1,128}.
+type FileEntry struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Name           string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	Type           string                 `protobuf:"bytes,2,opt,name=type,proto3" json:"type,omitempty"` // file, directory or symlink
+	Size           uint64                 `protobuf:"varint,3,opt,name=size,proto3" json:"size,omitempty"`
+	ModifiedUnixMs int64                  `protobuf:"varint,4,opt,name=modified_unix_ms,json=modifiedUnixMs,proto3" json:"modified_unix_ms,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *FileEntry) Reset() {
+	*x = FileEntry{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileEntry) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileEntry) ProtoMessage() {}
+
+func (x *FileEntry) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileEntry.ProtoReflect.Descriptor instead.
+func (*FileEntry) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *FileEntry) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *FileEntry) GetType() string {
+	if x != nil {
+		return x.Type
+	}
+	return ""
+}
+
+func (x *FileEntry) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *FileEntry) GetModifiedUnixMs() int64 {
+	if x != nil {
+		return x.ModifiedUnixMs
+	}
+	return 0
+}
+
+type FileOpRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	NodeId        string                 `protobuf:"bytes,2,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	Op            string                 `protobuf:"bytes,3,opt,name=op,proto3" json:"op,omitempty"` // list, stat, mkdir, rename or remove
+	Path          string                 `protobuf:"bytes,4,opt,name=path,proto3" json:"path,omitempty"`
+	NewName       string                 `protobuf:"bytes,5,opt,name=new_name,json=newName,proto3" json:"new_name,omitempty"` // rename target name (rename only)
+	Recursive     bool                   `protobuf:"varint,6,opt,name=recursive,proto3" json:"recursive,omitempty"`           // remove: allow a non-empty directory
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileOpRequest) Reset() {
+	*x = FileOpRequest{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileOpRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileOpRequest) ProtoMessage() {}
+
+func (x *FileOpRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileOpRequest.ProtoReflect.Descriptor instead.
+func (*FileOpRequest) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *FileOpRequest) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *FileOpRequest) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *FileOpRequest) GetOp() string {
+	if x != nil {
+		return x.Op
+	}
+	return ""
+}
+
+func (x *FileOpRequest) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *FileOpRequest) GetNewName() string {
+	if x != nil {
+		return x.NewName
+	}
+	return ""
+}
+
+func (x *FileOpRequest) GetRecursive() bool {
+	if x != nil {
+		return x.Recursive
+	}
+	return false
+}
+
+type FileOpReply struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	RequestId     string                 `protobuf:"bytes,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
+	ResultCode    string                 `protobuf:"bytes,2,opt,name=result_code,json=resultCode,proto3" json:"result_code,omitempty"` // ok, unauthorized, not_found, invalid, conflict, io_error or unsupported
+	Entries       []*FileEntry           `protobuf:"bytes,3,rep,name=entries,proto3" json:"entries,omitempty"`
+	Size          uint64                 `protobuf:"varint,4,opt,name=size,proto3" json:"size,omitempty"` // stat: total size in bytes
+	Path          string                 `protobuf:"bytes,5,opt,name=path,proto3" json:"path,omitempty"`  // resolved path for list/stat/mkdir/rename
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FileOpReply) Reset() {
+	*x = FileOpReply{}
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FileOpReply) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FileOpReply) ProtoMessage() {}
+
+func (x *FileOpReply) ProtoReflect() protoreflect.Message {
+	mi := &file_serverfleet_agent_v1_agent_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FileOpReply.ProtoReflect.Descriptor instead.
+func (*FileOpReply) Descriptor() ([]byte, []int) {
+	return file_serverfleet_agent_v1_agent_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *FileOpReply) GetRequestId() string {
+	if x != nil {
+		return x.RequestId
+	}
+	return ""
+}
+
+func (x *FileOpReply) GetResultCode() string {
+	if x != nil {
+		return x.ResultCode
+	}
+	return ""
+}
+
+func (x *FileOpReply) GetEntries() []*FileEntry {
+	if x != nil {
+		return x.Entries
+	}
+	return nil
+}
+
+func (x *FileOpReply) GetSize() uint64 {
+	if x != nil {
+		return x.Size
+	}
+	return 0
+}
+
+func (x *FileOpReply) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
 var File_serverfleet_agent_v1_agent_proto protoreflect.FileDescriptor
 
 const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\n" +
-	" serverfleet/agent/v1/agent.proto\x12\x14serverfleet.agent.v1\"\xfb\v\n" +
+	" serverfleet/agent/v1/agent.proto\x12\x14serverfleet.agent.v1\"\x93\r\n" +
 	"\bEnvelope\x12%\n" +
 	"\x0eprotocol_major\x18\x01 \x01(\rR\rprotocolMajor\x12%\n" +
 	"\x0eprotocol_minor\x18\x02 \x01(\rR\rprotocolMinor\x12\x1d\n" +
@@ -2207,7 +2471,9 @@ const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\x12file_chunk_request\x18! \x01(\v2&.serverfleet.agent.v1.FileChunkRequestH\x00R\x10fileChunkRequest\x12P\n" +
 	"\x10file_chunk_reply\x18\" \x01(\v2$.serverfleet.agent.v1.FileChunkReplyH\x00R\x0efileChunkReply\x12S\n" +
 	"\x11file_open_request\x18# \x01(\v2%.serverfleet.agent.v1.FileOpenRequestH\x00R\x0ffileOpenRequest\x12M\n" +
-	"\x0ffile_open_reply\x18$ \x01(\v2#.serverfleet.agent.v1.FileOpenReplyH\x00R\rfileOpenReplyB\t\n" +
+	"\x0ffile_open_reply\x18$ \x01(\v2#.serverfleet.agent.v1.FileOpenReplyH\x00R\rfileOpenReply\x12M\n" +
+	"\x0ffile_op_request\x18% \x01(\v2#.serverfleet.agent.v1.FileOpRequestH\x00R\rfileOpRequest\x12G\n" +
+	"\rfile_op_reply\x18& \x01(\v2!.serverfleet.agent.v1.FileOpReplyH\x00R\vfileOpReplyB\t\n" +
 	"\amessage\"\xd2\x02\n" +
 	"\n" +
 	"AgentHello\x12#\n" +
@@ -2366,7 +2632,28 @@ const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\vresult_code\x18\n" +
 	" \x01(\tR\n" +
 	"resultCode\x12,\n" +
-	"\x12plan_digest_sha256\x18\v \x01(\tR\x10planDigestSha256*P\n" +
+	"\x12plan_digest_sha256\x18\v \x01(\tR\x10planDigestSha256\"q\n" +
+	"\tFileEntry\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
+	"\x04type\x18\x02 \x01(\tR\x04type\x12\x12\n" +
+	"\x04size\x18\x03 \x01(\x04R\x04size\x12(\n" +
+	"\x10modified_unix_ms\x18\x04 \x01(\x03R\x0emodifiedUnixMs\"\xa4\x01\n" +
+	"\rFileOpRequest\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x17\n" +
+	"\anode_id\x18\x02 \x01(\tR\x06nodeId\x12\x0e\n" +
+	"\x02op\x18\x03 \x01(\tR\x02op\x12\x12\n" +
+	"\x04path\x18\x04 \x01(\tR\x04path\x12\x19\n" +
+	"\bnew_name\x18\x05 \x01(\tR\anewName\x12\x1c\n" +
+	"\trecursive\x18\x06 \x01(\bR\trecursive\"\xb0\x01\n" +
+	"\vFileOpReply\x12\x1d\n" +
+	"\n" +
+	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1f\n" +
+	"\vresult_code\x18\x02 \x01(\tR\n" +
+	"resultCode\x129\n" +
+	"\aentries\x18\x03 \x03(\v2\x1f.serverfleet.agent.v1.FileEntryR\aentries\x12\x12\n" +
+	"\x04size\x18\x04 \x01(\x04R\x04size\x12\x12\n" +
+	"\x04path\x18\x05 \x01(\tR\x04path*P\n" +
 	"\tPrivilege\x12\x19\n" +
 	"\x15PRIVILEGE_UNSPECIFIED\x10\x00\x12\x14\n" +
 	"\x10PRIVILEGE_NORMAL\x10\x01\x12\x12\n" +
@@ -2392,7 +2679,7 @@ func file_serverfleet_agent_v1_agent_proto_rawDescGZIP() []byte {
 }
 
 var file_serverfleet_agent_v1_agent_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_serverfleet_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 20)
+var file_serverfleet_agent_v1_agent_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_serverfleet_agent_v1_agent_proto_goTypes = []any{
 	(Privilege)(0),            // 0: serverfleet.agent.v1.Privilege
 	(ExecutionResult)(0),      // 1: serverfleet.agent.v1.ExecutionResult
@@ -2417,6 +2704,9 @@ var file_serverfleet_agent_v1_agent_proto_goTypes = []any{
 	(*FileChunkReply)(nil),    // 20: serverfleet.agent.v1.FileChunkReply
 	(*FileOpenRequest)(nil),   // 21: serverfleet.agent.v1.FileOpenRequest
 	(*FileOpenReply)(nil),     // 22: serverfleet.agent.v1.FileOpenReply
+	(*FileEntry)(nil),         // 23: serverfleet.agent.v1.FileEntry
+	(*FileOpRequest)(nil),     // 24: serverfleet.agent.v1.FileOpRequest
+	(*FileOpReply)(nil),       // 25: serverfleet.agent.v1.FileOpReply
 }
 var file_serverfleet_agent_v1_agent_proto_depIdxs = []int32{
 	4,  // 0: serverfleet.agent.v1.Envelope.agent_hello:type_name -> serverfleet.agent.v1.AgentHello
@@ -2436,17 +2726,20 @@ var file_serverfleet_agent_v1_agent_proto_depIdxs = []int32{
 	20, // 14: serverfleet.agent.v1.Envelope.file_chunk_reply:type_name -> serverfleet.agent.v1.FileChunkReply
 	21, // 15: serverfleet.agent.v1.Envelope.file_open_request:type_name -> serverfleet.agent.v1.FileOpenRequest
 	22, // 16: serverfleet.agent.v1.Envelope.file_open_reply:type_name -> serverfleet.agent.v1.FileOpenReply
-	7,  // 17: serverfleet.agent.v1.MetricsBatch.points:type_name -> serverfleet.agent.v1.MetricPoint
-	0,  // 18: serverfleet.agent.v1.TaskOffer.privilege:type_name -> serverfleet.agent.v1.Privilege
-	2,  // 19: serverfleet.agent.v1.TaskOutput.stream:type_name -> serverfleet.agent.v1.TaskOutput.Stream
-	1,  // 20: serverfleet.agent.v1.TaskFinished.result:type_name -> serverfleet.agent.v1.ExecutionResult
-	1,  // 21: serverfleet.agent.v1.ExecutionSnapshot.result:type_name -> serverfleet.agent.v1.ExecutionResult
-	16, // 22: serverfleet.agent.v1.StateSyncReply.executions:type_name -> serverfleet.agent.v1.ExecutionSnapshot
-	23, // [23:23] is the sub-list for method output_type
-	23, // [23:23] is the sub-list for method input_type
-	23, // [23:23] is the sub-list for extension type_name
-	23, // [23:23] is the sub-list for extension extendee
-	0,  // [0:23] is the sub-list for field type_name
+	24, // 17: serverfleet.agent.v1.Envelope.file_op_request:type_name -> serverfleet.agent.v1.FileOpRequest
+	25, // 18: serverfleet.agent.v1.Envelope.file_op_reply:type_name -> serverfleet.agent.v1.FileOpReply
+	7,  // 19: serverfleet.agent.v1.MetricsBatch.points:type_name -> serverfleet.agent.v1.MetricPoint
+	0,  // 20: serverfleet.agent.v1.TaskOffer.privilege:type_name -> serverfleet.agent.v1.Privilege
+	2,  // 21: serverfleet.agent.v1.TaskOutput.stream:type_name -> serverfleet.agent.v1.TaskOutput.Stream
+	1,  // 22: serverfleet.agent.v1.TaskFinished.result:type_name -> serverfleet.agent.v1.ExecutionResult
+	1,  // 23: serverfleet.agent.v1.ExecutionSnapshot.result:type_name -> serverfleet.agent.v1.ExecutionResult
+	16, // 24: serverfleet.agent.v1.StateSyncReply.executions:type_name -> serverfleet.agent.v1.ExecutionSnapshot
+	23, // 25: serverfleet.agent.v1.FileOpReply.entries:type_name -> serverfleet.agent.v1.FileEntry
+	26, // [26:26] is the sub-list for method output_type
+	26, // [26:26] is the sub-list for method input_type
+	26, // [26:26] is the sub-list for extension type_name
+	26, // [26:26] is the sub-list for extension extendee
+	0,  // [0:26] is the sub-list for field type_name
 }
 
 func init() { file_serverfleet_agent_v1_agent_proto_init() }
@@ -2472,6 +2765,8 @@ func file_serverfleet_agent_v1_agent_proto_init() {
 		(*Envelope_FileChunkReply)(nil),
 		(*Envelope_FileOpenRequest)(nil),
 		(*Envelope_FileOpenReply)(nil),
+		(*Envelope_FileOpRequest)(nil),
+		(*Envelope_FileOpReply)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -2479,7 +2774,7 @@ func file_serverfleet_agent_v1_agent_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_serverfleet_agent_v1_agent_proto_rawDesc), len(file_serverfleet_agent_v1_agent_proto_rawDesc)),
 			NumEnums:      3,
-			NumMessages:   20,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   0,
 		},
