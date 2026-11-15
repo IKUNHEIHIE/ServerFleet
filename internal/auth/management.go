@@ -85,7 +85,7 @@ func newIdentityService(store IdentityStore, resolver ResourceResolver, extra []
 		s.permissions[p.Key] = p
 	}
 	for _, p := range extra {
-		if !validPolicyID(p.Key) || p.Description == "" || len(p.Description) > 256 || p.ResourceType != "node" {
+		if !validPolicyID(p.Key) || p.Description == "" || len(p.Description) > 256 || (p.ResourceType != "node" && p.ResourceType != "system") {
 			return nil, ErrInvalidCheck
 		}
 		if _, exists := s.permissions[p.Key]; exists {
