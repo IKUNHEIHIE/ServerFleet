@@ -1,5 +1,17 @@
 # 任务登记板
 
+## 部署回执：节点管理与接入体验（2026-11-15）
+
+用户追加批准在 awskr 安装 C 编译器、验证后部署线上 VPS。本轮已安装 build-essential/GCC 14.2；nodes、transport、Controller server、v09 集成相关 race 通过，显式 NGINX_BIN=/usr/sbin/nginx 的 platform race 370.362 秒、services race 6.022 秒通过。全仓 race 未获得完整成功结果；internal/updates 既有超时仍保留 FAIL，不宣称全仓全绿。
+
+线上 Controller 与 Web 已更新为手工部署版本 0.9.3-node-management-20261115（基线 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb022a 加未提交工作树，非正式 Release）。停止 Controller 后保存一致数据库、旧程序/Web、credential-keys、PKI、安装状态及服务配置；备份数据库与停服原库 SHA256 相同、两者 integrity_check=ok，备份身份只读 upgrade-check 通过。备份目录 /var/lib/serverfleet/backups/pre-node-management-20261115。原服务参数、Agent 二进制、Nginx 与身份材料保持原配置；新迁移 ds/0089_node_archives 已应用，50→51 项，原 5 条节点记录保留。新库 integrity_check=ok，公网 readyz 五项 ready；Controller 无自动重启，首页与 JavaScript SHA256 和构建产物一致。
+
+本机 Agent 在停服期间重连预算耗尽，由原 systemd 自动重启一次后恢复 online 和持续心跳。部署前另外两条 Agent 连接尚未恢复，最后心跳停在停服时刻；原因未确定，不能归为历史无效节点或宣称所有节点恢复。浏览器连接器不可用，本次线上浏览器复验未完成；先前隔离 Controller 的 11 项浏览器验收结果仍仅适用于隔离环境。未提交、未推送 GitHub、未触发 GitHub CI。回滚必须恢复配套旧数据库和身份状态，不能让旧二进制直接打开新增迁移后的库。
+
+### 原任务登记（部署前）
+
+NODE-MANAGEMENT-20261115 / 412c65fe-a989-4943-8a8c-78204f25fd98；awskr /home/admin/sf-nodes-20261115，fix/node-management-20261115，基线 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb022a。用户明确并行完成节点增改查与归档删除、一键分类、接入页命名和排版、在线状态刷新。范围限上述前后端、追加迁移与必要回归/现行文档。停止于服务器专项/完整影响检查、独立审查和隔离浏览器验收；不提交推送 GitHub、不触发 GitHub CI、不部署生产。已通过 Web 54 文件/481 项、生产构建、完整契约/策略/安全、节点与接入及 Controller 集成、vet/staticcheck；独立最终复核通过。竞态检测因缺 C 编译器未启动，追加迁移影响的历史夹具/计数已修正，v09、平台恢复、备份恢复及实际 Nginx 网关专项通过；全仓 vet/staticcheck 与模块 verify/tidy 通过。updates 启动/回滚超时在未改动 e2fa5e9 基线复现，权威丢失用例当前树初始子进程就绪超时、旧基线单跑通过（该域源码未改），仍保留未解决 FAIL；独立真实 Controller 浏览器 11 项通过（编辑/CAS/授权/状态刷新/分类/名称/移动/删除）；节点状态为独立 DB 合成刺激，未宣称真实 Agent 心跳/安装。证据 `reports/browser-fixture-20261114T185611933Z-f88e66/results.json`；未提交推送或部署。
+
 ## 现行入口：文档交接整理（2026-11-14 R40）
 
 V09-DOCS-HANDOFF-01 / docs-handoff-20261114，单会话；独立 ServerFleet-docs-handoff / docs/successor-handoff-20261114。任务：清理现行文档过时状态，建立 HANDOFF/CURRENT-STATE 与历史分类，修正前端 Mock-only 旧规则、工具链、迁移数及协作入口。范围只限现行 Markdown/AGENTS 与可变进度索引导航；不改代码/脚本/锁/配置/迁移/生成索引/原始资料/历史证据，不访问生产、不新发 Release。按用户要求只做文档链接、来源、一致性、diff/范围检查，不运行完整 CI；提交/合并标记 [skip ci]。停止于文档审查与 expected-head 正常合并，结果写 PR 评论。

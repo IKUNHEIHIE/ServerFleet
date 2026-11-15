@@ -19,7 +19,7 @@
 ## 前端重构须知
 
 - React 正式页面已接入 Controller，不按旧 P1 说明改回 Mock-only。入口 `apps/web/src/app/routes.tsx`，API/DTO 在 `apps/web/src/lib/api/`，加载状态在 `apps/web/src/lib/data/`。
-- 会话、Origin/CSRF、节点资源权限、独立审批、版本冲突、UNKNOWN、加载/空/失败/缺观测值均属行为契约。管理员无节点通配；“已提交”不等于执行成功。
+- 会话、Origin/CSRF、节点资源权限、独立审批、版本冲突、UNKNOWN、加载/空/失败/缺观测值均属行为契约。仅首个 Bootstrap 管理员对当前节点具有读取、编辑、暂停、删除的跨节点权限；其他用户和管理员仍需逐节点授权；“已提交”不等于执行成功。
 - 路由索引用于定位，没有一份已全字段核验并冻结的统一 OpenAPI。逐功能核对 HTTP DTO、增量候选、客户端与测试；缺口补独立修订，不猜字段。
 - 纯视觉调整保留业务契约；新增/修改/删除交互同步产品/API。Xray、受限 Bearer 的未装配状态不得展示为已可用。
 

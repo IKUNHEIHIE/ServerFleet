@@ -150,6 +150,18 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/v1/nodes/{nodeId}",
+      "declarations": [
+        {
+          "source": "internal/nodes/node_management.go",
+          "owner": "RegisterManagementHTTP"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
+    },
+    {
+      "method": "DELETE",
       "path": "/api/v1/plugins/xray-manager/users/{userId}",
       "declarations": [
         {
@@ -1184,6 +1196,24 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/groups/node-results",
+      "declarations": [
+        {
+          "source": "internal/nodes/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/groups/node-results",
+          "operationId": "listNodeGroupResults"
+        }
+      ]
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/groups/{groupId}",
       "declarations": [
         {
@@ -1315,6 +1345,29 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/nodes",
           "operationId": "listNodesForTransfer"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}",
+      "declarations": [
+        {
+          "source": "internal/nodes/node_management.go",
+          "owner": "RegisterManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}",
+          "operationId": "getNodeDetailG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}",
+          "operationId": "getNodeDetailG2"
         }
       ]
     },
@@ -2747,6 +2800,29 @@
           "file": "api/openapi/revisions/v09-r33/node-probes-candidate.yaml",
           "path": "/api/v1/availability-monitors/{monitorId}",
           "operationId": "updateBackgroundMonitor"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/nodes/{nodeId}",
+      "declarations": [
+        {
+          "source": "internal/nodes/node_management.go",
+          "owner": "RegisterManagementHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-core-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}",
+          "operationId": "patchNodeG2"
+        },
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}",
+          "operationId": "patchNodeG2"
         }
       ]
     },
