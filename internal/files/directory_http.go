@@ -9,6 +9,9 @@ func entryPath(dir, name string) string {
 	if dir == "" || dir == "." {
 		return name
 	}
+	if dir == "/" {
+		return "/" + name
+	}
 	return dir + "/" + name
 }
 
