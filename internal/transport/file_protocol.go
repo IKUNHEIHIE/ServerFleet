@@ -56,6 +56,34 @@ func ValidFileConflictPolicy(policy string) bool {
 	return policy == "skip" || policy == "overwrite" || policy == "rename"
 }
 
+// Ad-hoc directory operations (not task reservations). A single listing is
+// bounded so a reply always fits one <=65536 frame.
+const MaxFileOpEntries = 256
+
+func ValidFileOp(op string) bool {
+	switch op {
+	case "list", "stat", "mkdir", "rename", "remove":
+		return true
+	}
+	return false
+}
+func ValidFileOpCode(code string) bool {
+	switch code {
+	case "ok", "unauthorized", "not_found", "invalid", "conflict", "io_error", "unsupported", "unknown":
+		return true
+	}
+	return false
+}
+func ValidFileOpName(name string) bool {
+	if name == "" || len(name) > 128 || name == "." || name == ".." {
+		return false
+	}
+	if strings.ContainsAny(name, "/") || strings.ContainsRune(name, 0) {
+		return false
+	}
+	return true
+}
+
 // fileDirectory returns the explicit parent of a validated relative file path.
 func fileDirectory(value string) string {
 	if i := strings.LastIndex(value, "/"); i >= 0 {
@@ -123,13 +151,13 @@ func FileOffer(o *agentv1.TaskOffer) (FileParameters, error) {
 }
 func IsFilePayload(p proto.Message) bool {
 	switch p.(type) {
-	case *agentv1.FileOpenRequest, *agentv1.FileOpenReply, *agentv1.FileChunkRequest, *agentv1.FileChunkReply:
+	case *agentv1.FileOpenRequest, *agentv1.FileOpenReply, *agentv1.FileChunkRequest, *agentv1.FileChunkReply, *agentv1.FileOpRequest, *agentv1.FileOpReply:
 		return true
 	}
 	return false
 }
 func FileEnvelope(e *agentv1.Envelope) bool {
-	return e != nil && (e.GetFileOpenRequest() != nil || e.GetFileOpenReply() != nil || e.GetFileChunkRequest() != nil || e.GetFileChunkReply() != nil)
+	return e != nil && (e.GetFileOpenRequest() != nil || e.GetFileOpenReply() != nil || e.GetFileChunkRequest() != nil || e.GetFileChunkReply() != nil || e.GetFileOpRequest() != nil || e.GetFileOpReply() != nil)
 }
 func FileFrameIDs(e *agentv1.Envelope) (task, execution, transfer string) {
 	switch {
@@ -176,6 +204,14 @@ func (v semanticValidator) filePayload(payload proto.Message) error {
 		}
 	case *agentv1.FileChunkReply:
 		if !ids(m.TaskId, m.ExecutionId, m.TransferId) || !code(m.ResultCode) || m.Offset > m.NextOffset || m.NextOffset > FileMaxBytes || len(m.Data) > FileChunkBytes {
+			return bad()
+		}
+	case *agentv1.FileOpRequest:
+		if !FileID(m.RequestId) || !FileID(m.NodeId) || !ValidFileOp(m.Op) || !FilePath(m.Path) || m.Op == "rename" && !ValidFileOpName(m.NewName) || m.Op != "rename" && m.NewName != "" {
+			return bad()
+		}
+	case *agentv1.FileOpReply:
+		if !FileID(m.RequestId) || !ValidFileOpCode(m.ResultCode) || len(m.Entries) > MaxFileOpEntries || m.Size > FileMaxBytes || m.Path != "" && !FilePath(m.Path) || m.ResultCode == "ok" && m.Path == "" {
 			return bad()
 		}
 	default:

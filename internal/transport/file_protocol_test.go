@@ -64,3 +64,37 @@ func TestFileFramesRequireExplicitMinorGrantBoundsAndDirection(t *testing.T) {
 		t.Fatal("unbounded allocation")
 	}
 }
+
+
+func TestFileOpFramesRequireExplicitGrantBoundsAndDirection(t *testing.T) {
+	l := ValidationLimits{AllowFileFrames: true, MaxMessageBytes: 64 << 10, MaxTextBytes: 256, MaxParametersBytes: 4096, MaxOutputBytes: 1024, MaxMetrics: 8, MaxSyncExecutions: 8, MaxCapabilities: 8, MaxTimeoutSeconds: 60, MaxOfferLifetime: time.Minute, AllowedActions: map[string]string{FileCapability: "1"}}
+	ctx := ValidationContext{Direction: ControllerToAgent, Phase: Established, ProtocolMajor: 1, ProtocolMinor: 1, Now: time.Now()}
+	env := func(m *agentv1.Envelope) *agentv1.Envelope {
+		m.ProtocolMajor, m.ProtocolMinor, m.NodeId, m.ConnectionId, m.MessageId, m.Sequence, m.SentAtUnixMs = 1, 1, "node", "connection", "message", 1, time.Now().UnixMilli()
+		return m
+	}
+	req := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-1", NodeId: "node", Op: "list", Path: "data"}}})
+	if err := ValidateEnvelope(req, ctx, l); err != nil {
+		t.Fatal(err)
+	}
+	ren := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-2", NodeId: "node", Op: "rename", Path: "data/a", NewName: "b"}}})
+	if err := ValidateEnvelope(ren, ctx, l); err != nil {
+		t.Fatal(err)
+	}
+	badOp := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-3", NodeId: "node", Op: "chmod", Path: "data"}}})
+	if ValidateEnvelope(badOp, ctx, l) == nil {
+		t.Fatal("unknown op accepted")
+	}
+	badName := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-4", NodeId: "node", Op: "rename", Path: "data/a", NewName: "../escape"}}})
+	if ValidateEnvelope(badName, ctx, l) == nil {
+		t.Fatal("unsafe rename target accepted")
+	}
+	rep := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpReply{FileOpReply: &agentv1.FileOpReply{RequestId: "req-1", ResultCode: "ok", Path: "data", Entries: []*agentv1.FileEntry{{Name: "a", Type: "file", Size: 3, ModifiedUnixMs: 1}}}}})
+	if err := ValidateEnvelope(rep, ValidationContext{Direction: AgentToController, Phase: Established, ProtocolMajor: 1, ProtocolMinor: 1, Now: time.Now()}, l); err != nil {
+		t.Fatal(err)
+	}
+	l.AllowedActions = map[string]string{}
+	if ValidateEnvelope(req, ctx, l) == nil {
+		t.Fatal("schema presence granted a file op capability")
+	}
+}

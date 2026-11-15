@@ -36,6 +36,8 @@ message Envelope {
     FileChunkReply file_chunk_reply = 34;
     FileOpenRequest file_open_request = 35;
     FileOpenReply file_open_reply = 36;
+    FileOpRequest file_op_request = 37;
+    FileOpReply file_op_reply = 38;
   }
 }
 
@@ -229,4 +231,32 @@ message FileOpenReply {
   bool complete = 9;
   string result_code = 10;
   string plan_digest_sha256 = 11;
+}
+
+// Ad-hoc, approval-free directory operation correlated by request_id (never a
+// task reservation). The agent performs the op strictly under the private file
+// root and replies with a bounded listing; raw file bytes never cross here.
+// Every frame <=65536; entries <=512; IDs use [A-Za-z0-9_-]{1,128}.
+message FileEntry {
+  string name = 1;
+  string type = 2; // file, directory or symlink
+  uint64 size = 3;
+  int64 modified_unix_ms = 4;
+}
+
+message FileOpRequest {
+  string request_id = 1;
+  string node_id = 2;
+  string op = 3; // list, stat, mkdir, rename or remove
+  string path = 4;
+  string new_name = 5; // rename target name (rename only)
+  bool recursive = 6; // remove: allow a non-empty directory
+}
+
+message FileOpReply {
+  string request_id = 1;
+  string result_code = 2; // ok, unauthorized, not_found, invalid, conflict, io_error or unsupported
+  repeated FileEntry entries = 3;
+  uint64 size = 4; // stat: total size in bytes
+  string path = 5; // resolved path for list/stat/mkdir/rename
 }

@@ -25,13 +25,19 @@ const (
 	ActionTransferCreate       = "files.transfer_create"
 	ActionTransferSubmitFailed = "files.transfer_submit_failed"
 	ActionTransferCancel       = "files.transfer_cancel"
-	ActionTransferExecute      = "files.transfer_execute"
-	ActionTransferRecover      = "files.transfer_recover"
-	ActionUploadCreate         = "files.upload_create"
-	ActionUploadComplete       = "files.upload_complete"
-	ActionUploadAbort          = "files.upload_abort"
-	ActionDownload             = "files.download"
+
+	ActionTransferExecute = "files.transfer_execute"
+	ActionTransferRecover = "files.transfer_recover"
+	ActionUploadCreate    = "files.upload_create"
+	ActionUploadComplete  = "files.upload_complete"
+	ActionUploadAbort     = "files.upload_abort"
+	ActionDownload        = "files.download"
 )
+
+var ErrMissingDirectoryTransport = errors.New("files: directory transport is required")
+var ErrInvalidDirectoryOp = errors.New("files: invalid directory operation")
+var ErrDirectoryNotFound = errors.New("files: directory path not found")
+var ErrDirectoryOp = errors.New("files: directory operation failed")
 
 func ServiceActions() []string {
 	return []string{ActionDownload, ActionRead, ActionTransfer, ActionTransferCancel, ActionTransferCreate,
@@ -88,6 +94,33 @@ type DownloadTransport interface {
 	PullFile(ctx context.Context, nodeID, remotePath string, sink io.Writer) (int64, error)
 }
 
+// DirectoryOp is one ad-hoc, approval-free directory operation on a node. The
+// transport is protobuf-free; the Controller adapts it to the agent channel.
+type DirectoryOp struct {
+	Op        string
+	Path      string
+	NewName   string
+	Recursive bool
+}
+
+type DirectoryEntry struct {
+	Name           string
+	Type           string
+	Size           int64
+	ModifiedUnixMs int64
+}
+
+type DirectoryResult struct {
+	Code    string
+	Path    string
+	Size    int64
+	Entries []DirectoryEntry
+}
+
+type DirectoryTransport interface {
+	DirectoryOp(ctx context.Context, nodeID string, op DirectoryOp) (DirectoryResult, error)
+}
+
 type Options struct {
 	DB               *storage.DB
 	Repo             *Repo
@@ -97,6 +130,7 @@ type Options struct {
 	Canceller        TaskCanceller
 	Uploads          UploadTransport
 	Downloads        DownloadTransport
+	DirectoryOps     DirectoryTransport
 	Coordinator      *TransferCoordinator
 	Tasks            TaskReporter
 	StagingDir       string
@@ -114,6 +148,7 @@ type Service struct {
 	canceller      TaskCanceller
 	uploads        UploadTransport
 	downloads      DownloadTransport
+	directoryOps   DirectoryTransport
 	coordinator    *TransferCoordinator
 	tasks          TaskReporter
 	stagingDir     string
@@ -148,7 +183,7 @@ func NewService(options Options) (*Service, error) {
 	return &Service{
 		db: options.DB, repo: options.Repo, audit: options.Audit, authorizer: options.Authorizer,
 		submitter: options.Submitter, canceller: options.Canceller, uploads: options.Uploads,
-		downloads: options.Downloads, coordinator: options.Coordinator, tasks: options.Tasks,
+		downloads: options.Downloads, directoryOps: options.DirectoryOps, coordinator: options.Coordinator, tasks: options.Tasks,
 		stagingDir: options.StagingDir, maxUploadBytes: maxUpload, now: now,
 		validateTransfer: options.ValidateTransfer,
 	}, nil
@@ -666,4 +701,35 @@ func isPureDenial(err error) bool {
 		err = single.Unwrap()
 	}
 	return false
+}
+
+// DirectoryOp authorizes the subject for the node, then performs one ad-hoc
+// directory operation through the transport. Listing and stat require read;
+// mkdir, rename and remove require write. No task, approval or file bytes are
+// involved; the agent confines every path under its private file root.
+func (s *Service) DirectoryOp(ctx context.Context, subjectID, requestID, nodeID string, op DirectoryOp) (DirectoryResult, error) {
+	if s.directoryOps == nil {
+		return DirectoryResult{}, ErrMissingDirectoryTransport
+	}
+	action := ActionRead
+	switch op.Op {
+	case "list", "stat":
+	case "mkdir", "rename", "remove":
+		action = ActionWrite
+	default:
+		return DirectoryResult{}, ErrInvalidDirectoryOp
+	}
+	if err := s.authorizeNode(ctx, subjectID, action, requestID, nodeID, "directory_"+op.Op); err != nil {
+		return DirectoryResult{}, err
+	}
+	result, err := s.directoryOps.DirectoryOp(ctx, nodeID, op)
+	if err != nil {
+		return DirectoryResult{}, err
+	}
+	auditCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if auditErr := s.audit.Append(auditCtx, s.event(subjectID, action, "success", requestID, []string{nodeID}, "directory_"+op.Op)); auditErr != nil {
+		return DirectoryResult{}, fmt.Errorf("files: directory op audit failed: %w", auditErr)
+	}
+	return result, nil
 }
