@@ -10,7 +10,7 @@ import { DefinitionList } from "@/components/ui/table";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi } from "@/lib/api/endpoints";
-import type { NodeCapabilities, NodeDetail, NodeDiagnostic, NodeIdentity, TrafficQuota } from "@/lib/api/dto";
+import type { NodeCapabilities, NodeDetail, NodeDiagnostic, NodeIdentity, TrafficQuota, TrafficUsage } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { NodeQuotaEditor } from "./node-quota-editor";
 import { NodeEditor } from "./node-editor";
@@ -66,7 +66,10 @@ function formatBytes(value?: number): string {
   return gb >= 1024 ? `${(gb / 1024).toFixed(1)} TB` : `${gb.toFixed(1)} GB`;
 }
 
-function HardwareBody({ facts, quota }: { readonly facts: NodeCapabilities; readonly quota: TrafficQuota | null }) {
+function HardwareBody({ facts, usage }: { readonly facts: NodeCapabilities; readonly usage: TrafficUsage | null }) {
+  const monthly = usage?.available && usage.bytesIn !== undefined && usage.bytesOut !== undefined
+    ? `${formatBytes(usage.bytesIn + usage.bytesOut)}（下行 ${formatBytes(usage.bytesIn)} / 上行 ${formatBytes(usage.bytesOut)}）`
+    : "暂无采样";
   return (
     <DefinitionList
       className="px-5 py-4"
@@ -75,7 +78,7 @@ function HardwareBody({ facts, quota }: { readonly facts: NodeCapabilities; read
         { term: "CPU 核数", value: facts.cpuCores ? `${facts.cpuCores} 核` : "未采集" },
         { term: "内存大小", value: formatBytes(facts.memoryTotalBytes) },
         { term: "存储大小", value: formatBytes(facts.diskTotalBytes) },
-        { term: "本月已用流量", value: quota && quota.usedGb !== undefined ? `${quota.usedGb} GB` : "未配置配额" },
+        { term: "本月流量", value: monthly },
         { term: "采集时间", value: facts.observedAt ?? "未采集" },
       ]}
     />
@@ -228,6 +231,10 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
     `node:quota:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.trafficQuota(nodeId, signal).then(result => result.data),
   );
+  const usage = useResource(
+    `node:usage:${session.viewEpoch}:${nodeId}`,
+    signal => nodesApi.trafficUsage(nodeId, signal).then(result => result.data),
+  );
   // 真实 Controller 在节点未配置配额时返回 404 quota_not_found；这是“尚未配置”而非加载失败，
   // 据此展示诚实空态并允许首次创建（GM-W4-02）。其余错误仍按失败展示。
   const quotaMissing = quota.state.status === "error" && quota.state.error.status === 404;
@@ -329,7 +336,7 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
         </Panel>
         <Panel title="硬件与流量" description="来自节点上次身份握手；未采集不按 0 处理。">
           <AsyncPanel state={capabilities.state} onRetry={capabilities.reload} errorTitle="硬件信息加载失败">
-            {data => <HardwareBody facts={data} quota={quota.state.status === "ready" ? quota.state.data : null} />}
+            {data => <HardwareBody facts={data} usage={usage.state.status === "ready" ? usage.state.data : null} />}
           </AsyncPanel>
         </Panel>
         <Panel title="连接诊断">

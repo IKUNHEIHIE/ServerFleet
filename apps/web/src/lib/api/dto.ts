@@ -93,6 +93,15 @@ export interface NodeDetail {
   readonly tags?: readonly string[];
 }
 
+export interface TrafficUsage {
+  readonly available: boolean;
+  readonly periodStart?: string;
+  readonly periodEnd?: string;
+  readonly bytesIn?: number;
+  readonly bytesOut?: number;
+  readonly source?: string;
+}
+
 export interface NodeIdentity {
   readonly nodeId: string;
   readonly certificateFingerprintSha256?: string;

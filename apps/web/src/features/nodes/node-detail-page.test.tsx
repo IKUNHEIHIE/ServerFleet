@@ -47,6 +47,8 @@ function detailRoutes(): FetchRoutes {
         pendingTasks: [{ id: "t-1", expired: false, requiresReapproval: true }],
         diagnosticNotes: ["最近一次心跳超时"],
       }),
+    "GET /api/v1/nodes/n-1/traffic-usage": () =>
+      jsonResponse({ available: true, periodStart: "2026-11-01T00:00:00Z", periodEnd: "2026-12-01T00:00:00Z", bytesIn: 1024 ** 3, bytesOut: 512 * 1024 ** 2, source: "agent_estimate" }),
     "GET /api/v1/nodes/n-1/traffic-quota": () =>
       jsonResponse({
         nodeId: "n-1",
@@ -170,6 +172,7 @@ describe("node detail page", () => {
     expect(screen.getByText("8 核")).toBeVisible();
     expect(screen.getByText("16.0 GB")).toBeVisible();
     expect(screen.getByText("200.0 GB")).toBeVisible();
+    expect(await screen.findByText("1.5 GB（下行 1.0 GB / 上行 0.5 GB）")).toBeVisible();
     expect(screen.queryByText("当前账户的节点管理授权")).not.toBeInTheDocument();
     expect(screen.queryByText(/首个初始化账户的节点管理权限已覆盖所有当前节点/)).not.toBeInTheDocument();
     expect(screen.queryByText(/协议版本/)).not.toBeInTheDocument();
