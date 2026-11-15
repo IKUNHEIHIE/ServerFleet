@@ -43,6 +43,11 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/files/uploads/{uploadId}", api.getUpload)
 	mux.HandleFunc("PUT /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/content", api.uploadContent)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/uploads/{uploadId}/complete", api.completeUpload)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/files", api.listDirectory)
+	mux.HandleFunc("DELETE /api/v1/nodes/{nodeId}/files", api.removePath)
+	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/size", api.pathSize)
+	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/files/directories", api.createDirectory)
+	mux.HandleFunc("PATCH /api/v1/nodes/{nodeId}/files/rename", api.renamePath)
 	mux.HandleFunc("POST /api/v1/files/distributions", api.createDistribution)
 	mux.HandleFunc("GET /api/v1/files/distributions/{distributionId}", api.getDistribution)
 	mux.HandleFunc("PUT /api/v1/files/distributions/{distributionId}/content", api.distributionContent)
@@ -458,6 +463,10 @@ func writeError(w http.ResponseWriter, err error) {
 		writeFixed(w, http.StatusForbidden, "forbidden", "request is not permitted")
 	case errors.Is(err, ErrTransferNotFound), errors.Is(err, ErrUploadNotFound), errors.Is(err, ErrDistributionNotFound):
 		writeFixed(w, http.StatusNotFound, "not_found", "resource was not found")
+	case errors.Is(err, ErrDirectoryNotFound):
+		writeFixed(w, http.StatusNotFound, "not_found", "directory path was not found")
+	case errors.Is(err, ErrDirectoryOp):
+		writeFixed(w, http.StatusBadRequest, "directory_error", "directory operation failed")
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):
 		writeFixed(w, http.StatusRequestTimeout, "request_timeout", "request was interrupted")
 	case errors.Is(err, ErrOffsetConflict), errors.Is(err, ErrUploadClosed), errors.Is(err, ErrDistributionClosed), errors.Is(err, ErrSubjectMismatch):

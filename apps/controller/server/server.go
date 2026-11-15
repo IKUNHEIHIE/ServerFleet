@@ -757,6 +757,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Canceller:        taskBridge,
 		Uploads:          uploads,
 		Downloads:        downloads,
+		DirectoryOps:     agentDirectoryOps(s),
 		StagingDir:       stagingDir,
 		Now:              now,
 	})
