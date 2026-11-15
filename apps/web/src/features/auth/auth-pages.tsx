@@ -296,7 +296,7 @@ export function BootstrapPage({ available }: { readonly available: boolean }) {
               />
             )}
           </Field>
-          <Field label="密码" hint="至少使用服务端策略要求的最小长度；密码不会写入浏览器存储。">
+          <Field label="密码" hint="满足最小长度要求；密码不会保存到浏览器。">
             {ids => (
               <TextInput
                 id={ids.inputId}

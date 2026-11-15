@@ -295,7 +295,7 @@ function XrayConsole() {
     <div className="space-y-5">
       <PageHeader
         title="Xray 节点管理器"
-        description="第一版唯一官方可选插件。声明式界面由核心 manifest 渲染，不执行插件脚本；未启用时不可操作。"
+        description="官方可选插件；未启用时不可操作。"
         badge={<Badge tone="primary" dot>声明式插件 UI</Badge>}
         actions={<Button type="button" onClick={() => { nodes.reload(); users.reload(); traffic.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
@@ -348,7 +348,7 @@ function XrayConsole() {
       <p className="text-xs text-muted-foreground">{XRAY_MANIFEST.find(item => item.id === tab)?.description}</p>
 
       {tab === "nodes" ? (
-        <Panel title="Xray 节点" description="GET /api/v1/plugins/xray-manager/nodes；managed 与探测状态来自服务端。">
+        <Panel title="Xray 节点">
           <AsyncPanel state={nodes.state} onRetry={nodes.reload} errorTitle="Xray 节点加载失败" empty={<EmptyState title="没有可见节点" />} isEmpty={data => data.items.length === 0}>
             {() => (
               <DataTable
@@ -370,7 +370,7 @@ function XrayConsole() {
       ) : null}
 
       {tab === "install" ? (
-        <Panel title="安装预检与任务" description="POST installations/preview → installations；校验版本、端口、磁盘与架构。">
+        <Panel title="安装预检与任务" description="安装前校验版本、端口、磁盘与架构。">
           <form onSubmit={runInstallPreview} className="space-y-3 px-5 py-4">
             {installPreview.error ? <Notice tone="error" title="预检失败">{describeApiError(installPreview.error)}</Notice> : null}
             <FieldsetBox legend="目标节点" className="max-h-40 overflow-y-auto">
@@ -439,7 +439,7 @@ function XrayConsole() {
               </div>
               <Field label="域名（TLS 模板可选）">{ids => <TextInput id={ids.inputId} value={configDomain} onChange={event => setConfigDomain(event.target.value)} />}</Field>
               {templateId === "custom-json" ? (
-                <Field label="自定义 JSON" hint="服务端会脱敏存储与安全预检；不得暴露公网管理 API。">
+                <Field label="自定义 JSON" hint="不得暴露公网管理接口。">
                   {ids => <TextArea id={ids.inputId} value={customJson} onChange={event => setCustomJson(event.target.value)} className="font-mono" />}
                 </Field>
               ) : null}
@@ -471,7 +471,7 @@ function XrayConsole() {
 
       {tab === "users" ? (
         <div className="space-y-5">
-          <Panel title="用户" description="GET /api/v1/plugins/xray-manager/users；UUID 只以凭据引用保存。">
+          <Panel title="用户" description="UUID 只以凭据引用保存。">
             <AsyncPanel state={users.state} onRetry={users.reload} errorTitle="Xray 用户加载失败" empty={<EmptyState title="暂无 Xray 用户" />} isEmpty={data => data.items.length === 0}>
               {() => (
                 <DataTable
@@ -501,7 +501,7 @@ function XrayConsole() {
               )}
             </AsyncPanel>
           </Panel>
-          <Panel title="创建用户" description="POST /api/v1/plugins/xray-manager/users；生成凭据时只返回引用，不回显 UUID。">
+          <Panel title="创建用户" description="生成凭据时只返回引用，不回显 UUID。">
             <form onSubmit={submitCreateUser} className="grid gap-3 px-5 py-4 sm:grid-cols-3">
               <Field label="节点">{ids => (
                 <Select id={ids.inputId} value={userNode} onChange={event => setUserNode(event.target.value)}>
@@ -523,7 +523,7 @@ function XrayConsole() {
       {tab === "traffic" ? (
         <div className="space-y-5">
           <Notice tone="info" title="统计口径">Xray 代理流量统计不等同服务器网卡或云账单；不完整的采样必须显示缺口。</Notice>
-          <Panel title="流量样本" description="GET /api/v1/plugins/xray-manager/traffic；sourceType 应为 proxy_only。">
+          <Panel title="流量样本">
             <AsyncPanel state={traffic.state} onRetry={traffic.reload} errorTitle="流量加载失败" empty={<EmptyState title="暂无代理流量样本" />} isEmpty={data => data.items.length === 0}>
               {data => (
                 <>
@@ -546,7 +546,7 @@ function XrayConsole() {
               )}
             </AsyncPanel>
           </Panel>
-          <Panel title="采样设置" description="PUT /api/v1/plugins/xray-manager/traffic/settings">
+          <Panel title="采样设置">
             <form onSubmit={saveTrafficSettings} className="space-y-3 px-5 py-4">
               {saveSettings.error ? <Notice tone="error" title="保存失败">{describeApiError(saveSettings.error)}</Notice> : null}
               <p className="text-xs text-muted-foreground">当前服务端设置：{settings.state.status === "ready" ? `采样间隔 ${settings.state.data.samplingIntervalSeconds}s` : "未加载"}</p>
@@ -561,7 +561,7 @@ function XrayConsole() {
       ) : null}
 
       {tab === "history" ? (
-        <Panel title="配置历史与回滚" description="GET nodes/{node}/configurations；回滚是异步任务。">
+        <Panel title="配置历史与回滚" description="回滚是异步任务。">
           <div className="space-y-3 px-5 py-4">
             <Field label="节点">
               {ids => (

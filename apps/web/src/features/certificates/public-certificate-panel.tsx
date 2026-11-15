@@ -122,7 +122,7 @@ export function PublicCertificatePanel() {
               观察时间 {formatDateTime(order.observedAt) ?? "—"} · 到期 {formatDateTime(order.notAfter) ?? "—"}
             </p>
             {chain ? (
-              <Field label="已观察的公开证书链" hint="将此公开证书链与上方同一个 CSR 任务 ID 提交到证书安装面板。签发成功不代表已安装、重载或网站健康。">
+              <Field label="已观察的公开证书链" hint="将公开证书链提交到证书安装面板；签发成功不代表已安装或网站健康。">
                 {ids => <TextArea id={ids.inputId} value={chain} readOnly rows={6} spellCheck={false} className="font-mono text-xs" />}
               </Field>
             ) : null}

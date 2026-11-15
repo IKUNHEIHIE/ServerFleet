@@ -16,7 +16,7 @@ it("saves a CAS policy with current credential metadata and requires a preview b
   expect(calls.some(c => c.url === "/api/v1/backups/maintenance")).toBe(false);
   fireEvent.click(await screen.findByRole("button", { name: "打开备份维护" }));
   fireEvent.click(await screen.findByLabelText("配置异地存储"));
-  fireEvent.change(screen.getByLabelText("HTTPS 存储端点"), { target: { value: "https://backup.example.com" } });
+  fireEvent.change(screen.getByLabelText("HTTPS 存储地址"), { target: { value: "https://backup.example.com" } });
   fireEvent.change(screen.getByLabelText("Bucket"), { target: { value: "fleet-backup" } });
   fireEvent.change(screen.getByLabelText("异地存储凭据"), { target: { value: "backup-credential" } });
   fireEvent.click(screen.getByLabelText("自动上传并读回校验"));

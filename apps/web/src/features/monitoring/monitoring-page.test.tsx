@@ -41,7 +41,7 @@ describe("monitoring page", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "监控告警" })).toBeVisible();
     expect(await screen.findByText("Tokyo")).toBeVisible();
     expect(screen.getByText(/quota\(warning，估算\)/)).toBeVisible();
-    expect(screen.getByText(/没有历史指标\/告警规则端点/)).toBeVisible();
+    expect(screen.getByText(/暂无历史趋势/)).toBeVisible();
   });
 
   it("creates, pauses and shows the real check history for service monitors", async () => {
@@ -113,7 +113,7 @@ describe("monitoring page", () => {
     fireEvent.click(await screen.findByRole("tab", { name: "服务监控" }));
     fireEvent.click(await screen.findByRole("button", { name: "检查历史" }));
     expect(await screen.findByText("暂无检查记录")).toBeVisible();
-    expect(screen.getByText(/不会伪造历史/)).toBeVisible();
+    expect(screen.getByText(/暂无该监控的探测采样记录/)).toBeVisible();
   });
   it("links unknown alert history to the real task without offering an automatic resend", async () => {
     await renderAuthenticated("/monitoring",{...monitorRoutes(),"GET /api/v1/availability-monitors/m-1/alerts":()=>jsonResponse({items:[{key:"episode-1",state:"delivery_unknown",deliveryId:7,taskId:"notify-unknown",createdAt:"2026-11-11T01:00:00Z",updatedAt:"2026-11-11T01:01:00Z"}]})});

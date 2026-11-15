@@ -256,7 +256,7 @@ export function RestrictedTokensPanel() {
   return (
     <Panel
       title="受限脚本令牌（script-read）"
-      description="GET/POST /api/v1/auth/tokens、DELETE /api/v1/auth/tokens/{tokenId}；用于最小权限只读脚本边界治理。"
+      description="用于最小权限的只读脚本。"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="warning" dot>

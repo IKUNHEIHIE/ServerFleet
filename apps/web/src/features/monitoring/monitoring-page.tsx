@@ -64,7 +64,7 @@ function CheckHistory({ monitor, onClose }: { readonly monitor: AvailabilityMoni
     <Modal
       open
       title={monitor.name ? `检查历史 · ${monitor.name}` : "检查历史"}
-      description="服务端持久化的探测采样（新→旧）；探测源失联只标记 unknown，不推断业务宕机。"
+      description="探测采样记录，从新到旧；探测源失联时标记为未知。"
       onClose={onClose}
       wide
       footer={<Button type="button" onClick={onClose}>关闭</Button>}
@@ -73,7 +73,7 @@ function CheckHistory({ monitor, onClose }: { readonly monitor: AvailabilityMoni
       {state.error ? <Notice tone="error" title="检查历史加载失败">{state.error}</Notice> : null}
       {!state.loading && !state.error ? (
         state.items.length === 0 ? (
-          <EmptyState title="暂无检查记录" description="服务端没有该监控的探测采样；不会伪造历史。" />
+          <EmptyState title="暂无检查记录" description="暂无该监控的探测采样记录。" />
         ) : (
           <DataTable
             caption="检查历史"
@@ -196,7 +196,7 @@ function MonitorEditor({
     <Modal
       open={open}
       title={monitor ? "编辑服务监控" : "新建服务监控"}
-      description="服务端会校验目标授权与 SSRF 约束；客户端目标字符串不构成探测许可。"
+      description="探测目标需先获得授权。"
       onClose={() => {
         if (!action.pending) onClose();
       }}
@@ -221,14 +221,14 @@ function MonitorEditor({
               </Select>
             )}
           </Field>
-          <Field label="探测来源" hint="节点需要支持 monitoring.probe；节点源仅探测公网目标。离线或未取得可信回执时显示未知，不判定业务宕机。">
+          <Field label="探测来源" hint="节点源仅探测公网目标；离线或结果不可信时显示未知。">
             {ids => <Select id={ids.inputId} value={sourceNodeId} onChange={event=>setSourceNodeId(event.target.value)} disabled={disabled}>
               <option value="">Controller</option>
               {nodes.map(node=><option key={node.id} value={node.id}>{node.name || node.id}{node.online ? "" : "（离线）"}</option>)}
             </Select>}
           </Field>
         </div>
-        <Field label="探测目标" hint="HTTP(S) URL、host:port；目标授权与 SSRF 由服务端执行。">
+        <Field label="探测目标" hint="HTTP(S) URL 或 host:port；目标需先获得授权。">
           {ids => <TextInput id={ids.inputId} value={target} onChange={event => setTarget(event.target.value)} required />}
         </Field>
         <div className="grid gap-3 sm:grid-cols-4">
@@ -310,7 +310,7 @@ export function MonitoringPage() {
       monitors.reload();
     } else if (result.error) {
       setOutcome(
-        `探测未执行（HTTP ${result.error.status}${result.error.code ? ` · 错误码 ${result.error.code}` : ""}）：${describeApiError(result.error)} 探测是否发起始终由服务端 SSRF/白名单边界决定。`,
+        `探测未执行（HTTP ${result.error.status}${result.error.code ? ` · 错误码 ${result.error.code}` : ""}）：${describeApiError(result.error)}`,
       );
     }
   }
@@ -339,7 +339,7 @@ export function MonitoringPage() {
     <div className="space-y-5">
       <PageHeader
         title="监控告警"
-        description="资源当前读数、HTTP/TCP/TLS 可用性监控（含真实检查历史与立即探测）与通知投递。资源历史趋势仍受当前契约限制，不能伪造。"
+        description="资源当前读数、可用性监控（含检查历史与立即探测）与通知投递。"
         badge={<Badge tone="primary" dot>监控</Badge>}
         actions={<Button type="button" onClick={() => { nodes.reload(); risks.reload(); monitors.reload(); channels.reload(); deliveries.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
@@ -402,9 +402,9 @@ export function MonitoringPage() {
       {tab === "resources" ? (
         <div className="space-y-5">
           <Notice tone="info" title="资源历史趋势缺口">
-            契约只提供节点当前 `cpuPercent/memoryPercent`（无采样时间）与流量风险摘要，没有历史指标/告警规则端点。本页不绘制伪造曲线。
+            当前仅提供节点实时读数与流量风险摘要，暂无历史趋势。
           </Notice>
-          <Panel title="节点当前资源" description="GET /api/v1/nodes + GET /api/v1/traffic-risks；离线节点不显示历史百分比。">
+          <Panel title="节点当前资源">
             <AsyncPanel state={nodes.state} onRetry={nodes.reload} errorTitle="节点资源加载失败" empty={<EmptyState title="没有可见节点" />} isEmpty={data => data.items.length === 0}>
               {() => (
                 <DataTable
@@ -453,7 +453,7 @@ export function MonitoringPage() {
           {!canManage ? <Notice tone="warning" title="写操作已锁定">当前身份未返回监控管理权限（`monitor.manage`）。</Notice> : null}
           <Panel
             title="服务可用性监控"
-            description="GET/POST/PATCH/DELETE /api/v1/availability-monitors；“检查历史”与“立即探测”对接真实历史/探测端点，探测由服务端 SSRF 边界执行。"
+            description="支持查看真实检查历史与立即探测。"
             actions={<Button size="sm" variant="primary" disabled={!canManage || session.writesLocked} onClick={() => setEditor({ open: true, monitor: null })}>新建监控</Button>}
           >
             <AsyncPanel
@@ -516,10 +516,10 @@ export function MonitoringPage() {
 
       {tab === "alerts" ? (
         <div className="space-y-5">
-          <Notice tone="info" title="告警事件契约缺口">
-            当前没有独立“告警事件”查询端点；本页展示通知渠道状态与投递记录。投递“平台已接受”不代表用户已阅读。
+          <Notice tone="info" title="告警事件说明">
+            本页展示通知渠道状态与投递记录；“平台已接受”不代表用户已阅读。
           </Notice>
-          <Panel title="通知渠道状态" description="GET /api/v1/notifications/channels；密钥只返回配置状态。">
+          <Panel title="通知渠道状态" description="密钥只显示配置状态，不显示明文。">
             <AsyncPanel state={channels.state} onRetry={channels.reload} errorTitle="通知渠道加载失败" empty={<EmptyState title="未返回通知渠道" />} isEmpty={data => data.items.length === 0}>
               {() => (
                 <DataTable
@@ -536,7 +536,7 @@ export function MonitoringPage() {
               )}
             </AsyncPanel>
           </Panel>
-          <Panel title="通知投递" description="GET /api/v1/notifications/deliveries；状态是平台语义，不是收件人已读回执。" actions={<Button size="sm" onClick={() => deliveries.reload()} loading={deliveries.state.status === "loading"}>刷新</Button>}>
+          <Panel title="通知投递" description="状态表示平台处理结果，不代表收件人已阅读。" actions={<Button size="sm" onClick={() => deliveries.reload()} loading={deliveries.state.status === "loading"}>刷新</Button>}>
             <AsyncPanel state={deliveries.state} onRetry={deliveries.reload} errorTitle="投递记录加载失败" empty={<EmptyState title="暂无投递记录" />} isEmpty={data => data.items.length === 0}>
               {() => (
                 <DataTable

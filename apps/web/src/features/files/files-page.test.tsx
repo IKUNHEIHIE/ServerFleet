@@ -70,7 +70,7 @@ describe("files page", () => {
     expect(within(table).getByText("readme.txt")).toBeVisible();
     expect(within(table).getByText("符号链接（不跟随）")).toBeVisible();
     expect(within(table).getByLabelText("选择 link")).toBeDisabled();
-    expect(screen.getByText(/没有下载端点/)).toBeVisible();
+    expect(screen.getByText(/暂不支持下载/)).toBeVisible();
 
     fireEvent.click(within(table).getByLabelText("选择 readme.txt"));
     fireEvent.click(screen.getByRole("button", { name: "发送到另一侧（1）" }));

@@ -149,7 +149,7 @@ function CredentialEditor({
             />
           )}
         </Field>
-        <Field label="允许使用的模块" hint="逗号分隔；由服务端校验最小权限。例如 dns,smtp,qqbot,ai,backups。">
+        <Field label="允许使用的模块" hint="逗号分隔，例如 dns,smtp,qqbot,ai,backups。">
           {ids => <TextInput id={ids.inputId} value={usageScope} onChange={event => setUsageScope(event.target.value)} />}
         </Field>
         <Field label="到期时间（可选）">
@@ -244,7 +244,7 @@ export function SettingsPage() {
           {!canManage ? <Notice tone="warning" title="写操作已锁定">当前身份未返回凭据管理权限（`credential.manage`/`settings.manage`/`user.manage`）。</Notice> : null}
           <Panel
             title="凭据元数据"
-            description="GET /api/v1/credentials；只返回元数据，不返回秘密。撤销前列出引用由服务端负责。"
+            description="只显示凭据元数据，不显示秘密内容。"
             actions={
               <Button
                 size="sm"
@@ -299,7 +299,7 @@ export function SettingsPage() {
               )}
             </AsyncPanel>
             <p className="border-t px-5 py-3 text-xs text-muted-foreground">
-              契约缺口：GET references 目前只返回 <code>{`{ok}`}</code>，没有引用清单；轮换/撤销返回后台作业，不能在此声称已立即生效。
+              轮换或撤销在后台处理，可能不会立即生效。
             </p>
           </Panel>
         </div>
@@ -318,18 +318,18 @@ export function SettingsPage() {
 
       {tab === "security" ? (
         <div className="space-y-5">
-          <Panel title="账号安全" description="当前契约没有密码修改、二次验证或凭据轮换端点；本页不创建假入口。">
+          <Panel title="账号安全" description="暂不支持修改密码、二次验证或凭据轮换。">
             <div className="space-y-2 px-5 py-4 text-sm">
               <p>当前身份：<strong>{session.identity?.displayName}</strong>（{session.identity?.userId}）</p>
               <p>角色：{session.identity?.roles.join("、") || "无"}</p>
               <p className="text-muted-foreground">
-                密码修改、二次验证登记与恢复码管理需要服务端专用端点与再认证流程；在契约补齐前标记为 UNTESTED。
+                密码修改、二次验证与恢复码管理暂不可用。
               </p>
             </div>
           </Panel>
           <Panel
             title="我的会话"
-            description="GET /api/v1/auth/sessions；只撤销自己的会话。当前会话使用顶部“退出”。"
+            description="只能撤销自己的会话；当前会话请使用顶部“退出”。"
             actions={<Button size="sm" onClick={sessions.reload} loading={sessions.state.status === "loading"}>刷新</Button>}
           >
             <AsyncPanel state={sessions.state} onRetry={sessions.reload} errorTitle="会话加载失败" empty={<EmptyState title="没有活跃会话" />} isEmpty={data => data.items.length === 0}>
@@ -402,7 +402,7 @@ export function SettingsPage() {
           <div className="space-y-2 text-sm">
             <p>凭据：{references.credential.name}</p>
             <p>{references.result}</p>
-            <Notice tone="warning" title="契约限制">服务端没有返回引用清单，因此不能在本页展示引用详情或声称可安全删除。</Notice>
+            <Notice tone="warning" title="说明">暂不能查看凭据的引用详情。</Notice>
           </div>
         ) : null}
       </Modal>

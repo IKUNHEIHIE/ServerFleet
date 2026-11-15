@@ -90,7 +90,7 @@ describe("AI budget panel", () => {
     expect(screen.getByText(/当前窗口内/)).toBeVisible();
 
     fireEvent.change(screen.getByLabelText("请求次数限额"), { target: { value: "50" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存预算窗口（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存预算窗口" }));
 
     await waitFor(() => {
       const call = calls.find(
@@ -125,7 +125,7 @@ describe("AI budget panel", () => {
     expect(await screen.findByText(/HTTP 403/)).toBeVisible();
     expect(screen.queryByText(/窗口 ID：/)).not.toBeInTheDocument();
     expect(screen.queryByText(/已用请求：/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "保存预算窗口（CAS）" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存预算窗口" })).not.toBeInTheDocument();
   });
 
   it("keeps the current view and reloads the server revision after a 409 conflict", async () => {
@@ -145,7 +145,7 @@ describe("AI budget panel", () => {
     );
 
     await screen.findByText("窗口 ID：november-2026");
-    fireEvent.click(screen.getByRole("button", { name: "保存预算窗口（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存预算窗口" }));
 
     expect(await screen.findByText(/修订冲突（409 BUDGET_REVISION_CONFLICT）/)).toBeVisible();
     expect(screen.getByText(/预算已被其他操作修改（409 BUDGET_REVISION_CONFLICT）/)).toBeVisible();
@@ -166,9 +166,9 @@ describe("AI budget panel", () => {
 
     expect(await screen.findByText("窗口 ID：november-2026")).toBeVisible();
     expect(
-      await screen.findByText("当前身份不是管理员：只能查看预算，配置由服务端 403 拒绝。"),
+      await screen.findByText("当前身份不是管理员：只能查看预算，不能修改配置。"),
     ).toBeVisible();
-    expect(screen.getByRole("button", { name: "保存预算窗口（CAS）" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "保存预算窗口" })).toBeDisabled();
     expect(screen.getByLabelText("请求次数限额")).toBeDisabled();
   });
 
@@ -187,7 +187,7 @@ describe("AI budget panel", () => {
     expect(await screen.findByText(/未配置窗口预算：服务端拒绝生成/)).toBeVisible();
     expect(screen.getByText(/预算配置：未配置/)).toBeVisible();
     fireEvent.change(screen.getByLabelText("窗口 ID"), { target: { value: "first-window" } });
-    fireEvent.click(screen.getByRole("button", { name: "保存预算窗口（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存预算窗口" }));
 
     await waitFor(() => {
       const call = calls.find(

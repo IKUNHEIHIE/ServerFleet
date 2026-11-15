@@ -82,7 +82,7 @@ function GroupEditor({
       <form id="group-editor-form" onSubmit={submit} className="space-y-4">
         {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
         {action.error ? <Notice tone="error" title="保存失败">{describeApiError(action.error)}</Notice> : null}
-        <Field label="分组名称" hint="同一管理范围内名称由服务端校验唯一性。">
+        <Field label="分组名称" hint="同一管理范围内名称不能重复。">
           {ids => (
             <TextInput
               id={ids.inputId}
@@ -142,7 +142,7 @@ function DeleteGroup({
       }
     >
       {action.error ? <Notice tone="error" title="删除失败">{describeApiError(action.error)}</Notice> : null}
-      <p className="text-sm text-muted-foreground">服务端会校验当前权限并记录审计。删除后成员关系不可恢复。</p>
+      <p className="text-sm text-muted-foreground">删除后成员关系不可恢复。</p>
     </Modal>
   );
 }
@@ -253,7 +253,7 @@ function MembersDrawer({
       <div className="space-y-4">
         {save.error ? <Notice tone="error" title="保存成员失败">{describeApiError(save.error)}</Notice> : null}
         {!canManage ? <Notice tone="warning" title="缺少成员管理权限">当前身份未返回分组管理权限，保存保持禁用。</Notice> : null}
-        {writesLocked ? <Notice tone="warning" title="写入被 CSRF 契约锁定">重新登录后才能保存。</Notice> : null}
+        {writesLocked ? <Notice tone="warning" title="写入已锁定">重新登录后才能保存。</Notice> : null}
         {missing.length > 0 ? (
           <Notice tone="warning" title="部分现有成员不在当前可见节点集合">
             有 {missing.length} 个成员 ID 未出现在当前返回的节点中（可能无权查看或已被移除）。继续保存会移除它们。
@@ -380,6 +380,7 @@ export function GroupsPage() {
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [dimension, setDimension] = useState<Dimension>("region");
   const [facetValue, setFacetValue] = useState<string | null>(null);
+  const [classificationEpoch, setClassificationEpoch] = useState(0);
   const [searchDraft, setSearchDraft] = useState("");
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState<StatusFilter>("all");
@@ -394,7 +395,7 @@ export function GroupsPage() {
     groupsApi.list(signal).then(result => result.data),
   );
   const facets = useResource(
-    `groups:facets:${session.viewEpoch}:${dimension}`,
+    `groups:facets:${session.viewEpoch}:${dimension}:${classificationEpoch}`,
     signal => groupsApi.classifications(dimension, signal).then(result => result.data),
     { enabled: view === "automatic" },
   );
@@ -406,7 +407,9 @@ export function GroupsPage() {
       : (groupItems[0]?.id ?? null);
   const selectedGroup = groupItems.find(group => group.id === effectiveGroupId) ?? null;
   const facetItems = facets.state.status === "ready" ? facets.state.data.items : [];
-  const effectiveFacet = facetValue ?? facetItems[0]?.value ?? null;
+  const effectiveFacet = facetValue !== null && facetItems.some(item => item.value === facetValue)
+    ? facetValue
+    : (facetItems[0]?.value ?? null);
 
   useEffect(() => {
     setCursor(null);
@@ -416,7 +419,7 @@ export function GroupsPage() {
   const mode: "manual" | "automatic" | null =
     view === "manual" ? (effectiveGroupId ? "manual" : null) : effectiveFacet ? "automatic" : null;
   const results = useResource(
-    `groups:results:${session.viewEpoch}:${mode ?? "none"}:${effectiveGroupId ?? ""}:${dimension}:${effectiveFacet ?? ""}:${search}:${status}:${cursor ?? ""}`,
+    `groups:results:${session.viewEpoch}:${classificationEpoch}:${mode ?? "none"}:${effectiveGroupId ?? ""}:${dimension}:${effectiveFacet ?? ""}:${search}:${status}:${cursor ?? ""}`,
     signal => {
       const query =
         mode === "manual"
@@ -446,6 +449,16 @@ export function GroupsPage() {
   function switchView(next: ViewMode) {
     setView(next);
     resetPage();
+  }
+
+  function classifyNow() {
+    setView("automatic");
+    setFacetValue(null);
+    setSearchDraft("");
+    setSearch("");
+    setStatus("all");
+    resetPage();
+    setClassificationEpoch(epoch => epoch + 1);
   }
 
   function selectGroup(id: string) {
@@ -494,15 +507,21 @@ export function GroupsPage() {
         description="自定义分组用于整理与筛选，可编辑成员；自动分类按节点属性实时计算，只读。二者都不是业务服务组。"
         badge={<Badge tone="primary">普通分组</Badge>}
         actions={
-          <Button
-            type="button"
-            variant="primary"
-            disabled={!canManage || session.writesLocked}
-            onClick={() => setEditor({ open: true, group: null })}
-          >
-            <Plus aria-hidden="true" className="size-3.5" />
-            新建自定义分组
-          </Button>
+          <>
+            <Button type="button" onClick={classifyNow} loading={view === "automatic" && facets.state.status === "loading"}>
+              <Layers aria-hidden="true" className="size-3.5" />
+              一键分类
+            </Button>
+            <Button
+              type="button"
+              variant="primary"
+              disabled={!canManage || session.writesLocked}
+              onClick={() => setEditor({ open: true, group: null })}
+            >
+              <Plus aria-hidden="true" className="size-3.5" />
+              新建自定义分组
+            </Button>
+          </>
         }
       />
       {outcome ? <Notice tone="success" title="操作完成" actions={<Button size="sm" onClick={() => setOutcome(null)}>知道了</Button>}>{outcome}</Notice> : null}
@@ -512,7 +531,7 @@ export function GroupsPage() {
         </Notice>
       ) : null}
       {session.writesLocked ? (
-        <Notice tone="warning" title="写入被 CSRF 契约锁定">重新登录后才能新建/编辑/删除分组或保存成员。</Notice>
+        <Notice tone="warning" title="写入已锁定">重新登录后才能新建/编辑/删除分组或保存成员。</Notice>
       ) : null}
 
       <TabBar
@@ -530,7 +549,7 @@ export function GroupsPage() {
           {view === "manual" ? (
             <Panel
               title="自定义分组"
-              description="GET /api/v1/groups；只返回人工建立的分组。"
+              description="只返回人工建立的分组。"
               actions={<Button size="sm" onClick={groups.reload} loading={groups.state.status === "loading"}>刷新</Button>}
             >
               <AsyncPanel
@@ -578,7 +597,7 @@ export function GroupsPage() {
               </AsyncPanel>
             </Panel>
           ) : (
-            <Panel title="自动分类" description="GET /api/v1/groups/classifications；只读、按可见节点实时计算。">
+            <Panel title="自动分类" description="只读，按可见节点实时计算。">
               <div className="px-3 pt-3">
                 <TabBar
                   label="自动分类维度"
@@ -653,7 +672,7 @@ export function GroupsPage() {
           }
           description={
             view === "manual"
-              ? "统一读取 GET /api/v1/groups/node-results；搜索与状态筛选均由服务端执行。"
+              ? "支持搜索与状态筛选。"
               : "自动分类只读；结果按当前用户可见节点范围计算。"
           }
           actions={

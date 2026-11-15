@@ -153,11 +153,11 @@ export function BackupsPage() {
       <Notice tone="info" title="离线恢复">上方管理加密备份；下方恢复预演仅展示服务端校验。实际恢复密钥和 Root 私钥不进入网页。</Notice>
 
       <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
-      <Panel title="校验备份" description="POST /api/v1/backups/{backupId}/verify → 返回恢复计划（202 表示已受理）。">
+      <Panel title="校验备份" description="校验后返回恢复计划。">
         <form onSubmit={verify} className="space-y-3 px-5 py-4">
           {verifyAction.error ? <Notice tone="error" title="校验失败">{describeApiError(verifyAction.error)}</Notice> : null}
           <div className="grid gap-3 sm:grid-cols-[1fr_auto]">
-            <Field label="备份 ID" hint="不接受通配或猜测值；无效 ID 应由服务端拒绝。">
+            <Field label="备份 ID" hint="请输入有效的备份 ID。">
               {ids => <TextInput id={ids.inputId} value={backupId} onChange={event => setBackupId(event.target.value)} disabled={!canManage || writesLocked} required />}
             </Field>
             <div className="flex items-end">
@@ -174,7 +174,7 @@ export function BackupsPage() {
         </form>
       </Panel>
 
-      <Panel title="灾难恢复预演" description="POST /api/v1/disaster-recovery/preview；预演不执行恢复，只返回服务端检查结论。">
+      <Panel title="灾难恢复预演" description="预演不执行恢复，只返回检查结论。">
         <form onSubmit={runPreview} className="space-y-3 px-5 py-4">
           {previewAction.error ? <Notice tone="error" title="预演失败">{describeApiError(previewAction.error)}</Notice> : null}
           <div className="grid gap-3 sm:grid-cols-2">
@@ -184,10 +184,10 @@ export function BackupsPage() {
             <Field label="期望版本（可选）">
               {ids => <TextInput id={ids.inputId} value={expectedVersion} onChange={event => setExpectedVersion(event.target.value)} disabled={!plan || !canManage || writesLocked} />}
             </Field>
-            <Field label="期望节点 ID（逗号分隔，可选）" hint="用于校验恢复后节点身份是否一致；由服务端比对。">
+            <Field label="期望节点 ID（逗号分隔，可选）" hint="用于校验恢复后节点身份是否一致。">
               {ids => <TextInput id={ids.inputId} value={expectedNodeIds} onChange={event => setExpectedNodeIds(event.target.value)} disabled={!plan || !canManage || writesLocked} />}
             </Field>
-            <Field label="恢复密钥引用（可选）" hint="只传引用标识；严禁在此填写密钥明文，页面也不会保存。">
+            <Field label="恢复密钥引用（可选）" hint="只填引用标识；严禁填写密钥明文。">
               {ids => <TextInput id={ids.inputId} value={keyReference} onChange={event => setKeyReference(event.target.value)} disabled={!plan || !canManage || writesLocked} autoComplete="off" />}
             </Field>
           </div>
@@ -212,7 +212,7 @@ export function BackupsPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[1.4fr_1fr] xl:items-start">
-      <Panel title="恢复作业" description="POST /api/v1/disaster-recovery/jobs（202）→ GET /api/v1/disaster-recovery/jobs/{jobId}。">
+      <Panel title="恢复作业">
         <div className="space-y-3 px-5 py-4">
           {createAction.error ? <Notice tone="error" title="创建恢复作业失败">{describeApiError(createAction.error)}</Notice> : null}
           {!preview ? <Notice tone="info" title="需要先预演">没有预演结论时不能创建恢复作业；本页不跳过检查。</Notice> : null}
@@ -251,7 +251,7 @@ export function BackupsPage() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground">
-                契约没有恢复作业列表端点，刷新页面后无法从服务端找回历史作业；本页不本地存储作业记录。
+                刷新页面后无法找回历史恢复作业。
               </p>
             </SubCard>
           ) : null}

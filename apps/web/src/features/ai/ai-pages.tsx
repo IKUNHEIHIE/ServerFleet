@@ -98,7 +98,7 @@ export function AIPage() {
         />
         <PageHeader
           title="AI 运维"
-          description="每个会话默认零资源授权、每次审批。审批模式只改变人工批准策略，绝不扩大节点/RBAC 权限。"
+          description="每个会话默认无资源授权、每次操作需审批；审批模式只改变人工批准策略，不会扩大权限。"
           badge={<Badge tone="primary">默认拒绝</Badge>}
           actions={
             <Button
@@ -118,10 +118,10 @@ export function AIPage() {
         />
       </div>
       {create.error ? <Notice tone="error" title="创建会话失败">{describeApiError(create.error)}</Notice> : null}
-      <Notice tone="info" title="会话列表契约缺口">
-        当前 OpenAPI 只有创建会话与按 ID 读取，没有“列出我的 AI 会话”端点。本页不伪造历史列表；请使用创建后返回的会话或已知会话链接。
+      <Notice tone="info" title="会话列表说明">
+        暂不支持列出历史会话；请使用创建后返回的会话或已知会话链接。
       </Notice>
-      <Panel title="服务端安全策略声明" description="GET /api/v1/ai/security-policy；声明不等于实际校验，实际仍由后端逐目标执行。">
+      <Panel title="安全策略">
         <AsyncPanel state={policy.state} onRetry={policy.reload} errorTitle="安全策略加载失败">
           {data => (
             <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
@@ -135,7 +135,7 @@ export function AIPage() {
                 <p className="font-medium text-foreground">未授权发现：{data.allowUnscopedDiscovery ? "允许" : "禁止"}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">scopeRevision 必需：{data.scopeRevisionRequired ? "是" : "未声明"}</p>
+                <p className="font-medium text-foreground">范围版本必需：{data.scopeRevisionRequired ? "是" : "未声明"}</p>
               </div>
               <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
                 <p className="font-medium text-foreground">横向移动限制：{data.lateralMovementRestricted ? "是" : "未声明"}</p>
@@ -175,7 +175,7 @@ function ModelSettingsPanel() {
   return (
     <Panel
       title="AI 模型设置（当前用户）"
-      description="GET/PUT /api/v1/ai/model-settings；PUT 是 owner CAS，仅当前真人管理员可写。保存的配置不代表供应商健康。"
+      description="仅当前管理员可保存；保存成功不代表供应商可用。"
     >
       {conflict ? (
         <Notice tone="error" title="配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）">
@@ -313,7 +313,7 @@ function ModelSettingsForm({
         loading={save.pending}
         disabled={!isAdmin || writesLocked || (enabled && (!model.trim() || !credentialRef))}
       >
-        保存模型设置（CAS）
+        保存模型设置
       </Button>
     </form>
   );
@@ -338,7 +338,7 @@ function ModelBudgetPanel({ profileId, modelEnabled }: { readonly profileId: str
       <div className="px-5 py-4">
         <h3 id="ai-budget-heading" className="text-sm font-semibold">AI 预算窗口（当前用户）</h3>
         <p className="mt-1 text-xs text-muted-foreground">
-          GET/PUT /api/v1/ai/model-settings/{profileId}/budget；计数以服务端为准，管理员 CAS 配置，窗口显式且不重置计数。
+          预算计数以系统为准；重新配置窗口不会重置已用计数。
         </p>
       </div>
       {conflict ? (
@@ -518,8 +518,8 @@ function ModelBudgetForm({
     <form onSubmit={submit} className="space-y-4 border-t px-5 py-4">
       <p className="text-sm">
         {isAdmin
-          ? `管理员 CAS 配置：expectedRevision = ${policy?.revision ?? 0}；同一窗口重配保留已用计数。`
-          : "当前身份不是管理员：只能查看预算，配置由服务端 403 拒绝。"}
+          ? `管理员配置：同一窗口重新配置会保留已用计数。`
+          : "当前身份不是管理员：只能查看预算，不能修改配置。"}
       </p>
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <Field label="窗口 ID" hint="显式窗口标识，1—128 字符；不做自动滚动。">
@@ -558,7 +558,7 @@ function ModelBudgetForm({
         loading={save.pending}
         disabled={!isAdmin || writesLocked || !valid}
       >
-        保存预算窗口（CAS）
+        保存预算窗口
       </Button>
     </form>
   );
@@ -619,7 +619,7 @@ function ModeCards({
       </div>
       {policy ? (
         <p className="text-xs text-muted-foreground">
-          生效模式：{MODE_LABEL[policy.effectiveMode]} · scopeRevision {policy.scopeRevision} · 到期 {formatDateTime(policy.expiresAt) ?? "未设置"}
+          生效模式：{MODE_LABEL[policy.effectiveMode]} · 范围版本 {policy.scopeRevision} · 到期 {formatDateTime(policy.expiresAt) ?? "未设置"}
           {policy.enforcedRestrictions?.length ? ` · 强制限制：${policy.enforcedRestrictions.join("；")}` : ""}
         </p>
       ) : null}
@@ -657,7 +657,7 @@ function ModeCards({
           </Field>
           <label className="flex items-start gap-2 text-sm">
             <Checkbox className="mt-1 accent-[var(--destructive)]" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />
-            我理解：完全访问只在当前资源授权和 RBAC 范围内生效，到期恢复每次审批；root Shell 仍需真人确认。
+            我理解：完全访问只在当前资源授权和权限范围内生效，到期恢复每次审批；root Shell 仍需真人确认。
           </label>
         </div>
       </Modal>
@@ -756,15 +756,15 @@ function ApprovalsPanel({
 
   return (
     <div className="grid gap-5 xl:grid-cols-2">
-      <Panel title="创建一次性工具审批" description="POST /api/v1/ai/sessions/{id}/approvals；绑定工具、参数摘要、目标快照与 scopeRevision。">
+      <Panel title="创建一次性工具审批" description="为指定工具与目标创建一次性审批。">
         <form onSubmit={requestApproval} className="space-y-3 px-5 py-4">
           {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
           {createApproval.error ? <Notice tone="error" title="创建审批失败">{describeApiError(createApproval.error)}</Notice> : null}
           <Field label="工具名称">{ids => <TextInput id={ids.inputId} value={toolName} onChange={event => setToolName(event.target.value)} placeholder="例如 system.metrics.read" required />}</Field>
-          <Field label="目标节点 ID（逗号分隔）" hint="只能使用当前会话 allowedNodeIds 内的目标；客户端选择不构成授权。">
+          <Field label="目标节点 ID（逗号分隔）" hint="只能使用当前会话已授权的目标节点。">
             {ids => <TextInput id={ids.inputId} value={targets} onChange={event => setTargets(event.target.value)} required />}
           </Field>
-          <Field label="工具参数（JSON 对象）" hint="服务端会规范化并摘要；不要粘贴秘密。">
+          <Field label="工具参数（JSON 对象）" hint="请勿粘贴秘密或凭据。">
             {ids => <TextArea id={ids.inputId} value={args} onChange={event => setArgs(event.target.value)} className="font-mono" />}
           </Field>
           <p className="text-xs text-muted-foreground">可用于授权的节点：{session.allowedNodeIds?.join("、") || "无（先添加资源授权）"}</p>
@@ -789,10 +789,10 @@ function ApprovalsPanel({
         ) : null}
       </Panel>
 
-      <Panel title="受控工具执行" description="POST /api/v1/ai/tools/execute；服务端逐目标校验资源、scopeRevision、审批与风险。">
+      <Panel title="受控工具执行" description="执行受授权与审批约束。">
         <form onSubmit={executeTool} className="space-y-3 px-5 py-4">
           {execute.error ? <Notice tone="error" title="执行未接受">{describeApiError(execute.error)}</Notice> : null}
-          <Field label="审批 ID（可选）" hint="仅服务端策略要求人工批准时填写；不能由客户端切换模式绕过。">
+          <Field label="审批 ID（可选）" hint="仅在需要人工批准时填写。">
             {ids => <TextInput id={ids.inputId} value={approvalId} onChange={event => setApprovalId(event.target.value)} />}
           </Field>
           <Button type="submit" variant="primary" loading={execute.pending} disabled={writesLocked}>提交受控工具调用</Button>
@@ -801,7 +801,7 @@ function ApprovalsPanel({
           <div className="border-t px-5 py-4 text-sm">
             <p>已接受：{executeResult.accepted ? "是" : "否"} · 状态 {executeResult.state}</p>
             <p>验证节点：{executeResult.validatedNodeIds.join("、") || "无"}</p>
-            <p>scopeRevision：{executeResult.scopeRevision}</p>
+            <p>范围版本：{executeResult.scopeRevision}</p>
             {executeResult.deniedReason ? <p className="text-destructive">拒绝原因：{executeResult.deniedReason}</p> : null}
             {executeResult.taskId ? <p className="mt-1"><a className="text-primary underline" href={`#/tasks/${encodeURIComponent(executeResult.taskId)}`}>查看任务 {executeResult.taskId}</a></p> : null}
             <p className="mt-1 text-xs text-muted-foreground">accepted/queued 不等于实际操作成功；逐节点结果以任务详情为准。</p>
@@ -971,7 +971,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
     <div className="space-y-5">
       <PageHeader
         title={current ? `AI 会话 ${current.id}` : "AI 会话"}
-        description="默认零资源授权、每次审批；授权变化会递增 scopeRevision，旧计划与旧审批不能继续执行。"
+        description="默认无资源授权、每次操作需审批；授权变化后，旧计划与旧审批失效。"
         actions={
           <>
             <LinkButton href="#/ai">返回 AI 入口</LinkButton>
@@ -980,19 +980,19 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
         }
       />
       {!canUse ? <Notice tone="warning" title="AI 使用入口已锁定">当前身份未返回 AI 使用权限（`ai.use`/`ai.manage`）。</Notice> : null}
-      {writesLocked ? <Notice tone="warning" title="写入被 CSRF 契约锁定">重新登录后才能授权/审批/发送消息。</Notice> : null}
+      {writesLocked ? <Notice tone="warning" title="写入已锁定">重新登录后才能授权/审批/发送消息。</Notice> : null}
       {streamError ? <Notice tone="error" title="AI 事件流终止">{describeApiError(streamError)} 不会自动循环重连。</Notice> : null}
 
       <AsyncPanel state={session.state} onRetry={session.reload} errorTitle="AI 会话加载失败" empty={<EmptyState title="会话不存在" description="服务端未返回该会话，或当前身份无权查看。" />} isEmpty={() => false}>
         {data => (
           <div className="space-y-5">
-            <Panel title="会话快照" description="GET /api/v1/ai/sessions/{sessionId}；allowedNodeIds 由服务端计算。">
+            <Panel title="会话快照">
               <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
                 <GlowingEffect className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
                   <p className="font-medium text-foreground">状态：{data.status}</p>
                 </GlowingEffect>
                 <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                  <p className="font-mono font-medium text-foreground">scopeRevision：{data.scopeRevision}</p>
+                  <p className="font-mono font-medium text-foreground">范围版本：{data.scopeRevision}</p>
                 </GlowingEffect>
                 <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
                   <p className="font-medium text-foreground">授权数：{data.resourceGrants.length}</p>
@@ -1143,7 +1143,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                         )}
                       </Field>
                     </div>
-                    <Field label="允许动作（逗号分隔）" hint="Agent工具：nodes.read（状态）、tasks.command（自检）、tasks.exec.v1（普通配置）、host.root（受控Root配置）；最终取用户权限交集。">
+                    <Field label="允许动作（逗号分隔）" hint="多个动作以逗号分隔；实际生效范围以用户权限为准。">
                       {ids => <TextInput id={ids.inputId} value={actions} onChange={event => setActions(event.target.value)} />}
                     </Field>
                     <Button type="submit" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse}>添加授权</Button>
@@ -1189,7 +1189,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
             ) : null}
 
             {tab === "policy" ? (
-              <Panel title="审批策略" description="GET/PATCH /api/v1/ai/sessions/{id}/approval-policy；服务端可强制更严格策略。">
+              <Panel title="审批策略" description="系统可能强制更严格的审批策略。">
                 <AsyncPanel state={policy.state} onRetry={policy.reload} errorTitle="审批策略加载失败">
                   {policyData => (
                     <ModeCards
@@ -1212,7 +1212,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
               <div className="grid gap-5 xl:grid-cols-2">
                 <Panel
                   title="消息"
-                  description="GET/POST /api/v1/ai/sessions/{id}/messages；内容为服务端脱敏文本。生成必须显式触发，返回缓冲至终态的完整消息。"
+                  description="消息内容已脱敏；生成需手动触发。"
                 >
                   <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="暂无消息" />} isEmpty={page => page.items.length === 0}>
                     {() => (
@@ -1266,7 +1266,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                   </AsyncPanel>
                   {generateError ? <Notice tone="error" title="生成失败（未产生助手回复）">{generateError}</Notice> : null}
                   <p className="px-5 pt-2 text-xs text-muted-foreground">
-                    生成说明：点击「生成回复」向 POST …/messages/{"{messageId}"}/generate 显式发起；响应为服务端缓冲上游 SSE 至终态并复核撤权/配额后的完整脱敏消息，不是浏览器逐 token 流。重复对 generating/unknown 消息发起会被服务端拒绝。
+                    点击「生成回复」后，系统会返回完整的脱敏回复；对同一消息重复生成会被拒绝。
                   </p>
                   <form
                     onSubmit={sendMessage}
@@ -1323,13 +1323,13 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                       </div>
                     ) : null}
                     {send.error ? <Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice> : null}
-                    <Field label="消息内容" hint="每次提交带 clientMessageId 与当前 scopeRevision；过期会被拒绝。支持将上方节点或服务组胶囊拖入此处。">
+                    <Field label="消息内容" hint="可将上方节点或服务组拖入此处；过期的会话状态会被拒绝。">
                       {ids => <TextArea id={ids.inputId} value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={32000} />}
                     </Field>
                     <Button type="submit" variant="primary" loading={send.pending} disabled={writesLocked || !canUse || !messageText.trim()}>发送消息</Button>
                   </form>
                 </Panel>
-                <Panel title="审批审计" description="GET /api/v1/ai/sessions/{id}/approval-events；只读。">
+                <Panel title="审批审计">
                   <AsyncPanel state={approvalEvents.state} onRetry={approvalEvents.reload} errorTitle="审批审计加载失败" empty={<EmptyState title="暂无审批事件" />} isEmpty={data2 => data2.items.length === 0}>
                     {() => (
                       <DataTable

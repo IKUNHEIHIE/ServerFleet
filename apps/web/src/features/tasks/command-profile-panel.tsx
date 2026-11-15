@@ -86,7 +86,7 @@ export function CommandProfilePanel() {
   return (
     <Panel
       title="受控命令"
-      description="使用节点预先配置并校验摘要的程序。普通及提权操作均先登记审批；提权另需节点的 root 执行助手。"
+      description="使用节点预先配置的程序。普通及提权操作均先登记审批。"
       actions={
         <Badge tone="primary" dot>
           <TerminalSquare aria-hidden="true" className="size-3" />
@@ -131,7 +131,7 @@ export function CommandProfilePanel() {
               </Field>
             </div>
             <div className="sm:col-span-2">
-              <Field label="参数 JSON 数组" hint="参数作为独立 argv 传给已配置程序，不自动展开为 Shell。">
+              <Field label="参数 JSON 数组" hint="参数逐项传给已配置程序。">
                 {ids => (
                   <TextArea
                     id={ids.inputId}

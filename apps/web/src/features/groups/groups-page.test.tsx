@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { jsonResponse, type FetchRoutes } from "@/test/http";
+import { IDENTITY, jsonResponse, type FetchRoutes } from "@/test/http";
 import { renderAuthenticated } from "@/test/app";
 
 afterEach(() => {
@@ -19,9 +19,9 @@ interface GroupFixture {
 }
 
 const NODES = [
-  { id: "n-1", name: "Alpha", online: true, region: "eu", provider: "aws", cpuPercent: 0, memoryPercent: 20 },
-  { id: "n-2", name: "Beta", online: false, region: "eu", provider: "hetzner", cpuPercent: 50, memoryPercent: 60 },
-  { id: "n-3", name: "Gamma", online: true, region: "us", provider: "gcp", cpuPercent: 10, memoryPercent: 30 },
+  { id: "n-1", name: "Alpha", online: true, region: "eu", provider: "aws", ip: "192.0.2.1", tags: ["web"], cpuPercent: 0, memoryPercent: 20 },
+  { id: "n-2", name: "Beta", online: false, region: "eu", provider: "hetzner", ip: "192.0.2.2", tags: ["web"], cpuPercent: null, memoryPercent: null },
+  { id: "n-3", name: "Gamma", online: true, region: "us", provider: "gcp", ip: "192.0.2.3", tags: [], cpuPercent: 10, memoryPercent: 30 },
 ];
 
 function groupRoutes() {
@@ -36,10 +36,9 @@ function groupRoutes() {
       const dimension = url.searchParams.get("dimension");
       return jsonResponse({
         dimension,
-        items:
-          dimension === "provider"
-            ? [{ value: "aws", nodeCount: 1 }, { value: "hetzner", nodeCount: 1 }]
-            : [{ value: "eu", nodeCount: 2 }, { value: "us", nodeCount: 1 }],
+        items: [...new Set(NODES.flatMap(node => dimension === "tag" ? node.tags : [dimension === "provider" ? node.provider : node.region]))]
+          .sort()
+          .map(value => ({ value, label: value, nodeCount: NODES.filter(node => dimension === "tag" ? node.tags.includes(value) : (dimension === "provider" ? node.provider : node.region) === value).length })),
       });
     },
     "GET /api/v1/groups/node-results": (_init, url) => {
@@ -52,9 +51,9 @@ function groupRoutes() {
         items = NODES.filter(node => group?.memberNodeIds.includes(node.id));
       } else {
         const value = url.searchParams.get("value");
-        items = NODES.filter(node => (url.searchParams.get("dimension") === "provider" ? node.provider : node.region) === value);
+        items = NODES.filter(node => url.searchParams.get("dimension") === "tag" ? node.tags.includes(value ?? "") : (url.searchParams.get("dimension") === "provider" ? node.provider : node.region) === value);
       }
-      if (search) items = items.filter(node => `${node.name} ${node.id}`.toLowerCase().includes(search));
+      if (search) items = items.filter(node => `${node.name} ${node.ip}`.toLowerCase().includes(search));
       if (status !== "all") items = items.filter(node => (status === "online" ? node.online : !node.online));
       return jsonResponse({ items, total: items.length, nextCursor: null });
     },
@@ -191,5 +190,101 @@ describe("groups page", () => {
       const last = [...calls].reverse().find(call => call.url.startsWith("/api/v1/groups/node-results"));
       expect(new URL(last?.url ?? "", "http://x").searchParams.get("groupId")).toBe("g-new");
     });
+  });
+});
+
+describe("one-click classification", () => {
+  it("refreshes the current dimension, clears stale filters and pagination without writes", async () => {
+    const routes = groupRoutes();
+    let generation = 0;
+    let facetReads = 0;
+    const manyNodes = Array.from({ length: 51 }, (_, index) => ({
+      ...NODES[1], id: `page-${String(index).padStart(3, "0")}`, name: `old search ${index}`,
+    }));
+    const refreshedNodes = [{ ...NODES[2], id: "fresh-node", name: "Fresh Gamma" }];
+    routes["GET /api/v1/groups/classifications"] = (_init, url) => {
+      facetReads += 1;
+      const dimension = url.searchParams.get("dimension");
+      const inventory = generation === 0 ? manyNodes : refreshedNodes;
+      const values = [...new Set(inventory.map(node => dimension === "provider" ? node.provider : node.region))].sort();
+      return jsonResponse({ dimension, items: values.map(value => ({ value, label: value, nodeCount: inventory.length })) });
+    };
+    routes["GET /api/v1/groups/node-results"] = (_init, url) => {
+      if (url.searchParams.get("mode") === "manual") return jsonResponse({ items: NODES.slice(0, 2), total: 2, nextCursor: null });
+      const inventory = generation === 0 ? manyNodes : refreshedNodes;
+      const value = url.searchParams.get("value");
+      const search = (url.searchParams.get("search") ?? "").toLowerCase();
+      const status = url.searchParams.get("status") ?? "all";
+      const matched = inventory.filter(node =>
+        (url.searchParams.get("dimension") === "provider" ? node.provider : node.region) === value &&
+        (!search || `${node.name} ${node.ip}`.toLowerCase().includes(search)) &&
+        (status === "all" || (status === "online" ? node.online : !node.online)),
+      );
+      const cursor = url.searchParams.get("cursor");
+      const after = cursor ? JSON.parse(atob(cursor)).after as string : "";
+      const remaining = matched.filter(node => node.id > after);
+      const items = remaining.slice(0, Number(url.searchParams.get("limit") ?? 50));
+      const nextCursor = remaining.length > items.length ? btoa(JSON.stringify({ after: items[items.length - 1].id })) : null;
+      return jsonResponse({ items, total: matched.length, nextCursor });
+    };
+    const { calls } = await renderAuthenticated("/groups", routes);
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "一键分类" }));
+    expect(await screen.findByRole("tab", { name: "自动分类（只读）" })).toHaveAttribute("aria-selected", "true");
+    fireEvent.click(await screen.findByRole("tab", { name: "云厂商" }));
+    fireEvent.click(await screen.findByRole("button", { name: /hetzner/ }));
+    fireEvent.change(screen.getByLabelText("搜索名称或 IP"), { target: { value: "old search" } });
+    fireEvent.click(screen.getByRole("button", { name: "搜索" }));
+    fireEvent.change(screen.getByLabelText("状态"), { target: { value: "offline" } });
+    await waitFor(() => expect(screen.getByRole("button", { name: "下一页" })).toBeEnabled());
+    fireEvent.click(screen.getByRole("button", { name: "下一页" }));
+    await waitFor(() => {
+      const last = [...calls].reverse().find(call => call.url.startsWith("/api/v1/groups/node-results"));
+      expect(new URL(last?.url ?? "", "http://x").searchParams.get("cursor")).toBeTruthy();
+    });
+    generation = 1;
+    const previousReads = facetReads;
+    fireEvent.click(screen.getByRole("button", { name: "一键分类" }));
+    expect(await screen.findByRole("button", { name: /gcp/ })).toBeVisible();
+    expect(await screen.findByText("Fresh Gamma")).toBeVisible();
+    expect(screen.queryByRole("button", { name: /hetzner/ })).not.toBeInTheDocument();
+    expect(facetReads).toBeGreaterThan(previousReads);
+    expect(screen.getByLabelText("搜索名称或 IP")).toHaveValue("");
+    expect(screen.getByLabelText("状态")).toHaveValue("all");
+    expect(screen.getByRole("button", { name: "上一页" })).toBeDisabled();
+    await waitFor(() => {
+      const last = [...calls].reverse().find(call => call.url.startsWith("/api/v1/groups/node-results"));
+      const params = new URL(last?.url ?? "", "http://x").searchParams;
+      expect(Object.fromEntries(params)).toEqual({ mode: "automatic", dimension: "provider", value: "gcp", status: "all", limit: "50" });
+    });
+    expect(screen.queryByRole("button", { name: "管理成员" })).not.toBeInTheDocument();
+    expect(calls.filter(call => call.url.startsWith("/api/v1/groups")).every(call => call.method === "GET")).toBe(true);
+  });
+
+  it("shows an empty classification without fabricating results", async () => {
+    const routes = groupRoutes();
+    routes["GET /api/v1/groups/classifications"] = () => jsonResponse({ dimension: "region", items: [] });
+    const { calls } = await renderAuthenticated("/groups", routes);
+    await screen.findByText("Alpha");
+    fireEvent.click(screen.getByRole("button", { name: "一键分类" }));
+    expect(await screen.findByText("当前维度没有分类值。")).toBeVisible();
+    expect(screen.getByText("请选择一个分类值")).toBeVisible();
+    expect(calls.filter(call => call.url.startsWith("/api/v1/groups/node-results"))
+      .some(call => new URL(call.url, "http://x").searchParams.get("mode") === "automatic")).toBe(false);
+    expect(calls.filter(call => call.url.startsWith("/api/v1/groups")).every(call => call.method === "GET")).toBe(true);
+  });
+
+  it("allows a read-only identity to classify and shows real read failures", async () => {
+    const routes = groupRoutes();
+    routes["GET /api/v1/groups/classifications"] = () => jsonResponse({ error: { code: "forbidden", message: "request is not permitted" } }, 403);
+    const { calls } = await renderAuthenticated("/groups", routes, { ...IDENTITY, roles: ["viewer"], permissions: ["node.read"], isBootstrapAdmin: false });
+    const classify = await screen.findByRole("button", { name: "一键分类" });
+    expect(classify).toBeEnabled();
+    expect(screen.getByRole("button", { name: "新建自定义分组" })).toBeDisabled();
+    fireEvent.click(classify);
+    expect(await screen.findByText("无权限")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "重新加载" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /eu.*台/ })).not.toBeInTheDocument();
+    expect(calls.filter(call => call.url.startsWith("/api/v1/groups")).every(call => call.method === "GET")).toBe(true);
   });
 });

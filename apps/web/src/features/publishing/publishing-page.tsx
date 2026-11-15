@@ -203,7 +203,7 @@ export function PublishingPage() {
       </div>
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_26rem]">
-        <Panel title="发布配置" description="GET 服务组/网关/DNS 列表；POST /api/v1/publications/preview 与 /publications。">
+        <Panel title="发布配置">
           <form onSubmit={create} className="space-y-4 px-5 py-4">
             {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
             {(previewAction.error ?? createAction.error) ? <Notice tone="error" title="操作失败">{describeApiError(previewAction.error ?? createAction.error)}</Notice> : null}
@@ -220,8 +220,7 @@ export function PublishingPage() {
             </div>
             {selectedGroup ? (
               <p className="text-xs text-muted-foreground">
-                服务组端口：{selectedGroup.service ? `${selectedGroup.service.protocol ?? "—"}:${selectedGroup.service.port ?? "—"}` : "未配置"} · revision {selectedGroup.revision}
-                。PublicationDraft 没有独立端口字段，本页不伪造端口覆盖。
+                服务组端口：{selectedGroup.service ? `${selectedGroup.service.protocol ?? "—"}:${selectedGroup.service.port ?? "—"}` : "未配置"}
               </p>
             ) : null}
             <FieldsetBox legend="网关（只列服务端声明可调度的网关）">
@@ -265,7 +264,7 @@ export function PublishingPage() {
                 )}
               </Field>
             </div>
-            <Field label="证书 ID（可选）" hint="来自证书模块；服务端会验证引用有效性。">
+            <Field label="证书 ID（可选）" hint="来自证书模块。">
               {ids => <TextInput id={ids.inputId} value={certificateId} onChange={event => { setCertificateId(event.target.value); setPreview(null); }} />}
             </Field>
             <div className="flex flex-wrap gap-4">
@@ -317,7 +316,7 @@ export function PublishingPage() {
         </Panel>
       </div>
 
-      <Panel title="发布记录" description="GET /api/v1/publications；状态与阶段由服务端返回，局部失败不改成全部成功。" actions={<Button size="sm" onClick={() => publications.reload()} loading={publications.state.status === "loading"}>刷新</Button>}>
+      <Panel title="发布记录" description="局部失败不会显示为全部成功。" actions={<Button size="sm" onClick={() => publications.reload()} loading={publications.state.status === "loading"}>刷新</Button>}>
         <AsyncPanel state={publications.state} onRetry={publications.reload} errorTitle="发布记录加载失败" empty={<EmptyState title="暂无发布记录" />} isEmpty={data => data.length === 0}>
           {() => (
             <DataTable

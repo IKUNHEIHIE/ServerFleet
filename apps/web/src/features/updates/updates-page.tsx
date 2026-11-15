@@ -136,7 +136,7 @@ export function ControllerUpdatePanel() {
       {!canManage ? <Notice tone="warning" title="更新权限缺失">当前身份没有返回更新管理权限；服务端仍会独立校验。</Notice> : null}
 
       <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
-      <Panel title="检查更新" description="POST /api/v1/system/updates/check；检查只读取版本清单，不安装、不自动重启、不静默升级。">
+      <Panel title="检查更新" description="检查只读取版本清单，不安装、不自动重启。">
         <form onSubmit={runCheck} className="space-y-3 px-5 py-4">
           {checkAction.error ? <Notice tone="error" title="检查失败">{describeApiError(checkAction.error)}</Notice> : null}
           {checkAction.error?.code === "UPDATE_SOURCE_UNAVAILABLE" ? (
@@ -180,7 +180,7 @@ export function ControllerUpdatePanel() {
         </form>
       </Panel>
 
-      <Panel title="升级计划与一键更新" description="POST /api/v1/system/updates/plan → /apply；计划不合格、预检失败或需要备份而没有备份时不能创建作业。">
+      <Panel title="升级计划与一键更新" description="计划不合格、预检失败或缺少所需备份时，不能创建作业。">
         <form onSubmit={runPlan} className="space-y-3 border-b px-5 py-4">
           {planAction.error ? <Notice tone="error" title="生成计划失败">{describeApiError(planAction.error)}</Notice> : null}
           {planAction.error?.code === "UPDATE_PLANNER_UNAVAILABLE" ? (
@@ -240,7 +240,7 @@ export function ControllerUpdatePanel() {
                     页面不预造备份记录，也不把“尚无 backupId”当成已经备份成功。
                   </Notice>
                 ) : null}
-                <Field label="确认文本" hint={`必须逐字输入目标版本 ${plan.targetVersion}；不得由模型或脚本自批准。`}>
+                <Field label="确认文本" hint={`必须逐字输入目标版本 ${plan.targetVersion}。`}>
                   {ids => <TextInput id={ids.inputId} value={confirmation} onChange={event => setConfirmation(event.target.value)} disabled={!canManage || writesLocked} autoComplete="off" />}
                 </Field>
                 <label className="flex items-start gap-2 text-sm">
@@ -262,7 +262,7 @@ export function ControllerUpdatePanel() {
 
       <Panel
         title="更新作业与历史"
-        description="GET /api/v1/system/updates/jobs；与系统设置共用同一份状态与历史。"
+        description="与系统设置共用同一份状态与历史。"
         actions={<Button size="sm" onClick={() => jobs.reload()} loading={jobs.state.status === "loading"}>刷新</Button>}
       >
         <AsyncPanel state={jobs.state} onRetry={jobs.reload} errorTitle="更新作业加载失败" empty={<EmptyState title="暂无更新作业" description="检查更新不会创建作业。" />} isEmpty={data => data.items.length === 0}>
@@ -315,11 +315,10 @@ export function ControllerUpdatePanel() {
         </p>
       </Panel>
 
-      <Panel title="Agent 更新" description="被控 Agent 升级在当前候选契约中没有专用端点。">
+      <Panel title="Agent 更新" description="暂不支持单独升级被控 Agent。">
         <div className="space-y-2 px-5 py-4 text-sm">
-          <Notice tone="warning" title="契约缺口：Agent 升级">
-            候选契约只有主控 `/api/v1/system/updates/*`，没有 Agent 版本清单、分批升级或失败熔断端点；`/api/v1/tasks` 也缺少分批/金丝雀参数（SHARED-CHANGES §5）。
-            本页不伪造“选择节点分批升级 Agent”，只能通过批量任务页提交普通任务，且其分批语义尚未冻结。
+          <Notice tone="warning" title="Agent 升级说明">
+            暂不支持分批升级 Agent；可通过批量任务页提交普通任务。
           </Notice>
           <p><a className="text-primary underline" href="#/tasks">前往批量任务</a> · <a className="text-primary underline" href="#/nodes">查看节点版本与在线状态</a></p>
         </div>
@@ -357,7 +356,7 @@ export function ControllerUpdatePanel() {
       <Modal
         open={rollbackTarget !== null}
         title="回滚主控更新"
-        description="回滚是异步作业；长事务或不可逆迁移可能需要人工恢复。"
+        description="回滚是异步作业；复杂情况可能需要人工恢复。"
         onClose={() => { if (!rollbackAction.pending) setRollbackTarget(null); }}
         footer={
           <>

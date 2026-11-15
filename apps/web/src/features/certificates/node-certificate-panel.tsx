@@ -85,7 +85,7 @@ export function NodeCertificatePanel() {
   return (
     <Panel
       title="安装公开网站证书链"
-      description="使用已完成的节点 CSR 关联网站私钥。节点校验信任链、域名、有效期与私钥匹配；私钥不会上传到 Controller。"
+      description="使用已完成的节点 CSR 关联网站私钥；私钥不会上传。"
       actions={
         <Badge tone="success" dot>
           <ShieldCheck aria-hidden="true" className="size-3" />

@@ -122,7 +122,7 @@ function PolicyForm({ initial, credentials, onSaved }: { readonly initial: Backu
                 </Select>
               )}
             </Field>
-            <Field label="HTTPS 存储端点" hint="填写公网 HTTPS 地址；WebDAV 目录需预先存在。">
+            <Field label="HTTPS 存储地址" hint="填写公网 HTTPS 地址；WebDAV 目录需预先存在。">
               {ids => <TextInput id={ids.inputId} type="url" required value={destination.endpoint} onChange={e => setDestination(d => ({ ...d, endpoint: e.target.value }))} />}
             </Field>
             {destination.kind === "s3" ? (
