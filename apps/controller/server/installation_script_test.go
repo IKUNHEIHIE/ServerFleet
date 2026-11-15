@@ -43,6 +43,8 @@ func TestInstallationAgentScriptKeepsTrustInScriptAndOutOfTheCommand(t *testing.
 		"-enroll", "-serve", `-node-name "$name"`,
 		`-root-pin '` + c.RootPin + `'`,
 		`'"enrolled":true'`,
+		`chmod 700 "$dir"`,
+		`chmod 600 "$dir/root.pem" "$dir/controller-ca.pem"`,
 		base64.StdEncoding.EncodeToString([]byte(c.IdentityRootPEM)),
 		base64.StdEncoding.EncodeToString([]byte(c.HTTPSRootPEM)),
 	} {

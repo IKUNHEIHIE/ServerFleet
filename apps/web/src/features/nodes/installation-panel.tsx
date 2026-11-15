@@ -53,7 +53,7 @@ export function installationCommand(c: Catalog, name: string): string {
   const pin = quote(c.rootPin);
   const node = quote(name);
   const common = `-controller-url ${url} -root-cert ${dir}/root.pem -controller-ca ${dir}/controller-ca.pem -root-pin ${pin} -node-name ${node} -state-dir ${dir}`;
-  return `(set -e; curl -fsSL --proto '=https' --tlsv1.3 ${quote(AGENT_BINARY_URL)} -o ${bin} && chmod +x ${bin} && mkdir -p ${dir} && printf '%s' ${root} | base64 -d > ${dir}/root.pem && printf '%s' ${ca} | base64 -d > ${dir}/controller-ca.pem && until ${bin} -status -state-dir ${dir} -root-pin ${pin} 2>/dev/null | grep -q '"enrolled":true'; do echo "等待管理员审批接入..."; ${bin} -enroll ${common} || true; sleep 5; done; echo "已批准，启动常驻服务..."; exec ${bin} -serve ${common})`;
+  return `(set -e; umask 077; curl -fsSL --proto '=https' --tlsv1.3 ${quote(AGENT_BINARY_URL)} -o ${bin} && chmod +x ${bin} && mkdir -p ${dir} && chmod 700 ${dir} && printf '%s' ${root} | base64 -d > ${dir}/root.pem && printf '%s' ${ca} | base64 -d > ${dir}/controller-ca.pem && until ${bin} -status -state-dir ${dir} -root-pin ${pin} 2>/dev/null | grep -q '"enrolled":true'; do echo "等待管理员审批接入..."; ${bin} -enroll ${common} || true; sleep 5; done; echo "已批准，启动常驻服务..."; exec ${bin} -serve ${common})`;
 }
 
 interface InstallationPanelProps {

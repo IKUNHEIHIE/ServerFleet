@@ -44,8 +44,9 @@ describe("one-click installation", () => {
   });
   it("quotes node names and keeps the fallback command inside a subshell", () => {
     const cmd = installationCommand(catalog, "node ' quoted");
-    expect(cmd.startsWith("(")).toBe(true);
+    expect(cmd.startsWith("(set -e; umask 077;")).toBe(true);
     expect(cmd.endsWith(")")).toBe(true);
+    expect(cmd).toContain("chmod 700 /var/lib/serverfleet-agent");
     expect(cmd).not.toContain("node ' quoted");
     expect(cmd).toContain(AGENT_BINARY_URL);
     expect(cmd).toContain("-enroll");
