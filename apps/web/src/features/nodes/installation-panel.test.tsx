@@ -2,7 +2,7 @@ import { fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { renderAuthenticated } from "@/test/app";
 import { jsonResponse } from "@/test/http";
-import { installationCommand, installationShortCommand } from "./installation-panel";
+import { installationShortCommand } from "./installation-panel";
 
 afterEach(() => { vi.unstubAllGlobals(); window.location.hash = ""; });
 
@@ -13,8 +13,6 @@ const catalog = {
   bootstrap: { amd64: { url: "https://release.example/amd64/controller", sha256: "c".repeat(64) }, arm64: { url: "https://release.example/arm64/controller", sha256: "d".repeat(64) } },
   agentScript: { url: "https://fleet.example/install/agent.sh", sha256: "e".repeat(64) },
 };
-
-const AGENT_BINARY_URL = "https://raw.githubusercontent.com/IKUNHEIHIE/ServerFleet/main/releases/serverfleet-agent-linux-amd64";
 
 describe("one-click installation", () => {
   it("downloads the pinned installer script and keeps the token payload out of the command", async () => {
@@ -29,10 +27,7 @@ describe("one-click installation", () => {
     expect(command.length).toBeLessThan(400);
     expect(command).not.toContain("enroll-token");
     expect(command).not.toContain("base64");
-    const full = (await screen.findByLabelText("完整安装命令") as HTMLTextAreaElement).value;
-    expect(full).toContain(AGENT_BINARY_URL);
-    expect(full).toContain("-node-name 'edge-hk-01'");
-    expect(full).not.toContain("enroll-token");
+    expect(screen.queryByLabelText("完整安装命令")).not.toBeInTheDocument();
     expect(screen.getByText("内部 Root CA 指纹：", { exact: false })).toHaveTextContent(catalog.rootPin);
     expect(screen.queryByLabelText("专用服务账户")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("安装节点名称")).not.toBeInTheDocument();
@@ -41,15 +36,6 @@ describe("one-click installation", () => {
     await renderAuthenticated("/nodes/new", { "GET /api/v1/installations/catalog": () => jsonResponse({ available: false }) });
     expect(await screen.findByText("尚未配置可信安装分发")).toBeVisible();
     expect(screen.queryByLabelText("一键安装命令")).not.toBeInTheDocument();
-  });
-  it("quotes node names and keeps the fallback command inside a subshell", () => {
-    const cmd = installationCommand(catalog, "node ' quoted");
-    expect(cmd.startsWith("(set -e; umask 077;")).toBe(true);
-    expect(cmd.endsWith(")")).toBe(true);
-    expect(cmd).toContain("chmod 700 /var/lib/serverfleet-agent");
-    expect(cmd).not.toContain("node ' quoted");
-    expect(cmd).toContain(AGENT_BINARY_URL);
-    expect(cmd).toContain("-enroll");
   });
   it("verifies the downloaded script before running it with the quoted node name", () => {
     const cmd = installationShortCommand(catalog.agentScript, "node ' quoted");

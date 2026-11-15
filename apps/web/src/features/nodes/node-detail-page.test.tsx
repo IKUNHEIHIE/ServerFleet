@@ -37,7 +37,7 @@ function detailRoutes(): FetchRoutes {
         lastVerifiedAt: "2026-10-30T01:00:00Z",
       }),
     "GET /api/v1/nodes/n-1/capabilities": () =>
-      jsonResponse({ nodeId: "n-1", protocolMajor: 1, protocolMinor: 2, capabilities: ["exec", "files"] }),
+      jsonResponse({ nodeId: "n-1", capabilities: [], observedAt: "2026-10-30T01:00:00Z", cpuModel: "AMD EPYC 7B13", cpuCores: 8, memoryTotalBytes: 16 * 1024 ** 3, diskTotalBytes: 200 * 1024 ** 3 }),
     "GET /api/v1/nodes/n-1/diagnostics": () =>
       jsonResponse({
         nodeId: "n-1",
@@ -163,22 +163,16 @@ describe("node detail page", () => {
     expect(calls.some(call => call.url.startsWith("/api/v1/nodes?"))).toBe(false);
   });
 
-  it("reloads node resources after granting access even when identity is unchanged", async () => {
-    let granted = false;
-    const routes = detailRoutes();
-    routes["GET /api/v1/nodes/n-1"] = () => granted
-      ? jsonResponse({ nodeId: "n-1", displayName: "Newly visible", status: "online", updatedAt: "2026-11-15T00:00:00Z" })
-      : jsonResponse({ code: "FORBIDDEN" }, 403);
-    routes["POST /api/v1/resource-grants"] = () => {
-      granted = true;
-      return jsonResponse({ id: "grant-new" }, 201);
-    };
-    await renderAuthenticated("/nodes/n-1", routes, { ...IDENTITY, isBootstrapAdmin: false, roles: ["administrator"] });
-    expect(await screen.findByText("无权限")).toBeVisible();
-    fireEvent.click(screen.getByLabelText("编辑节点资料"));
-    fireEvent.click(screen.getByRole("button", { name: "授权当前账户管理此节点" }));
-    expect(await screen.findByRole("heading", { level: 1, name: "Newly visible" })).toBeVisible();
-    expect(screen.queryByText("无权限")).not.toBeInTheDocument();
+  it("shows hardware facts without the account node-management authorization panel", async () => {
+    await renderAuthenticated("/nodes/n-1", detailRoutes());
+    expect(await screen.findByText("硬件与流量")).toBeVisible();
+    expect(await screen.findByText("AMD EPYC 7B13")).toBeVisible();
+    expect(screen.getByText("8 核")).toBeVisible();
+    expect(screen.getByText("16.0 GB")).toBeVisible();
+    expect(screen.getByText("200.0 GB")).toBeVisible();
+    expect(screen.queryByText("当前账户的节点管理授权")).not.toBeInTheDocument();
+    expect(screen.queryByText(/首个初始化账户的节点管理权限已覆盖所有当前节点/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/协议版本/)).not.toBeInTheDocument();
   });
 
   it("saves complete metadata with the original CAS timestamp and CSRF", async () => {

@@ -280,6 +280,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 	cfg := agentSessionConfig{
 		NodeID: facts.NodeID, BootID: bootID, Version: request.AgentVersion, ServerName: endpoint.serverName,
 		RootSPKISHA256: pin, ProtocolMajor: 1, ProtocolMinor: minor, MaxConcurrent: 1, Semantic: semantic, Frames: frames, Files: files,
+		HostFacts: collectHostFacts(request.FileRoot),
 		Current: func(_ context.Context, state tls.ConnectionState) error {
 			return verifyAgentLinkTrust(state, endpoint.serverName, pin)
 		},

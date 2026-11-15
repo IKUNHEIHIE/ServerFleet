@@ -84,6 +84,21 @@ describe("legacy node adapter", () => {
     expect(result.rows[0]).toMatchObject({ uploadBps: 1024, downloadBps: 2048, sampledAt: fresh, disk: { kind: "value", percent: 78.9 } });
   });
 
+  it("keeps heartbeat-age samples visible and only hides a real outage", () => {
+    const heartbeat = new Date(Date.now() - 30_000).toISOString();
+    const live = adapt([{ ...base, cpuPercent: 10, memoryPercent: 20, sampledAt: heartbeat }]);
+    expect(live.ok).toBe(true);
+    if (!live.ok) return;
+    expect(live.rows[0].cpu).toEqual({ kind: "value", percent: 10 });
+    expect(live.rows[0].memory).toEqual({ kind: "value", percent: 20 });
+
+    const old = new Date(Date.now() - 10 * 60_000).toISOString();
+    const stale = adapt([{ ...base, cpuPercent: 10, memoryPercent: 20, sampledAt: old }]);
+    expect(stale.ok).toBe(true);
+    if (!stale.ok) return;
+    expect(stale.rows[0].cpu).toEqual({ kind: "unavailable", reason: "offline" });
+  });
+
   it("returns an empty successful list for an empty server set", () => {
     expect(adapt([])).toEqual({ ok: true, rows: [] });
   });

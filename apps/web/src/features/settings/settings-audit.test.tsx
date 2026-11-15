@@ -93,8 +93,9 @@ describe("settings credentials", () => {
       "POST /api/v1/credentials/cred-1/revoke": () => jsonResponse({ id: "job-2", state: "accepted" }, 202),
     });
     expect(await screen.findByText("Cloudflare")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "添加凭据" }));
-    const dialog = await screen.findByRole("dialog");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "SMTP 密码/授权码" }));
+    const dialog = await screen.findByRole("dialog", { name: "添加安全凭据" });
     fireEvent.change(within(dialog).getByLabelText("名称"), { target: { value: "SMTP" } });
     fireEvent.change(within(dialog).getByLabelText("秘密值"), { target: { value: "smtp-password-value" } });
     fireEvent.change(within(dialog).getByLabelText("允许使用的模块"), { target: { value: "smtp" } });

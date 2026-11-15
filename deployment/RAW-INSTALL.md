@@ -19,14 +19,15 @@ curl --fail --silent --show-error --proto '=https' --tlsv1.3 https://raw.githubu
 管理员完成分发配置后，在控制台“添加节点”复制一键安装命令到被控服务器。默认命令只做三件事：下载脚本、核对摘要、执行：
 
 ```sh
-curl -fsSL --proto '=https' --tlsv1.3 'https://<面板>/install/agent.sh' -o /tmp/sf-agent.sh && printf '%s  %s\n' '<脚本摘要>' /tmp/sf-agent.sh | sha256sum --check --status && sh /tmp/sf-agent.sh '<节点名>'
+curl -fsSL --proto '=https' --tlsv1.3 'https://<面板>/install/agent.sh' -o /tmp/sf-agent.sh && printf '%s  %s
+' '<脚本摘要>' /tmp/sf-agent.sh | sha256sum --check --status && sh /tmp/sf-agent.sh '<节点名>'
 ```
 
-- `GET /install/agent.sh` 是无需会话的安装边界入口，只返回由 installation catalog 派生的静态脚本：预编译 Agent 的发行 URL、Root/HTTPS 证书、Root pin 与接入审批循环。脚本不含短期令牌；本版接入为免令牌审批，管理员在控制台批准后节点转为常驻服务。
-- 摘要来自 `GET /api/v1/installations/catalog` 的 `agentScript.sha256`，控制台会自动带入；脚本本身对所有请求返回同一份字节，节点名称只作为脚本参数传入并在 shell 中单引号转义。
-- 脚本下载 Agent 到 `/usr/local/bin`，信任材料写入 `/var/lib/serverfleet-agent`，随后每 5 秒发起一次接入申请，批准后 `exec` 常驻服务。
-- 面板必须使用公开可信 HTTPS（ADR-BOOT-001）。若面板使用私有 CA，控制台“完整安装命令”回退会把信任材料直接写进命令，不依赖面板证书。
-- 注册失败时 agent 保留统一失败文案，并追加一行本地推断原因（本地身份/证书、网络或 TLS、控制端拒绝）。原因只用于本机排查，不包含令牌或响应正文。
+- `GET /install/agent.sh` 是无需会话的安装边界入口，只返回由 installation catalog 派生的静态脚本：预编译 Agent 的发行 URL、Root/HTTPS 证书、Root pin、专用用户与 systemd 单元模板。脚本不含短期令牌；本版接入为免令牌审批。
+- 摘要来自 `GET /api/v1/installations/catalog` 的 `agentScript.sha256`，控制台会自动带入；脚本对所有请求返回同一份字节，节点名称只作为脚本参数传入。
+- 脚本以 root 运行，创建专用系统用户 `serverfleet`、`/var/lib/serverfleet/{agent,files}`（0700）、`/usr/local/lib/serverfleet/agent-run` 与 `serverfleet-agent.service`；随后以该用户每 5 秒发起一次接入申请，管理员批准后启用并重启服务。
+- 服务以普通用户运行并显式带 `-file-root /var/lib/serverfleet/files`：文件能力要求非 root 身份，控制器启用文件分发时协议次版本为 1.1，缺少 `-file-root` 的 root agent 会以 `INVALID_PROTOCOL` 被拒绝。
+- 面板必须使用公开可信 HTTPS（ADR-BOOT-001）；面板若使用私有 CA，需要为 curl 提供 `--cacert` 后再执行上述命令。
 - 需要 Python 3/OpenSSL 的 `raw-install.sh` 流程仍用于分发准备、主控安装与离线包校验，不是控制台 Agent 命令的默认路径。
 
 ## 首次准备签名安装源

@@ -27,6 +27,9 @@ type agentSessionConfig struct {
 	MaxConcurrent                                       int
 	Semantic                                            transport.ValidationLimits
 	Frames                                              transport.FrameDecodeLimits
+	// HostFacts is static hardware reported in the handshake; zero values are
+	// reported as "not collected" instead of a fabricated reading.
+	HostFacts agentHostFacts
 	// Current reads the actual local trust/revocation/profile authorities. A
 	// cached TLS state alone cannot admit a long-lived connection indefinitely.
 	Current func(context.Context, tls.ConnectionState) error
@@ -175,6 +178,7 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 	}
 	slices.Sort(capabilities)
 	hello := &agentv1.AgentHello{AgentVersion: cfg.Version, Platform: runtime.GOOS, Architecture: runtime.GOARCH, CapabilityIds: capabilities, MinProtocolMajor: cfg.ProtocolMajor, MaxProtocolMajor: cfg.ProtocolMajor, BootId: cfg.BootID}
+	hello.CpuModel, hello.CpuCores, hello.MemoryTotalBytes, hello.DiskTotalBytes = cfg.HostFacts.CPUModel, cfg.HostFacts.CPUCores, cfg.HostFacts.MemoryBytes, cfg.HostFacts.DiskBytes
 	if write(&agentv1.Envelope{Message: &agentv1.Envelope_AgentHello{AgentHello: hello}}, transport.AwaitAgentHello) != nil {
 		return errAgentSession
 	}

@@ -40,11 +40,14 @@ func TestInstallationAgentScriptKeepsTrustInScriptAndOutOfTheCommand(t *testing.
 	}
 	for _, want := range []string{
 		installationAgentBinaryURL,
-		"-enroll", "-serve", `-node-name "$name"`,
+		"useradd --system",
+		"User=serverfleet",
+		"-file-root '/var/lib/serverfleet/files'",
+		"runuser -u",
+		"systemctl restart serverfleet-agent",
+		"-enroll", "-serve",
 		`-root-pin '` + c.RootPin + `'`,
 		`'"enrolled":true'`,
-		`chmod 700 "$dir"`,
-		`chmod 600 "$dir/root.pem" "$dir/controller-ca.pem"`,
 		base64.StdEncoding.EncodeToString([]byte(c.IdentityRootPEM)),
 		base64.StdEncoding.EncodeToString([]byte(c.HTTPSRootPEM)),
 	} {

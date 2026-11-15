@@ -50,6 +50,12 @@ message AgentHello {
   uint32 max_protocol_major = 6;
   uint64 last_acked_controller_sequence = 7;
   string boot_id = 8;
+  // R44 CANDIDATE, NOT RUNTIME ADMISSION: static host facts reported at handshake;
+  // empty/zero means "not reported".
+  string cpu_model = 9;
+  uint32 cpu_cores = 10;
+  uint64 memory_total_bytes = 11;
+  uint64 disk_total_bytes = 12;
 }
 message ControllerHello {
   bool accepted = 1;

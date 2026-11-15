@@ -14,6 +14,11 @@ type ConnectionObservation struct {
 	ConnectionID         string    `json:"connectionId"`
 	ObservedAt           time.Time `json:"observedAt,omitzero"`
 	CertificateExpiresAt time.Time `json:"certificateExpiresAt,omitzero"`
+	// Static host facts reported at handshake. Empty/zero means "not collected".
+	CPUModel         string `json:"cpuModel,omitempty"`
+	CPUCores         uint32 `json:"cpuCores,omitempty"`
+	MemoryTotalBytes uint64 `json:"memoryTotalBytes,omitempty"`
+	DiskTotalBytes   uint64 `json:"diskTotalBytes,omitempty"`
 }
 type ConnectionEvent struct {
 	At   time.Time `json:"at"`
@@ -35,6 +40,9 @@ func DiagnosticMigrations() []storage.Migration {
 
 func (r *Repo) RecordConnection(ctx context.Context, node string, o ConnectionObservation) error {
 	if validateNodeID(node) != nil || !validDiagnosticText(o.AgentVersion) || !validDiagnosticText(o.ConnectionID) || o.ObservedAt.IsZero() || len(o.Capabilities) > 32 {
+		return ErrInvalidNode
+	}
+	if !validHostFactText(o.CPUModel) || o.CPUCores > 4096 || o.MemoryTotalBytes > 1<<42 || o.DiskTotalBytes > 1<<42 {
 		return ErrInvalidNode
 	}
 	o.Capabilities = append([]string{}, o.Capabilities...)
@@ -61,6 +69,20 @@ func validDiagnosticText(s string) bool {
 	}
 	for _, c := range s {
 		if c < 0x21 || c > 0x7e {
+			return false
+		}
+	}
+	return true
+}
+
+// validHostFactText allows the printable ASCII an OS reports for CPU models,
+// including spaces; empty means "not collected".
+func validHostFactText(s string) bool {
+	if len(s) > 128 {
+		return false
+	}
+	for _, c := range s {
+		if c < 0x20 || c == 0x7f || c > 0x7e {
 			return false
 		}
 	}

@@ -597,8 +597,14 @@ type AgentHello struct {
 	MaxProtocolMajor            uint32                 `protobuf:"varint,6,opt,name=max_protocol_major,json=maxProtocolMajor,proto3" json:"max_protocol_major,omitempty"`
 	LastAckedControllerSequence uint64                 `protobuf:"varint,7,opt,name=last_acked_controller_sequence,json=lastAckedControllerSequence,proto3" json:"last_acked_controller_sequence,omitempty"`
 	BootId                      string                 `protobuf:"bytes,8,opt,name=boot_id,json=bootId,proto3" json:"boot_id,omitempty"`
-	unknownFields               protoimpl.UnknownFields
-	sizeCache                   protoimpl.SizeCache
+	// R44 CANDIDATE, NOT RUNTIME ADMISSION: static host facts reported at handshake;
+	// empty/zero means "not reported".
+	CpuModel         string `protobuf:"bytes,9,opt,name=cpu_model,json=cpuModel,proto3" json:"cpu_model,omitempty"`
+	CpuCores         uint32 `protobuf:"varint,10,opt,name=cpu_cores,json=cpuCores,proto3" json:"cpu_cores,omitempty"`
+	MemoryTotalBytes uint64 `protobuf:"varint,11,opt,name=memory_total_bytes,json=memoryTotalBytes,proto3" json:"memory_total_bytes,omitempty"`
+	DiskTotalBytes   uint64 `protobuf:"varint,12,opt,name=disk_total_bytes,json=diskTotalBytes,proto3" json:"disk_total_bytes,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AgentHello) Reset() {
@@ -685,6 +691,34 @@ func (x *AgentHello) GetBootId() string {
 		return x.BootId
 	}
 	return ""
+}
+
+func (x *AgentHello) GetCpuModel() string {
+	if x != nil {
+		return x.CpuModel
+	}
+	return ""
+}
+
+func (x *AgentHello) GetCpuCores() uint32 {
+	if x != nil {
+		return x.CpuCores
+	}
+	return 0
+}
+
+func (x *AgentHello) GetMemoryTotalBytes() uint64 {
+	if x != nil {
+		return x.MemoryTotalBytes
+	}
+	return 0
+}
+
+func (x *AgentHello) GetDiskTotalBytes() uint64 {
+	if x != nil {
+		return x.DiskTotalBytes
+	}
+	return 0
 }
 
 type ControllerHello struct {
@@ -2474,7 +2508,7 @@ const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\x0ffile_open_reply\x18$ \x01(\v2#.serverfleet.agent.v1.FileOpenReplyH\x00R\rfileOpenReply\x12M\n" +
 	"\x0ffile_op_request\x18% \x01(\v2#.serverfleet.agent.v1.FileOpRequestH\x00R\rfileOpRequest\x12G\n" +
 	"\rfile_op_reply\x18& \x01(\v2!.serverfleet.agent.v1.FileOpReplyH\x00R\vfileOpReplyB\t\n" +
-	"\amessage\"\xd2\x02\n" +
+	"\amessage\"\xe4\x03\n" +
 	"\n" +
 	"AgentHello\x12#\n" +
 	"\ragent_version\x18\x01 \x01(\tR\fagentVersion\x12\x1a\n" +
@@ -2484,7 +2518,12 @@ const file_serverfleet_agent_v1_agent_proto_rawDesc = "" +
 	"\x12min_protocol_major\x18\x05 \x01(\rR\x10minProtocolMajor\x12,\n" +
 	"\x12max_protocol_major\x18\x06 \x01(\rR\x10maxProtocolMajor\x12C\n" +
 	"\x1elast_acked_controller_sequence\x18\a \x01(\x04R\x1blastAckedControllerSequence\x12\x17\n" +
-	"\aboot_id\x18\b \x01(\tR\x06bootId\"\x89\x03\n" +
+	"\aboot_id\x18\b \x01(\tR\x06bootId\x12\x1b\n" +
+	"\tcpu_model\x18\t \x01(\tR\bcpuModel\x12\x1b\n" +
+	"\tcpu_cores\x18\n" +
+	" \x01(\rR\bcpuCores\x12,\n" +
+	"\x12memory_total_bytes\x18\v \x01(\x04R\x10memoryTotalBytes\x12(\n" +
+	"\x10disk_total_bytes\x18\f \x01(\x04R\x0ediskTotalBytes\"\x89\x03\n" +
 	"\x0fControllerHello\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x12\x1f\n" +
 	"\vreason_code\x18\x02 \x01(\tR\n" +

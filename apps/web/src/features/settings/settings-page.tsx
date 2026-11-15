@@ -40,6 +40,7 @@ function CredentialEditor({
   open,
   mode,
   credential,
+  initialKind,
   canManage,
   writesLocked,
   onClose,
@@ -48,6 +49,7 @@ function CredentialEditor({
   readonly open: boolean;
   readonly mode: "create" | "rotate";
   readonly credential: CredentialMetadata | null;
+  readonly initialKind?: CredentialMetadata["kind"];
   readonly canManage: boolean;
   readonly writesLocked: boolean;
   readonly onClose: () => void;
@@ -72,13 +74,13 @@ function CredentialEditor({
   useEffect(() => {
     if (!open) return;
     setName(credential?.name ?? "");
-    setKind(credential?.kind ?? "cloudflare_token");
+    setKind(credential?.kind ?? initialKind ?? "cloudflare_token");
     setSecret("");
     setRequestKey(crypto.randomUUID());
     setUsageScope(credential?.usageScope.join(",") ?? "");
     setExpiresAt(credential?.expiresAt ? credential.expiresAt.slice(0, 16) : "");
     setLocalError(null);
-  }, [open, credential]);
+  }, [open, credential, initialKind]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -130,7 +132,9 @@ function CredentialEditor({
           {ids => <TextInput id={ids.inputId} value={name} onChange={event => setName(event.target.value)} required />}
         </Field>
         <Field label="类型">
-          {ids => (
+          {ids => mode === "rotate" ? (
+            <TextInput id={ids.inputId} value={KIND_LABEL[kind]} readOnly />
+          ) : (
             <Select id={ids.inputId} value={kind} onChange={event => setKind(event.target.value as CredentialMetadata["kind"])}>
               {Object.entries(KIND_LABEL).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </Select>
@@ -163,7 +167,7 @@ function CredentialEditor({
 export function SettingsPage() {
   const session = useSession();
   const [tab, setTab] = useState<Tab>("credentials");
-  const [editor, setEditor] = useState<{ open: boolean; mode: "create" | "rotate"; credential: CredentialMetadata | null }>({
+  const [editor, setEditor] = useState<{ open: boolean; mode: "create" | "rotate"; credential: CredentialMetadata | null; kind?: CredentialMetadata["kind"] }>({
     open: false,
     mode: "create",
     credential: null,
@@ -242,19 +246,24 @@ export function SettingsPage() {
       {tab === "credentials" ? (
         <div className="space-y-5">
           {!canManage ? <Notice tone="warning" title="写操作已锁定">当前身份未返回凭据管理权限（`credential.manage`/`settings.manage`/`user.manage`）。</Notice> : null}
+          <Panel title="添加凭据" description="先选类型，再在弹窗中填写名称与秘密值。">
+            <div className="flex flex-wrap gap-2 px-5 py-4">
+              {(Object.keys(KIND_LABEL) as CredentialMetadata["kind"][]).map(value => (
+                <Button
+                  key={value}
+                  size="sm"
+                  variant="secondary"
+                  disabled={!canManage || session.writesLocked}
+                  onClick={() => setEditor({ open: true, mode: "create", credential: null, kind: value })}
+                >
+                  {KIND_LABEL[value]}
+                </Button>
+              ))}
+            </div>
+          </Panel>
           <Panel
             title="凭据元数据"
             description="只显示凭据元数据，不显示秘密内容。"
-            actions={
-              <Button
-                size="sm"
-                variant="primary"
-                disabled={!canManage || session.writesLocked}
-                onClick={() => setEditor({ open: true, mode: "create", credential: null })}
-              >
-                添加凭据
-              </Button>
-            }
           >
             <AsyncPanel
               state={credentials.state}
@@ -366,6 +375,7 @@ export function SettingsPage() {
         open={editor.open}
         mode={editor.mode}
         credential={editor.credential}
+        initialKind={editor.kind}
         canManage={canManage}
         writesLocked={session.writesLocked}
         onClose={() => setEditor({ open: false, mode: "create", credential: null })}

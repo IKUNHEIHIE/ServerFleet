@@ -113,6 +113,11 @@ export interface NodeCapabilities {
   /** 真实 Controller 附加字段：是否记录过能力与说明。 */
   readonly recorded?: boolean;
   readonly message?: string;
+  /** 握手时上报的静态硬件信息；缺失表示未采集，不按 0 处理。 */
+  readonly cpuModel?: string;
+  readonly cpuCores?: number;
+  readonly memoryTotalBytes?: number;
+  readonly diskTotalBytes?: number;
 }
 
 export type NodeGroupKind = "manual" | "automatic";
