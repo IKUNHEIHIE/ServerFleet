@@ -991,6 +991,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Publishing = publishingService
 	s.mux = http.NewServeMux()
 	s.registerInstallationCatalogRoutes(cfg.InstallationCatalog)
+	s.registerInstallationScriptRoutes(cfg.InstallationCatalog)
 	if err := s.registerRoutes(); err != nil {
 		return cleanup(err)
 	}

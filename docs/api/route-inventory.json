@@ -2637,6 +2637,18 @@
     },
     {
       "method": "GET",
+      "path": "/install/agent.sh",
+      "declarations": [
+        {
+          "source": "apps/controller/server/installation_script.go",
+          "owner": "registerInstallationScriptRoutes"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
+    },
+    {
+      "method": "GET",
       "path": "/readyz",
       "declarations": [
         {

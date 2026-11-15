@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **276** 个不同的 method/path 声明，其中 **1** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **277** 个不同的 method/path 声明，其中 **2** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -231,6 +231,7 @@
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
 | GET | `/healthz` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerRoutes | [getHealthR34](../../api/openapi/revisions/v09-r34/runtime-additions-candidate.json) |
+| GET | `/install/agent.sh` | [installation_script.go](../../apps/controller/server/installation_script.go) · registerInstallationScriptRoutes | 未覆盖；以源码和领域说明为准 |
 | GET | `/readyz` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerRoutes | [readControllerReadinessR37](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json) |
 
 ## installations

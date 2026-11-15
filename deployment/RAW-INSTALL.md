@@ -16,11 +16,17 @@ curl --fail --silent --show-error --proto '=https' --tlsv1.3 https://raw.githubu
 
 ## 被控服务器安装 Agent
 
-管理员完成分发配置后，在控制台“添加节点”复制完整一键命令到被控服务器。命令中的脚本 URL 就是上面的 raw 链接，同时带有外部固定的脚本 SHA256、公开信任配置与两种架构的引导程序摘要。安装时终端隐藏输入短期令牌，然后按原规则批准接入。
+管理员完成分发配置后，在控制台“添加节点”复制一键安装命令到被控服务器。默认命令只做三件事：下载脚本、核对摘要、执行：
 
-`raw-install.sh agent` 使用既有安装器的 `--config/--config-base64`、两架构 URL/摘要、专用账户等参数；控制台负责自动生成完整参数。Agent 路径仅需 Linux amd64/arm64、curl、sha256sum、base64 与常见系统工具，安装器创建普通用户和 systemd 服务，执行仍经统一任务/权限/审批。
+```sh
+curl -fsSL --proto '=https' --tlsv1.3 'https://<面板>/install/agent.sh' -o /tmp/sf-agent.sh && printf '%s  %s\n' '<脚本摘要>' /tmp/sf-agent.sh | sha256sum --check --status && sh /tmp/sf-agent.sh '<节点名>'
+```
 
-新命令会将分发 HTTPS CA 以临时文件传给 curl，支持分发端使用已固定的私有 CA，无需修改节点系统根。raw 脚本本身仍使用系统 HTTPS 信任连接 GitHub。
+- `GET /install/agent.sh` 是无需会话的安装边界入口，只返回由 installation catalog 派生的静态脚本：预编译 Agent 的发行 URL、Root/HTTPS 证书、Root pin 与接入审批循环。脚本不含短期令牌；本版接入为免令牌审批，管理员在控制台批准后节点转为常驻服务。
+- 摘要来自 `GET /api/v1/installations/catalog` 的 `agentScript.sha256`，控制台会自动带入；脚本本身对所有请求返回同一份字节，节点名称只作为脚本参数传入并在 shell 中单引号转义。
+- 脚本下载 Agent 到 `/usr/local/bin`，信任材料写入 `/var/lib/serverfleet-agent`，随后每 5 秒发起一次接入申请，批准后 `exec` 常驻服务。
+- 面板必须使用公开可信 HTTPS（ADR-BOOT-001）。若面板使用私有 CA，控制台“完整安装命令”回退会把信任材料直接写进命令，不依赖面板证书。
+- 需要 Python 3/OpenSSL 的 `raw-install.sh` 流程仍用于分发准备、主控安装与离线包校验，不是控制台 Agent 命令的默认路径。
 
 ## 首次准备签名安装源
 
