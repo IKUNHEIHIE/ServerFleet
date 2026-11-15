@@ -43,6 +43,7 @@ type InstallationCatalog struct {
 	RootPin             string                          `json:"rootPin"`
 	InstallerScript     InstallationDownload            `json:"installerScript"`
 	Bootstrap           map[string]InstallationDownload `json:"bootstrap"`
+	AgentScript         InstallationDownload            `json:"agentScript"`
 }
 
 func installationHTTPSURL(value string) bool {
@@ -98,6 +99,9 @@ func LoadInstallationCatalog(filename, origin, pin string) (*InstallationCatalog
 		if !installationHTTPSURL(d.URL) || !transport.FileDigest(d.SHA256) {
 			return nil, ErrGatewayDeployment
 		}
+	}
+	if e := c.setAgentScript(); e != nil {
+		return nil, ErrGatewayDeployment
 	}
 	return &c, nil
 }

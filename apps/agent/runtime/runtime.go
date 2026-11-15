@@ -265,6 +265,9 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		})
 		if err != nil {
 			fmt.Fprintln(stderr, "agent: enrollment failed or outcome is unconfirmed; no automatic retry")
+			if hint, ok := err.(interface{ EnrollmentHint() string }); ok && strings.TrimSpace(hint.EnrollmentHint()) != "" {
+				fmt.Fprintf(stderr, "agent: 原因：%s\n", strings.TrimSpace(hint.EnrollmentHint()))
+			}
 			return 1
 		}
 		writeJSON(stdout, result)

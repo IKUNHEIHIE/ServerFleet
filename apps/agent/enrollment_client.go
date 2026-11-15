@@ -25,6 +25,28 @@ import (
 var errAgentEnrollment = errors.New("agent: enrollment unavailable or outcome unconfirmed; retain existing identity")
 var errAgentEnrollmentDenied = errors.New("agent: enrollment denied; no automatic replacement or retry")
 
+const (
+	enrollmentHintLocal   = "本地身份或证书不可用（检查 state-dir 权限、root 证书与 Root pin 是否一致）"
+	enrollmentHintNetwork = "无法连接控制器（网络不可达、DNS 或 TLS 校验失败）"
+	enrollmentHintServer  = "控制器拒绝或返回了无法验证的响应（检查控制端日志）"
+)
+
+// enrollmentHint keeps the single public failure sentence while adding one
+// short, locally derived reason. It never carries response bodies, tokens or
+// peer details.
+type enrollmentHint struct {
+	hint string
+	err  error
+}
+
+func (e *enrollmentHint) Error() string          { return e.err.Error() }
+func (e *enrollmentHint) Unwrap() error          { return e.err }
+func (e *enrollmentHint) EnrollmentHint() string { return e.hint }
+
+func enrollmentFailure(hint string) error {
+	return &enrollmentHint{hint: hint, err: errAgentEnrollment}
+}
+
 type agentEnrollmentConfig struct {
 	// Public Root certificate and origin MUST come from independent trusted
 	// installation input. Neither a response nor a redirect can supply them.
@@ -185,7 +207,10 @@ func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token, name stri
 	}
 	input, err := c.identity.Request(bounded, token, name)
 	if err != nil {
-		return zero, errAgentEnrollment
+		if bounded.Err() != nil {
+			return zero, errAgentEnrollment
+		}
+		return zero, enrollmentFailure(enrollmentHintLocal)
 	}
 	raw, err := json.Marshal(input)
 	if err != nil || len(raw) > 32<<10 {
@@ -203,19 +228,22 @@ func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token, name stri
 	r.Close = true
 	response, err := c.client.Do(r)
 	if err != nil {
-		return zero, errAgentEnrollment
+		if bounded.Err() != nil {
+			return zero, errAgentEnrollment
+		}
+		return zero, enrollmentFailure(enrollmentHintNetwork)
 	}
 	defer response.Body.Close()
 	if response.StatusCode != http.StatusOK || response.TLS == nil || !response.TLS.HandshakeComplete || len(response.TLS.VerifiedChains) == 0 || response.ContentLength > 96<<10 || len(response.Header.Values("Set-Cookie")) != 0 || response.Header.Get("Content-Encoding") != "" || len(response.Header.Values("Content-Type")) != 1 {
-		return zero, errAgentEnrollment
+		return zero, enrollmentFailure(enrollmentHintServer)
 	}
 	media, params, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
 	if err != nil || media != "application/json" || len(params) > 1 || params["charset"] != "" && !strings.EqualFold(params["charset"], "utf-8") {
-		return zero, errAgentEnrollment
+		return zero, enrollmentFailure(enrollmentHintServer)
 	}
 	for key := range params {
 		if key != "charset" {
-			return zero, errAgentEnrollment
+			return zero, enrollmentFailure(enrollmentHintServer)
 		}
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, (96<<10)+1))
@@ -225,7 +253,7 @@ func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token, name stri
 	}
 	result, err := decodeAgentEnrollmentResult(body)
 	if err != nil {
-		return zero, errAgentEnrollment
+		return zero, enrollmentFailure(enrollmentHintServer)
 	}
 	observation := agentEnrollmentObservation{State: result.State, ExpiresAt: result.ExpiresAt}
 	if result.State == "denied" {
@@ -236,7 +264,10 @@ func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token, name stri
 	}
 	if result.State == "issued" {
 		issued := transport.AgentEnrollmentResult{State: "approved", NodeID: result.NodeID, CertificatePEM: result.CertificatePEM + result.IntermediateChainPEM, TrustGeneration: result.TrustGeneration, ExpiresAt: result.ExpiresAt}
-		if c.identity.Accept(bounded, issued) != nil || c.observe(bounded) != nil {
+		if c.identity.Accept(bounded, issued) != nil {
+			return zero, enrollmentFailure(enrollmentHintLocal)
+		}
+		if c.observe(bounded) != nil {
 			return zero, errAgentEnrollment
 		}
 	}

@@ -18,6 +18,7 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 - 受限令牌管理使用Cookie会话：`GET/POST /auth/tokens`、`DELETE /auth/tokens/{tokenId}`。目前正式节点/任务HTTP仍使用Cookie认证，**尚无生产Bearer读取适配**；`AuthorizeRestrictedToken`/`BearerCommitGate`属于校验端口，不能将管理成功等同于Bearer可用。令牌仅设计为script-read、nodes.read/tasks.read、1—200显式节点、60—3600秒，不允许写入/AI/插件/注册/执行。
 - Agent的 `/api/v1/agent/link` 是WSS+Protobuf协议入口，需实际mTLS身份/能力协商与逐帧授权，不是浏览器REST。`POST /api/v1/agent/enroll` 是严格HTTPS首次注册协议，令牌/CSR/Root信任校验独立于Cookie。两者通过无method的转发挂载进入专用协议处理器，因此不列入AST的method/path声明计数。
 - `/healthz`仅表示活性；通用 `/readyz`检查启动及子系统就绪，不能代替业务或节点健康。更新还有独立本地监督进程 nonce 就绪条件，不能相互替代；详见[身份运维](../development/IDENTITY-OPERATIONS.md)。
+- `GET /install/agent.sh` 是安装边界入口，无需会话：只返回由 installation catalog 派生的静态脚本（预编译 Agent URL、Root/HTTPS 证书、Root pin、接入审批循环），不含令牌，节点名称作为脚本参数。摘要随 `GET /api/v1/installations/catalog` 的 `agentScript` 字段下发，固定为实际响应字节的 SHA-256；未配置 catalog 时返回 404。该入口只用于首次安装，不替代令牌、mTLS 或审批授权。
 
 ## 请求与响应规则
 

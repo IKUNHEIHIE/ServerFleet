@@ -311,3 +311,23 @@ func TestRunGatewayPrefixMustStayInsideTrustedFileRoot(t *testing.T) {
 		t.Fatal("connection was attempted with a gateway prefix outside the file root")
 	}
 }
+
+type enrollmentHintError struct{}
+
+func (enrollmentHintError) Error() string          { return "agent: enrollment unavailable" }
+func (enrollmentHintError) EnrollmentHint() string { return "本地身份或证书不可用" }
+
+func TestRunEnrollPrintsCategoryHintWithoutLeakingDetails(t *testing.T) {
+	dir := t.TempDir()
+	rootCert, _ := runtimeCA(t)
+	deps := &fakeDeps{enrollErr: enrollmentHintError{}}
+	var stdout, stderr bytes.Buffer
+	args := []string{"-enroll-token", "token-secret", "-state-dir", dir, "-controller-url", "https://controller.local", "-root-cert", rootCert}
+	if code := Run(context.Background(), args, deps.deps(), &stdout, &stderr); code != 1 {
+		t.Fatalf("enroll failure code = %d", code)
+	}
+	out := stderr.String()
+	if !strings.Contains(out, "no automatic retry") || !strings.Contains(out, "原因：本地身份或证书不可用") || strings.Contains(out, "token-secret") {
+		t.Fatalf("unexpected enrollment hint output: %s", out)
+	}
+}

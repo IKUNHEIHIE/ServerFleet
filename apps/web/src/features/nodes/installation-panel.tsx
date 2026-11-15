@@ -31,12 +31,17 @@ interface Catalog {
   readonly rootPin: string;
   readonly installerScript: Download;
   readonly bootstrap: Readonly<Record<"amd64" | "arm64", Download>>;
+  readonly agentScript: Download;
 }
 
 const AGENT_BINARY_URL = "https://raw.githubusercontent.com/IKUNHEIHIE/ServerFleet/main/releases/serverfleet-agent-linux-amd64";
 const quote = (s: string) => `'${s.replaceAll("'", `'"'"'`)}'`;
 function base64UTF8(s: string) {
   return btoa(Array.from(new TextEncoder().encode(s), b => String.fromCharCode(b)).join(""));
+}
+
+export function installationShortCommand(script: Download, name: string): string {
+  return `curl -fsSL --proto '=https' --tlsv1.3 ${quote(script.url)} -o /tmp/sf-agent.sh && printf '%s  %s\\n' ${quote(script.sha256)} /tmp/sf-agent.sh | sha256sum --check --status && sh /tmp/sf-agent.sh ${quote(name)}`;
 }
 
 export function installationCommand(c: Catalog, name: string): string {
@@ -48,7 +53,7 @@ export function installationCommand(c: Catalog, name: string): string {
   const pin = quote(c.rootPin);
   const node = quote(name);
   const common = `-controller-url ${url} -root-cert ${dir}/root.pem -controller-ca ${dir}/controller-ca.pem -root-pin ${pin} -node-name ${node} -state-dir ${dir}`;
-  return `(set -e; curl -fsSL --proto '=https' --tlsv1.3 ${quote(AGENT_BINARY_URL)} -o ${bin} && chmod +x ${bin} && mkdir -p ${dir} && printf '%s' ${root} | base64 -d > ${dir}/root.pem && printf '%s' ${ca} | base64 -d > ${dir}/controller-ca.pem && until ${bin} -status -state-dir ${dir} -root-pin ${pin} 2>/dev/null | grep -q '"enrolled":true'; do echo "等待管理员审批接入..."; ${bin} -enroll ${common} || true; sleep 5; done; echo "已批准，启动常驻服务..."; exec ${bin} -serve ${common})`;
+  return `(set -e; umask 077; curl -fsSL --proto '=https' --tlsv1.3 ${quote(AGENT_BINARY_URL)} -o ${bin} && chmod +x ${bin} && mkdir -p ${dir} && chmod 700 ${dir} && printf '%s' ${root} | base64 -d > ${dir}/root.pem && printf '%s' ${ca} | base64 -d > ${dir}/controller-ca.pem && until ${bin} -status -state-dir ${dir} -root-pin ${pin} 2>/dev/null | grep -q '"enrolled":true'; do echo "等待管理员审批接入..."; ${bin} -enroll ${common} || true; sleep 5; done; echo "已批准，启动常驻服务..."; exec ${bin} -serve ${common})`;
 }
 
 interface InstallationPanelProps {
@@ -65,7 +70,8 @@ function InstallationContent({ nodeName }: InstallationPanelProps) {
   const [message, setMessage] = useState<string | null>(null);
   const data = page.state.status === "ready" ? page.state.data : null;
   const valid = name.trim().length > 0 && name.length <= 128 && !/[\x00-\x1f\x7f]/.test(name);
-  const command = data?.catalog && valid ? installationCommand(data.catalog, name.trim()) : "";
+  const command = data?.catalog && valid ? installationShortCommand(data.catalog.agentScript, name.trim()) : "";
+  const fullCommand = data?.catalog && valid ? installationCommand(data.catalog, name.trim()) : "";
 
   return (
     <div className="space-y-4 px-5 py-4">
@@ -92,8 +98,14 @@ function InstallationContent({ nodeName }: InstallationPanelProps) {
           ) : null}
           {!valid ? <p role="alert" className="text-xs text-destructive">请填写有效节点名称。</p> : null}
           <Field label="一键安装命令">
-            {ids => <TextArea id={ids.inputId} readOnly rows={4} value={command} className="font-mono text-xs" />}
+            {ids => <TextArea id={ids.inputId} readOnly rows={2} value={command} className="font-mono text-xs" />}
           </Field>
+          <p className="text-xs text-muted-foreground">命令从本页面下载安装脚本并核对摘要，不含令牌。</p>
+          <details className="rounded border border-border/70 px-3 py-2 text-xs text-muted-foreground">
+            <summary className="cursor-pointer select-none">面板使用私有证书时，改用完整命令</summary>
+            <TextArea aria-label="完整安装命令" readOnly rows={4} value={fullCommand} className="mt-2 font-mono text-xs" />
+            <p className="mt-1">完整命令自动携带信任材料，不依赖本页面使用的公开证书。</p>
+          </details>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">运行后到下方「接入审批」批准该节点；批准后自动启动常驻服务并上线。</p>
             <Button
