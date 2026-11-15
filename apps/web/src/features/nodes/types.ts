@@ -67,7 +67,7 @@ export interface NodeListItemView {
   readonly id: string;
   readonly name: string;
   /** 来自候选 DTO 的乐观并发版本号；后续条件请求（If-Match）需要，本轮不发起任何写操作。 */
-  readonly revision: number;
+  readonly revision?: number;
   readonly status: NodeStatus;
   readonly platform: string | null;
   readonly agentVersion: string | null;

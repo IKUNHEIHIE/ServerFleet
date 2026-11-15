@@ -76,6 +76,14 @@ describe("legacy node adapter", () => {
     expect(adaptMetric(101, true)).toEqual({ kind: "invalid", reason: "out-of-range" });
   });
 
+  it("maps live disk, rates and sampledAt while hiding stale samples", () => {
+    const fresh = new Date(Date.now() - 1000).toISOString();
+    const result = adapt([{ ...base, cpuPercent: 12.3, memoryPercent: 45.6, diskPercent: 78.9, uploadBps: 1024, downloadBps: 2048, sampledAt: fresh }]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.rows[0]).toMatchObject({ uploadBps: 1024, downloadBps: 2048, sampledAt: fresh, disk: { kind: "value", percent: 78.9 } });
+  });
+
   it("returns an empty successful list for an empty server set", () => {
     expect(adapt([])).toEqual({ ok: true, rows: [] });
   });

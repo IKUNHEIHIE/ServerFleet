@@ -69,6 +69,10 @@ export interface NodeSummary {
   readonly tags?: readonly string[];
   readonly cpuPercent?: number | null;
   readonly memoryPercent?: number | null;
+  readonly diskPercent?: number | null;
+  readonly downloadBps?: number | null;
+  readonly uploadBps?: number | null;
+  readonly sampledAt?: string;
 }
 
 export type NodeStatus = "online" | "offline" | "suspended" | "revoked" | "unknown";
@@ -80,7 +84,13 @@ export interface NodeDetail {
   readonly lastSeenAt?: string;
   readonly agentVersion?: string;
   readonly platform?: string;
-  readonly revision: number;
+  readonly revision?: number;
+  readonly updatedAt?: string;
+  readonly address?: string;
+  readonly region?: string;
+  readonly provider?: string;
+  readonly countryCode?: string;
+  readonly tags?: readonly string[];
 }
 
 export interface NodeIdentity {

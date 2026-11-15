@@ -122,6 +122,10 @@ export const nodesApi = {
     }),
   detail: (nodeId: string, signal?: AbortSignal) =>
     apiClient.request<NodeDetail>(`/api/v1/nodes/${encodeURIComponent(nodeId)}`, { signal }),
+  update: (nodeId: string, body: { name: string; address: string; region: string; provider: string; countryCode: string; tags: readonly string[]; expectedUpdatedAt: string }) =>
+    apiClient.request<NodeDetail>(`/api/v1/nodes/${encodeURIComponent(nodeId)}`, { method: "PATCH", body }),
+  remove: (nodeId: string, body: { reason: string }) =>
+    apiClient.request<void>(`/api/v1/nodes/${encodeURIComponent(nodeId)}`, { method: "DELETE", body }),
   identity: (nodeId: string, signal?: AbortSignal) =>
     apiClient.request<NodeIdentity>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/identity`, { signal }),
   capabilities: (nodeId: string, signal?: AbortSignal) =>
@@ -142,7 +146,7 @@ export const nodesApi = {
 };
 
 export const enrollmentApi = {
-  createToken: (body: { expiryMinutes?: number; maxUses?: number; replaceNodeId?: string }) =>
+  createToken: (body: { name?: string; expiryMinutes?: number; maxUses?: number; replaceNodeId?: string }) =>
     apiClient.request<NodeEnrollmentToken>("/api/v1/node-enrollment-tokens", { method: "POST", body }),
   list: (signal?: AbortSignal) =>
     apiClient.request<ItemList<NodeEnrollment>>("/api/v1/node-enrollments", { signal }),

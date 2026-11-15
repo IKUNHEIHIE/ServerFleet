@@ -36,6 +36,9 @@ export function adaptLegacyNodes(payload: unknown): LegacyAdaptResult {
       nameIssue = "invalid";
     }
 
+    const sampledAt = typeof record.sampledAt === "string" && Number.isFinite(Date.parse(record.sampledAt)) ? record.sampledAt : null;
+    const stale = sampledAt !== null && (Date.now() - Date.parse(sampledAt) > 5000 || Date.parse(sampledAt) > Date.now() + 1000);
+    const metricsOnline = record.online && !stale;
     rows.push({
       id: record.id,
       name: nameIssue ? record.id : name,
@@ -43,8 +46,12 @@ export function adaptLegacyNodes(payload: unknown): LegacyAdaptResult {
       online: record.online,
       region: nonEmptyString(record.region),
       provider: nonEmptyString(record.provider),
-      cpu: adaptMetric(record.cpuPercent, record.online),
-      memory: adaptMetric(record.memoryPercent, record.online),
+      cpu: adaptMetric(record.cpuPercent, metricsOnline),
+      memory: adaptMetric(record.memoryPercent, metricsOnline),
+      disk: adaptMetric(record.diskPercent, metricsOnline),
+      uploadBps: metricsOnline && typeof record.uploadBps === "number" && Number.isFinite(record.uploadBps) && record.uploadBps >= 0 ? record.uploadBps : null,
+      downloadBps: metricsOnline && typeof record.downloadBps === "number" && Number.isFinite(record.downloadBps) && record.downloadBps >= 0 ? record.downloadBps : null,
+      sampledAt,
     });
   }
 

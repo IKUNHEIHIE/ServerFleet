@@ -1,22 +1,19 @@
 import { useMemo, useState } from "react";
-import { Activity, Filter, RefreshCw, Server } from "lucide-react";
+import { Activity, Filter, Plus, RefreshCw, Server } from "lucide-react";
 import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
-import { Notice } from "@/components/ui/feedback";
 import { Checkbox } from "@/components/ui/form";
-import { Button } from "@/components/ui/button";
+import { Button, LinkButton } from "@/components/ui/button";
 import { PageHeader, Panel } from "@/components/ui/panel";
-import { TabBar } from "@/components/ui/table";
+import { DefinitionList, TabBar } from "@/components/ui/table";
 import { nodesApi } from "@/lib/api/endpoints";
 import type { NodeDetail, NodeSummary } from "@/lib/api/dto";
 import { ApiError } from "@/lib/api/errors";
 import { useResource } from "@/lib/data/use-resource";
-import { NodeListWorkspace } from "./node-list-workspace";
 import { adaptLegacyNodes } from "./legacy-adapter";
 import { LegacyNodeList } from "./legacy-node-list";
-import { toRichNodes } from "./rich-adapter";
 
 async function loadDetails(
   summaries: readonly NodeSummary[],
@@ -42,31 +39,31 @@ function RichNodesView({
   listKey,
   enabled,
   onListRetry,
+  updatedAt,
 }: {
   readonly summaries: readonly NodeSummary[];
   readonly listKey: string;
   readonly enabled: boolean;
   readonly onListRetry: () => void;
+  readonly updatedAt: number;
 }) {
-  const summaryKey = summaries.map(summary => summary.id).join(",");
+  const summaryKey = JSON.stringify([updatedAt, summaries]);
   const rich = useResource(
     `nodes:rich:${listKey}:${summaryKey}`,
     async signal => {
       const details = await loadDetails(summaries, signal);
-      const items = toRichNodes(summaries, details);
-      if (!items) throw new ApiError({ kind: "invalid", status: 200 });
-      return items;
+      const ids = new Set(details.map(detail => detail.nodeId));
+      if (ids.size !== summaries.length || summaries.some(summary => !ids.has(summary.id))) {
+        throw new ApiError({ kind: "invalid", status: 200 });
+      }
+      return details;
     },
     { enabled },
   );
 
   return (
     <div className="space-y-4">
-      <Notice tone="warning" title="候选详情契约">
-        详情字段来自 <code>GET /api/v1/nodes/{"{nodeId}"}</code>（G2 候选，D02–D04 未冻结）。列表 DTO 没有采样时间，
-        富化视图不会把 CPU/内存数值显示为当前读数；兼容视图才按“无采样时间”展示这些合法数值。
-      </Notice>
-      <Panel title="富化节点视图" description="列表 + 只读详情；详情字段全部来自服务端，不补造状态或版本。">
+      <Panel title="节点详细状态" description="节点连接、平台与资源信息每 1 秒刷新。">
         <AsyncPanel
           state={rich.state}
           onRetry={() => {
@@ -79,16 +76,21 @@ function RichNodesView({
           isEmpty={items => items.length === 0}
         >
           {items => (
-            <div className="px-4 py-4">
-              <NodeListWorkspace
-                key={`${listKey}:${summaryKey}`}
-                state={{ status: "ready", nodes: items }}
-                title="节点列表（富化）"
-                onRetry={() => {
-                  onListRetry();
-                  rich.reload();
-                }}
-              />
+            <div className="grid gap-4 px-4 py-4 lg:grid-cols-2">
+              {items.map(detail => (
+                <Panel key={detail.nodeId} title={
+                  <a className="text-primary hover:underline" href={`#/nodes/${encodeURIComponent(detail.nodeId)}`}>
+                    {detail.displayName || detail.nodeId}
+                  </a>
+                }>
+                  <DefinitionList items={[
+                    { term: "状态", value: detail.status },
+                    { term: "平台", value: detail.platform ?? "未知" },
+                    { term: "Agent 版本", value: detail.agentVersion ?? "未知" },
+                    { term: "最近在线", value: detail.lastSeenAt ?? "未知" },
+                  ]} />
+                </Panel>
+              ))}
             </div>
           )}
         </AsyncPanel>
@@ -102,24 +104,33 @@ export function NodesPage() {
   const [onlineOnly, setOnlineOnly] = useState(false);
   const [view, setView] = useState<"legacy" | "rich">("legacy");
   const listKey = `${session.viewEpoch}:${onlineOnly}`;
-  const list = useResource(`nodes:list:${listKey}`, signal => nodesApi.list({ onlineOnly, signal }).then(result => result.data));
+  const list = useResource(
+    `nodes:list:${listKey}`,
+    signal => nodesApi.list({ onlineOnly, signal }).then(result => result.data),
+    { refreshIntervalMs: 1000 },
+  );
 
   const adapted = useMemo(() => {
     if (list.state.status !== "ready") return null;
     return adaptLegacyNodes(list.state.data);
   }, [list.state]);
 
-  const items = list.state.status === "ready" ? list.state.data.items : [];
+  const items = list.state.status === "ready" && adapted?.ok ? list.state.data.items : [];
   const online = items.filter(node => node.online).length;
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="节点列表"
-        description="服务器资产、地区、云厂商、在线状态与资源。默认使用兼容接口字段；富化视图需要候选详情接口。"
-        badge={<Badge tone="primary">只读</Badge>}
+        description="服务器资产、地区、云厂商与在线状态每 1 秒刷新；未接入或失联不等于关机。点击名称管理节点。"
+        badge={<Badge tone="primary">自动刷新 · 1 秒</Badge>}
         actions={
           <>
+            {session.can("node.manage") && !session.writesLocked ? (
+              <LinkButton href="#/nodes/new" variant="primary"><Plus aria-hidden="true" className="size-3.5" />添加节点</LinkButton>
+            ) : (
+              <Button type="button" variant="primary" disabled>添加节点</Button>
+            )}
             <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-lg border border-border/80 bg-card px-3 text-sm font-medium shadow-2xs transition-colors hover:bg-secondary/70">
               <Checkbox
                 checked={onlineOnly}
@@ -135,14 +146,14 @@ export function NodesPage() {
         }
       />
 
-      <Panel title="列表来源与范围" description="GET /api/v1/nodes；onlineOnly 直接作为查询参数，由服务端按当前身份返回可见范围。">
+      <Panel title="节点概览" description="当前账户可见的节点，每 1 秒自动更新。">
         <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-3">
           <GlowingEffect className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
             <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-primary-light text-primary">
               <Server className="size-4" />
             </span>
             <p>
-              当前返回：<strong className="font-semibold text-foreground">{list.state.status === "ready" ? `${items.length} 个节点` : "尚未取得"}</strong>
+              当前返回：<strong className="font-semibold text-foreground">{list.state.status === "ready" && adapted?.ok ? `${items.length} 个节点` : "尚未取得"}</strong>
             </p>
           </GlowingEffect>
           <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
@@ -150,7 +161,7 @@ export function NodesPage() {
               <Activity className="size-4" />
             </span>
             <p>
-              在线：<strong className="font-semibold text-emerald-700">{list.state.status === "ready" ? `${online} 个` : "—"}</strong>
+              在线：<strong className="font-semibold text-emerald-700">{list.state.status === "ready" && adapted?.ok ? `${online} 个` : "—"}</strong>
             </p>
           </GlowingEffect>
           <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
@@ -168,8 +179,8 @@ export function NodesPage() {
           active={view}
           onChange={setView}
           tabs={[
-            { id: "legacy", label: "兼容视图（旧字段）" },
-            { id: "rich", label: "富化视图（候选详情）" },
+            { id: "legacy", label: "节点概览" },
+            { id: "rich", label: "详细状态" },
           ]}
         />
         <div className="px-4 py-4">
@@ -186,8 +197,12 @@ export function NodesPage() {
                   <LegacyNodeList
                     key={listKey}
                     rows={adapted.rows}
+                    onChanged={list.reload}
+                    canEdit={session.can("node.manage")}
+                    canDelete={session.can("node.revoke")}
+                    writesLocked={session.writesLocked}
+                    viewEpoch={session.viewEpoch}
                     title="节点列表"
-                    description="兼容接口只提供 id/name/online 与可空指标。离线行不显示历史百分比；在线数值标记“无采样时间”。"
                   />
                 ) : (
                   <div role="alert" className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm">
@@ -200,13 +215,16 @@ export function NodesPage() {
             </AsyncPanel>
           ) : (
             <AsyncPanel state={list.state} onRetry={list.reload} errorTitle="节点列表加载失败">
-              {() => (
+              {() => adapted?.ok ? (
                 <RichNodesView
                   summaries={items}
+                  updatedAt={list.state.status === "ready" ? list.state.updatedAt : 0}
                   listKey={listKey}
                   enabled={view === "rich"}
                   onListRetry={list.reload}
                 />
+              ) : (
+                <p role="alert" className="px-4 py-3 text-sm text-destructive">节点数据格式不符合兼容约定</p>
               )}
             </AsyncPanel>
           )}

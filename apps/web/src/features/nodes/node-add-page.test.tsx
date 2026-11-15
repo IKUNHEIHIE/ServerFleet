@@ -31,13 +31,23 @@ describe("add-node page", () => {
     expect(await screen.findByRole("heading", { level: 1, name: "添加节点" })).toBeVisible();
     expect(await screen.findByText("new-node")).toBeVisible();
 
+    expect((screen.getByLabelText("节点名称") as HTMLInputElement).value).toMatch(/^node-[a-f0-9]{8}$/);
+    fireEvent.change(screen.getByLabelText("节点名称"), { target: { value: "  edge-hk-01  " } });
     fireEvent.change(screen.getByLabelText("有效期（分钟）"), { target: { value: "10" } });
     fireEvent.click(screen.getByRole("button", { name: "生成一次性凭证" }));
 
     expect(await screen.findByText("tok-secret-value")).toBeVisible();
     expect(screen.getByText("接入令牌（仅显示这一次）")).toBeVisible();
     const create = calls.find(call => call.method === "POST" && call.url === "/api/v1/node-enrollment-tokens");
-    expect(JSON.parse(String(create?.init?.body))).toEqual({ expiryMinutes: 10, maxUses: 1 });
+    expect(JSON.parse(String(create?.init?.body))).toEqual({ name: "edge-hk-01", expiryMinutes: 10, maxUses: 1 });
+
+    expect(screen.getByLabelText("节点名称")).toHaveValue("edge-hk-01");
+    expect(screen.getByLabelText("节点名称")).toHaveAttribute("readonly");
+    expect(screen.queryByText("2. 安装与审批")).not.toBeInTheDocument();
+    expect(screen.queryByText("契约缺口：接入历史与安装命令")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "1. 命名与接入凭证" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "2. 可信安装" })).toBeVisible();
+    expect(screen.getByRole("heading", { name: "3. 接入审批" })).toBeVisible();
 
     fireEvent.click(screen.getByRole("button", { name: "批准" }));
     expect(await screen.findByRole("heading", { level: 2, name: "批准节点接入" })).toBeVisible();
@@ -75,5 +85,42 @@ describe("add-node page", () => {
     expect(await screen.findByText("tok-secret-value")).toBeVisible();
     fireEvent.click(screen.getByRole("button", { name: "从页面移除" }));
     expect(screen.queryByText("tok-secret-value")).not.toBeInTheDocument();
+  });
+
+  it("refreshes automatic names for a new token and keeps the current token name fixed", async () => {
+    const { calls } = await renderAuthenticated("/nodes/new", enrollRoutes());
+    const name = screen.getByLabelText("节点名称") as HTMLInputElement;
+    const initial = name.value;
+    fireEvent.click(screen.getByRole("button", { name: "生成一次性凭证" }));
+    await screen.findByText("tok-secret-value");
+    expect(name).toHaveValue(initial);
+    expect(name).toHaveAttribute("readonly");
+    fireEvent.click(screen.getByRole("button", { name: "生成一次性凭证" }));
+    await waitFor(() => expect(name.value).not.toBe(initial));
+    const current = name.value;
+    expect(current).toMatch(/^node-[a-f0-9]{8}$/);
+    const bodies = calls.filter(call => call.url === "/api/v1/node-enrollment-tokens")
+      .map(call => JSON.parse(String(call.init?.body)));
+    expect(bodies.map(body => body.name)).toEqual([initial, current]);
+    fireEvent.click(screen.getByRole("button", { name: "从页面移除" }));
+    expect(name.value).not.toBe(current);
+    expect(name).not.toHaveAttribute("readonly");
+  });
+
+  it("keeps a custom name across token creation and removal, and requires a valid name", async () => {
+    const { calls } = await renderAuthenticated("/nodes/new", enrollRoutes());
+    const name = screen.getByLabelText("节点名称");
+    fireEvent.change(name, { target: { value: "   " } });
+    expect(screen.getByRole("button", { name: "生成一次性凭证" })).toBeDisabled();
+    expect(calls.some(call => call.url === "/api/v1/node-enrollment-tokens")).toBe(false);
+    fireEvent.change(name, { target: { value: "custom-node" } });
+    fireEvent.click(screen.getByRole("button", { name: "生成一次性凭证" }));
+    await screen.findByText("tok-secret-value");
+    fireEvent.click(screen.getByRole("button", { name: "从页面移除" }));
+    expect(name).toHaveValue("custom-node");
+    fireEvent.click(screen.getByRole("button", { name: "生成一次性凭证" }));
+    await screen.findByText("tok-secret-value");
+    expect(calls.filter(call => call.url === "/api/v1/node-enrollment-tokens")
+      .map(call => JSON.parse(String(call.init?.body)).name)).toEqual(["custom-node", "custom-node"]);
   });
 });

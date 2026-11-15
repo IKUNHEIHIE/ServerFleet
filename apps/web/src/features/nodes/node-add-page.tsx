@@ -18,12 +18,18 @@ import { InstallationPanel } from "./installation-panel";
 
 type Decision = "approve" | "reject";
 
+function randomNodeName() {
+  return `node-${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`;
+}
+
 export function NodeAddPage() {
   const session = useSession();
+  const [nodeName, setNodeName] = useState(randomNodeName);
+  const [customName, setCustomName] = useState(false);
   const [expiryMinutes, setExpiryMinutes] = useState("10");
   const maxUses = 1;
   const [replaceNodeId, setReplaceNodeId] = useState("");
-  const [token, setToken] = useState<{ id: string; token: string; expiresAt: string; replaceNodeId?: string } | null>(null);
+  const [token, setToken] = useState<{ id: string; token: string; expiresAt: string; name: string; replaceNodeId?: string } | null>(null);
   const [copyStatus, setCopyStatus] = useState<string | null>(null);
   const [decision, setDecision] = useState<{ enrollment: NodeEnrollment; decision: Decision } | null>(null);
   const [reason, setReason] = useState("");
@@ -32,12 +38,14 @@ export function NodeAddPage() {
 
   const canManage = session.can("node.manage") || session.can("node.approve") || session.can("node.enroll");
   const locked = !canManage || session.writesLocked;
+  const validName = nodeName.trim().length > 0 && nodeName.length <= 128 && !/[\x00-\x1f\x7f]/.test(nodeName);
 
   const list = useResource(`enrollments:list:${session.viewEpoch}`, signal =>
     enrollmentApi.list(signal).then(result => result.data),
   );
-  const createToken = useAction(() =>
+  const createToken = useAction((name: string) =>
     enrollmentApi.createToken({
+      name,
       expiryMinutes: Number(expiryMinutes),
       maxUses: Number(maxUses),
       ...(replaceNodeId.trim() ? { replaceNodeId: replaceNodeId.trim() } : {}),
@@ -48,12 +56,21 @@ export function NodeAddPage() {
   );
 
   async function generate() {
+    if (locked || createToken.pending || !validName) return;
+    const name = token && !customName ? randomNodeName() : nodeName.trim();
     setOutcome(null);
     setCopyStatus(null);
-    const result = await createToken.run();
+    const result = await createToken.run(name);
     if (result.ok && result.data) {
-      setToken({ ...result.data.data, ...(replaceNodeId.trim() ? { replaceNodeId: replaceNodeId.trim() } : {}) });
+      setNodeName(name);
+      setToken({ ...result.data.data, name, ...(replaceNodeId.trim() ? { replaceNodeId: replaceNodeId.trim() } : {}) });
     }
+  }
+
+  function removeToken() {
+    setToken(null);
+    setCopyStatus(null);
+    if (!customName) setNodeName(randomNodeName());
   }
 
   async function copyToken() {
@@ -91,19 +108,33 @@ export function NodeAddPage() {
 
       {!canManage ? (
         <Notice tone="warning" title="操作入口已锁定">
-          当前身份没有返回节点接入/审批权限（尝试 `node.manage`、`node.approve`、`node.enroll`）。仍可查看待审批请求，但不会显示可用写操作。
+          当前账户没有节点接入或审批权限，仍可查看请求，请联系管理员授权。
         </Notice>
       ) : null}
       {session.writesLocked ? (
-        <Notice tone="warning" title="写入被 CSRF 契约锁定">
-          刷新后 Identity 未返回 CSRF 令牌；请先重新登录，否则生成/审批会保持禁用。
+        <Notice tone="warning" title="会话安全验证未完成">
+          请重新登录后再生成凭证或审批接入请求。
         </Notice>
       ) : null}
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
 
-      <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="1. 生成短期接入凭证" description="POST /api/v1/node-enrollment-tokens。令牌只在创建响应显示一次，服务端不得支持后续列表读取明文。">
+      <div className="space-y-5">
+        <Panel title="1. 命名与接入凭证" description="为节点命名并生成一次性短期令牌；安装时使用同一名称。">
           <div className="space-y-4 px-5 py-4">
+            <Field label="节点名称" hint={token ? "当前令牌的名称已固定；移除令牌后可修改名称。" : "必填，最多 128 字符。自定义名称会在重新生成令牌时保留。"}>
+              {ids => (
+                <TextInput
+                  id={ids.inputId}
+                  required
+                  maxLength={128}
+                  value={nodeName}
+                  readOnly={token !== null}
+                  onChange={event => { setNodeName(event.target.value); setCustomName(true); }}
+                  disabled={locked || createToken.pending}
+                />
+              )}
+            </Field>
+            {!validName ? <p role="alert" className="text-xs text-destructive">请填写有效节点名称，不能包含控制字符。</p> : null}
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="有效期（分钟）" hint="有效期为 1–10 分钟。">
                 {ids => (
@@ -132,11 +163,11 @@ export function NodeAddPage() {
                 )}
               </Field>
             </div>
-            <Field label="恢复已有节点 ID（可选）" hint="仅用于已核验的身份恢复，要求该节点的 nodes.revoke 授权。批准后旧身份会被吊销；保留原执行账本，不自动重放任务。">{ids => <TextInput id={ids.inputId} value={replaceNodeId} onChange={event => setReplaceNodeId(event.target.value)} disabled={locked || createToken.pending} />}</Field>
+            <Field label="恢复已有节点 ID（可选）" hint="仅用于已核验的身份恢复；批准后旧身份会被吊销。">{ids => <TextInput id={ids.inputId} value={replaceNodeId} onChange={event => setReplaceNodeId(event.target.value)} disabled={locked || createToken.pending} />}</Field>
             {createToken.error ? (
               <Notice tone="error" title="凭证生成失败">{describeApiError(createToken.error)}</Notice>
             ) : null}
-            <Button type="button" variant="primary" onClick={generate} loading={createToken.pending} disabled={locked || !Number.isInteger(Number(expiryMinutes)) || Number(expiryMinutes) < 1 || Number(expiryMinutes) > 10}>
+            <Button type="button" variant="primary" onClick={generate} loading={createToken.pending} disabled={locked || !validName || !Number.isInteger(Number(expiryMinutes)) || Number(expiryMinutes) < 1 || Number(expiryMinutes) > 10}>
               生成一次性凭证
             </Button>
 
@@ -156,7 +187,7 @@ export function NodeAddPage() {
                   <Button type="button" size="sm" variant="primary" onClick={copyToken}>
                     复制令牌
                   </Button>
-                  <Button type="button" size="sm" variant="ghost" onClick={() => { setToken(null); setCopyStatus(null); }}>
+                  <Button type="button" size="sm" variant="ghost" onClick={removeToken} disabled={createToken.pending}>
                     从页面移除
                   </Button>
                 </div>
@@ -165,27 +196,13 @@ export function NodeAddPage() {
             ) : null}
           </div>
         </Panel>
-
-        <Panel title="2. 安装与审批" description="安装包与命令由 Agent 正式发行渠道提供；本页面不拼接未登记的下载地址，也不伪造安装成功。">
-          <div className="space-y-3 px-5 py-4 text-sm leading-6 text-muted-foreground">
-            <ol className="list-decimal space-y-2 pl-5">
-              <li>在受控终端以 Agent 官方发行包安装，使用上一步的一次性令牌完成注册。</li>
-              <li>若服务端启用人工审批，接入请求会出现在下方“待审批接入请求”。</li>
-              <li>批准后节点身份由服务端签发；拒绝或到期令牌不会产生可用节点。</li>
-              <li>节点身份被吊销后不可复用；过期任务不会自动恢复。</li>
-            </ol>
-            <Notice tone="info" title="契约缺口：接入历史与安装命令">
-              当前候选契约没有“接入历史/重新安装/按节点吊销历史”查询，也没有安装命令模板返回。页面不显示伪造历史或命令；相关证据保留为 UNTESTED，需求已登记。
-            </Notice>
-          </div>
-        </Panel>
       </div>
 
-      <InstallationPanel key={session.viewEpoch} />
+      <InstallationPanel key={session.viewEpoch} nodeName={token?.name ?? nodeName.trim()} />
 
       <Panel
-        title="待审批接入请求"
-        description="GET /api/v1/node-enrollments；批准/拒绝必须由服务端再次校验当前权限。"
+        title="3. 接入审批"
+        description="核对待审批接入请求的节点名称与安装来源后再批准；批准不代表节点已在线。"
         actions={<Button size="sm" onClick={list.reload} loading={list.state.status === "loading"}>刷新</Button>}
       >
         <AsyncPanel
@@ -282,7 +299,7 @@ export function NodeAddPage() {
             授予当前账户该节点的读取权限（不授予执行权限）
           </label>
         ) : null}
-        <Field label="原因（可选）" hint="服务端会写入审计；不要包含秘密或凭据。">
+        <Field label="原因（可选）" hint="请勿包含秘密或凭据。">
           {ids => (
             <TextArea
               id={ids.inputId}
