@@ -93,10 +93,10 @@ func ValidFileOpPath(p string) bool {
 		return false
 	}
 	trimmed := strings.TrimPrefix(p, "/")
-	if trimmed == "" {
+	if trimmed == "" || trimmed == "." {
 		return true
 	}
-	if !fs.ValidPath(trimmed) || trimmed == "." || strings.HasPrefix(trimmed, ".sf-") {
+	if !fs.ValidPath(trimmed) || strings.HasPrefix(trimmed, ".sf-") {
 		return false
 	}
 	return true

@@ -29,7 +29,7 @@ func (f *agentFileSessions) HandleOp(ctx context.Context, envelope *agentv1.Enve
 	if p == "" {
 		p = "."
 	}
-	reply := &agentv1.FileOpReply{RequestId: req.GetRequestId(), Path: p}
+	reply := &agentv1.FileOpReply{RequestId: req.GetRequestId(), Path: req.GetPath()}
 	switch req.GetOp() {
 	case "list":
 		if f.io.safePath(p, false) != nil {
