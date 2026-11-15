@@ -84,6 +84,24 @@ func ValidFileOpName(name string) bool {
 	return true
 }
 
+// ValidFileOpPath accepts the operator-facing path form used by the console: an
+// optional leading "/" rooted at the node's private file root ("/", "/data",
+// "data", "data/sub"). It still forbids escape (".."), backslash/colon/NUL and
+// the reserved ".sf-" prefix. The agent trims the leading "/" under os.Root.
+func ValidFileOpPath(p string) bool {
+	if len(p) > 1024 || strings.IndexByte(p, 92) >= 0 || strings.IndexByte(p, 58) >= 0 || strings.ContainsRune(p, 0) {
+		return false
+	}
+	trimmed := strings.TrimPrefix(p, "/")
+	if trimmed == "" {
+		return true
+	}
+	if !fs.ValidPath(trimmed) || trimmed == "." || strings.HasPrefix(trimmed, ".sf-") {
+		return false
+	}
+	return true
+}
+
 // fileDirectory returns the explicit parent of a validated relative file path.
 func fileDirectory(value string) string {
 	if i := strings.LastIndex(value, "/"); i >= 0 {
@@ -207,11 +225,11 @@ func (v semanticValidator) filePayload(payload proto.Message) error {
 			return bad()
 		}
 	case *agentv1.FileOpRequest:
-		if !FileID(m.RequestId) || !FileID(m.NodeId) || !ValidFileOp(m.Op) || !FilePath(m.Path) || m.Op == "rename" && !ValidFileOpName(m.NewName) || m.Op != "rename" && m.NewName != "" {
+		if !FileID(m.RequestId) || !FileID(m.NodeId) || !ValidFileOp(m.Op) || !ValidFileOpPath(m.Path) || m.Op == "rename" && !ValidFileOpName(m.NewName) || m.Op != "rename" && m.NewName != "" {
 			return bad()
 		}
 	case *agentv1.FileOpReply:
-		if !FileID(m.RequestId) || !ValidFileOpCode(m.ResultCode) || len(m.Entries) > MaxFileOpEntries || m.Size > FileMaxBytes || m.Path != "" && !FilePath(m.Path) || m.ResultCode == "ok" && m.Path == "" {
+		if !FileID(m.RequestId) || !ValidFileOpCode(m.ResultCode) || len(m.Entries) > MaxFileOpEntries || m.Size > FileMaxBytes || m.Path != "" && !ValidFileOpPath(m.Path) || m.ResultCode == "ok" && m.Path == "" {
 			return bad()
 		}
 	default:
