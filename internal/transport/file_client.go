@@ -18,7 +18,17 @@ type FileClient struct {
 	gate     FileFrameGate
 	mu       sync.Mutex
 	sessions map[string]*FileSession
+	ops      map[string]*fileOpPending
 	max      int
+}
+
+// fileOpPending correlates one ad-hoc directory operation by request_id. Unlike
+// a FileSession it is not a task reservation; authorization happened at the
+// service layer before DirectoryOp registered it.
+type fileOpPending struct {
+	node        string
+	observation LinkObservation
+	reply       chan *agentv1.FileOpReply
 }
 type FileSession struct {
 	client       *FileClient
@@ -43,7 +53,7 @@ func NewFileClient(links *ControllerLinks, gate FileFrameGate, max int) (*FileCl
 	if links == nil || gate == nil || max < 1 || max > 64 {
 		return nil, ErrLinkRejected
 	}
-	return &FileClient{links: links, gate: gate, sessions: map[string]*FileSession{}, max: max}, nil
+	return &FileClient{links: links, gate: gate, sessions: map[string]*FileSession{}, ops: map[string]*fileOpPending{}, max: max}, nil
 }
 func fileSessionKey(node, execution string) string { return node + "/" + execution }
 func (c *FileClient) NewSession(ctx context.Context, node string, offer *agentv1.TaskOffer) (*FileSession, error) {
@@ -226,6 +236,23 @@ func (c *FileClient) Deliver(ctx context.Context, o LinkObservation, e *agentv1.
 	if e == nil {
 		return false, ErrLinkRejected
 	}
+	if r := e.GetFileOpReply(); r != nil {
+		c.mu.Lock()
+		p := c.ops[r.RequestId]
+		c.mu.Unlock()
+		if p == nil {
+			return false, nil
+		}
+		if p.node != o.Identity.NodeID || p.observation != o {
+			return true, ErrLinkRejected
+		}
+		select {
+		case p.reply <- r:
+			return true, nil
+		default:
+			return true, ErrLinkRejected
+		}
+	}
 	task, execution, transfer := FileFrameIDs(e)
 	kind := ""
 	if e.GetFileOpenReply() != nil {
@@ -273,6 +300,15 @@ func (c *FileClient) AuthorizeFrame(ctx context.Context, o LinkObservation, e *a
 	if c == nil || e == nil {
 		return ErrLinkRejected
 	}
+	if r := e.GetFileOpRequest(); r != nil {
+		c.mu.Lock()
+		_, ok := c.ops[r.RequestId]
+		c.mu.Unlock()
+		if !ok {
+			return ErrLinkRejected
+		}
+		return nil
+	}
 	task, execution, transfer := FileFrameIDs(e)
 	if offer := e.GetTaskOffer(); offer != nil {
 		task, execution = offer.TaskId, offer.ExecutionId
@@ -291,4 +327,43 @@ func (c *FileClient) AuthorizeFrame(ctx context.Context, o LinkObservation, e *a
 		return ErrLinkRejected
 	}
 	return s.check(ctx, e)
+}
+
+// DirectoryOp sends one ad-hoc directory operation to a node's agent and waits
+// for the correlated reply. The service layer must have authorized the subject
+// for this node and operation before calling; here only the registered request
+// may be sent and only its reply accepted.
+func (c *FileClient) DirectoryOp(ctx context.Context, node string, req *agentv1.FileOpRequest) (*agentv1.FileOpReply, error) {
+	if c == nil || req == nil || !FileID(req.RequestId) || !FileID(node) || !ValidFileOp(req.Op) || ctx == nil || ctx.Err() != nil {
+		return nil, ErrLinkRejected
+	}
+	o, err := c.links.FileConnection(ctx, node)
+	if err != nil {
+		return nil, err
+	}
+	if o.Identity.NodeID != node {
+		return nil, ErrLinkRejected
+	}
+	replyCh := make(chan *agentv1.FileOpReply, 1)
+	c.mu.Lock()
+	if _, exists := c.ops[req.RequestId]; exists || len(c.ops) >= c.max {
+		c.mu.Unlock()
+		return nil, ErrLinkRejected
+	}
+	c.ops[req.RequestId] = &fileOpPending{node: node, observation: o, reply: replyCh}
+	c.mu.Unlock()
+	defer func() { c.mu.Lock(); delete(c.ops, req.RequestId); c.mu.Unlock() }()
+	if c.links.Send(ctx, node, &agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: req}}) != nil {
+		return nil, ErrDeliveryUnknown
+	}
+	timer := time.NewTimer(15 * time.Second)
+	defer timer.Stop()
+	select {
+	case reply := <-replyCh:
+		return reply, nil
+	case <-ctx.Done():
+		return nil, ErrDeliveryUnknown
+	case <-timer.C:
+		return nil, ErrDeliveryUnknown
+	}
 }
