@@ -173,7 +173,7 @@ func decodeAgentEnrollmentResult(raw []byte) (transport.EnrollmentHTTPResult, er
 // EnrollOnce sends exactly ONE explicit attempt with the existing CSR. Pending
 // is an observation, never installation success. Lost/invalid responses retain
 // the identity; this method does not loop, prepare, replace or retry anything.
-func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token string) (agentEnrollmentObservation, error) {
+func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token, name string) (agentEnrollmentObservation, error) {
 	var zero agentEnrollmentObservation
 	if c == nil || ctx == nil || c.identity == nil || c.client == nil || c.current == nil {
 		return zero, errAgentEnrollment
@@ -183,7 +183,7 @@ func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token string) (a
 	if c.observe(bounded) != nil {
 		return zero, errAgentEnrollment
 	}
-	input, err := c.identity.Request(bounded, token)
+	input, err := c.identity.Request(bounded, token, name)
 	if err != nil {
 		return zero, errAgentEnrollment
 	}

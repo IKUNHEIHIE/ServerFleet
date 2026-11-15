@@ -81,7 +81,7 @@ func TestEnrollmentOneTimeCSRApprovalReinstallAndLiveRevocation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := AgentEnrollmentInput{token.Token, "request-1", enrollmentCSR(t), s.issuer.rootPin, "synthetic-agent", "linux"}
+	input := AgentEnrollmentInput{token.Token, "", "request-1", enrollmentCSR(t), s.issuer.rootPin, "synthetic-agent", "linux"}
 	result, err := s.Submit(ctx, input)
 	if err != nil || result.State != "pending" || result.CertificatePEM != "" {
 		t.Fatal(result, err)
@@ -181,7 +181,7 @@ func TestEnrollmentExpiryPinSignatureAndAdminGate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := AgentEnrollmentInput{token.Token, "request-1", enrollmentCSR(t), s.issuer.rootPin, "agent", "linux"}
+	input := AgentEnrollmentInput{token.Token, "", "request-1", enrollmentCSR(t), s.issuer.rootPin, "agent", "linux"}
 	changed := input
 	changed.PinnedRootSPKI = "wrong"
 	if _, err = s.Submit(ctx, changed); err != ErrEnrollmentRejected {
@@ -238,7 +238,7 @@ func TestEnrollmentCommitAuthorityRollsBackTokensCertificatesRevocationAndReads(
 	if err != nil {
 		t.Fatal(err)
 	}
-	input := AgentEnrollmentInput{token.Token, "request-fenced", enrollmentCSR(t), s.issuer.rootPin, "0.9.0", "linux"}
+	input := AgentEnrollmentInput{token.Token, "", "request-fenced", enrollmentCSR(t), s.issuer.rootPin, "0.9.0", "linux"}
 	if _, err = s.Submit(ctx, input); err != nil {
 		t.Fatal(err)
 	}
@@ -325,5 +325,42 @@ func TestEnrollmentMissingPanickingUnavailableAndCancelledAuthorityCloses(t *tes
 				}
 			})
 		}
+	}
+}
+
+func TestEnrollmentTokenlessApprovalGated(t *testing.T) {
+	ctx := context.Background()
+	s, _, _ := enrollmentFixture(t)
+	input := AgentEnrollmentInput{"", "node-alpha", "request-tokenless-1", enrollmentCSR(t), s.issuer.rootPin, "synthetic-agent", "linux"}
+	result, err := s.Submit(ctx, input)
+	if err != nil || result.State != "pending" || result.CertificatePEM != "" || result.NodeID != "" {
+		t.Fatal("tokenless submit must create a pending request without issuing identity", result, err)
+	}
+	replay, rerr := s.Submit(ctx, input)
+	if rerr != nil || replay.State != "pending" {
+		t.Fatal("tokenless re-submit must be idempotent pending", replay, rerr)
+	}
+	conflict := input
+	conflict.CSRPEM = enrollmentCSR(t)
+	if _, err = s.Submit(ctx, conflict); err != ErrEnrollmentRejected {
+		t.Fatal("different CSR for the same request id must be rejected", err)
+	}
+	bad := input
+	bad.RequestID = "request-tokenless-2"
+	bad.CSRPEM = "not-a-csr"
+	if _, err = s.Submit(ctx, bad); err != ErrEnrollmentRejected {
+		t.Fatal("invalid CSR must be rejected", err)
+	}
+	list, err := s.List(ctx, EnrollmentOperation{ActorID: "admin", Action: "enrollment.list"})
+	if err != nil || len(list) != 1 || list[0].Status != "pending" || list[0].Name != "node-alpha" || list[0].NodeID == "" {
+		t.Fatal("expected exactly one pending tokenless request named node-alpha", list, err)
+	}
+	view, err := s.Decide(ctx, EnrollmentOperation{ActorID: "admin", Action: "enrollment.decide", EnrollmentID: list[0].ID, NodeID: list[0].NodeID, ExpectedRevision: list[0].Revision}, true)
+	if err != nil || view.Status != "approved" {
+		t.Fatal("administrator approval must issue the tokenless node", view, err)
+	}
+	issued, ierr := s.Submit(ctx, input)
+	if ierr != nil || issued.State != "approved" || issued.CertificatePEM == "" || issued.NodeID == "" {
+		t.Fatal("approved tokenless node must retrieve its issued certificate", issued, ierr)
 	}
 }

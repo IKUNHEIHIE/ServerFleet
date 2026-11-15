@@ -32,7 +32,7 @@ func enrollmentHTTPFixture(t *testing.T) (*EnrollmentHTTP, *EnrollmentService, *
 	if err != nil {
 		t.Fatal(err)
 	}
-	return h, s, store, AgentEnrollmentInput{token.Token, "request-1", enrollmentCSR(t), s.issuer.rootPin, "0.9.0-test", "linux"}
+	return h, s, store, AgentEnrollmentInput{token.Token, "", "request-1", enrollmentCSR(t), s.issuer.rootPin, "0.9.0-test", "linux"}
 }
 
 func enrollmentTestRequest(h *EnrollmentHTTP, body string, alter func(*http.Request)) *httptest.ResponseRecorder {
