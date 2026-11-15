@@ -95,13 +95,13 @@ func TestAgentEnrollmentClientActualTLSUsesSameCSRWithoutProxyOrBrowserCredentia
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out, err := c.EnrollOnce(context.Background(), enrollmentClientToken()); err != nil || out.State != "pending" {
+	if out, err := c.EnrollOnce(context.Background(), enrollmentClientToken(), ""); err != nil || out.State != "pending" {
 		t.Fatal("pending bootstrap failed", out.State, err)
 	}
 	if _, err = os.Stat(filepath.Join(dir, "issued.json")); !os.IsNotExist(err) {
 		t.Fatal("pending installed identity", err)
 	}
-	if out, err := c.EnrollOnce(context.Background(), enrollmentClientToken()); err != nil || out.State != "issued" {
+	if out, err := c.EnrollOnce(context.Background(), enrollmentClientToken(), ""); err != nil || out.State != "issued" {
 		t.Fatal("issued bootstrap failed", out.State, err)
 	}
 	if attempts.Load() != 2 || proxies.Load() != 0 {
@@ -173,7 +173,7 @@ func TestAgentEnrollmentClientRejectsResponsesRedirectsAndPostUseRevocation(t *t
 			if err != nil {
 				t.Fatal(err)
 			}
-			out, err := c.EnrollOnce(context.Background(), enrollmentClientToken())
+			out, err := c.EnrollOnce(context.Background(), enrollmentClientToken(), "")
 			if test.name == "denied" {
 				if err != errAgentEnrollmentDenied || out.State != "denied" {
 					t.Fatal("denial lost", err)
@@ -205,7 +205,7 @@ func TestAgentEnrollmentClientRejectsResponsesRedirectsAndPostUseRevocation(t *t
 		if err != nil {
 			t.Fatal(err)
 		}
-		if _, err = c.EnrollOnce(context.Background(), enrollmentClientToken()); err != errAgentEnrollment {
+		if _, err = c.EnrollOnce(context.Background(), enrollmentClientToken(), ""); err != errAgentEnrollment {
 			t.Fatal("revocation allowed bootstrap", err)
 		}
 		if _, err = os.Stat(filepath.Join(dir, "issued.json")); !os.IsNotExist(err) {
@@ -249,7 +249,7 @@ func TestAgentEnrollmentClientIndependentRootAndCancellation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
 	defer cancel()
 	start := time.Now()
-	if _, err = c.EnrollOnce(ctx, enrollmentClientToken()); err != errAgentEnrollment || time.Since(start) > time.Second {
+	if _, err = c.EnrollOnce(ctx, enrollmentClientToken(), ""); err != errAgentEnrollment || time.Since(start) > time.Second {
 		t.Fatal("request did not cancel", err)
 	}
 	if calls.Load() > 1 {
@@ -260,7 +260,7 @@ func TestAgentEnrollmentClientIndependentRootAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = wrong.EnrollOnce(context.Background(), enrollmentClientToken()); err != errAgentEnrollment {
+	if _, err = wrong.EnrollOnce(context.Background(), enrollmentClientToken(), ""); err != errAgentEnrollment {
 		t.Fatal("wrong DNS identity accepted", err)
 	}
 }

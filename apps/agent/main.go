@@ -85,7 +85,7 @@ func agentEnrollOnce(ctx context.Context, request agentruntime.EnrollRequest) (a
 	if err != nil {
 		return agentruntime.EnrollResult{}, errAgentEnrollment
 	}
-	observation, err := client.EnrollOnce(ctx, request.EnrollToken)
+	observation, err := client.EnrollOnce(ctx, request.EnrollToken, request.NodeName)
 	result := agentruntime.EnrollResult{State: observation.State, ExpiresAt: observation.ExpiresAt}
 	if err != nil {
 		if errors.Is(err, errAgentEnrollmentDenied) {

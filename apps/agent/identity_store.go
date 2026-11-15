@@ -241,16 +241,20 @@ func (s *agentIdentityStore) Prepare(ctx context.Context, version string) (agent
 
 // Request includes only CSR/public metadata and a transient one-use token.
 // Platform is the actual GOOS; this does not claim Windows is a Linux Agent.
-func (s *agentIdentityStore) Request(ctx context.Context, token string) (transport.AgentEnrollmentInput, error) {
+func (s *agentIdentityStore) Request(ctx context.Context, token, name string) (transport.AgentEnrollmentInput, error) {
 	var out transport.AgentEnrollmentInput
-	if len(token) != 43 {
+	if token != "" {
+		if len(token) != 43 {
+			return out, errAgentIdentity
+		}
+		b, err := base64.RawURLEncoding.DecodeString(token)
+		if s == nil || ctx == nil || ctx.Err() != nil || err != nil || len(b) != 32 || base64.RawURLEncoding.EncodeToString(b) != token {
+			return out, errAgentIdentity
+		}
+		defer clear(b)
+	} else if s == nil || ctx == nil || ctx.Err() != nil {
 		return out, errAgentIdentity
 	}
-	b, err := base64.RawURLEncoding.DecodeString(token)
-	if s == nil || ctx == nil || ctx.Err() != nil || err != nil || len(b) != 32 || base64.RawURLEncoding.EncodeToString(b) != token {
-		return out, errAgentIdentity
-	}
-	defer clear(b)
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.root == nil {
@@ -261,7 +265,7 @@ func (s *agentIdentityStore) Request(ctx context.Context, token string) (transpo
 	if err != nil {
 		return out, errAgentIdentity
 	}
-	return transport.AgentEnrollmentInput{EnrollmentToken: token, RequestID: r.RequestID, CSRPEM: r.CSRPEM, PinnedRootSPKI: r.RootSPKI, AgentVersion: r.Version, Platform: r.Platform}, nil
+	return transport.AgentEnrollmentInput{EnrollmentToken: token, NodeName: name, RequestID: r.RequestID, CSRPEM: r.CSRPEM, PinnedRootSPKI: r.RootSPKI, AgentVersion: r.Version, Platform: r.Platform}, nil
 }
 
 func (s *agentIdentityStore) validate(result transport.AgentEnrollmentResult, key []byte) (tls.Certificate, agentIdentityFacts, error) {

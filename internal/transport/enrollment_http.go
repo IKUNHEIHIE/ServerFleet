@@ -160,7 +160,7 @@ func decodeEnrollmentBody(w http.ResponseWriter, r *http.Request) (AgentEnrollme
 			return out, ErrEnrollmentRejected
 		}
 		switch key {
-		case "enrollmentToken", "requestId", "csrPem", "pinnedRootSpkiSha256", "agentVersion", "platform":
+		case "enrollmentToken", "nodeName", "requestId", "csrPem", "pinnedRootSpkiSha256", "agentVersion", "platform":
 		default:
 			return out, ErrEnrollmentRejected
 		}
@@ -172,18 +172,26 @@ func decodeEnrollmentBody(w http.ResponseWriter, r *http.Request) (AgentEnrollme
 			return out, ErrEnrollmentRejected
 		}
 		var text string
-		if json.Unmarshal(value, &text) != nil || text == "" {
+		if json.Unmarshal(value, &text) != nil {
+			return out, ErrEnrollmentRejected
+		}
+		if text == "" && key != "enrollmentToken" && key != "nodeName" {
 			return out, ErrEnrollmentRejected
 		}
 		values[key] = text
 	}
-	if token, err = d.Token(); err != nil || token != json.Delim('}') || len(values) != 6 {
+	if token, err = d.Token(); err != nil || token != json.Delim('}') {
 		return out, ErrEnrollmentRejected
+	}
+	for _, required := range []string{"requestId", "csrPem", "pinnedRootSpkiSha256", "agentVersion", "platform"} {
+		if _, ok := values[required]; !ok {
+			return out, ErrEnrollmentRejected
+		}
 	}
 	if _, err = d.Token(); err != io.EOF {
 		return out, ErrEnrollmentRejected
 	}
-	out = AgentEnrollmentInput{values["enrollmentToken"], values["requestId"], values["csrPem"], values["pinnedRootSpkiSha256"], values["agentVersion"], values["platform"]}
+	out = AgentEnrollmentInput{values["enrollmentToken"], values["nodeName"], values["requestId"], values["csrPem"], values["pinnedRootSpkiSha256"], values["agentVersion"], values["platform"]}
 	return out, nil
 }
 

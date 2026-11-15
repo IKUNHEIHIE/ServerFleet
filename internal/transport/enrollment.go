@@ -45,6 +45,7 @@ func (t EnrollmentToken) GoString() string { return t.String() }
 
 type AgentEnrollmentInput struct {
 	EnrollmentToken string `json:"enrollmentToken"`
+	NodeName        string `json:"nodeName,omitempty"`
 	RequestID       string `json:"requestId"`
 	CSRPEM          string `json:"csrPem"`
 	PinnedRootSPKI  string `json:"pinnedRootSpkiSha256"`
@@ -155,6 +156,8 @@ func enrollmentSecret() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
+const tokenlessEnrollmentTTL = 15 * time.Minute
+
 func validEnrollmentSecret(secret string) bool {
 	b, err := base64.RawURLEncoding.DecodeString(secret)
 	return err == nil && len(b) == 32 && base64.RawURLEncoding.EncodeToString(b) == secret
@@ -290,7 +293,7 @@ func (s *EnrollmentService) IssueToken(ctx context.Context, op EnrollmentOperati
 	return result, nil
 }
 func (s *EnrollmentService) Submit(ctx context.Context, input AgentEnrollmentInput) (AgentEnrollmentResult, error) {
-	if s == nil || !validEnrollmentSecret(input.EnrollmentToken) || !validBindingID(input.RequestID) || len(input.RequestID) > 128 || input.PinnedRootSPKI != s.issuer.rootPin || input.AgentVersion == "" || len(input.AgentVersion) > 128 || input.Platform != "linux" {
+	if s == nil || (input.EnrollmentToken != "" && !validEnrollmentSecret(input.EnrollmentToken)) || len(input.NodeName) > 128 || !validBindingID(input.RequestID) || len(input.RequestID) > 128 || input.PinnedRootSPKI != s.issuer.rootPin || input.AgentVersion == "" || len(input.AgentVersion) > 128 || input.Platform != "linux" {
 		return AgentEnrollmentResult{}, ErrEnrollmentRejected
 	}
 	csr, err := parseEnrollmentCSR(input.CSRPEM)
@@ -305,6 +308,54 @@ func (s *EnrollmentService) Submit(ctx context.Context, input AgentEnrollmentInp
 	var result AgentEnrollmentResult
 	var outcome error
 	err = s.change(ctx, func(_ context.Context, st *enrollmentState, now time.Time) error {
+		if input.EnrollmentToken == "" {
+			// Approval-gated enrollment without a one-time token. Re-submitting the
+			// same RequestID with the same CSR is idempotent: it returns the pending
+			// state, or the issued certificate once an administrator has approved it.
+			// A different CSR for the same RequestID is rejected. No identity or
+			// certificate exists until Decide approves the request.
+			if record, exists := st.Requests[input.RequestID]; exists {
+				if record.RequestDigest != digest {
+					outcome = ErrEnrollmentRejected
+					return nil
+				}
+				result = AgentEnrollmentResult{State: record.View.Status, ExpiresAt: record.View.ExpiresAt}
+				if record.View.Status == "approved" {
+					id, idok := st.Identities[record.Certificate.Fingerprint]
+					if !idok || id.Revoked || !id.Enabled || id.TrustGeneration != s.issuer.generation || !now.Before(record.Certificate.Expires) {
+						outcome = ErrEnrollmentRejected
+						return nil
+					}
+					result.NodeID = id.NodeID
+					pem, perr := s.issuer.responsePEM(record.Certificate)
+					if perr != nil {
+						return perr
+					}
+					result.CertificatePEM = pem
+					result.TrustGeneration = id.TrustGeneration
+					result.ExpiresAt = record.Certificate.Expires
+				}
+				return nil
+			}
+			if len(st.Requests) >= 10000 {
+				outcome = ErrEnrollmentRejected
+				return nil
+			}
+			node, rerr := randomLinkID()
+			if rerr != nil {
+				return rerr
+			}
+			name := input.NodeName
+			if name == "" {
+				name = node
+			}
+			spki := sha256.Sum256(csr.RawSubjectPublicKeyInfo)
+			expires := now.Add(tokenlessEnrollmentTTL)
+			view := EnrollmentView{input.RequestID, node, name, "pending", now, expires, 1, hex.EncodeToString(spki[:])}
+			st.Requests[view.ID] = enrollmentRecord{View: view, CSR: bytes.Clone(csr.Raw), RequestDigest: digest}
+			result = AgentEnrollmentResult{State: "pending", ExpiresAt: expires}
+			return appendEnrollmentAudit(st, EnrollmentOperation{ActorID: "enrolling-agent"}, "enrollment.request", node, view.ID, now)
+		}
 		token, ok := st.Tokens[enrollmentDigest(input.EnrollmentToken)]
 		if !ok || !now.Before(token.Expires) {
 			outcome = ErrEnrollmentRejected

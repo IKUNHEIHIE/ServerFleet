@@ -47,6 +47,7 @@ type EnrollRequest struct {
 	ControllerCA    string
 	ControllerURL   string
 	EnrollToken     string
+	NodeName        string
 	StateDir        string
 	RootPin         string
 	RootCertificate string
@@ -117,6 +118,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	controllerCA := flags.String("controller-ca", "", "optional separately trusted HTTPS root; identity remains pinned by -root-pin")
 	controllerURL := flags.String("controller-url", "", "Controller https or wss origin, e.g. https://controller.example")
 	enrollToken := flags.String("enroll-token", "", "one-time enrollment token")
+	enroll := flags.Bool("enroll", false, "enroll without a one-time token; the node enters administrator approval")
 	enrollTokenFile := flags.String("enroll-token-file", "", "private enrollment token file (Linux; avoids secrets in process arguments)")
 	connectOnce := flags.Bool("connect-once", false, "open one controlled WSS+mTLS connection, sample once and exit")
 	serve := flags.Bool("serve", false, "maintain WSS+mTLS with bounded reconnect; stop with SIGTERM")
@@ -204,7 +206,7 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 	}
 
 	modes := 0
-	for _, active := range []bool{*statusFlag, *enrollToken != "", *connectOnce, *serve} {
+	for _, active := range []bool{*statusFlag, *enrollToken != "", *enroll, *connectOnce, *serve} {
 		if active {
 			modes++
 		}
@@ -241,20 +243,21 @@ func Run(ctx context.Context, args []string, deps Deps, stdout, stderr io.Writer
 		}
 		writeJSON(stdout, status)
 		return 0
-	case *enrollToken != "":
+	case *enrollToken != "" || *enroll:
 		if deps.Enroll == nil {
 			fmt.Fprintln(stderr, "agent: enrollment is unavailable")
 			return 1
 		}
 		origin := strings.TrimSpace(*controllerURL)
 		if !strings.HasPrefix(origin, "https://") || strings.TrimSpace(*rootCert) == "" {
-			fmt.Fprintln(stderr, "agent: -enroll-token requires -controller-url https://... and -root-cert")
+			fmt.Fprintln(stderr, "agent: enrollment requires -controller-url https://... and -root-cert")
 			return 2
 		}
 		result, err := deps.Enroll(ctx, EnrollRequest{
 			ControllerCA:    *controllerCA,
 			ControllerURL:   origin,
 			EnrollToken:     *enrollToken,
+			NodeName:        strings.TrimSpace(*nodeName),
 			StateDir:        *stateDir,
 			RootPin:         resolvedPin,
 			RootCertificate: *rootCert,

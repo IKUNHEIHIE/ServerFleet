@@ -92,7 +92,7 @@ func TestAgentIdentityLocalKeyCSRRequestAndRestart(t *testing.T) {
 		t.Fatal(err)
 	}
 	token := base64.RawURLEncoding.EncodeToString(bytes.Repeat([]byte{9}, 32))
-	r, err := s.Request(ctx, token)
+	r, err := s.Request(ctx, token, "")
 	if err != nil || r.RequestID != p.RequestID || r.Platform != runtime.GOOS || strings.Contains(r.CSRPEM, "PRIVATE KEY") {
 		t.Fatal("wrong CSR-only request", err)
 	}
