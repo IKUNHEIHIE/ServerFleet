@@ -80,10 +80,14 @@ func installationAgentScript(c *InstallationCatalog) (string, error) {
 	b.WriteString("chown \"$user:$user\" \"$state/root.pem\" \"$state/controller-ca.pem\"\n")
 	b.WriteString("chmod 0600 \"$state/root.pem\" \"$state/controller-ca.pem\"\n")
 	common := " -controller-url " + origin + ` -root-cert "$state/root.pem" -controller-ca "$state/controller-ca.pem" -root-pin ` + pin + ` -node-name "$name" -state-dir "$state"`
-	// The runner keeps every value shell-quoted; systemd executes it directly.
+	b.WriteString("printf '%s' \"$name\" > \"$state/node-name\"\n")
+	b.WriteString("chown \"$user:$user\" \"$state/node-name\" && chmod 0600 \"$state/node-name\"\n")
+	// The runner is executed without the installer's variables: paths are
+	// literal and the node name comes from the private file written above.
+	runnerCommon := " -controller-url " + origin + " -root-cert " + shellQuote(state+"/root.pem") + " -controller-ca " + shellQuote(state+"/controller-ca.pem") + " -root-pin " + pin + ` -node-name "$(cat ` + shellQuote(state+"/node-name") + `)" -state-dir ` + shellQuote(state)
 	b.WriteString("cat > \"$run.tmp\" <<'SF_RUNNER'\n")
 	b.WriteString("#!/bin/sh\n")
-	b.WriteString("exec " + shellQuote(bin) + " -serve" + common + " -file-root " + shellQuote(files) + "\n")
+	b.WriteString("exec " + shellQuote(bin) + " -serve" + runnerCommon + " -file-root " + shellQuote(files) + "\n")
 	b.WriteString("SF_RUNNER\n")
 	b.WriteString("chmod 0755 \"$run.tmp\" && mv \"$run.tmp\" \"$run\"\n")
 	b.WriteString("cat > \"$unit\" <<'SF_UNIT'\n")
