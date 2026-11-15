@@ -52,9 +52,16 @@ func newFileWSSFixture(t *testing.T, node, root, ledger string, dropFinal ...boo
 	var client *transport.FileClient
 	hub, err := transport.NewControllerLinks(verifier, transport.ControllerLinkConfig{ProtocolMajor: 1, ProtocolMinor: 1, Semantic: semantic, Frames: frames, HeartbeatInterval: time.Second, MaxConnections: 1, Handshake: func(context.Context, transport.LinkObservation, *agentv1.AgentHello) ([]string, error) {
 		return []string{transport.FileCapability}, nil
-	}, Admit: func(context.Context, transport.LinkObservation, *agentv1.Envelope) error {
+	}, Admit: func(ctx context.Context, o transport.LinkObservation, e *agentv1.Envelope) error {
 		if !gate.Load() {
 			return transport.ErrLinkRejected
+		}
+		// Compose the real Controller admit seam for file frames: an agent-side
+		// frame is only admitted when the FileClient accepts it. A directory-op
+		// reply must survive this path, otherwise a successful agent operation
+		// would tear down the link and the caller would only see a timeout.
+		if transport.FileEnvelope(e) {
+			return client.AuthorizeFrame(ctx, o, e)
 		}
 		return nil
 	}, Event: func(ctx context.Context, o transport.LinkObservation, e *agentv1.Envelope) error {

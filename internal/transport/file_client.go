@@ -309,6 +309,19 @@ func (c *FileClient) AuthorizeFrame(ctx context.Context, o LinkObservation, e *a
 		}
 		return nil
 	}
+	// A directory-op reply is correlated by request_id, not by a transfer
+	// session: FileFrameIDs yields empty ids for it, so the session lookup below
+	// would reject the reply and tear down a healthy link. Admit the reply of a
+	// request this controller registered, on the same link that sent it.
+	if r := e.GetFileOpReply(); r != nil {
+		c.mu.Lock()
+		p, ok := c.ops[r.RequestId]
+		c.mu.Unlock()
+		if !ok || p.node != o.Identity.NodeID || p.observation != o {
+			return ErrLinkRejected
+		}
+		return nil
+	}
 	task, execution, transfer := FileFrameIDs(e)
 	if offer := e.GetTaskOffer(); offer != nil {
 		task, execution = offer.TaskId, offer.ExecutionId
