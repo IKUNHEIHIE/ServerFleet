@@ -7,6 +7,65 @@ import (
 	"time"
 )
 
+func TestBootstrapAdminGetsCurrentNodeScopeWhileOtherAdminsStayExplicit(t *testing.T) {
+	base, store, _ := identityFixture(t)
+	ctx := context.Background()
+	managed, err := NewIdentityServiceWithResources(store, func(context.Context, string, string) ([]string, error) {
+		return []string{"node-a", "node-b"}, nil
+	}, []PermissionDefinition{
+		{"host.patch", "Controlled host change", "node", false, false},
+		{"nodes.write", "Modify nodes", "node", false, false},
+		{"nodes.suspend", "Suspend nodes", "node", false, false},
+		{"nodes.revoke", "Archive nodes", "node", false, true},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	managed.SetBootstrapNodeLister(func(context.Context) ([]string, error) {
+		return []string{"node-a", "node-b"}, nil
+	})
+	managed.now = base.now
+	admin := identityLogin(t, managed)
+	ordinary, err := managed.CreateUser(ctx, admin.Secret, admin.CSRF, UserCreation{"administrator-two", "Other administrator", identityTestPassword, []string{"administrator"}, true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, action := range []string{NodeReadAction, "nodes.write", "nodes.suspend", "nodes.revoke"} {
+		if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: action, NodeIDs: []string{"node-a", "node-b"}}); err != nil {
+			t.Fatalf("bootstrap administrator denied %s: %v", action, err)
+		}
+		if err := managed.Authorize(ctx, Check{SubjectID: ordinary.UserID, Action: action, NodeIDs: []string{"node-a"}}); err != ErrDenied {
+			t.Fatalf("ordinary administrator implicitly gained %s: %v", action, err)
+		}
+	}
+	if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: "tasks.approve", NodeIDs: []string{"node-a"}}); err != nil {
+		t.Fatalf("bootstrap administrator denied role-authorized approval permission: %v", err)
+	}
+	if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: "unregistered.action", NodeIDs: []string{"node-a"}}); err == nil {
+		t.Fatal("bootstrap administrator bypassed permission catalog")
+	}
+	if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: "nodes.write", NodeIDs: []string{"new-node"}}); err != nil {
+		t.Fatalf("bootstrap administrator could not create a new node: %v", err)
+	}
+	if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: "host.patch", NodeIDs: []string{"node-a"}}); err != nil {
+		t.Fatalf("bootstrap administrator could not use catalog-authorized node action: %v", err)
+	}
+	if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: "unregistered.action", NodeIDs: []string{"node-a"}}); err == nil {
+		t.Fatal("bootstrap administrator bypassed permission catalog")
+	}
+	policy, err := managed.NodeReadPolicySnapshot(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(policy.ReadGrants[admin.Identity.SubjectID]) != 2 || len(policy.ReadGrants[ordinary.UserID]) != 0 {
+		t.Fatalf("unexpected read scope: %#v", policy.ReadGrants)
+	}
+	managed.SetBootstrapNodeLister(func(context.Context) ([]string, error) { return nil, errors.New("inventory unavailable") })
+	if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: NodeReadAction, NodeIDs: []string{"node-a"}}); err != ErrPolicyUnavailable {
+		t.Fatalf("bootstrap inventory failure did not fail closed: %v", err)
+	}
+}
+
 func TestIdentityRBACExactGrantsGroupSnapshotAndRevocation(t *testing.T) {
 	s, m, now := identityFixture(t)
 	ctx := context.Background()

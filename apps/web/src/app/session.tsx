@@ -387,8 +387,9 @@ export function SessionProvider({ children }: { readonly children: ReactNode }) 
   const can = useCallback(
     (permission: string): boolean => {
       if (!identity) return false;
-      if (identity.isBootstrapAdmin === true) return true;
-      // GM-W3-01：同时接受候选契约 UI 键与真实 Controller 权限目录键（显式授予，不推断）。
+      // Bootstrap 管理员的跨节点范围仅由服务端对节点读/写/暂停/删除授权；
+      // 其他操作仍按服务端权限目录显示，审批和危险操作流程不因此跳过。
+      if (identity.isBootstrapAdmin === true && ["node.read", "node.manage", "node.suspend", "node.revoke"].includes(permission)) return true;
       return hasPermission(identity.permissions, permission);
     },
     [identity],

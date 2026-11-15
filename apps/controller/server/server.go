@@ -408,6 +408,17 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return cleanup(err)
 	}
+	identityService.SetBootstrapNodeLister(func(ctx context.Context) ([]string, error) {
+		inventory, err := nodesRepo.List(ctx)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]string, len(inventory))
+		for i, node := range inventory {
+			ids[i] = node.ID
+		}
+		return ids, nil
+	})
 	var aiConversation *ai.ConversationService
 	var publicCertificates *publicCertificateExecution
 	keyDir := cfg.CredentialKeyDir

@@ -49,8 +49,8 @@ func TestRemoteProbeTaskBindingReceiptAndRevocation(t *testing.T) {
 	if _, e = s.NodesRepo.Create(ctx, s.DB, nodes.NodeCreateInput{ID: "source-node", Name: "Source", Status: nodes.StatusOnline}); e != nil {
 		t.Fatal(e)
 	}
-	if s.validateProbeSource(ctx, owner, "source-node") == nil {
-		t.Fatal("administrator implicitly received a node probe grant")
+	if s.validateProbeSource(ctx, owner, "source-node") != nil {
+		t.Fatal("bootstrap administrator lacks its role-authorized node probe permission")
 	}
 	if _, e = s.Identity.CreateResourceGrant(ctx, login.Secret, login.CSRF, auth.GrantRequest{PrincipalID: owner, ResourceType: "node", ResourceID: "source-node", Permissions: []string{transport.ProbeCapability, tasks.ActionCancel}}); e != nil {
 		t.Fatal(e)
