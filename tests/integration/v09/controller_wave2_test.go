@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/server"
+	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/nodes"
 	"serverfleet.local/serverfleet/internal/storage"
@@ -69,8 +70,8 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppliedVersions: %v", err)
 	}
-	if len(versions) != 51 {
-		t.Fatalf("applied migrations = %d (%v), want 51", len(versions), versions)
+	if len(versions) != 52 {
+		t.Fatalf("applied migrations = %d (%v), want 52", len(versions), versions)
 	}
 
 	setupToken, err := composed.Identity.PrepareSetup(ctx)
@@ -182,7 +183,9 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		t.Fatalf("me csrf mismatch: %+v want %s", mePayload, adminLogin.CSRF)
 	}
 
-	// 2. Seed two nodes in SQLite and verify zero-grant default even for bootstrap admin
+	// 2. Seed two nodes in SQLite. The bootstrap (first) administrator is the
+	// super admin and sees every current node by design; a non-bootstrap
+	// administrator keeps the zero-grant default.
 	for _, n := range []nodes.NodeCreateInput{
 		{ID: "node-tokyo", Name: "Tokyo Edge", Region: "ap-northeast", Status: nodes.StatusOnline},
 		{ID: "node-frankfurt", Name: "Frankfurt Core", Region: "eu-central", Status: nodes.StatusOnline},
@@ -210,8 +213,43 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 			ID string `json:"id"`
 		} `json:"items"`
 	}
+	if err := json.Unmarshal(data, &nodeList); err != nil || len(nodeList.Items) != 2 {
+		t.Fatalf("bootstrap admin must see all nodes (first-user superadmin): %+v (%v)", nodeList.Items, err)
+	}
+
+	// A non-bootstrap administrator must not inherit that implicit scope.
+	adminSession, err := composed.Identity.Login(ctx, "admin", "wave2-admin-strong-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = composed.Identity.CreateUser(ctx, adminSession.Secret, adminSession.CSRF, auth.UserCreation{
+		Username: "wave2-scoped-admin", Password: "wave2-scoped-admin-password",
+		RoleIDs: []string{"administrator"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	scopedClient := newClient()
+	resp, data = doReq(scopedClient, "POST", "/api/v1/auth/login", map[string]string{
+		"username": "wave2-scoped-admin", "password": "wave2-scoped-admin-password",
+	}, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("scoped admin login = %d: %s", resp.StatusCode, data)
+	}
+	var scopedLogin struct {
+		Identity struct {
+			UserID string `json:"userId"`
+		} `json:"identity"`
+		CSRF string `json:"csrfToken"`
+	}
+	if err := json.Unmarshal(data, &scopedLogin); err != nil || scopedLogin.CSRF == "" {
+		t.Fatalf("decode scoped admin login: %v (%s)", err, data)
+	}
+	resp, data = doReq(scopedClient, "GET", "/api/v1/nodes", nil, "", "")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("list nodes (scoped, 0 grants) = %d: %s", resp.StatusCode, data)
+	}
 	if err := json.Unmarshal(data, &nodeList); err != nil || len(nodeList.Items) != 0 {
-		t.Fatalf("admin got implicit nodes without grant: %+v (%v)", nodeList.Items, err)
+		t.Fatalf("non-bootstrap admin got implicit nodes without grant: %+v (%v)", nodeList.Items, err)
 	}
 
 	// 3. Grant node-tokyo permissions to admin and verify scoped visibility + group/service-group creation
@@ -246,7 +284,19 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 		t.Fatalf("create grant = %d: %s", resp.StatusCode, data)
 	}
 
-	resp, data = doReq(adminClient, "GET", "/api/v1/nodes", nil, "", "")
+	// The same node grant for the non-bootstrap administrator proves scoped
+	// visibility: exactly the granted node, not the whole inventory.
+	resp, data = doReq(adminClient, "POST", "/api/v1/resource-grants", map[string]any{
+		"principalId":  scopedLogin.Identity.UserID,
+		"resourceType": "node",
+		"resourceId":   "node-tokyo",
+		"permissions":  []string{"nodes.read"},
+	}, adminLogin.CSRF, "wave2-grant-scoped-0001")
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("create scoped grant = %d: %s", resp.StatusCode, data)
+	}
+
+	resp, data = doReq(scopedClient, "GET", "/api/v1/nodes", nil, "", "")
 	if resp.StatusCode != http.StatusOK {
 		t.Fatalf("list nodes (with grant) = %d: %s", resp.StatusCode, data)
 	}

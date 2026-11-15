@@ -43,8 +43,8 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 			old = append(old, m)
 		}
 	}
-	if len(old) != 25 {
-		t.Fatalf("adopted migration count=%d, want 25", len(old))
+	if len(old) != 26 {
+		t.Fatalf("adopted migration count=%d, want 26", len(old))
 	}
 	db := testkit.NewDB(t, old)
 	ctx := context.Background()
@@ -81,7 +81,7 @@ func TestCloudUploadMigrationPreservesAdoptedFileHistory(t *testing.T) {
 		t.Fatalf("old upload changed: task=%q status=%q", taskID, status)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 51 {
+	if err != nil || len(versions) != 52 {
 		t.Fatal("new migration count", versions, err)
 	}
 }

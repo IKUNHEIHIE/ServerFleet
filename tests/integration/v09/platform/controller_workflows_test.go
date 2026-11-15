@@ -153,13 +153,44 @@ func TestWave4WorkflowHTTPManagementApprovalAndAudit(t *testing.T) {
 		t.Fatalf("anonymous workflow list = %d, want 401", status)
 	}
 
-	// Untargeted node is outside the actor's grant snapshot: creation must fail closed.
-	if status, data := admin.do("POST", "/api/v1/workflows", map[string]any{
+	// The bootstrap administrator is the first-user super admin and keeps a
+	// trusted current-node scope, so fail-closed is proven on a subject whose
+	// scope comes only from explicit grants.
+	if status, data := admin.do("POST", "/api/v1/users", map[string]any{
+		"username": "workflow-operator", "displayName": "Workflow Operator",
+		"password": "wave4-workflow-operator-password", "roleIds": []string{"administrator"},
+	}, adminCSRF); status != http.StatusOK && status != http.StatusCreated {
+		t.Fatalf("create operator = %d: %s", status, data)
+	}
+	operator := newClient()
+	status, data = operator.do("POST", "/api/v1/auth/login", map[string]string{
+		"username": "workflow-operator", "password": "wave4-workflow-operator-password",
+	}, "")
+	if status != http.StatusOK {
+		t.Fatalf("operator login = %d: %s", status, data)
+	}
+	var operatorLogin struct {
+		Identity struct {
+			UserID string `json:"userId"`
+		} `json:"identity"`
+		CSRF string `json:"csrfToken"`
+	}
+	decode(t, data, &operatorLogin)
+	for _, permission := range []string{"nodes.read", "tasks.command", "tasks.submit", "tasks.approve", "tasks.read", "host.patch"} {
+		if status, data := admin.do("POST", "/api/v1/resource-grants", map[string]any{
+			"principalId": operatorLogin.Identity.UserID, "resourceType": "node", "resourceId": grantedNode,
+			"permissions": []string{permission},
+		}, adminCSRF); status != http.StatusOK {
+			t.Fatalf("operator grant = %d: %s", status, data)
+		}
+	}
+	// Untargeted node is outside the operator's grant snapshot: creation must fail closed.
+	if status, data := operator.do("POST", "/api/v1/workflows", map[string]any{
 		"trigger": "manual",
 		"steps": []map[string]any{{
 			"actionId": "host.patch", "nodeIds": []string{ungrantedNode}, "parameters": map[string]string{"command": "uptime"},
 		}},
-	}, adminCSRF); status != http.StatusForbidden {
+	}, operatorLogin.CSRF); status != http.StatusForbidden {
 		t.Fatalf("ungranted target create = %d: %s", status, data)
 	}
 
