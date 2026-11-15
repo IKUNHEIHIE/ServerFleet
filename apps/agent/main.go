@@ -56,24 +56,24 @@ func agentStatus(ctx context.Context, stateDir, rootPin string) (agentruntime.St
 func agentEnrollOnce(ctx context.Context, request agentruntime.EnrollRequest) (agentruntime.EnrollResult, error) {
 	rootPEM, err := os.ReadFile(request.RootCertificate)
 	if err != nil || len(rootPEM) == 0 || len(rootPEM) > 16<<10 {
-		return agentruntime.EnrollResult{}, errAgentEnrollment
+		return agentruntime.EnrollResult{}, enrollmentFailure(enrollmentHintLocal)
 	}
 	if err := os.MkdirAll(request.StateDir, 0o700); err != nil {
-		return agentruntime.EnrollResult{}, errAgentEnrollment
+		return agentruntime.EnrollResult{}, enrollmentFailure(enrollmentHintLocal)
 	}
 	store, err := openAgentIdentity(request.StateDir, request.RootPin, 1)
 	if err != nil {
-		return agentruntime.EnrollResult{}, errAgentEnrollment
+		return agentruntime.EnrollResult{}, enrollmentFailure(enrollmentHintLocal)
 	}
 	defer store.Close()
 	if _, err := store.Prepare(ctx, request.AgentVersion); err != nil {
-		return agentruntime.EnrollResult{}, errAgentEnrollment
+		return agentruntime.EnrollResult{}, enrollmentFailure(enrollmentHintLocal)
 	}
 	var controllerCA []byte
 	if request.ControllerCA != "" {
 		controllerCA, err = readAgentFile(request.ControllerCA, 16<<10)
 		if err != nil {
-			return agentruntime.EnrollResult{}, errAgentEnrollment
+			return agentruntime.EnrollResult{}, enrollmentFailure(enrollmentHintLocal)
 		}
 	}
 	client, err := newAgentEnrollmentClient(store, agentEnrollmentConfig{
@@ -83,7 +83,7 @@ func agentEnrollOnce(ctx context.Context, request agentruntime.EnrollRequest) (a
 		Current:            func(context.Context) error { return nil },
 	})
 	if err != nil {
-		return agentruntime.EnrollResult{}, errAgentEnrollment
+		return agentruntime.EnrollResult{}, enrollmentFailure(enrollmentHintLocal)
 	}
 	observation, err := client.EnrollOnce(ctx, request.EnrollToken, request.NodeName)
 	result := agentruntime.EnrollResult{State: observation.State, ExpiresAt: observation.ExpiresAt}

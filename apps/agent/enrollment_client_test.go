@@ -178,7 +178,7 @@ func TestAgentEnrollmentClientRejectsResponsesRedirectsAndPostUseRevocation(t *t
 				if err != errAgentEnrollmentDenied || out.State != "denied" {
 					t.Fatal("denial lost", err)
 				}
-			} else if err != errAgentEnrollment || out.State != "" {
+			} else if !errors.Is(err, errAgentEnrollment) || out.State != "" {
 				t.Fatal("invalid response accepted", out.State, err)
 			}
 			if _, err = os.Stat(filepath.Join(dir, "issued.json")); !os.IsNotExist(err) {
@@ -260,7 +260,48 @@ func TestAgentEnrollmentClientIndependentRootAndCancellation(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = wrong.EnrollOnce(context.Background(), enrollmentClientToken(), ""); err != errAgentEnrollment {
+	if _, err = wrong.EnrollOnce(context.Background(), enrollmentClientToken(), ""); !errors.Is(err, errAgentEnrollment) {
 		t.Fatal("wrong DNS identity accepted", err)
+	}
+}
+
+func enrollmentHintOf(err error) string {
+	hint, _ := err.(interface{ EnrollmentHint() string })
+	if hint == nil {
+		return ""
+	}
+	return hint.EnrollmentHint()
+}
+
+func TestAgentEnrollmentClientReportsNetworkCategoryWithoutLeakingDetails(t *testing.T) {
+	s, ca, _, _ := identityStoreFixture(t)
+	if _, err := s.Prepare(context.Background(), "0.9.0-test"); err != nil {
+		t.Fatal(err)
+	}
+	// The listener port is closed: the attempt fails before any HTTP exchange.
+	c, err := newAgentEnrollmentClient(s, enrollmentClientConfig(ca, "https://localhost:1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.EnrollOnce(context.Background(), enrollmentClientToken(), ""); !errors.Is(err, errAgentEnrollment) || enrollmentHintOf(err) != enrollmentHintNetwork {
+		t.Fatalf("network failure hint = %q, err=%v", enrollmentHintOf(err), err)
+	}
+}
+
+func TestAgentEnrollmentClientReportsServerCategory(t *testing.T) {
+	s, ca, key, _ := identityStoreFixture(t)
+	if _, err := s.Prepare(context.Background(), "0.9.0-test"); err != nil {
+		t.Fatal(err)
+	}
+	_, origin := enrollmentClientServer(t, ca, key, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusInternalServerError)
+	}), "localhost")
+	c, err := newAgentEnrollmentClient(s, enrollmentClientConfig(ca, origin))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = c.EnrollOnce(context.Background(), enrollmentClientToken(), ""); !errors.Is(err, errAgentEnrollment) || enrollmentHintOf(err) != enrollmentHintServer {
+		t.Fatalf("server failure hint = %q, err=%v", enrollmentHintOf(err), err)
 	}
 }
