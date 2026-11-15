@@ -65,7 +65,6 @@ func TestFileFramesRequireExplicitMinorGrantBoundsAndDirection(t *testing.T) {
 	}
 }
 
-
 func TestFileOpFramesRequireExplicitGrantBoundsAndDirection(t *testing.T) {
 	l := ValidationLimits{AllowFileFrames: true, MaxMessageBytes: 64 << 10, MaxTextBytes: 256, MaxParametersBytes: 4096, MaxOutputBytes: 1024, MaxMetrics: 8, MaxSyncExecutions: 8, MaxCapabilities: 8, MaxTimeoutSeconds: 60, MaxOfferLifetime: time.Minute, AllowedActions: map[string]string{FileCapability: "1"}}
 	ctx := ValidationContext{Direction: ControllerToAgent, Phase: Established, ProtocolMajor: 1, ProtocolMinor: 1, Now: time.Now()}
@@ -76,6 +75,14 @@ func TestFileOpFramesRequireExplicitGrantBoundsAndDirection(t *testing.T) {
 	req := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-1", NodeId: "node", Op: "list", Path: "data"}}})
 	if err := ValidateEnvelope(req, ctx, l); err != nil {
 		t.Fatal(err)
+	}
+	root := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-root", NodeId: "node", Op: "list", Path: "/"}}})
+	if err := ValidateEnvelope(root, ctx, l); err != nil {
+		t.Fatal("operator root path \"/\" must be accepted", err)
+	}
+	badPath := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-esc", NodeId: "node", Op: "list", Path: "/../etc"}}})
+	if ValidateEnvelope(badPath, ctx, l) == nil {
+		t.Fatal("escape path must be rejected")
 	}
 	ren := env(&agentv1.Envelope{Message: &agentv1.Envelope_FileOpRequest{FileOpRequest: &agentv1.FileOpRequest{RequestId: "req-2", NodeId: "node", Op: "rename", Path: "data/a", NewName: "b"}}})
 	if err := ValidateEnvelope(ren, ctx, l); err != nil {
