@@ -210,7 +210,7 @@ export function PluginsPage() {
 
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
 
-      <Panel title="插件来源" description="GET/PUT /api/v1/plugins/repository；自定义来源必须显示为非官方并锁定不可变版本。">
+      <Panel title="插件来源" description="自定义来源会标记为非官方，并锁定版本。">
         <form onSubmit={saveRepository} className="space-y-3 px-5 py-4">
           {putRepository.error ? <Notice tone="error" title="保存来源失败">{describeApiError(putRepository.error)}</Notice> : null}
           <div className="grid gap-3 sm:grid-cols-3">
@@ -230,7 +230,7 @@ export function PluginsPage() {
             </Field>
           </div>
           {mode === "custom" ? (
-            <Field label="GitHub 仓库 URL" hint="只接受受信任的 github.com/owner/repo 形式；页面会显示非官方来源。">
+            <Field label="GitHub 仓库 URL" hint="只接受 github.com/owner/repo 形式；会标记为非官方来源。">
               {ids => <TextInput id={ids.inputId} value={url} onChange={event => setUrl(event.target.value)} disabled={!canRepo || session.writesLocked} />}
             </Field>
           ) : null}
@@ -260,7 +260,7 @@ export function PluginsPage() {
         </form>
       </Panel>
 
-      <Panel title="插件目录" description="GET /api/v1/plugins/catalog；只读取元数据，主动安装才获取插件包。">
+      <Panel title="插件目录" description="只读取元数据，主动安装才获取插件包。">
         {catalog.state.status === "error" && catalog.state.error.code === "PLUGIN_CATALOG_SOURCE_UNAVAILABLE" ? (
           <div className="px-5 pb-4">
             <Notice tone="warning" title="目录源不可用（B03 硬依赖）">
@@ -295,7 +295,7 @@ export function PluginsPage() {
         </AsyncPanel>
       </Panel>
 
-      <Panel title="已安装插件" description="GET /api/v1/plugins；禁用/卸载后业务菜单与 API 不应可执行。">
+      <Panel title="已安装插件" description="禁用或卸载后，相关菜单不可用。">
         <AsyncPanel state={installed.state} onRetry={installed.reload} errorTitle="已安装插件加载失败" empty={<EmptyState title="未安装可选插件" description="核心功能不依赖任何可选插件。" />} isEmpty={data => data.items.length === 0}>
           {() => (
             <DataTable
@@ -380,7 +380,7 @@ export function PluginsPage() {
       <Modal
         open={installedAction !== null}
         title={installedAction ? `更新 ${installedAction.id}` : "更新插件"}
-        description="热更新会校验新版、排空任务并在失败时保持旧版；不能承诺零停顿。"
+        description="热更新失败时会保持旧版；不能保证零停顿。"
         onClose={() => setInstalledAction(null)}
         footer={
           <>
@@ -419,7 +419,7 @@ export function PluginsPage() {
         }
       >
         {uninstall.error ? <Notice tone="error" title="卸载失败">{describeApiError(uninstall.error)}</Notice> : null}
-        <p className="text-sm text-muted-foreground">契约没有“保留/清除插件数据”选择字段；本页不承诺数据保留策略。卸载完成后业务菜单应消失。</p>
+        <p className="text-sm text-muted-foreground">卸载完成后相关菜单会消失。</p>
       </Modal>
 
       <Modal

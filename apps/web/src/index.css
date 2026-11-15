@@ -244,3 +244,12 @@ details > summary:hover {
     scroll-behavior: auto !important;
   }
 }
+
+@media (max-width: 767px) {
+  .node-monitor-table, .node-monitor-table tbody { display: block; }
+  .node-monitor-table tr { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); margin-bottom: 16px; padding: 12px; }
+  .node-monitor-table tbody th { grid-column: 1 / 5; width: auto; padding: 4px 6px 14px; }
+  .node-monitor-table tbody td { width: auto; padding: 8px 4px; }
+  .node-monitor-table tbody td:last-child { grid-column: 5; grid-row: 1; padding: 0; }
+  .node-monitor-table tbody td span.text-base { font-size: 12px; }
+}

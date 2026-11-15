@@ -72,6 +72,10 @@ type identityGrant struct {
 func NewIdentityServiceWithResources(store IdentityStore, resolver ResourceResolver, permissions []PermissionDefinition) (*IdentityService, error) {
 	return newIdentityService(store, resolver, permissions)
 }
+
+func (s *IdentityService) SetBootstrapNodeLister(list func(context.Context) ([]string, error)) {
+	s.bootstrapNodeList = list
+}
 func newIdentityService(store IdentityStore, resolver ResourceResolver, extra []PermissionDefinition) (*IdentityService, error) {
 	if store == nil {
 		return nil, ErrIdentityUnavailable
@@ -161,8 +165,12 @@ func (s *IdentityService) RoleCatalog() []RoleDefinition {
 	return out
 }
 func (s *IdentityService) roleAllows(u identityUser, action string) bool {
+	roleIDs := u.RoleIDs
+	if u.Bootstrap {
+		roleIDs = []string{"administrator"}
+	}
 	for _, role := range s.RoleCatalog() {
-		if slices.Contains(u.RoleIDs, role.RoleID) && slices.Contains(role.Permissions, action) {
+		if slices.Contains(roleIDs, role.RoleID) && slices.Contains(role.Permissions, action) {
 			return true
 		}
 	}
@@ -477,6 +485,16 @@ func (s *IdentityService) grantedNodes(ctx context.Context, st *identityState, s
 		return nil, ErrDenied
 	}
 	out := map[string]struct{}{}
+	if u.Bootstrap && s.bootstrapNodeList != nil {
+		nodes, err := s.bootstrapNodeList(ctx)
+		if err != nil || nodes == nil || !validExactIDs(nodes) {
+			return nil, ErrPolicyUnavailable
+		}
+		for _, id := range nodes {
+			out[id] = struct{}{}
+		}
+	}
+
 	for _, grant := range st.Grants {
 		g := grant.Value
 		if g.PrincipalID != subject || !slices.Contains(g.Permissions, action) || g.ExpiresAt != nil && !now.Before(*g.ExpiresAt) {
@@ -503,7 +521,8 @@ func (s *IdentityService) grantedNodes(ctx context.Context, st *identityState, s
 
 // Authorize implements the existing port for ALREADY authenticated subjects.
 // It does not turn a SubjectID or role name supplied by a client into identity.
-// Every target must be explicitly granted; even administrators get no wildcard.
+// Targets must be explicitly granted, except for the initialized bootstrap subject,
+// whose trusted current-node scope is supplied by the Controller.
 func (s *IdentityService) Authorize(ctx context.Context, check Check) error {
 	check.NodeIDs = append([]string(nil), check.NodeIDs...)
 	if !validPolicyID(check.SubjectID) || !validPolicyID(check.Action) || len(check.NodeIDs) == 0 || !validExactIDs(check.NodeIDs) {
@@ -515,9 +534,13 @@ func (s *IdentityService) Authorize(ctx context.Context, check Check) error {
 			return err
 		}
 		for _, id := range check.NodeIDs {
-			if _, ok := allowed[id]; !ok {
-				return ErrDenied
+			if _, ok := allowed[id]; ok {
+				continue
 			}
+			if user := st.Users[check.SubjectID]; user.Bootstrap && check.Action == "nodes.write" {
+				continue
+			}
+			return ErrDenied
 		}
 		return nil
 	})

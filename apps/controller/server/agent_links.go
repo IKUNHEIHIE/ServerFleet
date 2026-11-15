@@ -262,6 +262,13 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 	if b == nil || envelope == nil || envelope.GetNodeId() != observation.Identity.NodeID {
 		return transport.ErrLinkRejected
 	}
+	if b.nodesRepo == nil {
+		return transport.ErrLinkRejected
+	}
+	node, err := b.nodesRepo.Get(ctx, observation.Identity.NodeID)
+	if err != nil || node.Status == nodes.StatusRevoked {
+		return transport.ErrLinkRejected
+	}
 	fileChild := false
 	if b.fileWorker != nil {
 		var err error
@@ -383,6 +390,9 @@ func (b *agentLinkBridge) applyAgentState(ctx context.Context, observation trans
 		Metrics:      metrics,
 		SampleSource: nodes.SampleSourceAgent,
 	}
+	if metrics != nil {
+		update.ObservedAt = metrics.ObservedAt
+	}
 	_, err := b.nodesService.ApplyAgentUpdate(ctx, observation.Identity.NodeID, requestID, update)
 	return err
 }
@@ -406,12 +416,35 @@ func agentMetrics(batch *agentv1.MetricsBatch, observed time.Time) *nodes.Metric
 	if batch == nil || len(batch.GetPoints()) == 0 || len(batch.GetPoints()) > 128 {
 		return nil
 	}
-	var cpu, memory *float64
+	var cpu, memory, disk, download, upload *float64
+	var sampleTime int64
 	for _, point := range batch.GetPoints() {
+		if point == nil || point.ObservedAtUnixMs <= 0 {
+			return nil
+		}
+		if sampleTime != 0 && sampleTime != point.ObservedAtUnixMs {
+			return nil
+		}
+		sampleTime = point.ObservedAtUnixMs
 		switch point.GetName() {
 		case "cpu", "cpu.percent", "cpu_percent":
 			value := point.GetValue()
 			cpu = &value
+		case "disk.used_percent":
+			value := point.GetValue()
+			if value >= 0 && value <= 100 {
+				disk = &value
+			}
+		case "network.download_bps":
+			value := point.GetValue()
+			if value >= 0 {
+				download = &value
+			}
+		case "network.upload_bps":
+			value := point.GetValue()
+			if value >= 0 {
+				upload = &value
+			}
 		case "memory", "memory.percent", "memory_percent":
 			value := point.GetValue()
 			memory = &value
@@ -420,7 +453,11 @@ func agentMetrics(batch *agentv1.MetricsBatch, observed time.Time) *nodes.Metric
 	if cpu == nil || memory == nil {
 		return nil
 	}
-	return &nodes.Metrics{CPUPercent: *cpu, MemoryPercent: *memory, ObservedAt: observed}
+	sampledAt := time.UnixMilli(sampleTime).UTC()
+	if sampledAt.After(observed) || observed.Sub(sampledAt) > 5*time.Minute {
+		return nil
+	}
+	return &nodes.Metrics{CPUPercent: *cpu, MemoryPercent: *memory, DiskPercent: disk, DownloadBps: download, UploadBps: upload, ObservedAt: sampledAt}
 }
 
 func (b *agentLinkBridge) taskAck(ctx context.Context, observation transport.LinkObservation, ack *agentv1.TaskAck) error {

@@ -158,7 +158,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
         }
       />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
-      {writesLocked ? <Notice tone="warning" title="写入被 CSRF 契约锁定">重新登录后才能审批/取消/恢复。</Notice> : null}
+      {writesLocked ? <Notice tone="warning" title="写入已锁定">重新登录后才能审批/取消/恢复。</Notice> : null}
       {streamError ? (
         <Notice tone="error" title="事件流已终止">
           {describeApiError(streamError)} 不会自动重连；可手动重连或刷新任务。
@@ -174,7 +174,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
       >
         {data => (
           <div className="space-y-5">
-            <Panel title="任务快照" description="GET /api/v1/tasks/{taskId}；状态与摘要以服务端为准。">
+            <Panel title="任务快照">
               <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
                 <div className="grid gap-2.5 sm:grid-cols-4">
                   {[
@@ -204,8 +204,8 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
                 <p>创建：{formatDateTime(data.createdAt) ?? "—"}</p>
                 <p>创建者：{data.createdBy ?? "—"}</p>
                 <p>到期：{formatDateTime(data.expiresAt) ?? "—"}</p>
-                <p className="lg:col-span-2">planDigest：<span className="break-all font-mono text-xs">{data.planDigest ?? planDigest ?? "（此端点未返回 planDigest；服务端任务列表中也没有该任务，审批保持禁用）"}</span></p>
-                <p>revision：{data.revision}</p>
+                <p className="lg:col-span-2">任务指纹：<span className="break-all font-mono text-xs">{data.planDigest ?? planDigest ?? "（未提供，审批保持禁用）"}</span></p>
+                <p>版本：{data.revision}</p>
                 <p>目标快照：{data.targetType === "controller" ? "1 个主控" : `${data.targetNodeIdsSnapshot.length} 台`}</p>
               </div>
               <div className="border-t border-border/70 bg-[#FAFBFD] px-5 py-3 text-xs text-muted-foreground">
@@ -215,7 +215,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
 
             <Panel
               title="实时事件"
-              description="SSE 只投影已知字段；原始 data 不回显，避免命令输出或秘密进入界面。"
+              description="实时状态只显示摘要，不回显原始输出。"
               actions={
                 <Button size="sm" onClick={stream.reconnect} disabled={terminal}>
                   <Radio aria-hidden="true" className="size-3.5" />
@@ -266,7 +266,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
               )}
             </Panel>
 
-            <Panel title="逐节点执行" description="GET /api/v1/tasks/{taskId}/executions；未知/超时不等于成功。">
+            <Panel title="逐节点执行" description="未知或超时不代表成功。">
               <AsyncPanel
                 state={executions.state}
                 onRetry={executions.reload}
@@ -308,7 +308,7 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
             ? "取消是尽力请求；已执行/已复制的部分不会被自动回滚。"
             : decision === "resume"
               ? "只恢复未开始的批次；已过期或已撤权的目标不会被自动放行。"
-              : "审批绑定当前 planDigest、目标快照与权限世代；重复或改参提交必须被服务端拒绝。"
+              : "审批与当前任务内容绑定；重复或修改后的提交会被拒绝。"
         }
         onClose={() => {
           if (!busy) setDecision(null);
@@ -324,8 +324,8 @@ export function TaskDetailPage({ taskId }: { readonly taskId: string }) {
       >
         <form id="task-decision" onSubmit={submit} className="space-y-4">
           {actionError ? <Notice tone="error" title="操作失败">{describeApiError(actionError)}</Notice> : null}
-          {current ? <p className="text-xs text-muted-foreground">planDigest：<span className="break-all font-mono">{current.planDigest ?? planDigest ?? "未返回"}</span></p> : null}
-          <Field label="原因（可选）" hint="服务端会写入审计；取消/恢复需要说明。">
+          {current ? <p className="text-xs text-muted-foreground">任务指纹：<span className="break-all font-mono">{current.planDigest ?? planDigest ?? "未返回"}</span></p> : null}
+          <Field label="原因（可选）" hint="取消或恢复需要填写说明。">
             {ids => <TextArea id={ids.inputId} value={reason} onChange={event => setReason(event.target.value)} maxLength={500} />}
           </Field>
         </form>

@@ -79,10 +79,10 @@ export function AuditPage() {
     <div className="space-y-5">
       <PageHeader
         title="审计日志"
-        description="查询脱敏的服务端审计事件；不展示秘密、凭据或原始文件内容。浏览器日志不能替代服务端审计。"
+        description="查询审计事件；不展示秘密、凭据或原始文件内容。"
         badge={<Badge tone="info" dot>只读</Badge>}
       />
-      <Panel title="筛选" description="GET /api/v1/audit/events；时间按 UTC 提交。">
+      <Panel title="筛选" description="时间按 UTC 提交。">
         <form onSubmit={apply} className="grid gap-3 px-5 py-4 sm:grid-cols-2 lg:grid-cols-3">
           <Field label="主体类型">
             {ids => (
@@ -128,7 +128,7 @@ export function AuditPage() {
         </form>
       </Panel>
 
-      <Panel title="事件" description="只读脱敏视图；详情不额外请求，避免把敏感字段带入浏览器。">
+      <Panel title="事件" description="只读视图，敏感字段已脱敏。">
         <AsyncPanel
           state={events.state}
           onRetry={events.reload}
@@ -192,7 +192,7 @@ export function AuditPage() {
       <Modal
         open={selected !== null}
         title="审计事件详情"
-        description="只展示服务端返回的脱敏字段。"
+        description="敏感字段已脱敏。"
         onClose={() => setSelected(null)}
         footer={<Button type="button" onClick={() => setSelected(null)}>关闭</Button>}
       >

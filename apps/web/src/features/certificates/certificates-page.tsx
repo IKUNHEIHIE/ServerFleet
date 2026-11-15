@@ -226,7 +226,7 @@ export function CertificatesPage() {
           </Notice>
           <Panel
             title="内部证书下发任务"
-            description="GET /api/v1/certificates/internal/distributions；离线节点显示等待，不计为成功。"
+            description="离线节点显示等待，不计为成功。"
             actions={<Button size="sm" variant="primary" disabled={!canManage || session.writesLocked} onClick={() => setCreateOpen(true)}>新建下发</Button>}
           >
             <AsyncPanel state={jobs.state} onRetry={jobs.reload} errorTitle="证书任务加载失败" empty={<EmptyState title="暂无内部证书任务" />} isEmpty={data => data.items.length === 0}>
@@ -293,7 +293,7 @@ export function CertificatesPage() {
               </Select>
             )}
           </Field>
-          <Field label="身份模板（可选）" hint="不同节点必须获得不同身份；服务端负责约束。">
+          <Field label="身份模板（可选）" hint="不同节点必须获得不同身份。">
             {ids => <TextInput id={ids.inputId} value={identityProfile} onChange={event => setIdentityProfile(event.target.value)} />}
           </Field>
           <Field label="有效期小时（可选）">

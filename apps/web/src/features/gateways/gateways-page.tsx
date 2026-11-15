@@ -218,7 +218,7 @@ function GatewayTopologyCanvas({
           </div>
           {serviceGroups.length === 0 && routes.filter(r => Boolean(r.upstream)).length === 0 ? (
             <div className="rounded-xl border border-dashed border-border bg-card/80 p-3.5 text-xs text-muted-foreground">
-              暂无关联后端服务组或直接 upstream
+              暂无关联后端服务组或直接上游地址
             </div>
           ) : (
             <>
@@ -340,7 +340,7 @@ function RouteEditor({
     <Modal
       open={open}
       title={route ? "编辑网关路由" : "新建网关路由"}
-      description="后端只能二选一：直接 upstream 字符串或服务组 ID；服务端会检查网关准入和引用有效性。"
+      description="后端只能二选一：上游地址或服务组。"
       onClose={() => { if (!action.pending) onClose(); }}
       footer={
         <>
@@ -353,7 +353,7 @@ function RouteEditor({
         {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
         {action.error ? <Notice tone="error" title="保存失败">{describeApiError(action.error)}</Notice> : null}
         {!route ? (
-          <Field label="所属网关" hint="真实 Controller 的路由创建按网关归属校验；编辑时不可更换。">
+          <Field label="所属网关" hint="编辑时不可更换所属网关。">
             {ids => (
               <Select id={ids.inputId} value={gatewayId} onChange={event => setGatewayId(event.target.value)} required disabled={disabled}>
                 <option value="">请选择网关</option>
@@ -366,7 +366,7 @@ function RouteEditor({
         <Field label="后端类型">
           {ids => (
             <Select id={ids.inputId} value={mode} onChange={event => setMode(event.target.value as typeof mode)} disabled={disabled}>
-              <option value="upstream">直接 upstream</option>
+              <option value="upstream">直接上游地址</option>
               <option value="serviceGroup">服务组</option>
             </Select>
           )}
@@ -501,7 +501,7 @@ export function GatewaysPage() {
 
       <Panel
         title="实时网络拓扑视图"
-        description="基于当前服务端返回的网关、路由与后端服务组真实数据渲染动态流量路径。"
+        description="基于网关、路由与后端服务组数据渲染流量路径。"
       >
         <GatewayTopologyCanvas gateways={gatewayItems} routes={routeItems} serviceGroups={groupItems} />
       </Panel>
@@ -519,7 +519,7 @@ export function GatewaysPage() {
       {tab === "gateways" ? (
         <Panel
           title="网关节点"
-          description="GET /api/v1/gateways；schedulingEligible 由服务端综合在线、就绪、检查与启用状态计算。"
+          description="可调度状态综合在线、就绪、检查与启用情况。"
           actions={<Button size="sm" variant="primary" disabled={!canInstall || session.writesLocked} onClick={() => setCreateOpen(true)}>新建网关</Button>}
         >
           <AsyncPanel state={gateways.state} onRetry={gateways.reload} errorTitle="网关列表加载失败" empty={<EmptyState title="暂无网关" description="从在线节点选择并授权安装 Nginx。" />} isEmpty={data => data.items.length === 0}>
@@ -557,7 +557,7 @@ export function GatewaysPage() {
       ) : (
         <Panel
           title="服务路由"
-          description="GET /api/v1/gateway-routes；后端为直接 upstream 或服务组 ID（二选一）。"
+          description="后端为上游地址或服务组（二选一）。"
           actions={<Button size="sm" variant="primary" disabled={!canManage || session.writesLocked} onClick={() => setRouteEditor({ open: true, route: null })}>新建路由</Button>}
         >
           <AsyncPanel state={routes.state} onRetry={routes.reload} errorTitle="路由加载失败" empty={<EmptyState title="暂无网关路由" />} isEmpty={data => data.items.length === 0}>
@@ -613,7 +613,7 @@ export function GatewaysPage() {
           </Field>
           <label className="flex items-start gap-2 text-sm">
             <Checkbox className="mt-1" checked={ack} onChange={event => setAck(event.target.checked)} />
-            我确认安装 Nginx 可能影响节点现有服务；服务端会保留现有配置并先检测。
+            我确认安装 Nginx 可能影响节点现有服务；系统会保留现有配置并先检测。
           </label>
         </form>
       </Modal>
@@ -723,7 +723,7 @@ export function GatewayDetailPage({ gatewayId }: { readonly gatewayId: string })
       {retry.error ? <Notice tone="error" title="重试失败">{describeApiError(retry.error)}</Notice> : null}
       <AsyncPanel state={gateway.state} onRetry={gateway.reload} errorTitle="网关加载失败" empty={<EmptyState title="网关不存在" />} isEmpty={() => false}>
         {data => (
-          <Panel title="网关快照" description="GET /api/v1/gateways/{gatewayId}">
+          <Panel title="网关快照">
             <DefinitionList
               items={[
                 { term: "节点", value: <span className="font-mono text-xs">{data.nodeId}</span> },
@@ -740,7 +740,7 @@ export function GatewayDetailPage({ gatewayId }: { readonly gatewayId: string })
           </Panel>
         )}
       </AsyncPanel>
-      <Panel title="健康检查" description="GET /api/v1/gateways/{gatewayId}/checks；失败原因以服务端为准。">
+      <Panel title="健康检查">
         <AsyncPanel state={checks.state} onRetry={checks.reload} errorTitle="检查结果加载失败">
           {data => <ChecksBody checks={data} />}
         </AsyncPanel>

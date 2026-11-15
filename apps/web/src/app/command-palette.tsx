@@ -149,7 +149,7 @@ export function CommandPalette({
         id: "act:revalidate",
         label: "同步并复核服务端身份",
         group: "快捷操作",
-        subtitle: "执行 GET /api/v1/auth/me 刷新当前权限快照",
+        subtitle: "刷新当前身份与权限",
         keywords: "revalidate refresh auth session 同步身份 权限",
         onSelect: () => {
           session.revalidate();

@@ -153,7 +153,7 @@ export function CertificateCleanupPanel() {
   return (
     <Panel
       title="ACME 验证记录清理队列"
-      description="GET /api/v1/certificates/cleanup、POST /retry 与 /cancel；跟踪并治理遗留 TXT 记录清理。"
+      description="跟踪并清理遗留的 TXT 记录。"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="neutral" dot>

@@ -210,28 +210,28 @@ export function OverviewPage() {
         <StatCard
           label="节点总数"
           numericValue={nodes.state.status === "ready" ? nodeItems.length : null}
-          hint="GET /api/v1/nodes"
+          hint="当前返回的节点总数"
           icon={<Server className="size-5" aria-hidden="true" />}
           tone="primary"
         />
         <StatCard
           label="在线节点"
           numericValue={nodes.state.status === "ready" ? onlineCount : null}
-          hint="online === true"
+          hint="当前在线的节点数量"
           icon={<Wifi className="size-5" aria-hidden="true" />}
           tone="success"
         />
         <StatCard
           label="离线节点"
           numericValue={nodes.state.status === "ready" ? offlineCount : null}
-          hint="离线节点指标不作为当前值展示"
+          hint="离线节点的旧指标不作为当前值"
           icon={<WifiOff className="size-5" aria-hidden="true" />}
           tone="warning"
         />
         <StatCard
           label="活动任务"
           numericValue={tasks.state.status === "ready" ? runningTasks : null}
-          hint="最近 8 条任务中尚未终态的数量"
+          hint="最近 8 条任务中未完成的数量"
           icon={<Activity className="size-5" aria-hidden="true" />}
           tone="info"
         />
@@ -242,7 +242,7 @@ export function OverviewPage() {
         {/* Card 1: Node Sync & Regional Topology */}
         <Panel
           title="集群在线率与区域分布"
-          description="基于当前 /api/v1/nodes 实时快照统计"
+          description="基于节点实时快照统计"
         >
           <div className="flex flex-col justify-between gap-4 px-5 py-4">
             <div className="flex items-center gap-5">
@@ -391,7 +391,7 @@ export function OverviewPage() {
         {/* Card 3: Quick Operations & Control Matrix */}
         <Panel
           title="控制面快捷矩阵"
-          description="高频运维工作流直达入口；写操作受服务端 RBAC 与 CSRF 保护"
+          description="高频运维工作流直达入口"
         >
           <div className="grid grid-cols-2 gap-2.5 px-5 py-4">
             {[
@@ -459,7 +459,7 @@ export function OverviewPage() {
       <div className="grid gap-5 xl:grid-cols-2">
         <Panel
           title="最近批量任务"
-          description="GET /api/v1/tasks?limit=8；ACCEPTED/QUEUED 不代表执行成功。"
+          description="最近 8 条任务；已受理不代表执行成功。"
           actions={
             <a className="text-xs font-semibold text-primary hover:underline" href="#/tasks">
               查看全部任务 →
@@ -520,7 +520,7 @@ export function OverviewPage() {
 
         <Panel
           title="最近审计事件"
-          description="GET /api/v1/audit/events?limit=8；脱敏摘要由服务端提供。"
+          description="最近 8 条审计事件。"
           actions={
             <a className="text-xs font-semibold text-primary hover:underline" href="#/audit">
               打开审计日志 →
@@ -583,7 +583,7 @@ export function OverviewPage() {
       {/* Authorized Nodes Table */}
       <Panel
         title="当前授权节点"
-        description="点击节点进入详情或前往节点管理筛选；指标无采样时间时标注“无采样时间”。"
+        description="点击节点进入详情，或前往节点管理筛选。"
         actions={
           <div className="flex flex-wrap gap-2">
             <a className="text-xs font-semibold text-primary hover:underline" href="#/nodes">

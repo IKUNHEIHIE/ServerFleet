@@ -70,7 +70,7 @@ function ReceiptTable({ rows, caption }: { readonly rows: readonly IncidentTaskR
       columns={[
         { key: "task", header: "任务", render: r => <a className="break-all font-mono text-xs text-primary underline" href={`#/tasks/${encodeURIComponent(r.taskId)}`}>{r.taskId}</a> },
         { key: "state", header: "当前结果", render: r => TASKS[r.state] ?? r.state },
-        { key: "counts", header: "逐目标汇总", render: r => Object.entries(r.results).map(([state, count]) => `${TASKS[state] ?? state}: ${count}`).join(" · ") || "—" },
+        { key: "counts", header: "各目标汇总", render: r => Object.entries(r.results).map(([state, count]) => `${TASKS[state] ?? state}: ${count}`).join(" · ") || "—" },
         { key: "time", header: "更新时间", render: r => formatDateTime(r.updatedAt) ?? "—" },
       ]}
     />
@@ -423,7 +423,7 @@ function IncidentDetail({ id, onChanged }: { readonly id: string; readonly onCha
                 </div>
               ) : null}
               {selected === "link_task" ? (
-                <Field label="新建后续任务 ID" hint="须晚于本处置创建且属于原资源范围；关联不赋予审批或执行权限。">
+                <Field label="新建后续任务 ID" hint="须晚于本处置创建且属于原资源范围。">
                   {ids => <TextInput id={ids.inputId} required value={followup} onChange={e => setFollowup(e.target.value)} />}
                 </Field>
               ) : null}

@@ -435,7 +435,7 @@ export function Shell({ children }: { readonly children: ReactNode }) {
                           </p>
                           <p className="mt-0.5 text-[11px] text-muted-foreground">
                             {session.writesLocked
-                              ? "刷新页面后需重新登录获取内存级 CSRF 令牌。"
+                              ? "刷新页面后需重新登录。"
                               : "当前会话具备完整服务端写操作保护。"}
                           </p>
                         </div>
@@ -502,11 +502,11 @@ export function Shell({ children }: { readonly children: ReactNode }) {
                 title="安全写入已锁定"
                 actions={
                   <LinkButton href="#/login" size="sm">
-                    重新登录以获取 CSRF 令牌
+                    重新登录
                   </LinkButton>
                 }
               >
-                页面刷新后，服务端会话仍有效，但当前 Identity 契约未返回 CSRF 令牌。只读页面可用；创建、修改、审批、退出等写操作会保持禁用，直到重新登录。
+                页面刷新后，只读页面可用；创建、修改、审批等写操作需重新登录后才能使用。
               </Notice>
             ) : null}
           </div>
@@ -515,10 +515,9 @@ export function Shell({ children }: { readonly children: ReactNode }) {
           </main>
           <footer className="mt-10 border-t border-border/80 py-4 text-xs leading-5 text-muted-foreground">
             <p>
-              Server Fleet · 完整 v0.9 管理台（GM · NEUROX UI v2.0）。所有管理操作经 Controller
-              REST/SSE；不在浏览器保存会话令牌、凭据或生产秘密。
+              Server Fleet · 完整 v0.9 管理台（GM · NEUROX UI v2.0）。不在浏览器保存会话令牌、凭据或秘密。
             </p>
-            <p className="mt-1">G2 契约仍为候选；未实现或失败接口会明确显示，不以演示数据替代。</p>
+            <p className="mt-1">未实现或失败的功能会明确显示。</p>
           </footer>
         </div>
       </div>

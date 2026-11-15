@@ -19,7 +19,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 	var old []storage.Migration
 	for _, set := range server.Migrations() {
 		for _, migration := range set {
-			if completionOnlyMigration(migration.Version) {
+			if completionOnlyMigration(migration.Version) || migration.Version == "ds/0089_node_archives" {
 				continue
 			}
 			if migration.Version != "cx/0007_ai_budgets_and_model_audit" && migration.Version != "ds/0081_publishing_targets" && migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" && migration.Version != "ds/0042_file_distribution" && migration.Version != "cx/0010_gateway_artifact_bindings" && migration.Version != "ds/0043_upload_policies" {
@@ -48,7 +48,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 		t.Fatal("migration replay changed history", err)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 50 {
+	if err != nil || len(versions) != 51 {
 		t.Fatal(versions, err)
 	}
 	var name, gateways string
@@ -74,7 +74,7 @@ func TestUploadPolicyMigrationUpgradesActual28WithoutReinterpretingQueuedPlans(t
 	var old []storage.Migration
 	for _, set := range server.Migrations() {
 		for _, m := range set {
-			if completionOnlyMigration(m.Version) {
+			if completionOnlyMigration(m.Version) || m.Version == "ds/0089_node_archives" {
 				continue
 			}
 			if m.Version != "ds/0043_upload_policies" {
@@ -111,7 +111,7 @@ func TestUploadPolicyMigrationUpgradesActual28WithoutReinterpretingQueuedPlans(t
 		t.Fatal(err)
 	}
 	versions, err = storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 50 {
+	if err != nil || len(versions) != 51 {
 		t.Fatalf("upgrade count: %v %v", versions, err)
 	}
 }

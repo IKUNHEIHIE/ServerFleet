@@ -12,7 +12,10 @@ describe("hasPermission", () => {
     expect(hasPermission(["tasks.approve", "tasks.read"], "task.approve")).toBe(true);
     expect(hasPermission(["tasks.submit"], "task.submit")).toBe(true);
     expect(hasPermission(["nodes.write"], "node.manage")).toBe(true);
-    expect(hasPermission(["node.create"], "node.manage")).toBe(true);
+    expect(hasPermission(["nodes.create"], "node.manage")).toBe(false);
+    expect(hasPermission(["nodes.suspend"], "node.suspend")).toBe(true);
+    expect(hasPermission(["nodes.revoke"], "node.revoke")).toBe(true);
+    expect(hasPermission(["nodes.write"], "node.revoke")).toBe(false);
     expect(hasPermission(["groups.write"], "group.manage")).toBe(true);
     expect(hasPermission(["servicegroups.write"], "servicegroup.manage")).toBe(true);
     expect(hasPermission(["gateway.write"], "gateway.manage")).toBe(true);

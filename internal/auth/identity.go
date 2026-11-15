@@ -122,11 +122,12 @@ type identityState struct {
 // IdentityService implements auth-local lifecycle logic. The public contract and
 // adapter are candidates; no Controller route consumes this before review.
 type IdentityService struct {
-	store       IdentityStore
-	now         func() time.Time
-	random      io.Reader
-	resources   ResourceResolver
-	permissions map[string]PermissionDefinition
+	store             IdentityStore
+	now               func() time.Time
+	random            io.Reader
+	resources         ResourceResolver
+	bootstrapNodeList func(context.Context) ([]string, error)
+	permissions       map[string]PermissionDefinition
 }
 
 func NewIdentityService(store IdentityStore) (*IdentityService, error) {

@@ -152,7 +152,7 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		ProtocolMinor:     minor,
 		Semantic:          semantic,
 		Frames:            agentFrameLimits(),
-		HeartbeatInterval: 15 * time.Second,
+		HeartbeatInterval: time.Second,
 		MaxConnections:    100,
 		Handshake:         bridge.handshake,
 		Admit:             bridge.admit,

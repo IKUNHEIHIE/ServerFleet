@@ -84,7 +84,7 @@ function UserEditor({
     <Modal
       open={open}
       title={user ? "编辑用户" : "创建用户"}
-      description={user ? "更新角色与启用状态。当前契约没有密码重置端点；不得在本页伪造成功。" : "创建后密码不会回显；角色决定服务端能力目录。"}
+      description={user ? "更新角色与启用状态。" : "创建后密码不会回显；角色决定可用权限。"}
       onClose={() => {
         if (!action.pending) onClose();
       }}
@@ -233,7 +233,7 @@ function GrantEditor({
     <Modal
       open={open}
       title="创建资源授权"
-      description="客户端选择不构成授权；服务端会再次校验主体、资源与操作权限，并记录审计。"
+      description="选择主体、资源与权限后提交。"
       onClose={() => {
         if (!action.pending) onClose();
       }}
@@ -247,7 +247,7 @@ function GrantEditor({
       <form id="grant-editor" onSubmit={submit} className="space-y-4">
         {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
         {action.error ? <Notice tone="error" title="授权失败">{describeApiError(action.error)}</Notice> : null}
-        <Field label="主体 ID" hint="通常是用户 ID；不能使用客户端自报身份代替服务端鉴权。">
+        <Field label="主体 ID" hint="通常是用户 ID。">
           {ids => <TextInput id={ids.inputId} value={principalId} onChange={event => setPrincipalId(event.target.value)} required />}
         </Field>
         <Field label="资源类型">
@@ -293,7 +293,7 @@ function GrantEditor({
             ))}
           </FieldsetBox>
         ) : (
-          <Field label="权限（逗号分隔）" hint="权限目录不可用时的降级输入；服务端仍会校验。">
+          <Field label="权限（逗号分隔）" hint="权限目录不可用时手动填写，多个以逗号分隔。">
             {ids => <TextInput id={ids.inputId} value={permissionText} onChange={event => setPermissionText(event.target.value)} />}
           </Field>
         )}
@@ -386,8 +386,8 @@ export function UsersPage() {
     <div className="space-y-5">
       <PageHeader
         title="用户与权限"
-        description="用户、角色目录、资源授权与会话。客户端隐藏按钮不构成安全控制；所有访问由服务端重新校验。"
-        badge={<Badge tone="primary" dot>RBAC</Badge>}
+        description="用户、角色目录、资源授权与会话。"
+        badge={<Badge tone="primary" dot>权限</Badge>}
       />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       <TabBar
@@ -405,7 +405,7 @@ export function UsersPage() {
       {tab === "users" ? (
         <Panel
           title="用户"
-          description="GET /api/v1/users；修改角色/停用需服务端权限。"
+          description="修改角色或停用需要相应权限。"
           actions={
             <Button size="sm" variant="primary" disabled={!canManageUsers || session.writesLocked} onClick={() => setUserEditor({ open: true, user: null })}>
               创建用户
@@ -438,14 +438,14 @@ export function UsersPage() {
             )}
           </AsyncPanel>
           <p className="border-t px-5 py-3 text-xs text-muted-foreground">
-            契约缺口：没有密码重置、二次验证或删除用户端点；本页不提供伪造入口。UserPatch 也未携带 expectedRevision，服务端需自行处理并发。
+            暂不支持密码重置、二次验证或删除用户。
           </p>
         </Panel>
       ) : null}
 
       {tab === "roles" ? (
         <div className="grid gap-5 xl:grid-cols-2">
-          <Panel title="角色目录" description="GET /api/v1/roles；当前契约没有角色 CRUD，目录只读。">
+          <Panel title="角色目录" description="角色目录只读。">
             <AsyncPanel state={roles.state} onRetry={roles.reload} errorTitle="角色加载失败" empty={<EmptyState title="暂无角色" />} isEmpty={data => data.items.length === 0}>
               {() => (
                 <DataTable
@@ -462,7 +462,7 @@ export function UsersPage() {
               )}
             </AsyncPanel>
           </Panel>
-          <Panel title="权限目录" description="GET /api/v1/permissions；供授权选择与审计核对。">
+          <Panel title="权限目录" description="供授权选择与审计核对。">
             <AsyncPanel state={permissions.state} onRetry={permissions.reload} errorTitle="权限目录加载失败" empty={<EmptyState title="暂无权限项" />} isEmpty={data => data.items.length === 0}>
               {() => (
                 <DataTable
@@ -484,7 +484,7 @@ export function UsersPage() {
       {tab === "grants" ? (
         <Panel
           title="资源授权"
-          description="GET /api/v1/resource-grants；选中资源不代表授权，服务端会按主体/资源/权限再次校验。"
+          description="选中资源不代表已授权。"
           actions={<Button size="sm" variant="primary" disabled={!canManageGrants || session.writesLocked} onClick={() => setGrantEditorOpen(true)}>创建授权</Button>}
         >
           <AsyncPanel state={grants.state} onRetry={grants.reload} errorTitle="资源授权加载失败" empty={<EmptyState title="暂无资源授权" />} isEmpty={data => data.items.length === 0}>
@@ -517,7 +517,7 @@ export function UsersPage() {
       {tab === "sessions" ? (
         <Panel
           title="我的会话"
-          description="GET /api/v1/auth/sessions；撤销他人会话不在本页范围，当前会话请使用退出。"
+          description="此处不能撤销他人会话；当前会话请使用退出。"
           actions={<Button size="sm" onClick={sessions.reload} loading={sessions.state.status === "loading"}>刷新</Button>}
         >
           <AsyncPanel state={sessions.state} onRetry={sessions.reload} errorTitle="会话列表加载失败" empty={<EmptyState title="没有活跃会话" />} isEmpty={data => data.items.length === 0}>

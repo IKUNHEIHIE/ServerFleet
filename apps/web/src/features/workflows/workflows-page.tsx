@@ -147,7 +147,7 @@ export function WorkflowsPage() {
     event.preventDefault();
     const nodeIdsParsed = nodeIds.split(/[,，\s]+/).map(id => id.trim()).filter(Boolean);
     if (nodeIdsParsed.length === 0) return setLocalError("至少填写一个目标节点 ID。");
-    if (new Set(nodeIdsParsed).size !== nodeIdsParsed.length) return setLocalError("目标节点 ID 不能重复（服务端会拒绝）。");
+    if (new Set(nodeIdsParsed).size !== nodeIdsParsed.length) return setLocalError("目标节点 ID 不能重复。");
     const parsedParameters = parseParameterLines(parameters);
     if (typeof parsedParameters === "string") return setLocalError(parsedParameters);
     if (Boolean(matchKey) !== Boolean(matchValue)) return setLocalError("匹配条件的键和值必须同时填写或同时留空。");
@@ -191,7 +191,7 @@ export function WorkflowsPage() {
     <div className="space-y-5">
       <PageHeader
         title="自动化工作流"
-        description="规则创建、启停与手动触发对接真实 Controller（GET/POST/PATCH /api/v1/workflows*）。步骤执行与人工审批始终经统一任务系统；本页不执行任何命令。"
+        description="规则创建、启停与手动触发均已接入；步骤执行与人工审批经统一任务系统，本页不执行命令。"
         badge={<Badge tone="primary" dot>自动化</Badge>}
         actions={<Button type="button" onClick={list.reload} loading={list.state.status === "loading"}><RefreshCw className="size-3.5" />刷新</Button>}
       />
@@ -269,7 +269,7 @@ export function WorkflowsPage() {
 
       <Panel
         title="创建工作流"
-        description="POST /api/v1/workflows → 201。动作只接受服务端注册的 tasks.command / host.patch / host.root；参数是字符串键值对象。"
+        description="动作仅限系统允许的类型，参数为键值对象。"
       >
         <form onSubmit={submitCreate} className="space-y-4 px-5 py-4">
           {createAction.error ? <Notice tone="error" title="创建失败">{describeApiError(createAction.error)}</Notice> : null}
@@ -282,7 +282,7 @@ export function WorkflowsPage() {
                 </Select>
               )}
             </Field>
-            <Field label="动作（步骤 1）" hint="服务端固定允许的动作集合。">
+            <Field label="动作（步骤 1）" hint="仅可选择系统允许的动作。">
               {ids => (
                 <Select id={ids.inputId} value={actionId} onChange={event => setActionId(event.target.value)}>
                   {ACTION_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}
@@ -298,7 +298,7 @@ export function WorkflowsPage() {
               {ids => <TextInput id={ids.inputId} value={matchValue} onChange={event => setMatchValue(event.target.value)} />}
             </Field>
           </div>
-          <Field label="目标节点 ID" hint="逗号分隔；需要对这些节点具备所选动作的资源授权。">
+          <Field label="目标节点 ID" hint="逗号分隔；需对这些节点具备相应授权。">
             {ids => <TextInput id={ids.inputId} value={nodeIds} onChange={event => setNodeIds(event.target.value)} placeholder="node-alpha, node-beta" />}
           </Field>
           <Field label="参数（每行 key=value，可选）">

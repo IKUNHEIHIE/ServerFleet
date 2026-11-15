@@ -244,12 +244,11 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
           </AsyncPanel>
         )}
 
-        <Field label="命令或脚本" hint="高风险/root 操作仍需服务端审批；客户端不能以 dryRun 代替真实授权。">
+        <Field label="命令或脚本" hint="高风险或 root 操作仍需审批。">
           {ids => <TextArea id={ids.inputId} value={command} onChange={event => setCommand(event.target.value)} required className="font-mono" />}
         </Field>
-        <Notice tone="info" title="契约限制">
-          当前创建 DTO 只提供 `dispatchMode` 与布尔 `dryRun`，没有 batchSize/canarySize/预演级别字段。页面不伪造这些参数；
-          服务端安全计划接口（/tasks/safety-plan）若实现分批/金丝雀，需要额外契约协调。
+        <Notice tone="info" title="说明">
+          暂不支持分批或金丝雀发布参数。
         </Notice>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="执行策略">
@@ -371,7 +370,7 @@ export function TasksPage() {
 
       <Panel
         title="任务历史"
-        description="GET /api/v1/tasks；状态筛选只作用于已加载页。"
+        description="状态筛选只作用于当前已加载的任务。"
         actions={
           <label className="text-xs font-medium text-muted-foreground">
             状态

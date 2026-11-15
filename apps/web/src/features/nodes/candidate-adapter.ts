@@ -34,7 +34,7 @@ export interface CandidateNodeDetail {
   readonly lastSeenAt?: string | null;
   readonly agentVersion?: string | null;
   readonly platform?: string | null;
-  readonly revision: number;
+  readonly revision?: number;
 }
 
 /**

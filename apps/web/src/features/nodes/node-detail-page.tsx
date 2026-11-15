@@ -1,3 +1,4 @@
+import { NodeManagementAccess } from "./node-management-access";
 import { formatDateTime } from "@/lib/format";
 import { useState } from "react";
 import { useSession } from "@/app/session";
@@ -14,8 +15,9 @@ import { nodesApi } from "@/lib/api/endpoints";
 import type { NodeCapabilities, NodeDetail, NodeDiagnostic, NodeIdentity, TrafficQuota } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { NodeQuotaEditor } from "./node-quota-editor";
+import { NodeEditor } from "./node-editor";
 
-type ActionKind = "suspend" | "revoke";
+type ActionKind = "suspend" | "revoke" | "remove";
 
 const CONNECTION_TEXT: Record<NodeDiagnostic["connectionState"], string> = {
   online: "在线",
@@ -31,7 +33,12 @@ function DetailBody({ detail }: { readonly detail: NodeDetail }) {
         { term: "显示名称", value: detail.displayName || detail.nodeId },
         { term: "节点 ID", value: <span className="font-mono text-xs">{detail.nodeId}</span> },
         { term: "状态", value: detail.status },
-        { term: "版本 revision", value: detail.revision },
+        { term: "地址", value: detail.address || "未设置" },
+        { term: "地区", value: detail.region || "未设置" },
+        { term: "云厂商", value: detail.provider || "未设置" },
+        { term: "国家码", value: detail.countryCode || "未设置" },
+        { term: "标签", value: detail.tags?.join("、") || "未设置" },
+        { term: "更新时间", value: detail.updatedAt ?? "未提供" },
         { term: "平台", value: detail.platform ?? "未知" },
         { term: "Agent 版本", value: detail.agentVersion ?? "未知" },
         { term: "最近在线", value: detail.lastSeenAt ?? "未知" },
@@ -202,17 +209,16 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
   const [confirmRevoke, setConfirmRevoke] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
   const [quotaOpen, setQuotaOpen] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
 
-  const canManage = session.can("node.manage") || session.can("node.suspend") || session.can("node.revoke");
-  const canManageQuota = session.can("quota.manage") || session.can("node.manage");
-  const locked = !canManage || session.writesLocked;
+  const canManage = session.can("node.manage");
+  const canSuspend = session.can("node.suspend");
+  const canRevoke = session.can("node.revoke");
+  const canManageQuota = session.can("quota.manage") || canManage;
   const detail = useResource(`node:detail:${session.viewEpoch}:${nodeId}`, signal =>
     nodesApi.detail(nodeId, signal).then(result => result.data),
+    { refreshIntervalMs: 5000 },
   );
-  // 真实 Controller 只暴露 identity/capabilities/diagnostics 子资源，没有
-  // `GET /api/v1/nodes/{id}` 详情路由（GM-W4-02）：子资源不再门控在详情 ready 之后，
-  // 独立加载、独立展示错误；详情 404 时元数据面板回退为节点列表中的真实摘要，不编造字段。
-  const detailMissing = detail.state.status === "error" && detail.state.error.status === 404;
   const identity = useResource(
     `node:identity:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.identity(nodeId, signal).then(result => result.data),
@@ -224,6 +230,7 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
   const diagnostic = useResource(
     `node:diagnostics:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.diagnostics(nodeId, signal).then(result => result.data),
+    { refreshIntervalMs: 5000 },
   );
   const quota = useResource(
     `node:quota:${session.viewEpoch}:${nodeId}`,
@@ -233,142 +240,115 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
   // 据此展示诚实空态并允许首次创建（GM-W4-02）。其余错误仍按失败展示。
   const quotaMissing = quota.state.status === "error" && quota.state.error.status === 404;
   const quotaEditable = quota.state.status === "ready" || quotaMissing;
-  // 真实后端拒绝节点生命周期请求携带 expectedRevision（节点清单无持久化 revision，
-  // 返回 `revision_not_supported`），因此只提交 reason，不伪造乐观锁（GM-W4-02）。
   const suspendAction = useAction((body: { reason: string }) => nodesApi.suspend(nodeId, body));
   const revokeAction = useAction((body: { reason: string }) => nodesApi.revoke(nodeId, body));
-  const actionPending = suspendAction.pending || revokeAction.pending;
-  const actionError = suspendAction.error ?? revokeAction.error;
+  const removeAction = useAction((body: { reason: string }) => nodesApi.remove(nodeId, body));
+  const actionPending = suspendAction.pending || revokeAction.pending || removeAction.pending;
+  const activeAction = actionKind === "remove" ? removeAction : actionKind === "revoke" ? revokeAction : suspendAction;
+  const actionError = activeAction.error;
+  const actionAllowed = !session.writesLocked && (actionKind === "suspend" ? canSuspend : canRevoke);
+
+  function openAction(kind: ActionKind) {
+    if (session.writesLocked || (kind === "suspend" ? !canSuspend : !canRevoke)) return;
+    suspendAction.reset();
+    revokeAction.reset();
+    removeAction.reset();
+    setReason("");
+    setConfirmRevoke(false);
+    setOutcome(null);
+    setActionKind(kind);
+  }
 
   async function submitAction() {
-    if (!actionKind) return;
-    const body = { reason: reason.trim() };
-    const result = actionKind === "revoke" ? await revokeAction.run(body) : await suspendAction.run(body);
+    if (!actionKind || !actionAllowed || actionPending || !reason.trim() || (actionKind !== "suspend" && !confirmRevoke)) return;
+    const result = await activeAction.run({ reason: reason.trim() });
     if (result.ok) {
-      setOutcome(actionKind === "revoke" ? "节点身份已吊销（服务端结果）。" : "已提交暂停请求（服务端结果）。");
       setActionKind(null);
       setReason("");
       setConfirmRevoke(false);
+      if (actionKind === "remove") {
+        window.location.hash = "#/nodes";
+        return;
+      }
+      setOutcome(actionKind === "revoke" ? "节点身份已吊销（服务端结果）。" : "已提交暂停请求（服务端结果）。");
       detail.reload();
       identity.reload();
       diagnostic.reload();
     }
   }
 
-  // 详情端点未提供时的诚实回退：只展示节点列表返回的真实摘要字段。
-  const summary = useResource(
-    `node:summary:${session.viewEpoch}:${nodeId}`,
-    signal => nodesApi.list({ signal }).then(result => result.data.items.find(item => item.id === nodeId) ?? null),
-    { enabled: detailMissing },
-  );
-
   return (
     <div className="space-y-5">
       <PageHeader
         title={detail.state.status === "ready" ? detail.state.data.displayName || nodeId : "节点详情"}
-        description="节点元数据、身份、能力、诊断与流量配额。所有字段来自服务端；失联不推断关机。"
+        description="节点元数据、身份、能力与流量配额；连接诊断每 5 秒刷新。未接入或失联不等于关机。"
         actions={
           <>
             <LinkButton href="#/nodes">
               返回节点列表
             </LinkButton>
+            <Button type="button" disabled={!canManage || session.writesLocked || detail.state.status !== "ready"} onClick={() => setEditorOpen(true)}>编辑节点</Button>
+            <Button type="button" variant="danger" disabled={!canRevoke || session.writesLocked} onClick={() => openAction("remove")}>删除节点</Button>
             <Button
               type="button"
-              disabled={locked}
-              onClick={() => {
-                setOutcome(null);
-                setActionKind("suspend");
-              }}
+              disabled={!canSuspend || session.writesLocked}
+              onClick={() => openAction("suspend")}
             >
               暂停派发
             </Button>
             <Button
               type="button"
               variant="danger"
-              disabled={locked}
-              onClick={() => {
-                setOutcome(null);
-                setActionKind("revoke");
-              }}
+              disabled={!canRevoke || session.writesLocked}
+              onClick={() => openAction("revoke")}
             >
               吊销身份
             </Button>
           </>
         }
       />
+      <NodeManagementAccess key={`access:${session.viewEpoch}:${nodeId}`} nodeId={nodeId} onGranted={() => { detail.reload(); identity.reload(); capabilities.reload(); diagnostic.reload(); quota.reload(); }} />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
-      {!canManage ? (
+      {!canManage && !canSuspend && !canRevoke ? (
         <Notice tone="warning" title="操作入口已锁定">
-          当前身份没有返回节点管理权限（`node.manage`/`node.suspend`/`node.revoke`）。详情仍为只读。
+          当前身份没有节点写入权限，详情仍可查看。
         </Notice>
       ) : null}
       {session.writesLocked ? (
-        <Notice tone="warning" title="写入被 CSRF 契约锁定">重新登录后才能执行暂停/吊销。</Notice>
+        <Notice tone="warning" title="写入已锁定">请重新登录后再编辑、删除或管理节点。</Notice>
       ) : null}
 
-      <Panel title="节点元数据" description="GET /api/v1/nodes/{nodeId}">
-        {detailMissing ? (
-          <>
-            <Notice tone="info" title="详情端点未提供">
-              当前 Controller 未实现 GET /api/v1/nodes/&#123;nodeId&#125;；以下字段来自节点列表返回的真实摘要，
-              不展示候选契约中的 revision/platform/agentVersion。
-            </Notice>
-            <AsyncPanel
-              state={summary.state}
-              onRetry={summary.reload}
-              errorTitle="节点摘要加载失败"
-              empty={<p className="px-6 py-8 text-sm text-muted-foreground">节点列表中没有该节点（可能未授权或已删除）。</p>}
-              isEmpty={data => data === null}
-            >
-              {data =>
-              data === null ? null : (
-                <DefinitionList
-                  items={[
-                    { term: "显示名称", value: data.name.trim() || data.id },
-                    { term: "节点 ID", value: <span className="font-mono text-xs">{data.id}</span> },
-                    { term: "在线状态", value: data.online ? "在线" : "离线" },
-                    { term: "区域", value: data.region ?? "未返回" },
-                    { term: "供应商", value: data.provider ?? "未返回" },
-                    { term: "IP", value: data.ip ?? "未返回" },
-                    { term: "标签", value: data.tags?.join("、") || "未设置" },
-                  ]}
-                />
-              )
-            }
-            </AsyncPanel>
-          </>
-        ) : (
-          <AsyncPanel
-            state={detail.state}
-            onRetry={detail.reload}
-            errorTitle="节点详情加载失败"
-            empty={<p className="px-6 py-8 text-sm text-muted-foreground">未找到该节点。</p>}
-            isEmpty={() => false}
-          >
-            {data => <DetailBody detail={data} />}
-          </AsyncPanel>
-        )}
+      <Panel title="节点元数据">
+        <AsyncPanel
+          state={detail.state}
+          onRetry={detail.reload}
+          errorTitle="节点详情加载失败"
+          empty={<p className="px-6 py-8 text-sm text-muted-foreground">未找到该节点。</p>}
+          isEmpty={() => false}
+        >
+          {data => <DetailBody detail={data} />}
+        </AsyncPanel>
       </Panel>
 
       <div className="grid gap-5 xl:grid-cols-2">
-        <Panel title="节点身份" description="GET /api/v1/nodes/{nodeId}/identity；不返回私钥。">
+        <Panel title="节点身份" description="不显示私钥。">
           <AsyncPanel state={identity.state} onRetry={identity.reload} errorTitle="身份信息加载失败">
             {data => <IdentityBody identity={data} />}
           </AsyncPanel>
         </Panel>
-        <Panel title="协商能力" description="GET /api/v1/nodes/{nodeId}/capabilities">
+        <Panel title="协商能力">
           <AsyncPanel state={capabilities.state} onRetry={capabilities.reload} errorTitle="能力信息加载失败">
             {data => <CapabilitiesBody capabilities={data} />}
           </AsyncPanel>
         </Panel>
-        <Panel title="连接诊断" description="GET /api/v1/nodes/{nodeId}/diagnostics">
+        <Panel title="连接诊断">
           <AsyncPanel state={diagnostic.state} onRetry={diagnostic.reload} errorTitle="诊断加载失败">
             {data => <DiagnosticBody diagnostic={data} />}
           </AsyncPanel>
         </Panel>
         <Panel
           title="流量与配额"
-          description="GET /api/v1/nodes/{nodeId}/traffic-quota；估算值与账单分开。"
+          description="估算值与账单分开。"
           actions={
             <Button
               type="button"
@@ -392,6 +372,23 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
         </Panel>
       </div>
 
+      {editorOpen && detail.state.status === "ready" ? (
+        <NodeEditor
+          key={`editor:${session.viewEpoch}:${nodeId}`}
+          nodeId={nodeId}
+          metadata={detail.state.data}
+          canManage={canManage}
+          writesLocked={session.writesLocked}
+          onClose={() => setEditorOpen(false)}
+          onRefresh={() => { setEditorOpen(false); detail.reload(); }}
+          onSaved={() => {
+            setEditorOpen(false);
+            setOutcome("节点信息已保存。");
+            detail.reload();
+          }}
+        />
+      ) : null}
+
       <NodeQuotaEditor
         nodeId={nodeId}
         quota={quota.state.status === "ready" ? quota.state.data : null}
@@ -408,9 +405,11 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
 
       <Modal
         open={actionKind !== null}
-        title={actionKind === "revoke" ? "吊销节点身份" : "暂停节点任务派发"}
+        title={actionKind === "remove" ? "删除节点" : actionKind === "revoke" ? "吊销节点身份" : "暂停节点任务派发"}
         description={
-          actionKind === "revoke"
+          actionKind === "remove"
+            ? "停止此节点接入并从列表移除，保留历史审计与关联记录；重新使用须重新接入。"
+            : actionKind === "revoke"
             ? "吊销后该节点凭据不可恢复；在途任务与待审批计划需要人工处置。该操作不可用简单回滚。"
             : "暂停只停止新的任务派发，不删除节点，也不代表节点已离线。"
         }
@@ -421,7 +420,7 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
         }}
         footer={
           <>
-            <Button type="button" disabled={actionPending} onClick={() => setActionKind(null)}>
+            <Button type="button" disabled={actionPending} onClick={() => { setActionKind(null); setConfirmRevoke(false); }}>
               取消
             </Button>
             <Button
@@ -429,16 +428,16 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
               variant="danger"
               onClick={submitAction}
               loading={actionPending}
-              disabled={!reason.trim() || (actionKind === "revoke" && !confirmRevoke)}
+              disabled={!actionAllowed || !reason.trim() || (actionKind !== "suspend" && !confirmRevoke)}
             >
-              确认执行
+              {actionKind === "remove" ? "确认删除" : "确认执行"}
             </Button>
           </>
         }
       >
         {actionError ? <Notice tone="error" title="操作未完成">{describeApiError(actionError)}</Notice> : null}
         <div className="space-y-4">
-          <Field label="原因" hint="服务端会记录到审计；请勿包含秘密。">
+          <Field label="原因" hint="请勿包含秘密或凭据。">
             {ids => (
               <TextArea
                 id={ids.inputId}
@@ -449,7 +448,7 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
               />
             )}
           </Field>
-          {actionKind === "revoke" ? (
+          {actionKind === "revoke" || actionKind === "remove" ? (
             <label className="flex items-start gap-2 text-sm">
               <Checkbox
                 className="mt-1 accent-[var(--destructive)]"
@@ -457,12 +456,11 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
                 onChange={event => setConfirmRevoke(event.target.checked)}
                 disabled={actionPending}
               />
-              我理解吊销身份不可恢复，且不会自动回滚在途任务。
+              {actionKind === "remove" ? "停止此节点接入并从列表移除，保留历史审计；重新使用须重新接入" : "我理解吊销身份不可恢复，且不会自动回滚在途任务。"}
             </label>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            当前 Controller 的节点生命周期操作不接受 expectedRevision（节点清单无持久化版本号）；
-            暂停/吊销以服务端审计与权限校验为准。
+            操作原因会记录到审计中，实际结果以服务端返回为准。
           </p>
         </div>
       </Modal>

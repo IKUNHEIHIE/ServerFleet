@@ -123,7 +123,7 @@ describe("update center", () => {
 
   it("reports the missing Agent update contract instead of faking batch upgrades", async () => {
     await renderAuthenticated("/updates", updateRoutes([]));
-    expect(await screen.findByText("契约缺口：Agent 升级")).toBeVisible();
+    expect(await screen.findByText("Agent 升级说明")).toBeVisible();
     expect(screen.queryByRole("button", { name: /分批升级|升级 Agent/ })).not.toBeInTheDocument();
   });
 

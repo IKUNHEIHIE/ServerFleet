@@ -28,7 +28,7 @@ export function SessionUnavailable() {
   return (
     <AuthLayout
       title="无法验证管理会话"
-      subtitle="Controller 管理 API 未返回可用响应。当前不会自动跳转登录页，也不会用演示数据替代。"
+      subtitle="无法连接管理服务。请重试或重新加载页面。"
       footer={<>请确认 Controller 已启动、反向代理与同源 Cookie 配置正确。</>}
     >
       <Notice tone="error" title="连接失败">
@@ -43,8 +43,7 @@ export function SessionUnavailable() {
         </Button>
       </div>
       <p className="mt-4 text-xs leading-5 text-muted-foreground">
-        如果错误码为 <code>404</code> 或提示“非 JSON 响应”，通常表示该 Controller 仍是工程骨架，尚未提供
-        <code>/api/v1/auth/*</code> 管理接口。此页面不会伪造登录成功。
+        无法连接管理服务。请确认服务已正常启动，或重新加载页面。
       </p>
     </AuthLayout>
   );

@@ -369,7 +369,7 @@ export function DnsPage() {
       <div className="grid gap-5 lg:grid-cols-[20rem_minmax(0,1fr)]">
         <Panel
           title="账号"
-          description="GET /api/v1/dns/accounts；不返回 Token。"
+          description="不显示 Token 明文。"
           actions={<Button size="sm" variant="primary" disabled={!canManageAccounts || session.writesLocked} onClick={() => setAccountEditor({ open: true, account: null })}>添加账号</Button>}
         >
           <AsyncPanel state={accounts.state} onRetry={accounts.reload} errorTitle="账号加载失败" empty={<EmptyState title="暂无 Cloudflare 账号" />} isEmpty={data => data.items.length === 0}>
@@ -450,7 +450,7 @@ export function DnsPage() {
 
           <Panel
             title="解析记录"
-            description={selectedZone ? `Zone ${selectedZone.name}；GET /api/v1/dns/zones/${selectedZone.id}/records` : "选择 Zone 后显示记录"}
+            description={selectedZone ? `Zone ${selectedZone.name} 的解析记录` : "选择 Zone 后显示记录"}
             actions={<Button size="sm" variant="primary" disabled={!selectedZone || !canManageRecords || session.writesLocked} onClick={() => setRecordEditor({ open: true, record: null })}>添加记录</Button>}
           >
             {!selectedZone ? <EmptyState title="请选择 Zone" /> : (
@@ -488,7 +488,7 @@ export function DnsPage() {
 
       <SectionDivider label="DNS 供应商能力与批量任务" caption="Provider Capabilities & Inspection Tasks" />
       <div className="grid gap-5 xl:grid-cols-[1fr_1.5fr] xl:items-start">
-        <Panel title="供应商" description="GET /api/v1/dns/providers；只启用服务端声明支持的供应商。">
+        <Panel title="供应商" description="只启用系统支持的供应商。">
           <AsyncPanel state={providers.state} onRetry={providers.reload} errorTitle="供应商加载失败">
             {data => (
               <p className="px-5 py-4 text-sm">

@@ -279,7 +279,7 @@ function MemberEditor({
       <div className="space-y-3">
         {save.error ? <Notice tone="error" title="保存成员失败">{describeApiError(save.error)}</Notice> : null}
         {!canManage ? <Notice tone="warning" title="缺少服务组管理权限">保存保持禁用。</Notice> : null}
-        {writesLocked ? <Notice tone="warning" title="写入被 CSRF 契约锁定">重新登录后才能保存。</Notice> : null}
+        {writesLocked ? <Notice tone="warning" title="写入已锁定">重新登录后才能保存。</Notice> : null}
         {missing.length > 0 ? (
           <Notice tone="warning" title="部分现有成员不可见">
             有 {missing.length} 个成员不在当前可见节点集合；继续保存会移除它们。
@@ -437,7 +437,7 @@ export function ServiceGroupsPage() {
 
       <Panel
         title="服务组列表"
-        description="GET /api/v1/service-groups。只有明确启用的网关联动服务组才参与调度；默认不启用负载均衡。"
+        description="只有明确启用的网关联动服务组才参与调度；默认不启用负载均衡。"
         actions={<Button size="sm" onClick={groups.reload} loading={groups.state.status === "loading"}>刷新</Button>}
       >
         <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3.5">
@@ -455,7 +455,7 @@ export function ServiceGroupsPage() {
           state={groups.state}
           onRetry={groups.reload}
           errorTitle="服务组加载失败"
-          empty={<EmptyState title="暂无服务组" description="服务端返回空集合；创建后可作为网关后端或任务目标。" />}
+          empty={<EmptyState title="暂无服务组" description="创建后可作为网关后端或任务目标。" />}
           isEmpty={data => data.items.length === 0}
         >
           {() => (
@@ -670,7 +670,7 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
       >
         {data => (
           <div className="space-y-5">
-            <Panel title="服务组定义" description="GET /api/v1/service-groups/{serviceGroupId}">
+            <Panel title="服务组定义">
               <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
                 <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
                   <p className="font-medium text-foreground">用途：{data.description || "未填写"}</p>
@@ -787,7 +787,7 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
         }
       >
         {schedulingAction.error ? <Notice tone="error" title="操作失败">{describeApiError(schedulingAction.error)}</Notice> : null}
-        <Field label="原因" hint="服务端会记录审计；请勿包含秘密。">
+        <Field label="原因" hint="请勿包含秘密或凭据。">
           {ids => <TextArea id={ids.inputId} value={reason} onChange={event => setReason(event.target.value)} />}
         </Field>
       </Modal>
@@ -807,7 +807,7 @@ export function ServiceGroupDetailPage({ serviceGroupId }: { readonly serviceGro
         }
       >
         {deleteAction.error ? <Notice tone="error" title="删除失败">{describeApiError(deleteAction.error)}</Notice> : null}
-        <p className="text-sm text-muted-foreground">服务端会校验当前权限并记录审计；删除后不能用旧 revision 恢复。</p>
+        <p className="text-sm text-muted-foreground">删除后不能恢复。</p>
       </Modal>
     </div>
   );

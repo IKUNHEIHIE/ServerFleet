@@ -23,6 +23,10 @@ export interface LegacyNodeRow {
   readonly provider: string | null;
   readonly cpu: LegacyMetric;
   readonly memory: LegacyMetric;
+  readonly disk?: LegacyMetric;
+  readonly uploadBps?: number | null;
+  readonly downloadBps?: number | null;
+  readonly sampledAt?: string | null;
 }
 
 export type LegacyAdaptResult =

@@ -78,7 +78,7 @@ export function NodeQuotaEditor({
     <Modal
       open={open}
       title="编辑流量配额与到期提醒"
-      description="PUT /api/v1/nodes/{nodeId}/traffic-quota；估算值与账单分开，不自动断网、续费或购买流量。"
+      description="估算值与账单分开；不会自动断网、续费或购买流量。"
       onClose={() => {
         if (!action.pending) onClose();
       }}

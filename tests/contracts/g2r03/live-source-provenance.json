@@ -1,0 +1,30 @@
+{
+  "scope": "Current source hashes only; archived G2-R02A review conclusions are unchanged.",
+  "archivedArtifacts": {
+    "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml": "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+    "docs/contracts/revisions/g2-r03/provenance.json": "1850f1e49b7c6001722e4b32109661d3fceaf6dc55e079c0fe2872d1afb65654",
+    "docs/contracts/revisions/g2-r03/MATRIX.md": "8e98e1600e66d8bcfc01eff4cf1a0102031623fb91742367099b85a946a13c52"
+  },
+  "sources": {
+    "webAdapter": {
+      "file": "apps/web/src/features/nodes/candidate-adapter.ts",
+      "sha256": "3bb74898aba0c643ac3e12f4e3b213248af46ced6da43222727ddd29615974f7"
+    },
+    "webTypes": {
+      "file": "apps/web/src/features/nodes/types.ts",
+      "sha256": "1c261a0a27db03cdd912bdc1821bf152ef9b8a7b8b51d19bf78cdd4d20e33ddb"
+    },
+    "node": {
+      "file": "internal/nodes/node.go",
+      "sha256": "c61c768a2d2f6f5729219c8a459258b3f34ff83f14c578253c3abba2fd63eb78"
+    },
+    "visibility": {
+      "file": "internal/nodes/visibility.go",
+      "sha256": "602051c3fca3d3569ead89c1eaf9af1bebd638100d58257f818ae1fbd47ae187"
+    },
+    "auth": {
+      "file": "internal/auth/node_policy.go",
+      "sha256": "f678bd148db82ba4e7af900d87227313ec32b8708736495b64c74bf0501575ec"
+    }
+  }
+}

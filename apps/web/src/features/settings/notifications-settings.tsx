@@ -198,7 +198,7 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
         )}
       </AsyncPanel>
 
-      <Panel title="通知策略" description="GET/PUT /api/v1/notifications/settings">
+      <Panel title="通知策略">
         <form onSubmit={submitSettings} className="space-y-4 px-5 py-4">
           {saveSettings.error ? <Notice tone="error" title="保存失败">{describeApiError(saveSettings.error)}</Notice> : null}
           {draft ? (
@@ -248,7 +248,7 @@ export function NotificationsSettings({ onOpenCredentials }: { readonly onOpenCr
       </Panel>
 
       {retryDelivery.error ? <Notice tone="error" title="重试未创建">{describeApiError(retryDelivery.error)}</Notice> : null}
-      <Panel title="投递记录" description="GET /api/v1/notifications/deliveries；只读状态。" actions={<Button size="sm" onClick={deliveries.reload} loading={deliveries.state.status === "loading"}>刷新</Button>}>
+      <Panel title="投递记录" actions={<Button size="sm" onClick={deliveries.reload} loading={deliveries.state.status === "loading"}>刷新</Button>}>
         <AsyncPanel state={deliveries.state} onRetry={deliveries.reload} errorTitle="投递记录加载失败" empty={<EmptyState title="暂无投递记录" />} isEmpty={data => data.items.length === 0}>
           {() => (
             <DataTable

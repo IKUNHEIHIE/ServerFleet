@@ -152,7 +152,7 @@ describe("AI model settings (GM-W6-R1)", () => {
     fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
     fireEvent.change(credentialSelect, { target: { value: "cred-ai-1" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
-    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "PUT" && call.url === "/api/v1/ai/model-settings");
       expect(call).toBeDefined();
@@ -176,7 +176,7 @@ describe("AI model settings (GM-W6-R1)", () => {
     fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
     fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
     fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
-    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
     expect(await screen.findByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
     await waitFor(() => expect(calls.filter(call => call.url === "/api/v1/ai/model-settings" && call.method === "GET").length).toBeGreaterThanOrEqual(2));
   });
@@ -187,7 +187,7 @@ describe("AI model settings (GM-W6-R1)", () => {
       "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "AI_SOURCE_UNAVAILABLE", status: 503 }, 503),
     }, ADMIN_IDENTITY);
     await screen.findByRole("option", { name: /本地模型 Key/ });
-    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
     expect(await screen.findByText("保存失败")).toBeVisible();
     expect(screen.queryByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeNull();
   });
@@ -200,7 +200,7 @@ describe("AI model settings (GM-W6-R1)", () => {
       "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "MODEL_REVISION_CONFLICT", status: 409 }, 409),
     }, ADMIN_IDENTITY);
     await screen.findByRole("option", { name: /本地模型 Key/ });
-    fireEvent.click(screen.getByRole("button", { name: "保存模型设置（CAS）" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
     await waitFor(() => expect(screen.getByLabelText("模型标识")).toHaveValue("other-admin-model"));
     expect(screen.getByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
   });
@@ -208,7 +208,7 @@ describe("AI model settings (GM-W6-R1)", () => {
   it("keeps the panel read-only for a non-administrator identity", async () => {
     const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), { ...IDENTITY, roles: ["reader"] });
     await screen.findByText("当前身份不是管理员：只能查看本页配置，不能修改（服务端强制）。");
-    expect((screen.getByRole("button", { name: "保存模型设置（CAS）" }) as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("button", { name: "保存模型设置" }) as HTMLButtonElement).disabled).toBe(true);
     await waitFor(() => expect(calls.some(call => call.method === "PUT")).toBe(false));
   });
 });

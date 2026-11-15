@@ -14,7 +14,7 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 ## 入口与认证
 
 - 正式Web调用同源 `/api/v1`，直接HTTPS。浏览器会话Cookie为 `__Host-sf_session`，HttpOnly/Secure；写请求按当前会话发送 `X-CSRF-Token` 和精确Origin，不信任转发头来伪造TLS。请求ID由Controller产生并随响应/审计关联。
-- 全局功能权限与节点资源权限同时生效。管理员没有隐式的所有节点授权。服务组任务使用冻结成员/修订；每次执行、帧和敏感响应还要复核当前授权、隔离门、审批与凭据版本。
+- 全局功能权限与节点资源权限同时生效。首个 Bootstrap 管理员拥有当前节点的基础管理权限；普通管理员和其他用户没有隐式节点授权。服务组任务使用冻结成员/修订；每次执行、帧和敏感响应还要复核当前授权、隔离门、审批与凭据版本。
 - 受限令牌管理使用Cookie会话：`GET/POST /auth/tokens`、`DELETE /auth/tokens/{tokenId}`。目前正式节点/任务HTTP仍使用Cookie认证，**尚无生产Bearer读取适配**；`AuthorizeRestrictedToken`/`BearerCommitGate`属于校验端口，不能将管理成功等同于Bearer可用。令牌仅设计为script-read、nodes.read/tasks.read、1—200显式节点、60—3600秒，不允许写入/AI/插件/注册/执行。
 - Agent的 `/api/v1/agent/link` 是WSS+Protobuf协议入口，需实际mTLS身份/能力协商与逐帧授权，不是浏览器REST。`POST /api/v1/agent/enroll` 是严格HTTPS首次注册协议，令牌/CSR/Root信任校验独立于Cookie。两者通过无method的转发挂载进入专用协议处理器，因此不列入AST的method/path声明计数。
 - `/healthz`仅表示活性；通用 `/readyz`检查启动及子系统就绪，不能代替业务或节点健康。更新还有独立本地监督进程 nonce 就绪条件，不能相互替代；详见[身份运维](../development/IDENTITY-OPERATIONS.md)。
@@ -48,6 +48,14 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 | 监控/通知/流量 | `/availability-monitors`、`/traffic-risks`、`/notifications`、节点traffic相关路径 | 源节点权限、当前owner、通知凭据、真实计数覆盖；旧`/monitoring/`前缀兼容 |
 | 更新/备份/恢复/处置 | `/system`、`/backups`、`/disaster-recovery`、`/operations/incidents` | 可信supervisor、加密/存储凭据、恢复隔离、独立审批和新鲜证据 |
 | 插件 | `/plugins`、`/plugins/xray-manager` | 目录/包/声明式元数据可存在；变更/执行需已准入Runtime和Host，当前存在明确501/503拒绝式入口 |
+
+## 节点管理补丁（2026-11-15，工作区待提交）
+
+新增 `GET/PATCH/DELETE /api/v1/nodes/{nodeId}`。GET 返回 `nodeId/displayName/status/address/region/provider/countryCode/tags/updatedAt`，可选最近在线与 Agent 版本；不伪造 revision。PATCH 只接受 `name/address/region/provider/countryCode/tags/expectedUpdatedAt`，要求 nodes.write 和读取授权；expectedUpdatedAt 为读取时的元数据版本，冲突返回 409 node_metadata_conflict。心跳不使元数据版本失效。DELETE 接受必填 reason，要求 nodes.revoke，事务内撤销并归档；普通列表隐藏，历史关联和审计记录保留，重复删除幂等。归档不等于远程程序已卸载。
+
+新增 `GET /api/v1/groups/node-results`，支持 mode=manual + groupId 或 mode=automatic + dimension(region/provider/tag) + value，可选 search（别名 q，不能共存）、status(all/online/offline)、cursor、limit(1–200)。返回 `{items,total,nextCursor}`，每次请求按当前 nodes.read 授权计算；游标绑定筛选，不授权资源。自动分类只读，不修改手动分组和权限。
+
+接入令牌创建支持 name；省略或空白时生成可区分的 node-随机名称。页面将同一个名称用于令牌和安装命令。新增迁移 ds/0089_node_archives，工作区迁移共 51 项，历史迁移不改写。
 
 ## 手动监控探测
 

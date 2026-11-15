@@ -145,7 +145,7 @@ export function FileDistributionPanel({ nodes }: { readonly nodes: readonly Node
   return (
     <Panel
       title="多目标文件分发"
-      description="POST /api/v1/files/distributions → PUT content → POST complete；单次上传向多台目标节点并发分发。"
+      description="单次上传向多台目标节点并发分发。"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="primary" dot>

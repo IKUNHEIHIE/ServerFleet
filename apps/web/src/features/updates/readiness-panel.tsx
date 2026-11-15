@@ -65,7 +65,7 @@ export function ReadinessPanel() {
   return (
     <Panel
       title="主控通用就绪与活性诊断"
-      description="GET /readyz 与 GET /healthz；按需核验控制面启动及子系统就绪分类。"
+      description="按需核验控制面启动与子系统就绪状态。"
       actions={
         <div className="flex flex-wrap items-center gap-2">
           <Badge tone="info" dot>
@@ -91,7 +91,7 @@ export function ReadinessPanel() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
                     <Server aria-hidden="true" className="size-3.5 text-primary" />
-                    总体就绪状态（GET /readyz）
+                    总体就绪状态
                   </span>
                   {snapshot.readiness ? (
                     <Badge tone={snapshot.readiness.status === "ready" ? "success" : "danger"} dot>
@@ -112,7 +112,7 @@ export function ReadinessPanel() {
                 <div className="flex items-center justify-between gap-2">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-foreground">
                     <Activity aria-hidden="true" className="size-3.5 text-sky-600" />
-                    进程活性（GET /healthz）
+                    进程活性
                   </span>
                   {snapshot.health ? (
                     <Badge tone={snapshot.health.status === "ok" ? "success" : "warning"} dot>
@@ -151,7 +151,7 @@ export function ReadinessPanel() {
           </div>
         ) : (
           <p className="text-xs text-muted-foreground">
-            点击右上角“探测主控就绪与活性”触发 <code>/readyz</code> 与 <code>/healthz</code> 实时检查，不伪造初始化状态。
+            点击右上角“探测主控就绪与活性”进行实时检查。
           </p>
         )}
       </div>

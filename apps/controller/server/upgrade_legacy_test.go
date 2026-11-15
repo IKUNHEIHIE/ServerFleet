@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo50(t *testing.T) {
+func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo52(t *testing.T) {
 	ctx := context.Background()
 	directory := t.TempDir()
 	database := filepath.Join(directory, "legacy.db")
@@ -21,7 +21,7 @@ func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo50(t *testing.T) {
 	for _, group := range Migrations() {
 		old := []storage.Migration{}
 		for _, m := range group {
-			if m.Version != "ds/0088_node_diagnostics" {
+			if m.Version != "ds/0088_node_diagnostics" && m.Version != "ds/0089_node_archives" && m.Version != "ds/0090_node_live_metrics" {
 				old = append(old, m)
 			}
 		}
@@ -105,7 +105,7 @@ func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo50(t *testing.T) {
 	}
 	defer upgraded.Close()
 	versions, e = storage.AppliedVersions(ctx, upgraded.DB)
-	if e != nil || len(versions) != 50 {
+	if e != nil || len(versions) != 52 {
 		t.Fatal(len(versions), e)
 	}
 	current, e := upgraded.Identity.Authenticate(ctx, login.Secret, "", false)

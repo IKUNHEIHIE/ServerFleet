@@ -57,14 +57,14 @@ export function AgentRunPanel({ session }: { readonly session: AISession }) {
     <div className="space-y-5">
       <Panel title="发起 Agent 运维" description="描述目标后，Agent 会选择工具、等待审批、读取真实结果，再决定下一步。关闭页面后本次运行仍可在主控内继续。">
         <form onSubmit={start} className="space-y-4 px-5 py-4">
-          <Field label="运维目标" hint="可查看已授权节点、运行固定自检或已安装的命令配置。命令需提供 profileId 和策略摘要；缺少配置时 Agent 会说明原因。不要粘贴密钥。">
+          <Field label="运维目标" hint="可查看已授权节点、运行自检或已安装的命令配置；不要粘贴密钥。">
             {ids => <TextArea id={ids.inputId} aria-describedby={ids.hintId} value={goal} onChange={event => setGoal(event.target.value)} maxLength={8000} required disabled={locked || create.pending || uncertain} placeholder="例如：检查已授权节点的运行状态，对异常节点执行自检，然后汇总结果。" />}
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label="最多规划步数">{ids => <Select id={ids.inputId} value={maxSteps} disabled={locked || create.pending || uncertain} onChange={event => setMaxSteps(Number(event.target.value))}>{[4, 8, 12].map(value => <option key={value} value={value}>{value} 步</option>)}</Select>}</Field>
             <Field label="运行期限（含等待审批）">{ids => <Select id={ids.inputId} value={timeoutSeconds} disabled={locked || create.pending || uncertain} onChange={event => setTimeoutSeconds(Number(event.target.value))}>{[300, 900, 1800, 3600].map(value => <option key={value} value={value}>{value / 60} 分钟</option>)}</Select>}</Field>
           </div>
-          <p className="text-sm text-muted-foreground">授权节点：{session.allowedNodeIds?.length ?? 0} 台。资源变更会使旧运行失效；执行和结果读取均由后端重新校验权限。</p>
+          <p className="text-sm text-muted-foreground">授权节点：{session.allowedNodeIds?.length ?? 0} 台。资源变更会使旧运行失效。</p>
           {create.error ? <Notice tone="error" title="发起请求未确认">{describeApiError(create.error)} 请先查看下方运行列表；再次提交使用同一请求编号和原始目标。</Notice> : null}
           <Button type="submit" variant="primary" loading={create.pending} disabled={locked || (!goal.trim() && !uncertain)}>{uncertain ? "核对并继续同一次请求" : "开始运行"}</Button>
         </form>

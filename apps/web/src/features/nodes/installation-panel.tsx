@@ -71,13 +71,18 @@ export function installationCommand(c: Catalog, user: string, name: string): str
   return `(_sf_install=$(mktemp -d) && chmod 700 "$_sf_install" && printf '%s' ${ca} | base64 --decode > "$_sf_install/source-ca.pem" && chmod 600 "$_sf_install/source-ca.pem" && curl --fail --silent --show-error --proto '=https' --tlsv1.3 --noproxy '*' --max-time 60 --max-filesize 131072 ${localScriptCA}${quote(script.url)} -o "$_sf_install/install.sh" && printf '%s  %s\\n' ${quote(script.sha256)} "$_sf_install/install.sh" | sha256sum --check --status && sh "$_sf_install/install.sh" ${flags}; _sf_result=$?; [ -z "\${_sf_install:-}" ] || rm -rf -- "$_sf_install"; exit "$_sf_result")`;
 }
 
-function InstallationContent() {
+interface InstallationPanelProps {
+  readonly nodeName?: string;
+}
+
+function InstallationContent({ nodeName }: InstallationPanelProps) {
   const session = useSession();
   const page = useResource(`installation-catalog:${session.viewEpoch}`, signal =>
     apiClient.request<{ available: boolean; catalog?: Catalog }>("/api/v1/installations/catalog", { signal }).then(r => r.data),
   );
   const [user, setUser] = useState("serverfleet");
-  const [name, setName] = useState("node");
+  const [fallbackName, setFallbackName] = useState("node");
+  const name = nodeName ?? fallbackName;
   const [message, setMessage] = useState<string | null>(null);
   const data = page.state.status === "ready" ? page.state.data : null;
   const valid = /^[a-z][a-z0-9_-]{2,31}$/.test(user) && name.trim().length > 0 && name.length <= 128 && !/[\x00-\x1f\x7f]/.test(name);
@@ -109,9 +114,11 @@ function InstallationContent() {
             <Field label="专用服务账户">
               {ids => <TextInput id={ids.inputId} value={user} maxLength={32} onChange={e => setUser(e.target.value)} />}
             </Field>
-            <Field label="安装节点名称">
-              {ids => <TextInput id={ids.inputId} value={name} maxLength={128} onChange={e => setName(e.target.value)} />}
-            </Field>
+            {nodeName === undefined ? (
+              <Field label="安装节点名称">
+                {ids => <TextInput id={ids.inputId} value={fallbackName} maxLength={128} onChange={e => setFallbackName(e.target.value)} />}
+              </Field>
+            ) : null}
           </div>
           {!valid ? (
             <p role="alert" className="text-xs text-destructive">
@@ -148,12 +155,12 @@ function InstallationContent() {
   );
 }
 
-export function InstallationPanel() {
+export function InstallationPanel({ nodeName }: InstallationPanelProps = {}) {
   const session = useSession();
   const [open, setOpen] = useState(false);
   return (
     <Panel
-      title="一键安装节点"
+      title={nodeName === undefined ? "一键安装节点" : "2. 可信安装"}
       description="可信下载、专用用户、服务注册和接入审批。"
       actions={
         <>
@@ -168,7 +175,7 @@ export function InstallationPanel() {
       }
     >
       {open ? (
-        <InstallationContent key={session.viewEpoch} />
+        <InstallationContent key={session.viewEpoch} nodeName={nodeName} />
       ) : (
         <div className="px-5 py-3.5 text-xs text-muted-foreground">
           从可信安装分发清单生成包含 Root CA 指纹与 SHA-256 校验的单行安装脚本（不含短期令牌明文）。

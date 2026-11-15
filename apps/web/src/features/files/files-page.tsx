@@ -318,7 +318,7 @@ function FilePane({
       return;
     }
     if (session.writesLocked || !canWrite) {
-      setPendingNotice("当前身份为只读（缺少 CSRF 写凭据或文件写权限），不能取消推送任务。");
+      setPendingNotice("当前身份为只读，不能取消推送任务。");
       return;
     }
     if (!item.taskId) {
@@ -923,7 +923,7 @@ function FilePane({
       >
         {remove.error ? <Notice tone="error" title="删除失败">{describeApiError(remove.error)}</Notice> : null}
         <p className="text-sm text-muted-foreground">
-          删除目录时服务端会递归处理；这不是可回滚操作。系统路径是否允许删除由服务端授权策略决定。
+          删除目录会递归删除内容，且不可回滚。
         </p>
       </Modal>
 
@@ -996,14 +996,12 @@ export function FilesPage() {
     <div className="space-y-5">
       <PageHeader
         title="文件互传"
-        description="双栏独立浏览目录，跨节点复制通过唯一传输任务接口。符号链接默认不跟随；上传走真实字节通道（POST uploads → PUT content → POST complete 校验）。"
+        description="双栏独立浏览目录，支持跨节点复制；符号链接默认不跟随。"
         badge={<Badge tone="primary" dot>异步复制</Badge>}
         actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
       />
-      <Notice tone="info" title="能力边界">
-        上传会话会真实传输文件字节并由服务端校验字节数与 SHA-256（`PUT …/content` → `POST …/complete`）；
-        远端节点传输通道未注入时服务端返回 503，界面如实区分“校验通过”与“未送达远端”。
-        当前契约仍**没有下载端点**，本页不伪造下载成功。
+      <Notice tone="info" title="说明">
+        上传会校验文件完整性；界面区分“校验通过”与“未送达远端”。暂不支持下载。
       </Notice>
       {outcome ? <Notice tone="success" title="操作结果" actions={<Button size="sm" onClick={() => setOutcome(null)}>关闭</Button>}>{outcome}</Notice> : null}
 
@@ -1032,7 +1030,7 @@ export function FilesPage() {
 
       <Panel
         title="传输任务"
-        description="GET /api/v1/transfers；进度与项目级结果以服务端为准。取消是请求，不保证回滚。"
+        description="取消是请求，不保证回滚。"
         actions={
           <>
             <label className="text-xs text-muted-foreground">

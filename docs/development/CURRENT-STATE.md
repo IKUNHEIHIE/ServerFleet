@@ -2,6 +2,20 @@
 
 核对日期：**2026-11-14**。这是当前状态汇总入口；历史进度与任务单不替代本文。后续代码合并须重新核对更新。
 
+## 2026-11-15 节点管理补丁（未提交、已部署）
+
+用户追加批准在 awskr 安装 C 编译器、验证后部署线上 VPS。本轮已安装 build-essential/GCC 14.2；nodes、transport、Controller server、v09 集成相关 race 通过，显式 NGINX_BIN=/usr/sbin/nginx 的 platform race 370.362 秒、services race 6.022 秒通过。全仓 race 未获得完整成功结果；internal/updates 既有超时仍保留 FAIL，不宣称全仓全绿。
+
+线上 Controller 与 Web 已更新为手工部署版本 0.9.3-node-management-20261115（基线 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb022a 加未提交工作树，非正式 Release）。停止 Controller 后保存一致数据库、旧程序/Web、credential-keys、PKI、安装状态及服务配置；备份数据库与停服原库 SHA256 相同、两者 integrity_check=ok，备份身份只读 upgrade-check 通过。备份目录 /var/lib/serverfleet/backups/pre-node-management-20261115。原服务参数、Agent 二进制、Nginx 与身份材料保持原配置；新迁移 ds/0089_node_archives 已应用，50→51 项，原 5 条节点记录保留。新库 integrity_check=ok，公网 readyz 五项 ready；Controller 无自动重启，首页与 JavaScript SHA256 和构建产物一致。
+
+本机 Agent 在停服期间重连预算耗尽，由原 systemd 自动重启一次后恢复 online 和持续心跳。部署前另外两条 Agent 连接尚未恢复，最后心跳停在停服时刻；原因未确定，不能归为历史无效节点或宣称所有节点恢复。浏览器连接器不可用，本次线上浏览器复验未完成；先前隔离 Controller 的 11 项浏览器验收结果仍仅适用于隔离环境。未提交、未推送 GitHub、未触发 GitHub CI。回滚必须恢复配套旧数据库和身份状态，不能让旧二进制直接打开新增迁移后的库。
+
+### 部署前开发验证记录
+
+awskr 的 fix/node-management-20261115 从 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb022a 开发节点管理与接入体验。新增详情/元数据 CAS 编辑/归档删除、可见节点分类结果、一键分类、命名与安装一致及 5 秒状态刷新；工作区追加 ds/0089_node_archives 后共 51 项迁移。下方发布基线与旧 50 项迁移为历史交付事实，当前补丁不改变线上服务。本次 Web 完整检查 54 个文件、481 项测试及生产构建通过；完整接口契约、策略、依赖安全检查通过，节点/接入/Controller 集成和 vet/staticcheck 通过；独立最终代码复核未发现阻断问题。CGO race 因服务器缺 C 编译器无法启动，完整 Go 回归中本次追加迁移涉及的旧快照/计数已修正，v09、平台恢复、备份恢复及显式 NGINX_BIN=/usr/sbin/nginx 的真实网关专项通过。全仓 vet/staticcheck、模块 verify/tidy 通过。更新监督器启动与回滚超时在未改动基线 e2fa5e9 复现，保留 FAIL；权威丢失用例在当前树初始子进程就绪超时，旧基线单跑通过；该用例和监督器源码与旧基线字节一致，本次未改 internal/updates，仍保留未解决 FAIL。隔离真实 Controller 浏览器 11 项通过，涵盖授权、编辑/CAS、5 秒状态刷新、一键分类、自定义名称/令牌、文案/移动布局、归档删除；节点/状态使用独立 DB 合成数据，不代替真实 Agent 心跳或安装验收。证据：`reports/browser-fixture-20261114T185611933Z-f88e66/results.json`。未提交、推送或部署。
+
+上述段落为部署前记录；缺编译器、未部署等状态已由本节部署事实取代，既有失败和验收边界仍保留。
+
 ## 代码与发布基线
 
 | 项目 | 已核对事实 |
@@ -19,7 +33,7 @@
 
 | 范围 | 当前实现 | 运行/验收边界 |
 |---|---|---|
-| 身份、节点、权限 | 登录/RBAC/资源授权/审计、分类/服务组、mTLS 续期/过期重入网、诊断/readyz | 需 PKI/HTTPS、明确节点授权；管理员无节点通配 |
+| 身份、节点、权限 | 登录/RBAC/资源授权/审计、分类/服务组、mTLS 续期/过期重入网、诊断/readyz | 需 PKI/HTTPS；首个 Bootstrap 管理员拥有当前节点读取/编辑/暂停/删除权，其他账户须明确节点授权 |
 | 任务与文件 | 批次/审批/命令/传输/显式续传、UNKNOWN 人工闭环 | 文件根、命令策略、提权独立配置；UNKNOWN 不重放 |
 | AI 运维 | 多轮模型→工具→任务→结果回传、范围与审批 | BYOK/真实模型及节点联调未据此完成；任意 root 仍需真人审批 |
 | 网关、DNS、证书、发布 | Nginx 纳管、Cloudflare、ACME/内部证书、续签安装发布编排 | 可信工件/供应商/执行配置；实际证书和服务重载待验证 |
