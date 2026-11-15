@@ -26,6 +26,7 @@ curl -fsSL --proto '=https' --tlsv1.3 'https://<面板>/install/agent.sh' -o /tm
 - 摘要来自 `GET /api/v1/installations/catalog` 的 `agentScript.sha256`，控制台会自动带入；脚本本身对所有请求返回同一份字节，节点名称只作为脚本参数传入并在 shell 中单引号转义。
 - 脚本下载 Agent 到 `/usr/local/bin`，信任材料写入 `/var/lib/serverfleet-agent`，随后每 5 秒发起一次接入申请，批准后 `exec` 常驻服务。
 - 面板必须使用公开可信 HTTPS（ADR-BOOT-001）。若面板使用私有 CA，控制台“完整安装命令”回退会把信任材料直接写进命令，不依赖面板证书。
+- 注册失败时 agent 保留统一失败文案，并追加一行本地推断原因（本地身份/证书、网络或 TLS、控制端拒绝）。原因只用于本机排查，不包含令牌或响应正文。
 - 需要 Python 3/OpenSSL 的 `raw-install.sh` 流程仍用于分发准备、主控安装与离线包校验，不是控制台 Agent 命令的默认路径。
 
 ## 首次准备签名安装源
