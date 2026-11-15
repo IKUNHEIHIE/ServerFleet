@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"serverfleet.local/serverfleet/apps/controller/server"
+	"serverfleet.local/serverfleet/internal/auth"
 	"serverfleet.local/serverfleet/internal/files"
 	"serverfleet.local/serverfleet/internal/tasks"
 )
@@ -136,7 +137,20 @@ func TestAM02DistributionMultiTargetRealAgents(t *testing.T) {
 		t.Fatal(err)
 	}
 	must("POST", "/api/v1/auth/bootstrap", map[string]string{"setupToken": setup, "username": "admin", "password": "private-am02-test-password"}, 204)
-	raw := must("POST", "/api/v1/auth/login", map[string]string{"username": "admin", "password": "private-am02-test-password"}, 200)
+	// The revocation scenario needs a subject whose node access comes only from
+	// explicit grants; the bootstrap (first) admin is the super admin and keeps
+	// its trusted current-node scope regardless of grants.
+	bootstrap, err := composed.Identity.Login(ctx, "admin", "private-am02-test-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = composed.Identity.CreateUser(ctx, bootstrap.Secret, bootstrap.CSRF, auth.UserCreation{
+		Username: "am02-operator", Password: "private-am02-operator-password",
+		RoleIDs: []string{"administrator"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw := must("POST", "/api/v1/auth/login", map[string]string{"username": "am02-operator", "password": "private-am02-operator-password"}, 200)
 	var login struct {
 		CSRF     string `json:"csrfToken"`
 		Identity struct {

@@ -162,6 +162,24 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/v1/nodes/{nodeId}/files",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files",
+          "operationId": "deleteFile"
+        }
+      ]
+    },
+    {
+      "method": "DELETE",
       "path": "/api/v1/plugins/xray-manager/users/{userId}",
       "declarations": [
         {
@@ -1419,6 +1437,24 @@
           "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
           "path": "/api/v1/nodes/{nodeId}/diagnostics",
           "operationId": "readNodeConnectionDiagnosticsR37"
+        }
+      ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/files",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files",
+          "operationId": "listDirectory"
         }
       ]
     },
@@ -2823,6 +2859,24 @@
           "file": "api/openapi/g2-merged-candidate.yaml",
           "path": "/api/v1/nodes/{nodeId}",
           "operationId": "patchNodeG2"
+        }
+      ]
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/nodes/{nodeId}/files/rename",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/rename",
+          "operationId": "renameFile"
         }
       ]
     },
@@ -4260,6 +4314,42 @@
           "file": "api/openapi/revisions/v09-r37/identity-operations-candidate.json",
           "path": "/api/v1/node-enrollments/{enrollmentId}/decision",
           "operationId": "decideEnrollmentWithReadGrantR37"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/nodes/{nodeId}/files/directories",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/directories",
+          "operationId": "createDirectory"
+        }
+      ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/nodes/{nodeId}/files/size",
+      "declarations": [
+        {
+          "source": "internal/files/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "exact",
+      "candidates": [
+        {
+          "file": "api/openapi/g2-merged-candidate.yaml",
+          "path": "/api/v1/nodes/{nodeId}/files/size",
+          "operationId": "calculateFileSize"
         }
       ]
     },

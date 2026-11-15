@@ -177,17 +177,33 @@ test("P1 proto revision only adds go_package and formatting; original semantic t
   assert.equal(tokens(p1), tokens(original));
 });
 
-test("R6 retains every P1 declaration and adds only its four reviewed Envelope fields", () => {
+// Reviewed append-only revisions. Each entry names the marker comment that
+// opens its section and the Envelope oneof fields it adds. Everything outside
+// those sections must stay byte-identical to the P1 baseline.
+const REVISIONS = [
+  { marker: "// R6 CANDIDATE, NOT RUNTIME ADMISSION:", fields: [["FileChunkRequest","file_chunk_request",33],["FileChunkReply","file_chunk_reply",34],["FileOpenRequest","file_open_request",35],["FileOpenReply","file_open_reply",36]] },
+  { marker: "// Ad-hoc, approval-free directory operation correlated by request_id (never a", fields: [["FileOpRequest","file_op_request",37],["FileOpReply","file_op_reply",38]] },
+];
+
+test("append-only revisions retain every P1 declaration and add only reviewed fields", () => {
   const p1 = read("tests/contracts/proto-baseline/serverfleet/agent/v1/agent.proto");
   const current = read("proto/serverfleet/agent/v1/agent.proto");
-  const sections = current.split("// R6 CANDIDATE, NOT RUNTIME ADMISSION:");
-  assert.equal(sections.length, 2, "R6 declarations must be a separate append-only section");
-  let prefix = sections[0];
-  for (const [type, field, number] of [["FileChunkRequest","file_chunk_request",33],["FileChunkReply","file_chunk_reply",34],["FileOpenRequest","file_open_request",35],["FileOpenReply","file_open_reply",36]]) {
-    const line = `    ${type} ${field} = ${number};\n`;
-    assert.equal(prefix.split(line).length,2,"exactly one registered R6 field");
-    prefix = prefix.replace(line,"");
-    assert.ok(sections[1].includes(`message ${type} {`),"candidate body is present");
+  const rest = current.split(REVISIONS[0].marker);
+  assert.equal(rest.length, 2, "first revision must open its own section");
+  let prefix = rest[0];
+  let tail = rest[1];
+  for (const [index, revision] of REVISIONS.entries()) {
+    if (index > 0) {
+      const parts = tail.split(revision.marker);
+      assert.equal(parts.length, 2, "each later revision must open its own section");
+      tail = parts[1];
+    }
+    for (const [type, field, number] of revision.fields) {
+      const line = `    ${type} ${field} = ${number};\n`;
+      assert.equal(prefix.split(line).length, 2, `exactly one registered ${type} field`);
+      prefix = prefix.replace(line, "");
+      assert.ok(tail.includes(`message ${type} {`), `${type} candidate body is present`);
+    }
   }
   const tokens = v => v.replace(/\s+/g, "");
   assert.equal(tokens(prefix), tokens(p1), "legacy declarations, field numbers and comments unchanged");

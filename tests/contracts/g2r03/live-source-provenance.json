@@ -16,7 +16,7 @@
     },
     "node": {
       "file": "internal/nodes/node.go",
-      "sha256": "c61c768a2d2f6f5729219c8a459258b3f34ff83f14c578253c3abba2fd63eb78"
+      "sha256": "3874d15ccb64def56d0769ea016cfda124f364f0fbd63ec6a7334094eed121bb"
     },
     "visibility": {
       "file": "internal/nodes/visibility.go",

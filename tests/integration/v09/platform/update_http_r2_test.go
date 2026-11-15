@@ -43,7 +43,20 @@ func TestR2UpdateHTTPAwaitsHumanAndProjectsCurrentOwnerTask(t *testing.T) {
 	if err = composed.Identity.Bootstrap(ctx, setup, "admin", "synthetic-update-http-password"); err != nil {
 		t.Fatal(err)
 	}
-	login, err := composed.Identity.Login(ctx, "admin", "synthetic-update-http-password", "127.0.0.1")
+	bootstrap, err := composed.Identity.Login(ctx, "admin", "synthetic-update-http-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The revocation assertions below need a subject whose node access comes
+	// only from an explicit grant; the bootstrap (first) admin is the super admin
+	// and keeps its trusted current-node scope regardless of grants.
+	if _, err = composed.Identity.CreateUser(ctx, bootstrap.Secret, bootstrap.CSRF, auth.UserCreation{
+		Username: "update-owner", Password: "synthetic-update-owner-password",
+		RoleIDs: []string{"administrator"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	login, err := composed.Identity.Login(ctx, "update-owner", "synthetic-update-owner-password", "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}

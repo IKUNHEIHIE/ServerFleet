@@ -160,7 +160,20 @@ func TestR2HTTPUnifiedWorkerTwoActualAgentsMultiFileAndUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	must("POST", "/api/v1/auth/bootstrap", map[string]string{"setupToken": setup, "username": "admin", "password": "private-r2-test-password"}, 204)
-	raw := must("POST", "/api/v1/auth/login", map[string]string{"username": "admin", "password": "private-r2-test-password"}, 200)
+	// The revoke scenario removes files.write from a grant, so the transfer owner
+	// must be a subject whose access comes only from grants; the bootstrap
+	// (first) admin is the super admin and keeps files.write implicitly.
+	bootstrap, err := composed.Identity.Login(ctx, "admin", "private-r2-test-password", "127.0.0.1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = composed.Identity.CreateUser(ctx, bootstrap.Secret, bootstrap.CSRF, auth.UserCreation{
+		Username: "r2-operator", Password: "private-r2-operator-password",
+		RoleIDs: []string{"administrator"}, Enabled: true,
+	}); err != nil {
+		t.Fatal(err)
+	}
+	raw := must("POST", "/api/v1/auth/login", map[string]string{"username": "r2-operator", "password": "private-r2-operator-password"}, 200)
 	var login struct {
 		CSRF     string `json:"csrfToken"`
 		Identity struct {

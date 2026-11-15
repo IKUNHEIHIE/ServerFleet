@@ -10,8 +10,11 @@ import (
 func TestAllEnvelopeVariantsRoundTrip(t *testing.T) {
 	d := (&agentv1.Envelope{}).ProtoReflect().Descriptor()
 	oneof := d.Oneofs().ByName("message")
-	if oneof == nil || oneof.Fields().Len() != 17 {
-		t.Fatal("expected original 13 plus the four separately reviewed R6 variants")
+	// 13 original variants, the four separately reviewed R6 file-transfer
+	// variants, and the two directory-op variants added with remote directory
+	// browsing. A new variant must be reviewed and added here deliberately.
+	if oneof == nil || oneof.Fields().Len() != 19 {
+		t.Fatal("expected original 13 plus the four R6 file-transfer variants and the two directory-op variants")
 	}
 	if d.ParentFile().Services().Len() != 0 {
 		t.Fatal("WSS contract must not introduce a gRPC service")
