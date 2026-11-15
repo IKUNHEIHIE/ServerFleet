@@ -156,6 +156,7 @@ func enrollmentSecret() (string, error) {
 	}
 	return base64.RawURLEncoding.EncodeToString(b[:]), nil
 }
+
 const tokenlessEnrollmentTTL = 15 * time.Minute
 
 func validEnrollmentSecret(secret string) bool {

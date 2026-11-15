@@ -220,7 +220,7 @@ func (c *agentEnrollmentClient) EnrollOnce(ctx context.Context, token, name stri
 	}
 	body, err := io.ReadAll(io.LimitReader(response.Body, (96<<10)+1))
 	defer clear(body)
-	if err != nil || len(body) > 96<<10 || bytes.Contains(body, []byte(token)) || c.observe(bounded) != nil {
+	if err != nil || len(body) > 96<<10 || (token != "" && bytes.Contains(body, []byte(token))) || c.observe(bounded) != nil {
 		return zero, errAgentEnrollment
 	}
 	result, err := decodeAgentEnrollmentResult(body)

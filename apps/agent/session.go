@@ -339,6 +339,14 @@ func runAgentSession(ctx context.Context, socket transport.FrameSocket, state tl
 			if after != nil {
 				after()
 			}
+		case envelope.GetFileOpRequest() != nil:
+			if cfg.Files == nil || accepted.SelectedProtocolMinor < 1 || !granted[transport.FileCapability] {
+				return errAgentSession
+			}
+			reply, opErr := cfg.Files.HandleOp(bounded, envelope)
+			if opErr != nil || write(reply, transport.Established) != nil {
+				return errAgentSession
+			}
 		case envelope.GetTaskOffer() != nil:
 			offer := envelope.GetTaskOffer()
 			if !granted[offer.ActionId] || offer.Privilege != registeredPrivilege(executor.actions[offer.ActionId]) || offer.PluginId != "" || admit(bounded, offer) != nil {
