@@ -58,6 +58,8 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 
 接入令牌创建支持 name；省略或空白时生成可区分的 node-随机名称。页面将同一个名称用于令牌和安装命令。新增迁移 ds/0089_node_archives，工作区迁移共 51 项，历史迁移不改写。
 
+节点能力接口 `GET /api/v1/nodes/{nodeId}/capabilities` 在握手诊断中额外返回 `cpuModel/cpuCores/memoryTotalBytes/diskTotalBytes`（AgentHello 新增字段 9–12，append-only；缺失表示未采集，不按 0 处理）。安装脚本改为创建专用用户与 systemd 服务并带 `-file-root`；文件能力需要非 root 身份，控制器启用文件分发时协议次版本为 1.1。
+
 ## 手动监控探测
 
 `POST /api/v1/availability-monitors/{monitorId}/probe`：无查询参数，空体或严格空JSON对象；使用已保存的目标/来源，不从请求体覆盖。写权限与实际点击者的源节点授权必须同时满足。响应包含 `monitorId/status/state/checkedAt/consecutiveFailures`，可选 `latencyMs/statusCode/error/sourceNodeId/taskId`；没有观测值不补零。

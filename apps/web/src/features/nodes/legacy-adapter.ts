@@ -1,5 +1,8 @@
 import { LEGACY_FORMAT_ERROR, type LegacyAdaptResult, type LegacyMetric, type LegacyNodeRow } from "./legacy-types";
 
+/** Matches the Controller's own 5-minute sample window. */
+const SAMPLE_MAX_AGE_MS = 5 * 60_000;
+
 function nonEmptyString(value: unknown): string | null {
   return typeof value === "string" && value.trim() !== "" ? value : null;
 }
@@ -37,7 +40,11 @@ export function adaptLegacyNodes(payload: unknown): LegacyAdaptResult {
     }
 
     const sampledAt = typeof record.sampledAt === "string" && Number.isFinite(Date.parse(record.sampledAt)) ? record.sampledAt : null;
-    const stale = sampledAt !== null && (Date.now() - Date.parse(sampledAt) > 5000 || Date.parse(sampledAt) > Date.now() + 1000);
+    // The Controller already drops samples older than 5 minutes; the browser
+    // must not invent a tighter window (5s) that hides fresh 5s heartbeats or
+    // samples from a node whose clock is slightly ahead.
+    const sampledTime = sampledAt !== null ? Date.parse(sampledAt) : Number.NaN;
+    const stale = sampledAt !== null && (Date.now() - sampledTime > SAMPLE_MAX_AGE_MS || sampledTime > Date.now() + SAMPLE_MAX_AGE_MS);
     const metricsOnline = record.online && !stale;
     rows.push({
       id: record.id,

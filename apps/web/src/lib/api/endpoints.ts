@@ -36,6 +36,7 @@ import type {
   Session,
   TaskSummary,
   TrafficQuota,
+  TrafficUsage,
   TransferJob,
   UploadCompletion,
   UploadProgress,
@@ -138,6 +139,8 @@ export const nodesApi = {
     apiClient.request<NodeDiagnostic>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/diagnostics`, { signal }),
   trafficQuota: (nodeId: string, signal?: AbortSignal) =>
     apiClient.request<TrafficQuota>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/traffic-quota`, { signal }),
+  trafficUsage: (nodeId: string, signal?: AbortSignal) =>
+    apiClient.request<TrafficUsage>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/traffic-usage`, { signal }),
   setTrafficQuota: (nodeId: string, body: TrafficQuota) =>
     apiClient.request<TrafficQuota>(`/api/v1/nodes/${encodeURIComponent(nodeId)}/traffic-quota`, {
       method: "PUT",

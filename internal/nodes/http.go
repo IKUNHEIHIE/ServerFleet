@@ -146,6 +146,11 @@ type nodeCapabilitiesDTO struct {
 	Capabilities []string `json:"capabilities"`
 	Recorded     bool     `json:"recorded"`
 	Message      string   `json:"message,omitempty"`
+	// Static host facts from the same authenticated handshake.
+	CPUModel         string `json:"cpuModel,omitempty"`
+	CPUCores         uint32 `json:"cpuCores,omitempty"`
+	MemoryTotalBytes uint64 `json:"memoryTotalBytes,omitempty"`
+	DiskTotalBytes   uint64 `json:"diskTotalBytes,omitempty"`
 }
 
 type nodeDiagnosticsDTO struct {
@@ -243,6 +248,7 @@ func (api *httpAPI) nodeCapabilities(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, nodeCapabilitiesDTO{
 		ObservedAt: formatNodeTime(diagnostics.ObservedAt),
 		NodeID:     node.ID, Capabilities: diagnostics.Capabilities, Recorded: diagnostics.Recorded,
+		CPUModel: diagnostics.CPUModel, CPUCores: diagnostics.CPUCores, MemoryTotalBytes: diagnostics.MemoryTotalBytes, DiskTotalBytes: diagnostics.DiskTotalBytes,
 	})
 }
 

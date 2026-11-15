@@ -1534,6 +1534,18 @@
     },
     {
       "method": "GET",
+      "path": "/api/v1/nodes/{nodeId}/traffic-usage",
+      "declarations": [
+        {
+          "source": "internal/quota/http.go",
+          "owner": "RegisterHTTP"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
+    },
+    {
+      "method": "GET",
       "path": "/api/v1/notifications/channels",
       "declarations": [
         {

@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **277** 个不同的 method/path 声明，其中 **2** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **278** 个不同的 method/path 声明，其中 **3** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -278,6 +278,7 @@
 | GET | `/api/v1/nodes/{nodeId}/files/uploads/{uploadId}` | [http.go](../../internal/files/http.go) · RegisterHTTP | [getOwnedUploadR11](../../api/openapi/revisions/v09-r11/upload-policies-candidate.yaml) |
 | GET | `/api/v1/nodes/{nodeId}/identity` | [http.go](../../internal/nodes/http.go) · RegisterHTTP | [getNodeIdentityG2](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/nodes/{nodeId}/traffic-quota` | [http.go](../../internal/quota/http.go) · RegisterHTTP | [getObservedTrafficQuota](../../api/openapi/revisions/v09-r32/observability-candidate.yaml) |
+| GET | `/api/v1/nodes/{nodeId}/traffic-usage` | [http.go](../../internal/quota/http.go) · RegisterHTTP | 未覆盖；以源码和领域说明为准 |
 | PATCH | `/api/v1/nodes/{nodeId}` | [node_management.go](../../internal/nodes/node_management.go) · RegisterManagementHTTP | [patchNodeG2](../../api/openapi/g2-merged-candidate.yaml) |
 | PATCH | `/api/v1/nodes/{nodeId}/files/rename` | [http.go](../../internal/files/http.go) · RegisterHTTP | [renameFile](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/nodes/{nodeId}/files/directories` | [http.go](../../internal/files/http.go) · RegisterHTTP | [createDirectory](../../api/openapi/g2-merged-candidate.yaml) |

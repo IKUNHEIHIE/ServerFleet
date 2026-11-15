@@ -100,7 +100,7 @@ func (s *Server) setupAgentTransport(cfg Config, nodesService *nodes.Service, ta
 		if e != nil {
 			return e
 		}
-		return s.NodesRepo.RecordConnection(ctx, o.Identity.NodeID, nodes.ConnectionObservation{AgentVersion: hello.AgentVersion, Capabilities: capabilities, ConnectionID: o.ConnectionID, ObservedAt: s.now().UTC(), CertificateExpiresAt: expiry})
+		return s.NodesRepo.RecordConnection(ctx, o.Identity.NodeID, nodes.ConnectionObservation{AgentVersion: hello.AgentVersion, Capabilities: capabilities, ConnectionID: o.ConnectionID, ObservedAt: s.now().UTC(), CertificateExpiresAt: expiry, CPUModel: hello.CpuModel, CPUCores: hello.CpuCores, MemoryTotalBytes: hello.MemoryTotalBytes, DiskTotalBytes: hello.DiskTotalBytes})
 	}
 	bridge.observeDisconnect = func(ctx context.Context, o transport.LinkObservation) error {
 		return s.NodesRepo.RecordDisconnect(ctx, o.Identity.NodeID, s.now().UTC())

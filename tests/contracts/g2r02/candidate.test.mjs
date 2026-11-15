@@ -185,6 +185,19 @@ const REVISIONS = [
   { marker: "// Ad-hoc, approval-free directory operation correlated by request_id (never a", fields: [["FileOpRequest","file_op_request",37],["FileOpReply","file_op_reply",38]] },
 ];
 
+// Reviewed in-place field additions to an existing message. They must appear
+// inside that message, exactly once, with fresh numbers after the P1 snapshot.
+const MESSAGE_FIELD_REVISIONS = [
+  {
+    message: "AgentHello",
+    comments: [
+      "  // R44 CANDIDATE, NOT RUNTIME ADMISSION: static host facts reported at handshake;\n",
+      "  // empty/zero means \"not reported\".\n",
+    ],
+    fields: [["string","cpu_model",9],["uint32","cpu_cores",10],["uint64","memory_total_bytes",11],["uint64","disk_total_bytes",12]],
+  },
+];
+
 test("append-only revisions retain every P1 declaration and add only reviewed fields", () => {
   const p1 = read("tests/contracts/proto-baseline/serverfleet/agent/v1/agent.proto");
   const current = read("proto/serverfleet/agent/v1/agent.proto");
@@ -206,5 +219,20 @@ test("append-only revisions retain every P1 declaration and add only reviewed fi
     }
   }
   const tokens = v => v.replace(/\s+/g, "");
+  for (const revision of MESSAGE_FIELD_REVISIONS) {
+    const block = prefix.match(new RegExp(`message ${revision.message} \\{[\\s\\S]*?\\n\\}`));
+    assert.ok(block, `${revision.message} block present`);
+    for (const comment of revision.comments ?? []) {
+      assert.equal(prefix.split(comment).length, 2, `exactly one registered ${revision.message} comment`);
+      assert.ok(block[0].includes(comment), `${revision.message} comment lives inside its message`);
+      prefix = prefix.replace(comment, "");
+    }
+    for (const [type, field, number] of revision.fields) {
+      const line = `  ${type} ${field} = ${number};\n`;
+      assert.equal(prefix.split(line).length, 2, `exactly one registered ${revision.message}.${field}`);
+      assert.ok(block[0].includes(line), `${revision.message}.${field} lives inside its message`);
+      prefix = prefix.replace(line, "");
+    }
+  }
   assert.equal(tokens(prefix), tokens(p1), "legacy declarations, field numbers and comments unchanged");
 });

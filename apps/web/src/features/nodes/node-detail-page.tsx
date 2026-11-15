@@ -1,9 +1,7 @@
-import { NodeManagementAccess } from "./node-management-access";
 import { formatDateTime } from "@/lib/format";
 import { useState } from "react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Checkbox, Field, TextArea } from "@/components/ui/form";
@@ -12,7 +10,7 @@ import { DefinitionList } from "@/components/ui/table";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi } from "@/lib/api/endpoints";
-import type { NodeCapabilities, NodeDetail, NodeDiagnostic, NodeIdentity, TrafficQuota } from "@/lib/api/dto";
+import type { NodeCapabilities, NodeDetail, NodeDiagnostic, NodeIdentity, TrafficQuota, TrafficUsage } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { NodeQuotaEditor } from "./node-quota-editor";
 import { NodeEditor } from "./node-editor";
@@ -62,31 +60,28 @@ function IdentityBody({ identity }: { readonly identity: NodeIdentity }) {
   );
 }
 
-function CapabilitiesBody({ capabilities }: { readonly capabilities: NodeCapabilities }) {
-  const protocol = capabilities.protocolMajor === undefined || capabilities.protocolMinor === undefined
-    ? "未返回（当前 Controller 不记录协议版本）"
-    : `${capabilities.protocolMajor}.${capabilities.protocolMinor}`;
+function formatBytes(value?: number): string {
+  if (value === undefined || value <= 0) return "未采集";
+  const gb = value / 1024 ** 3;
+  return gb >= 1024 ? `${(gb / 1024).toFixed(1)} TB` : `${gb.toFixed(1)} GB`;
+}
+
+function HardwareBody({ facts, usage }: { readonly facts: NodeCapabilities; readonly usage: TrafficUsage | null }) {
+  const monthly = usage?.available && usage.bytesIn !== undefined && usage.bytesOut !== undefined
+    ? `${formatBytes(usage.bytesIn + usage.bytesOut)}（下行 ${formatBytes(usage.bytesIn)} / 上行 ${formatBytes(usage.bytesOut)}）`
+    : "暂无采样";
   return (
-    <div className="space-y-3 px-5 py-4 text-sm">
-      <p>
-        协议版本：{protocol}
-        {capabilities.observedAt ? ` · 观察于 ${capabilities.observedAt}` : ""}
-      </p>
-      {capabilities.message ? <p className="text-xs text-muted-foreground">{capabilities.message}</p> : null}
-      {capabilities.capabilities.length === 0 ? (
-        <p className="text-muted-foreground">服务端未返回任何能力项。</p>
-      ) : (
-        <ul className="flex flex-wrap gap-2">
-          {capabilities.capabilities.map(capability => (
-            <li key={capability}>
-              <Badge variant="outline" className="font-mono">
-                {capability}
-              </Badge>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+    <DefinitionList
+      className="px-5 py-4"
+      items={[
+        { term: "CPU 型号", value: facts.cpuModel || "未采集" },
+        { term: "CPU 核数", value: facts.cpuCores ? `${facts.cpuCores} 核` : "未采集" },
+        { term: "内存大小", value: formatBytes(facts.memoryTotalBytes) },
+        { term: "存储大小", value: formatBytes(facts.diskTotalBytes) },
+        { term: "本月流量", value: monthly },
+        { term: "采集时间", value: facts.observedAt ?? "未采集" },
+      ]}
+    />
   );
 }
 
@@ -236,6 +231,10 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
     `node:quota:${session.viewEpoch}:${nodeId}`,
     signal => nodesApi.trafficQuota(nodeId, signal).then(result => result.data),
   );
+  const usage = useResource(
+    `node:usage:${session.viewEpoch}:${nodeId}`,
+    signal => nodesApi.trafficUsage(nodeId, signal).then(result => result.data),
+  );
   // 真实 Controller 在节点未配置配额时返回 404 quota_not_found；这是“尚未配置”而非加载失败，
   // 据此展示诚实空态并允许首次创建（GM-W4-02）。其余错误仍按失败展示。
   const quotaMissing = quota.state.status === "error" && quota.state.error.status === 404;
@@ -307,7 +306,6 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
           </>
         }
       />
-      <NodeManagementAccess key={`access:${session.viewEpoch}:${nodeId}`} nodeId={nodeId} onGranted={() => { detail.reload(); identity.reload(); capabilities.reload(); diagnostic.reload(); quota.reload(); }} />
       {outcome ? <Notice tone="success" title="操作完成">{outcome}</Notice> : null}
       {!canManage && !canSuspend && !canRevoke ? (
         <Notice tone="warning" title="操作入口已锁定">
@@ -336,9 +334,9 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
             {data => <IdentityBody identity={data} />}
           </AsyncPanel>
         </Panel>
-        <Panel title="协商能力">
-          <AsyncPanel state={capabilities.state} onRetry={capabilities.reload} errorTitle="能力信息加载失败">
-            {data => <CapabilitiesBody capabilities={data} />}
+        <Panel title="硬件与流量" description="来自节点上次身份握手；未采集不按 0 处理。">
+          <AsyncPanel state={capabilities.state} onRetry={capabilities.reload} errorTitle="硬件信息加载失败">
+            {data => <HardwareBody facts={data} usage={usage.state.status === "ready" ? usage.state.data : null} />}
           </AsyncPanel>
         </Panel>
         <Panel title="连接诊断">

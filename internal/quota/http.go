@@ -45,7 +45,31 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	api := &httpAPI{service: service, authenticator: authenticator}
 	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/traffic-quota", api.getPolicy)
 	mux.HandleFunc("PUT /api/v1/nodes/{nodeId}/traffic-quota", api.putPolicy)
+	mux.HandleFunc("GET /api/v1/nodes/{nodeId}/traffic-usage", api.getUsage)
 	return nil
+}
+
+// getUsage exposes the stored current-period totals even when no quota policy
+// exists, so a node page can show this month's traffic without inventing a cap.
+func (api *httpAPI) getUsage(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.RawQuery != "" || r.ContentLength != 0 {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "invalid query")
+		return
+	}
+	usage, found, err := api.service.LatestUsage(r.Context(), principal.SubjectID, r.PathValue("nodeId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	if !found {
+		writeJSON(w, http.StatusOK, map[string]any{"available": false})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"available": true, "periodStart": usage.PeriodStart, "periodEnd": usage.PeriodEnd, "bytesIn": usage.BytesIn, "bytesOut": usage.BytesOut, "source": usage.Source})
 }
 
 type trafficQuotaDTO struct {
