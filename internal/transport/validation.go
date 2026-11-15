@@ -161,6 +161,14 @@ func knownPayload(e *agentv1.Envelope) (proto.Message, Direction, HandshakePhase
 		if m != nil {
 			return m.FileChunkReply, AgentToController, Established
 		}
+	case *agentv1.Envelope_FileOpRequest:
+		if m != nil {
+			return m.FileOpRequest, ControllerToAgent, Established
+		}
+	case *agentv1.Envelope_FileOpReply:
+		if m != nil {
+			return m.FileOpReply, AgentToController, Established
+		}
 	case *agentv1.Envelope_AgentHello:
 		if m != nil {
 			return m.AgentHello, AgentToController, AwaitAgentHello
