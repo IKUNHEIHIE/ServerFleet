@@ -73,8 +73,11 @@ func installationAgentScript(c *InstallationCatalog) (string, error) {
 	b.WriteString("getent passwd \"$user\" >/dev/null 2>&1 || useradd --system --home-dir \"$base\" --shell /usr/sbin/nologin \"$user\"\n")
 	b.WriteString("install -d -m 0755 -o root -g root \"$(dirname \"$run\")\"\n")
 	b.WriteString("install -d -m 0700 -o \"$user\" -g \"$user\" \"$base\" \"$state\" \"$files\"\n")
-	b.WriteString("curl -fsSL --proto '=https' --tlsv1.3 " + shellQuote(installationAgentBinaryURL) + ` -o "$bin"` + "\n")
-	b.WriteString("chmod 0755 \"$bin\"\n")
+	b.WriteString("curl -fsSL --proto '=https' --tlsv1.3 " + shellQuote(installationAgentBinaryURL) + ` -o "$bin.tmp"` + "\n")
+	// Rename instead of writing over the target: replacing a running
+	// executable in place fails with ETXTBSY on every re-run.
+	b.WriteString("install -m 0755 \"$bin.tmp\" \"$bin\"\n")
+	b.WriteString("rm -f \"$bin.tmp\"\n")
 	b.WriteString(`printf '%s' ` + shellQuote(base64.StdEncoding.EncodeToString([]byte(c.IdentityRootPEM))) + ` | base64 -d > "$state/root.pem"` + "\n")
 	b.WriteString(`printf '%s' ` + shellQuote(base64.StdEncoding.EncodeToString([]byte(c.HTTPSRootPEM))) + ` | base64 -d > "$state/controller-ca.pem"` + "\n")
 	b.WriteString("chown \"$user:$user\" \"$state/root.pem\" \"$state/controller-ca.pem\"\n")
