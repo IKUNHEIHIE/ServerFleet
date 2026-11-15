@@ -40,6 +40,8 @@ func TestInstallationAgentScriptKeepsTrustInScriptAndOutOfTheCommand(t *testing.
 	}
 	for _, want := range []string{
 		installationAgentBinaryURL,
+		`-o "$bin.tmp"`,
+		`install -m 0755 "$bin.tmp" "$bin"`,
 		"useradd --system",
 		"User=serverfleet",
 		"-file-root '/var/lib/serverfleet/files'",
