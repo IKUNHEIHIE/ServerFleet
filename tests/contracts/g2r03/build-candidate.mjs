@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto";
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { parseDocument, stringify } from "yaml";
+import { parseDocument } from "yaml";
 
 export const root = fileURLToPath(new URL("../../../", import.meta.url));
 export const candidate = "api/openapi/revisions/g2-r03/nodes-read-candidate.yaml";
@@ -20,6 +20,15 @@ export const sources = {
   node: "internal/nodes/node.go",
   visibility: "internal/nodes/visibility.go",
   auth: "internal/auth/node_policy.go",
+};
+// Historical candidate evidence stays byte-for-byte intact; current source evidence
+// is generated separately and does not claim the original review was repeated.
+export const liveSourceNames = ["webAdapter", "webTypes", "node", "visibility", "auth"];
+export const liveProvenanceFile = "tests/contracts/g2r03/live-source-provenance.json";
+export const archivedArtifacts = {
+  [candidate]: "dcb499b108fc6eab67412e08833100f9cb13c93d843863661faab56535180cfd",
+  [`${docs}/provenance.json`]: "1850f1e49b7c6001722e4b32109661d3fceaf6dc55e079c0fe2872d1afb65654",
+  [`${docs}/MATRIX.md`]: "8e98e1600e66d8bcfc01eff4cf1a0102031623fb91742367099b85a946a13c52",
 };
 export const read = file => readFileSync(path.join(root, file), "utf8");
 export const hash = value => createHash("sha256").update(value).digest("hex");
@@ -131,19 +140,25 @@ export function provenance() {
   };
 }
 
+export function liveProvenance() {
+  return {
+    scope: "Current source hashes only; archived G2-R02A review conclusions are unchanged.",
+    archivedArtifacts,
+    sources: Object.fromEntries(liveSourceNames.map(name => [name, {
+      file: sources[name], sha256: hash(readFileSync(path.join(root, sources[name]))),
+    }])),
+  };
+}
+
 export function matrixMarkdown(data = provenance()) {
   return `# 来源、操作与逐字段矩阵\n\n由 tests/contracts/g2r03/build-candidate.mjs 生成并独立重算；语义与决策见 COMPATIBILITY.md。来源 SHA-256 见 provenance.json。G2 未冻结。\n\n## 操作\n\n| 方法/路径 | operationId（保留） | 原错误 → 候选错误 | 错误媒体（保留） | 原认证（保留） |\n|---|---|---|---|---|\n${data.operations.map(op => `| GET ${op.path} | ${op.operationId} | ${op.originalErrors.join("/")} → ${op.candidateErrors.join("/")} | ${op.errorMedia} | ${JSON.stringify(op.security)} |`).join("\n")}\n\nCore 只有详情；原始 v0.9/Merged 和 r02 均有列表。r02 的必需 profile 头/统一 Problem 不进入本候选。列表仍 {items:[NodeSummary]}，详情仍 NodeDetail；不新增集合路由或复用 operationId。\n\n## 字段\n\n| 字段 | 原 Merged 列表 | 原 Core/Merged 详情 | Web 局部形状 | r03 提案/兼容边界 |\n|---|---|---|---|---|\n${data.fields.map(f => `| ${f.id} | ${f.legacy} | ${f.detail} | ${f.web} | ${f.proposal} |`).join("\n")}\n\nregion/provider/countryCode/ip/tags 的类型逐项由测试与原 NodeSummary 深比较；表中合并仅为阅读。NodeSummary 原来未禁止额外字段，NodeDetail 原来 additionalProperties=false，均保留。\n`;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  if (process.argv[2] !== "--write") throw new Error("Use --write to regenerate only the three g2-r03 review artifacts");
-  for (const [file, text] of [
-    [candidate, stringify(buildCandidate(), { aliasDuplicateObjects: false, lineWidth: 110 })],
-    [`${docs}/provenance.json`, JSON.stringify(provenance(), null, 2) + "\n"],
-    [`${docs}/MATRIX.md`, matrixMarkdown()],
-  ]) {
-    mkdirSync(path.dirname(path.join(root, file)), { recursive: true });
-    writeFileSync(path.join(root, file), text);
-    console.log(`wrote ${file}`);
+  if (process.argv[2] !== "--write-live") throw new Error("Use --write-live; historical candidate/provenance/MATRIX artifacts must not be rewritten");
+  for (const [file, sha256] of Object.entries(archivedArtifacts)) {
+    if (hash(readFileSync(path.join(root, file))) !== sha256) throw new Error(`Archived artifact changed: ${file}`);
   }
+  writeFileSync(path.join(root, liveProvenanceFile), JSON.stringify(liveProvenance(), null, 2) + "\n");
+  console.log(`wrote ${liveProvenanceFile}`);
 }

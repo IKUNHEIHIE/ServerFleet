@@ -69,8 +69,8 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppliedVersions: %v", err)
 	}
-	if len(versions) != 50 {
-		t.Fatalf("applied migrations = %d (%v), want 50", len(versions), versions)
+	if len(versions) != 51 {
+		t.Fatalf("applied migrations = %d (%v), want 51", len(versions), versions)
 	}
 
 	setupToken, err := composed.Identity.PrepareSetup(ctx)

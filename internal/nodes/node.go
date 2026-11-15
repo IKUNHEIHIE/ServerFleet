@@ -30,6 +30,9 @@ func (s Status) Valid() bool {
 type Metrics struct {
 	CPUPercent    float64
 	MemoryPercent float64
+	DiskPercent   *float64
+	DownloadBps   *float64
+	UploadBps     *float64
 	ObservedAt    time.Time
 }
 
@@ -61,8 +64,8 @@ func (n Node) Usage(now time.Time, maxAge time.Duration) (Metrics, bool) {
 	if n.Status != StatusOnline || n.Metrics == nil || maxAge <= 0 {
 		return Metrics{}, false
 	}
-	sample := *n.Metrics
-	if !finite(sample.CPUPercent) || !finite(sample.MemoryPercent) {
+	sample := cloneMetrics(*n.Metrics)
+	if !validMetrics(sample) {
 		return Metrics{}, false
 	}
 	if sample.ObservedAt.IsZero() || sample.ObservedAt.After(now) {
@@ -76,4 +79,35 @@ func (n Node) Usage(now time.Time, maxAge time.Duration) (Metrics, bool) {
 
 func finite(value float64) bool {
 	return !math.IsNaN(value) && !math.IsInf(value, 0)
+}
+
+func cloneMetrics(sample Metrics) Metrics {
+	if sample.DiskPercent != nil {
+		v := *sample.DiskPercent
+		sample.DiskPercent = &v
+	}
+	if sample.DownloadBps != nil {
+		v := *sample.DownloadBps
+		sample.DownloadBps = &v
+	}
+	if sample.UploadBps != nil {
+		v := *sample.UploadBps
+		sample.UploadBps = &v
+	}
+	return sample
+}
+
+func validMetrics(sample Metrics) bool {
+	if !validPercent(sample.CPUPercent) || !validPercent(sample.MemoryPercent) {
+		return false
+	}
+	if sample.DiskPercent != nil && !validPercent(*sample.DiskPercent) {
+		return false
+	}
+	for _, rate := range []*float64{sample.DownloadBps, sample.UploadBps} {
+		if rate != nil && (!finite(*rate) || *rate < 0) {
+			return false
+		}
+	}
+	return true
 }

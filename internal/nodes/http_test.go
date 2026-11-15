@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -222,4 +224,177 @@ func TestHTTPNodesGroupsAndClassifications(t *testing.T) {
 		t.Fatalf("facets = %v %d", err, facets.StatusCode)
 	}
 	facets.Body.Close()
+}
+
+func TestHTTPGroupNodeResultsVisibilityFiltersAndPagination(t *testing.T) {
+	t.Parallel()
+	policy := &auth.NodePolicy{
+		KnownNodes: map[string]struct{}{"a": {}, "b": {}, "c": {}, "d": {}},
+		ReadGrants: map[string]map[string]struct{}{"reader": {"a": {}, "c": {}, "d": {}}, "zero": {}},
+	}
+	h := newServiceFixture(t, authorizerFunc(func(context.Context, auth.Check) error { return nil }),
+		func(context.Context) (*auth.NodePolicy, error) { return policy, nil })
+	ctx := context.Background()
+	for _, node := range []nodes.NodeCreateInput{
+		{ID: "c", Name: "Gamma", Address: "192.0.2.3", Region: "eu", Provider: "aws", Tags: []string{"web"}, Status: nodes.StatusOffline},
+		{ID: "b", Name: "hidden-marker", Address: "192.0.2.99", Region: "eu", Provider: "secret", Tags: []string{"web", "hidden-tag"}, Status: nodes.StatusOnline},
+		{ID: "a", Name: "Alpha", Address: "192.0.2.1", Region: "eu", Provider: "aws", Tags: []string{"web", "web"}, Status: nodes.StatusOnline},
+		{ID: "d", Name: "Empty attributes", Status: nodes.StatusUnknown},
+	} {
+		if _, err := h.repo.Create(ctx, h.db, node); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for id, members := range map[string][]string{"safe": {"c", "a"}, "mixed": {"a", "b"}, "hidden": {"b"}, "empty": {}} {
+		if _, err := h.groups.Create(ctx, h.db, id, id, "", members); err != nil {
+			t.Fatal(err)
+		}
+	}
+	mux := http.NewServeMux()
+	if err := nodes.RegisterHTTP(mux, h.svc, func(r *http.Request) (nodes.Principal, error) {
+		subject := r.Header.Get("X-Test-Subject")
+		if subject == "" {
+			subject = "reader"
+		}
+		return nodes.Principal{SubjectID: subject, RequestID: "group-results-http"}, nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(mux)
+	defer server.Close()
+	type summary struct {
+		ID     string   `json:"id"`
+		CPU    *float64 `json:"cpuPercent"`
+		Memory *float64 `json:"memoryPercent"`
+	}
+	type page struct {
+		Items      []summary `json:"items"`
+		Total      int       `json:"total"`
+		NextCursor *string   `json:"nextCursor"`
+	}
+	read := func(query string) page {
+		t.Helper()
+		response := httpGet(t, server.URL+"/api/v1/groups/node-results?"+query)
+		if strings.Contains(string(response.Body), "hidden-marker") || strings.Contains(string(response.Body), "192.0.2.99") || strings.Contains(string(response.Body), "hidden-tag") {
+			t.Fatalf("hidden inventory leaked: %s", response.Body)
+		}
+		var got page
+		decodeNodeResponse(t, response, &got)
+		if got.Items == nil {
+			t.Fatalf("items must be an array: %s", response.Body)
+		}
+		for _, item := range got.Items {
+			if item.ID == "b" || item.CPU != nil || item.Memory != nil {
+				t.Fatalf("unsafe or fabricated summary: %+v", got)
+			}
+		}
+		return got
+	}
+	base := "mode=automatic&dimension=region&value=eu&limit=1"
+	first := read(base)
+	if first.Total != 2 || len(first.Items) != 1 || first.Items[0].ID != "a" || first.NextCursor == nil {
+		t.Fatalf("first = %+v", first)
+	}
+	cursor := url.QueryEscape(*first.NextCursor)
+	second := read(base + "&cursor=" + cursor)
+	if second.Total != 2 || len(second.Items) != 1 || second.Items[0].ID != "c" || second.NextCursor != nil {
+		t.Fatalf("second = %+v", second)
+	}
+	manual := read("mode=manual&groupId=safe")
+	if manual.Total != 2 || len(manual.Items) != 2 || manual.Items[0].ID != "a" || manual.Items[1].ID != "c" {
+		t.Fatalf("manual = %+v", manual)
+	}
+	for _, query := range []string{
+		"mode=automatic&dimension=tag&value=web", "mode=automatic&dimension=provider&value=aws",
+	} {
+		if got := read(query); got.Total != 2 || len(got.Items) != 2 {
+			t.Fatalf("bucket = %+v", got)
+		}
+	}
+	for _, query := range []string{
+		"mode=automatic&dimension=region&value=eu&search=ALPHA&status=online",
+		"mode=manual&groupId=safe&q=192.0.2.3&status=offline",
+	} {
+		if got := read(query); got.Total != 1 || len(got.Items) != 1 {
+			t.Fatalf("filtered = %+v", got)
+		}
+	}
+	for _, query := range []string{
+		"mode=automatic&dimension=tag&value=hidden-tag", "mode=automatic&dimension=provider&value=secret",
+		"mode=automatic&dimension=region&value=eu&search=hidden-marker", "mode=manual&groupId=empty",
+		"mode=automatic&dimension=region&value=eu&search=Alpha&status=offline",
+	} {
+		if got := read(query); got.Total != 0 || len(got.Items) != 0 || got.NextCursor != nil {
+			t.Fatalf("empty = %+v", got)
+		}
+	}
+	for _, group := range []string{"mixed", "hidden"} {
+		response := httpGet(t, server.URL+"/api/v1/groups/node-results?mode=manual&groupId="+group)
+		if response.StatusCode != http.StatusForbidden || strings.Contains(string(response.Body), "hidden") {
+			t.Fatalf("group denial = %+v", response)
+		}
+	}
+	if got := httpGet(t, server.URL+"/api/v1/groups/safe"); got.StatusCode != http.StatusOK {
+		t.Fatalf("group route shadowed: %+v", got)
+	}
+	if got := httpGet(t, server.URL+"/api/v1/groups/node-results?mode=manual&groupId=missing"); got.StatusCode != http.StatusNotFound {
+		t.Fatalf("missing = %+v", got)
+	}
+	for _, query := range []string{
+		"", "mode=other", "mode=manual", "mode=automatic&dimension=invalid&value=eu",
+		"mode=automatic&dimension=region", "mode=automatic&dimension=region&value=%20",
+		"mode=manual&groupId=safe&dimension=region", "mode=automatic&dimension=region&value=eu&groupId=safe",
+		base + "&status=unknown", base + "&value=eu", base + "&cursor=%21", base + "&search=%FF", base + "&cursor=garbage", base + "&cursor=" + cursor + "&search=Alpha",
+		"mode=manual&groupId=safe&cursor=" + cursor, "mode=manual&groupId=safe&limit=0",
+		"mode=manual&groupId=safe&limit=201", "mode=manual&groupId=safe&limit=-1",
+		"mode=manual&groupId=safe&limit=no", base + "&limit=2", base + "&search=a&q=b",
+		base + "&q=" + strings.Repeat("x", 257), base + "&cursor=" + strings.Repeat("x", 2049), base + "&unknown=1",
+	} {
+		response := httpGet(t, server.URL+"/api/v1/groups/node-results?"+query)
+		if response.StatusCode != http.StatusBadRequest || strings.Contains(string(response.Body), "hidden-marker") {
+			t.Fatalf("invalid query %q: %+v", query, response)
+		}
+	}
+	// The same cursor cannot be reused by a different subject.
+	foreign, err := http.NewRequest(http.MethodGet, server.URL+"/api/v1/groups/node-results?"+base+"&cursor="+cursor, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreign.Header.Set("X-Test-Subject", "zero")
+	foreignResponse, err := http.DefaultClient.Do(foreign)
+	if err != nil {
+		t.Fatal(err)
+	}
+	foreignResult := nodeRead(t, foreignResponse)
+	foreignResponse.Body.Close()
+	if foreignResult.StatusCode != http.StatusBadRequest {
+		t.Fatalf("foreign cursor = %+v", foreignResult)
+	}
+	// Every page reauthorizes: a cursor issued before revocation cannot reveal a.
+	delete(policy.ReadGrants["reader"], "a")
+	if got := read(base + "&cursor=" + cursor); got.Total != 1 || len(got.Items) != 1 || got.Items[0].ID != "c" {
+		t.Fatalf("revoked page = %+v", got)
+	}
+	for _, subject := range []string{"zero", "unknown"} {
+		request, err := http.NewRequest(http.MethodGet, server.URL+"/api/v1/groups/node-results?"+base, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request.Header.Set("X-Test-Subject", subject)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		result := nodeRead(t, response)
+		response.Body.Close()
+		if subject == "zero" {
+			var empty page
+			decodeNodeResponse(t, result, &empty)
+			if empty.Total != 0 || empty.Items == nil || len(empty.Items) != 0 || empty.NextCursor != nil {
+				t.Fatalf("zero scope = %+v", empty)
+			}
+		} else if result.StatusCode != http.StatusForbidden {
+			t.Fatalf("subject %s = %+v", subject, result)
+		}
+	}
 }

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { validateContract } from "../../../scripts/contracts.mjs";
-import { buildCandidate, candidate, detailPath, docs, document, fields, hash, listPath, matrixMarkdown, provenance, read, sources } from "./build-candidate.mjs";
+import { archivedArtifacts, buildCandidate, candidate, detailPath, docs, document, fields, hash, listPath, liveProvenance, liveProvenanceFile, liveSourceNames, matrixMarkdown, provenance, read, sources } from "./build-candidate.mjs";
 
 const current = document(candidate);
 const merged = document(sources.merged);
@@ -26,10 +26,17 @@ test("candidate YAML parses, resolves all refs, has exactly the two existing GET
   assert.deepEqual(document(sources.originalMerged).paths[listPath], merged.paths[listPath]);
 });
 
-test("provenance, operation matrix and Markdown field matrix are recomputed from real sources", () => {
-  assert.deepEqual(metadata, provenance());
+test("archived provenance and matrices retain their original source hashes and conclusions", () => {
+  for (const [file, sha256] of Object.entries(archivedArtifacts)) assert.equal(hash(read(file)), sha256, file);
+  const recomputed = provenance();
+  // The pinned archive records historical live-source hashes. Verify current
+  // bytes independently below rather than replacing historical evidence.
+  for (const name of liveSourceNames) recomputed.sources[name] = metadata.sources[name];
+  assert.deepEqual(metadata, recomputed);
   assert.equal(read(`${docs}/MATRIX.md`), matrixMarkdown(metadata));
-  for (const source of Object.values(metadata.sources)) assert.equal(source.sha256, hash(read(source.file)));
+  for (const [name, source] of Object.entries(metadata.sources)) {
+    if (!liveSourceNames.includes(name)) assert.equal(source.sha256, hash(read(source.file)), source.file);
+  }
   for (const row of metadata.operations) {
     const op = current.paths[row.path][row.method];
     assert.equal(op.operationId, row.operationId);
@@ -47,6 +54,10 @@ test("provenance, operation matrix and Markdown field matrix are recomputed from
     if (row.detailProperty) assert.ok(current.components.schemas.NodeDetail.properties[row.detailProperty], row.id);
   }
   assert.deepEqual(metadata.fields.map(row => row.id), fields.map(row => row[0]));
+});
+
+test("generated live-source provenance matches current source bytes independently of the archive", () => {
+  assert.equal(read(liveProvenanceFile), JSON.stringify(liveProvenance(), null, 2) + "\n");
 });
 
 test("legacy list request, envelope and every original summary field remain unchanged", () => {
@@ -103,9 +114,16 @@ test("matrix source absences are real, including unchanged r02 success schemas a
   assert.deepEqual(oldDetail.properties.status.enum, ["online", "offline", "suspended", "revoked", "unknown"]);
   const adapter = read(sources.webAdapter);
   assert.ok(adapter.includes("export interface CandidateNodeMetrics"));
-  assert.ok(adapter.includes("readonly revision: number"));
+  const types = read(sources.webTypes);
+  for (const [source, name] of [[adapter, "CandidateNodeDetail"], [types, "NodeListItemView"]]) {
+    const body = source.split(`export interface ${name} {`)[1]?.split("\n}")[0];
+    assert.ok(body, name);
+    assert.match(body, /readonly\s+revision\?\s*:\s*number\s*;/, name);
+    assert.doesNotMatch(body, /readonly\s+revision\s*:/, name);
+  }
+  assert.match(adapter, /revision:\s*detail\.revision\s*,/);
   assert.ok(adapter.includes("此形状只用于隔离 Mock 与 ViewModel"));
-  assert.ok(read(sources.webTypes).includes("maxSampleAgeMs: number"));
+  assert.ok(types.includes("maxSampleAgeMs: number"));
   const internalNode = read(sources.node).split("type Node struct {")[1].split("\n}")[0];
   assert.doesNotMatch(internalNode, /Revision|Platform|AgentVersion/);
 });

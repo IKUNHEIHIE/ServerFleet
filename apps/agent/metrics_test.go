@@ -65,7 +65,7 @@ func TestSampleAgentMetricsFailsClosedOffLinux(t *testing.T) {
 		if err != nil {
 			t.Fatalf("linux sample: %v", err)
 		}
-		if (len(sample.GetPoints()) != 2 && len(sample.GetPoints()) != 5) || sample.GetPoints()[0].GetName() != "cpu" || sample.GetPoints()[1].GetName() != "memory" || sample.GetBatchId() == "" {
+		if (len(sample.GetPoints()) < 2 || len(sample.GetPoints()) > 8) || sample.GetPoints()[0].GetName() != "cpu" || sample.GetPoints()[1].GetName() != "memory" || sample.GetBatchId() == "" {
 			t.Fatalf("sample = %v", sample)
 		}
 		for _, point := range sample.GetPoints()[:2] {
@@ -73,7 +73,7 @@ func TestSampleAgentMetricsFailsClosedOffLinux(t *testing.T) {
 				t.Fatalf("point = %v", point)
 			}
 		}
-		if len(sample.GetPoints()) == 5 {
+		if len(sample.GetPoints()) >= 5 {
 			points := sample.GetPoints()
 			for index, name := range []string{"network.rx_bytes", "network.tx_bytes"} {
 				point := points[index+2]

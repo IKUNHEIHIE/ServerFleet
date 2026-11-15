@@ -367,3 +367,70 @@ func TestReadInventoryCancellationAtEveryObservation(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupNodeResultsClassifySemanticsAndReadFailures(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	policy := readPolicy("reader", []string{"a", "b", "c"}, []string{"a", "c"})
+	h := newServiceFixture(t, authorizerFunc(func(context.Context, auth.Check) error { return nil }), policy)
+	for _, id := range []string{"c", "b", "a"} {
+		seedNode(t, h.db, h.repo, id, id)
+	}
+	// Exercise legacy/raw empty attributes using the same semantics as Classify.
+	if _, err := h.db.Exec(ctx, "UPDATE nodes SET region = ?, provider = ?, tags = ? WHERE id = ?", " eu ", " aws ", `[" web ","web","", " "]`, "a"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.db.Exec(ctx, "UPDATE nodes SET region = ?, provider = ?, tags = ? WHERE id = ?", " ", "", `[]`, "c"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.groups.Create(ctx, h.db, "existing", "Existing manual group", "retained", []string{"a"}); err != nil {
+		t.Fatal(err)
+	}
+	before, err := h.groups.List(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, dimension := range []nodes.Dimension{nodes.DimensionRegion, nodes.DimensionProvider, nodes.DimensionTag} {
+		buckets, err := h.svc.ClassifyVisible(ctx, "reader", dimension)
+		if err != nil || len(buckets) != 1 || buckets[0].Count != 1 {
+			t.Fatalf("buckets = %+v, %v", buckets, err)
+		}
+		page, err := h.svc.ReadGroupNodeResults(ctx, "reader", nodes.GroupNodeQuery{Mode: "automatic", Dimension: dimension, Value: buckets[0].Value})
+		if err != nil || page.Total != 1 || len(page.Items) != 1 || page.Items[0].ID != "a" {
+			t.Fatalf("page = %+v, %v", page, err)
+		}
+	}
+	after, err := h.groups.List(ctx)
+	if err != nil || !reflect.DeepEqual(before, after) {
+		t.Fatalf("automatic reads mutated groups: before=%+v after=%+v err=%v", before, after, err)
+	}
+	query := nodes.GroupNodeQuery{Mode: "automatic", Dimension: nodes.DimensionRegion, Value: "eu"}
+	canceled, cancel := context.WithCancel(ctx)
+	cancel()
+	for _, tc := range []struct {
+		ctx     context.Context
+		subject string
+		want    error
+	}{
+		{canceled, "reader", context.Canceled}, {nil, "reader", auth.ErrInvalidCheck}, {ctx, "unknown", auth.ErrDenied},
+	} {
+		page, err := h.svc.ReadGroupNodeResults(tc.ctx, tc.subject, query)
+		if !errors.Is(err, tc.want) || page.Items != nil || page.Total != 0 || page.NextCursor != "" {
+			t.Fatalf("failure leaked page: %+v, %v", page, err)
+		}
+	}
+	expired, stop := context.WithDeadline(ctx, time.Now().Add(-time.Second))
+	defer stop()
+	if page, err := h.svc.ReadGroupNodeResults(expired, "reader", query); !errors.Is(err, context.DeadlineExceeded) || page.Items != nil {
+		t.Fatalf("expired page = %+v, %v", page, err)
+	}
+	unavailable := newServiceFixture(t, authorizerFunc(func(context.Context, auth.Check) error { return nil }),
+		func(context.Context) (*auth.NodePolicy, error) { return nil, errors.New("private-policy-marker") })
+	if page, err := unavailable.svc.ReadGroupNodeResults(ctx, "reader", query); !errors.Is(err, auth.ErrPolicyUnavailable) || strings.Contains(err.Error(), "private-policy-marker") || page.Items != nil || page.Total != 0 {
+		t.Fatalf("policy failure = %+v, %v", page, err)
+	}
+	query.Value = " "
+	if page, err := h.svc.ReadGroupNodeResults(ctx, "reader", query); !errors.Is(err, nodes.ErrInvalidGroupNodeQuery) || page.Items != nil {
+		t.Fatalf("blank bucket = %+v, %v", page, err)
+	}
+}

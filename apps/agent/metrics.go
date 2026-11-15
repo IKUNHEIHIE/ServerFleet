@@ -32,7 +32,9 @@ func sampleAgentMetrics(ctx context.Context) (*agentv1.MetricsBatch, error) {
 	if err != nil {
 		return nil, errMetricsUnavailable
 	}
-	timer := time.NewTimer(100 * time.Millisecond)
+	networkBefore, networkErr := readBoundedProcFile("/proc/net/dev")
+	startedAt := time.Now()
+	timer := time.NewTimer(900 * time.Millisecond)
 	defer timer.Stop()
 	select {
 	case <-timer.C:
@@ -57,6 +59,21 @@ func sampleAgentMetrics(ctx context.Context) (*agentv1.MetricsBatch, error) {
 		{Name: "memory", Value: memoryPercent, Unit: "percent", ObservedAtUnixMs: now},
 	}
 	points = append(points, networkMetricPoints(now)...)
+	if networkErr == nil {
+		if after, e := readBoundedProcFile("/proc/net/dev"); e == nil {
+			rx1, tx1, set1, e1 := parseProcNetDev(networkBefore)
+			rx2, tx2, set2, e2 := parseProcNetDev(after)
+			elapsed := time.Since(startedAt).Seconds()
+			if e1 == nil && e2 == nil && set1 == set2 && rx2 >= rx1 && tx2 >= tx1 && elapsed > 0 {
+				points = append(points,
+					&agentv1.MetricPoint{Name: "network.download_bps", Value: float64(rx2-rx1) / elapsed, Unit: "bytes/second", ObservedAtUnixMs: now},
+					&agentv1.MetricPoint{Name: "network.upload_bps", Value: float64(tx2-tx1) / elapsed, Unit: "bytes/second", ObservedAtUnixMs: now})
+			}
+		}
+	}
+	if disk, ok := sampleDiskPercent(); ok {
+		points = append(points, &agentv1.MetricPoint{Name: "disk.used_percent", Value: disk, Unit: "percent", ObservedAtUnixMs: now})
+	}
 	return &agentv1.MetricsBatch{Points: points, BatchId: batchID}, nil
 }
 

@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"sort"
 	"strconv"
 	"time"
@@ -39,6 +40,9 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	if authenticator == nil {
 		return errors.New("nodes: authenticator is required")
 	}
+	if err := RegisterManagementHTTP(mux, service, authenticator); err != nil {
+		return err
+	}
 	api := &httpAPI{service: service, authenticator: authenticator, now: service.now}
 	mux.HandleFunc("GET /api/v1/nodes", api.listNodes)
 	mux.HandleFunc("POST /api/v1/nodes/{nodeId}/suspend", api.suspendNode)
@@ -49,6 +53,7 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("GET /api/v1/groups", api.listGroups)
 	mux.HandleFunc("POST /api/v1/groups", api.createGroup)
 	mux.HandleFunc("GET /api/v1/groups/classifications", api.classifications)
+	mux.HandleFunc("GET /api/v1/groups/node-results", api.groupNodeResults)
 	mux.HandleFunc("GET /api/v1/groups/{groupId}", api.getGroup)
 	mux.HandleFunc("PATCH /api/v1/groups/{groupId}", api.updateGroup)
 	mux.HandleFunc("DELETE /api/v1/groups/{groupId}", api.deleteGroup)
@@ -67,6 +72,10 @@ type nodeSummary struct {
 	Tags          []string `json:"tags,omitempty"`
 	CPUPercent    *float64 `json:"cpuPercent"`
 	MemoryPercent *float64 `json:"memoryPercent"`
+	DiskPercent   *float64 `json:"diskPercent"`
+	DownloadBps   *float64 `json:"downloadBps"`
+	UploadBps     *float64 `json:"uploadBps"`
+	SampledAt     string   `json:"sampledAt,omitempty"`
 }
 
 type groupDTO struct {
@@ -104,6 +113,8 @@ func (api *httpAPI) listNodes(w http.ResponseWriter, r *http.Request) {
 		if sample, ok := node.Usage(now, 5*time.Minute); ok {
 			cpu, memory := sample.CPUPercent, sample.MemoryPercent
 			summary.CPUPercent, summary.MemoryPercent = &cpu, &memory
+			summary.DiskPercent, summary.DownloadBps, summary.UploadBps = sample.DiskPercent, sample.DownloadBps, sample.UploadBps
+			summary.SampledAt = formatNodeTime(sample.ObservedAt)
 		}
 		items = append(items, summary)
 	}
@@ -440,6 +451,88 @@ func (api *httpAPI) replaceMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, groupFromRecord(group))
+}
+
+// groupNodeResults implements the existing Web NodeGroupResults contract.
+func (api *httpAPI) groupNodeResults(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if len(r.URL.RawQuery) > 8192 {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "group node query is invalid")
+		return
+	}
+	values, err := url.ParseQuery(r.URL.RawQuery)
+	if err != nil {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "group node query is invalid")
+		return
+	}
+	for key, entries := range values {
+		switch key {
+		case "mode", "groupId", "dimension", "value", "search", "q", "status", "cursor", "limit":
+		default:
+			writeFixed(w, http.StatusBadRequest, "invalid_request", "group node query is invalid")
+			return
+		}
+		if len(entries) != 1 {
+			writeFixed(w, http.StatusBadRequest, "invalid_request", "group node query is invalid")
+			return
+		}
+	}
+	if values.Has("search") && values.Has("q") {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "use search or q, not both")
+		return
+	}
+	limit := 50
+	if values.Has("limit") {
+		limit, err = strconv.Atoi(values.Get("limit"))
+		if err != nil || limit < 1 || limit > 200 {
+			writeFixed(w, http.StatusBadRequest, "invalid_request", "limit must be between 1 and 200")
+			return
+		}
+	}
+	search := values.Get("search")
+	if values.Has("q") {
+		search = values.Get("q")
+	}
+	page, err := api.service.ReadGroupNodeResults(r.Context(), principal.SubjectID, GroupNodeQuery{
+		Mode: values.Get("mode"), GroupID: values.Get("groupId"), Dimension: Dimension(values.Get("dimension")),
+		Value: values.Get("value"), Search: search, Status: values.Get("status"), Cursor: values.Get("cursor"), Limit: limit,
+	})
+	if errors.Is(err, ErrInvalidGroupNodeQuery) {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "group node query is invalid")
+		return
+	}
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	now := api.now()
+	items := make([]nodeSummary, 0, len(page.Items))
+	for _, node := range page.Items {
+		summary := nodeSummary{
+			ID: node.ID, Name: node.Name, Online: node.Status == StatusOnline,
+			Region: node.Region, Provider: node.Provider, CountryCode: node.CountryCode,
+			IP: node.Address, Tags: append([]string(nil), node.Tags...),
+		}
+		if sample, ok := node.Usage(now, 5*time.Minute); ok {
+			cpu, memory := sample.CPUPercent, sample.MemoryPercent
+			summary.CPUPercent, summary.MemoryPercent = &cpu, &memory
+			summary.DiskPercent, summary.DownloadBps, summary.UploadBps = sample.DiskPercent, sample.DownloadBps, sample.UploadBps
+			summary.SampledAt = formatNodeTime(sample.ObservedAt)
+		}
+		items = append(items, summary)
+	}
+	var nextCursor *string
+	if page.NextCursor != "" {
+		nextCursor = &page.NextCursor
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Items      []nodeSummary `json:"items"`
+		Total      int           `json:"total"`
+		NextCursor *string       `json:"nextCursor"`
+	}{Items: items, Total: page.Total, NextCursor: nextCursor})
 }
 
 func (api *httpAPI) classifications(w http.ResponseWriter, r *http.Request) {

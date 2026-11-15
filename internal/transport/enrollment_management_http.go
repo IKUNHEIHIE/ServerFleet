@@ -157,8 +157,14 @@ func (h *EnrollmentManagementHTTP) issueToken(w http.ResponseWriter, r *http.Req
 		writeTransportProblem(w, http.StatusBadRequest, "ENROLLMENT_TOKEN_POLICY")
 		return
 	}
+	input.Name = strings.TrimSpace(input.Name)
 	if input.Name == "" {
-		input.Name = "enrollment-token"
+		id, err := randomLinkID()
+		if err != nil {
+			writeTransportProblem(w, http.StatusServiceUnavailable, "ENROLLMENT_UNAVAILABLE")
+			return
+		}
+		input.Name = "node-" + id[:8]
 	}
 	if len(input.Name) > 128 {
 		writeTransportProblem(w, http.StatusBadRequest, "INVALID_REQUEST")

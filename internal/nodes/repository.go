@@ -118,7 +118,7 @@ func (r *Repo) List(ctx context.Context) ([]Node, error) {
 	if r == nil || r.db == nil {
 		return nil, errors.New("nodes: repository is not configured")
 	}
-	rows, err := r.db.Query(ctx, nodeSelect+" ORDER BY name, id")
+	rows, err := r.db.Query(ctx, nodeSelect+" WHERE id NOT IN (SELECT node_id FROM node_archives) ORDER BY name, id")
 	if err != nil {
 		return nil, err
 	}
@@ -191,7 +191,7 @@ func (r *Repo) ApplyAgentUpdate(ctx context.Context, q storage.Queryer, update A
 		merged.LastSeenAt = update.ObservedAt
 	}
 	if update.Metrics != nil {
-		sample := *update.Metrics
+		sample := cloneMetrics(*update.Metrics)
 		sample.ObservedAt = update.ObservedAt
 		merged.Metrics = &sample
 	}
@@ -203,22 +203,21 @@ func (r *Repo) ApplyAgentUpdate(ctx context.Context, q storage.Queryer, update A
 		return Node{}, false, err
 	}
 	sampleSource := ""
-	var cpu, memory any
-	var observed any
+	var cpu, memory, disk, rxBytes, txBytes, observed any
 	if merged.Metrics != nil {
 		sampleSource = SampleSourceAgent
-		cpu = merged.Metrics.CPUPercent
-		memory = merged.Metrics.MemoryPercent
+		cpu, memory, disk = merged.Metrics.CPUPercent, merged.Metrics.MemoryPercent, merged.Metrics.DiskPercent
+		rxBytes, txBytes = merged.Metrics.DownloadBps, merged.Metrics.UploadBps
 		observed = encodeTime(merged.Metrics.ObservedAt)
 	}
 	outcome, err := q.Exec(ctx, `UPDATE nodes SET
 		name = ?, address = ?, region = ?, provider = ?, country_code = ?, tags = ?,
-		status = ?, last_seen_at = ?, event_seq = ?, metrics_cpu = ?, metrics_memory = ?,
-		metrics_observed_at = ?, metrics_source = ?, updated_at = ?
+		status = ?, last_seen_at = ?, event_seq = ?, metrics_cpu = ?, metrics_memory = ?, metrics_disk = ?,
+		metrics_download_bps = ?, metrics_upload_bps = ?, metrics_observed_at = ?, metrics_source = ?, updated_at = ?
 		WHERE id = ? AND event_seq = ?`,
 		merged.Name, merged.Address, merged.Region, merged.Provider, merged.CountryCode, tags,
-		string(merged.Status), encodeTime(merged.LastSeenAt), update.Sequence, cpu, memory,
-		observed, sampleSource, encodeTime(time.Now().UTC()), update.NodeID, current.eventSeq)
+		string(merged.Status), encodeTime(merged.LastSeenAt), update.Sequence, cpu, memory, disk,
+		rxBytes, txBytes, observed, sampleSource, encodeTime(time.Now().UTC()), update.NodeID, current.eventSeq)
 	if err != nil {
 		return Node{}, false, err
 	}
@@ -312,7 +311,7 @@ func (r *Repo) CountExisting(ctx context.Context, q storage.Queryer, ids []strin
 }
 
 const nodeSelect = `SELECT id, name, address, region, provider, country_code, tags, status,
-	last_seen_at, event_seq, metrics_cpu, metrics_memory, metrics_observed_at, metrics_source,
+	last_seen_at, event_seq, metrics_cpu, metrics_memory, metrics_disk, metrics_download_bps, metrics_upload_bps, metrics_observed_at, metrics_source,
 	created_at, updated_at FROM nodes`
 
 type scanner interface {
@@ -325,13 +324,14 @@ func scanNode(row scanner) (Node, error) {
 		country, tags, status           string
 		lastSeen, observed, source      storage.NullString
 		createdAt, updatedAt            string
-		cpu, memory                     *float64
+		cpu, memory, disk               *float64
+		rxBytes, txBytes                *float64
 		eventSeq                        int64
 		storedID, name, address, region string
 		provider                        string
 	)
 	if err := row.Scan(&storedID, &name, &address, &region, &provider, &country, &tags, &status,
-		&lastSeen, &eventSeq, &cpu, &memory, &observed, &source, &createdAt, &updatedAt); err != nil {
+		&lastSeen, &eventSeq, &cpu, &memory, &disk, &rxBytes, &txBytes, &observed, &source, &createdAt, &updatedAt); err != nil {
 		return Node{}, err
 	}
 	node.ID = storedID
@@ -360,7 +360,7 @@ func scanNode(row scanner) (Node, error) {
 		return Node{}, fmt.Errorf("nodes: stored node %q has negative sequence", storedID)
 	}
 	node.eventSeq = uint64(eventSeq)
-	if cpu != nil || memory != nil || observed.Valid {
+	if cpu != nil || memory != nil || disk != nil || rxBytes != nil || txBytes != nil || observed.Valid {
 		if cpu == nil || memory == nil || !observed.Valid || !source.Valid || source.String == "" {
 			return Node{}, fmt.Errorf("nodes: stored node %q has incomplete metrics", storedID)
 		}
@@ -368,10 +368,14 @@ func scanNode(row scanner) (Node, error) {
 		if err != nil {
 			return Node{}, err
 		}
-		node.Metrics = &Metrics{CPUPercent: *cpu, MemoryPercent: *memory, ObservedAt: observedAt}
+		node.Metrics = &Metrics{CPUPercent: *cpu, MemoryPercent: *memory, DiskPercent: disk, DownloadBps: rxBytes, UploadBps: txBytes, ObservedAt: observedAt}
 	}
-	_ = createdAt
-	_ = updatedAt
+	if node.CreatedAt, err = storage.DecodeTime(createdAt); err != nil {
+		return Node{}, err
+	}
+	if node.UpdatedAt, err = storage.DecodeTime(updatedAt); err != nil {
+		return Node{}, err
+	}
 	return node, nil
 }
 
@@ -418,7 +422,7 @@ func validateAgentUpdate(update AgentUpdate) error {
 		if update.SampleSource != SampleSourceAgent {
 			return fmt.Errorf("%w: sample source", ErrInvalidSample)
 		}
-		if !validPercent(update.Metrics.CPUPercent) || !validPercent(update.Metrics.MemoryPercent) {
+		if !validMetrics(*update.Metrics) {
 			return ErrInvalidSample
 		}
 	}
@@ -473,7 +477,7 @@ func validateNode(node Node) error {
 		return err
 	}
 	if node.Metrics != nil {
-		if node.Metrics.ObservedAt.IsZero() || !validPercent(node.Metrics.CPUPercent) || !validPercent(node.Metrics.MemoryPercent) {
+		if node.Metrics.ObservedAt.IsZero() || !validMetrics(*node.Metrics) {
 			return ErrInvalidSample
 		}
 		if node.Metrics.ObservedAt.After(time.Now().Add(5 * time.Minute)) {

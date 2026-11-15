@@ -44,5 +44,13 @@ func Migrations() []storage.Migration {
 			)`,
 			`CREATE INDEX node_group_members_node ON node_group_members (node_id)`,
 		},
-	}}, DiagnosticMigrations()...)
+	}}, append(append(DiagnosticMigrations(), ManagementMigrations()...), storage.Migration{
+		Version: "ds/0090_node_live_metrics",
+		Name:    "node live disk and network metrics",
+		Statements: []string{
+			`ALTER TABLE nodes ADD COLUMN metrics_disk REAL`,
+			`ALTER TABLE nodes ADD COLUMN metrics_download_bps REAL`,
+			`ALTER TABLE nodes ADD COLUMN metrics_upload_bps REAL`,
+		},
+	})...)
 }
