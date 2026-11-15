@@ -2,8 +2,14 @@ package files
 
 import (
 	"net/http"
+	"strings"
 	"time"
 )
+
+// stagingEntryName reports the per-transfer staging directories the Agent keeps
+// inside its file root. They are machinery, never operator content, so the
+// console hides them instead of showing an ever-growing list of .sf-file-*.
+func stagingEntryName(name string) bool { return strings.HasPrefix(name, ".sf-") }
 
 func entryPath(dir, name string) string {
 	if dir == "" || dir == "." {
@@ -28,6 +34,9 @@ func (api *httpAPI) listDirectory(w http.ResponseWriter, r *http.Request) {
 	}
 	entries := make([]map[string]any, 0, len(result.Entries))
 	for _, e := range result.Entries {
+		if stagingEntryName(e.Name) {
+			continue // transfer staging machinery, not operator content
+		}
 		entry := map[string]any{"name": e.Name, "path": entryPath(result.Path, e.Name), "type": e.Type}
 		if e.Type == "file" || e.Type == "symlink" {
 			entry["sizeBytes"] = e.Size
