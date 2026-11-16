@@ -433,6 +433,74 @@ func (s *SessionService) Get(ctx context.Context, id string) (SessionView, error
 	}
 	return out, nil
 }
+type SessionSummary struct {
+	ID             string    `json:"id"`
+	Title          string    `json:"title"`
+	Status         string    `json:"status"`
+	ScopeRevision  uint64    `json:"scopeRevision"`
+	CreatedAt      time.Time `json:"createdAt"`
+	LastActivityAt time.Time `json:"lastActivityAt"`
+}
+
+// List returns the caller's own sessions, newest activity first. Titles are
+// derived from the first redacted user message; they never contain secrets.
+func (s *SessionService) List(ctx context.Context) ([]SessionSummary, error) {
+	actor, err := s.actor(ctx, "ai.sessions.list", "", false)
+	if err != nil {
+		return nil, err
+	}
+	items := []SessionSummary{}
+	err = s.store.View(ctx, func(raw []byte) error {
+		state, err := decodeSessions(raw)
+		if err != nil {
+			return err
+		}
+		for id, record := range state.Sessions {
+			if record.Scope.SubjectID != actor.SubjectID {
+				continue
+			}
+			title, last := "新会话", record.Created
+			if record.Conversation != nil {
+				for _, message := range record.Conversation.Messages {
+					if message.CreatedAt.After(last) {
+						last = message.CreatedAt
+					}
+					if title == "新会话" && message.Role == "user" && message.RedactedContent != "" {
+						title = sessionTitle(message.RedactedContent)
+					}
+				}
+			}
+			status := "active"
+			if record.Closed {
+				status = "closed"
+			}
+			items = append(items, SessionSummary{ID: id, Title: title, Status: status, ScopeRevision: record.Scope.Revision, CreatedAt: record.Created, LastActivityAt: last})
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(items, func(i, j int) bool {
+		if items[i].LastActivityAt.Equal(items[j].LastActivityAt) {
+			return items[i].ID < items[j].ID
+		}
+		return items[i].LastActivityAt.After(items[j].LastActivityAt)
+	})
+	if len(items) > 50 {
+		items = items[:50]
+	}
+	return items, nil
+}
+
+func sessionTitle(content string) string {
+	runes := []rune(content)
+	if len(runes) > 24 {
+		return string(runes[:24]) + "…"
+	}
+	return string(runes)
+}
+
 func (s *SessionService) AddGrant(ctx context.Context, id string, expected uint64, input ResourceGrantInput) (SessionView, error) {
 	actor, err := s.actor(ctx, "ai.sessions.grant", id, true)
 	if err != nil {

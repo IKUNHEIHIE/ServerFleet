@@ -23,15 +23,15 @@ func NewRepo(db *storage.DB) (*Repo, error) {
 }
 
 const accountSelect = `SELECT id, provider_code, display_name, note, enabled, is_default,
-	credential_ref, credential_status, created_at, updated_at FROM dns_accounts`
+	credential_ref, credential_revision, credential_status, created_at, updated_at FROM dns_accounts`
 
 func (r *Repo) createAccount(ctx context.Context, q storage.Queryer, record accountRecord) error {
 	_, err := q.Exec(ctx, `INSERT INTO dns_accounts
 		(id, provider_code, display_name, note, enabled, is_default, credential_ref,
-		 credential_status, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		 credential_revision, credential_status, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		record.ID, record.ProviderCode, record.DisplayName, record.Note, boolInt(record.Enabled),
-		boolInt(record.IsDefault), string(record.CredentialRef), string(record.CredentialStatus),
+		boolInt(record.IsDefault), string(record.CredentialRef), record.CredentialRevision, string(record.CredentialStatus),
 		storage.EncodeTime(record.CreatedAt), storage.EncodeTime(record.UpdatedAt))
 	if storage.IsUniqueViolation(err) {
 		return ErrAccountExists
@@ -66,9 +66,9 @@ func (r *Repo) listAccounts(ctx context.Context) ([]accountRecord, error) {
 
 func (r *Repo) updateAccount(ctx context.Context, q storage.Queryer, record accountRecord) error {
 	outcome, err := q.Exec(ctx, `UPDATE dns_accounts SET display_name = ?, note = ?, enabled = ?,
-		credential_ref = ?, credential_status = ?, updated_at = ? WHERE id = ?`,
+		credential_ref = ?, credential_revision = ?, credential_status = ?, updated_at = ? WHERE id = ?`,
 		record.DisplayName, record.Note, boolInt(record.Enabled), string(record.CredentialRef),
-		string(record.CredentialStatus), storage.EncodeTime(record.UpdatedAt), record.ID)
+		record.CredentialRevision, string(record.CredentialStatus), storage.EncodeTime(record.UpdatedAt), record.ID)
 	if err != nil {
 		return err
 	}
@@ -162,6 +162,11 @@ func (r *Repo) listZones(ctx context.Context, accountID string) ([]Zone, error) 
 const recordSelect = `SELECT id, zone_id, type, name, content, ttl, proxied, priority, modified_at
 	FROM dns_records`
 
+func (r *Repo) deleteRecordsByZone(ctx context.Context, q storage.Queryer, zoneID string) error {
+	_, err := q.Exec(ctx, `DELETE FROM dns_records WHERE zone_id = ?`, zoneID)
+	return err
+}
+
 func (r *Repo) createRecord(ctx context.Context, q storage.Queryer, record Record) error {
 	_, err := q.Exec(ctx, `INSERT INTO dns_records
 		(id, zone_id, type, name, content, ttl, proxied, priority, modified_at)
@@ -240,7 +245,7 @@ func scanAccount(row scanner) (accountRecord, error) {
 		createdAt, updatedAt  string
 	)
 	if err := row.Scan(&record.ID, &record.ProviderCode, &record.DisplayName, &record.Note,
-		&enabled, &isDefault, &credentialRef, &status, &createdAt, &updatedAt); err != nil {
+		&enabled, &isDefault, &credentialRef, &record.CredentialRevision, &status, &createdAt, &updatedAt); err != nil {
 		return accountRecord{}, err
 	}
 	if record.ProviderCode != ProviderCloudflare {

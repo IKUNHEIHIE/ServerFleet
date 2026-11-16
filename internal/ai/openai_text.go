@@ -237,11 +237,15 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 	if err != nil || op.SubjectID != r.SubjectID || op.CredentialID != r.Profile.CredentialRef || op.OperationID != r.OperationID || op.Module != "ai" || op.Source != "ai" || op.Action != "use" || op.ChangeID != "" || op.ExpectedRevision == 0 || op.PlanDigest != digest {
 		return ErrToolDenied
 	}
-	input := []map[string]string{}
+	input := []map[string]any{}
 	for _, m := range r.Messages {
-		item := map[string]string{"type": "message", "role": m.Role, "content": m.RedactedContent}
+		item := map[string]any{"type": "message", "role": m.Role}
 		if m.Role == "assistant" {
-			item["phase"] = "final_answer"
+			// OpenAI-compatible gateways require assistant history as typed
+			// output_text parts rather than a bare string.
+			item["content"] = []map[string]string{{"type": "output_text", "text": m.RedactedContent}}
+		} else {
+			item["content"] = m.RedactedContent
 		}
 		input = append(input, item)
 	}

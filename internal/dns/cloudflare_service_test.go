@@ -48,7 +48,7 @@ func TestCloudflareProviderThroughDNSDomain(t *testing.T) {
 	}
 	fixture := newDNSFixture(t, nil, provider, nil)
 	account, err := fixture.service.CreateAccount(context.Background(), "user-1", "req-account", dns.CreateAccountInput{
-		ID: "account-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true, Credential: "secret/cf-1",
+		ID: "account-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true, Credential: "secret/cf-1", CredentialRevision: 1,
 	})
 	if err != nil {
 		t.Fatal(err)

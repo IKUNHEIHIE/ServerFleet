@@ -259,8 +259,8 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
   }
 
   async function submitAction() {
-    if (!actionKind || !actionAllowed || actionPending || !reason.trim() || (actionKind !== "suspend" && !confirmRevoke)) return;
-    const result = await activeAction.run({ reason: reason.trim() });
+    if (!actionKind || !actionAllowed || actionPending || (actionKind !== "remove" && !reason.trim()) || (actionKind !== "suspend" && !confirmRevoke)) return;
+    const result = await activeAction.run({ reason: actionKind === "remove" ? "未填写原因" : reason.trim() });
     if (result.ok) {
       setActionKind(null);
       setReason("");
@@ -426,7 +426,7 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
               variant="danger"
               onClick={submitAction}
               loading={actionPending}
-              disabled={!actionAllowed || !reason.trim() || (actionKind !== "suspend" && !confirmRevoke)}
+              disabled={!actionAllowed || (actionKind !== "remove" && !reason.trim()) || (actionKind !== "suspend" && !confirmRevoke)}
             >
               {actionKind === "remove" ? "确认删除" : "确认执行"}
             </Button>
@@ -435,17 +435,19 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
       >
         {actionError ? <Notice tone="error" title="操作未完成">{describeApiError(actionError)}</Notice> : null}
         <div className="space-y-4">
-          <Field label="原因" hint="请勿包含秘密或凭据。">
-            {ids => (
-              <TextArea
-                id={ids.inputId}
-                value={reason}
-                onChange={event => setReason(event.target.value)}
-                disabled={actionPending}
-                required
-              />
-            )}
-          </Field>
+          {actionKind === "remove" ? null : (
+            <Field label="原因" hint="请勿包含秘密或凭据。">
+              {ids => (
+                <TextArea
+                  id={ids.inputId}
+                  value={reason}
+                  onChange={event => setReason(event.target.value)}
+                  disabled={actionPending}
+                  required
+                />
+              )}
+            </Field>
+          )}
           {actionKind === "revoke" || actionKind === "remove" ? (
             <label className="flex items-start gap-2 text-sm">
               <Checkbox
@@ -458,7 +460,7 @@ export function NodeDetailPage({ nodeId }: { readonly nodeId: string }) {
             </label>
           ) : null}
           <p className="text-xs text-muted-foreground">
-            操作原因会记录到审计中，实际结果以服务端返回为准。
+            {actionKind === "remove" ? "删除会记录到审计中，实际结果以服务端返回为准。" : "操作原因会记录到审计中，实际结果以服务端返回为准。"}
           </p>
         </div>
       </Modal>

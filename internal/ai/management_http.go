@@ -43,6 +43,7 @@ func NewManagementHTTP(sessions *SessionService, authenticate Authenticator, exe
 	h := &ManagementHTTP{sessions: sessions, auth: authenticate, execute: executor, mux: http.NewServeMux(), now: time.Now}
 	h.mux.HandleFunc("GET /api/v1/ai/security-policy", h.securityPolicy)
 	h.mux.HandleFunc("POST /api/v1/ai/sessions", h.createSession)
+	h.mux.HandleFunc("GET /api/v1/ai/sessions", h.listSessions)
 	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}", h.getSession)
 	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}/approval-policy", h.getApprovalPolicy)
 	h.mux.HandleFunc("PATCH /api/v1/ai/sessions/{sessionId}/approval-policy", h.updateApprovalPolicy)
@@ -190,6 +191,23 @@ func (h *ManagementHTTP) createSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAIJSON(w, http.StatusCreated, view)
+}
+
+func (h *ManagementHTTP) listSessions(w http.ResponseWriter, r *http.Request) {
+	ctx, _, ok := h.request(w, r, false)
+	if !ok {
+		return
+	}
+	if r.ContentLength > 0 || len(r.TransferEncoding) != 0 || r.URL.RawQuery != "" {
+		writeAIProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
+		return
+	}
+	items, err := h.sessions.List(ctx)
+	if err != nil {
+		writeAIError(w, err)
+		return
+	}
+	writeAIJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (h *ManagementHTTP) sessionID(w http.ResponseWriter, r *http.Request) (string, bool) {

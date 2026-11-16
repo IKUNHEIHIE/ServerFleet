@@ -21,6 +21,65 @@ func (s *Service) ListRecords(ctx context.Context, subjectID, zoneID string) ([]
 	return s.repo.listRecords(ctx, zoneID)
 }
 
+// SyncZoneRecords replaces the local record cache with the provider's current
+// records for one imported zone. It never mutates the provider.
+func (s *Service) SyncZoneRecords(ctx context.Context, subjectID, requestID, zoneID string) ([]Record, error) {
+	if err := s.requireRequest(requestID); err != nil {
+		return nil, err
+	}
+	if !validID(zoneID) {
+		return nil, ErrZoneNotFound
+	}
+	if err := s.authorize(ctx, subjectID, ActionRecordsRead, requestID, nil, "dns_records_sync"); err != nil {
+		return nil, err
+	}
+	zone, account, err := s.zoneWithAccount(ctx, zoneID)
+	if err != nil {
+		return nil, err
+	}
+	provider, credential, err := s.credentialProvider(account)
+	if err != nil {
+		return nil, err
+	}
+	providerRecords, err := provider.ListRecords(s.withSecretScope(ctx, subjectID, requestID, account), credential, zone.ProviderZoneID)
+	if err != nil {
+		return nil, ErrProviderFailed
+	}
+	records := make([]Record, 0, len(providerRecords))
+	seen := make(map[string]struct{}, len(providerRecords))
+	for _, candidate := range providerRecords {
+		priority, err := validateRecordInput(candidate.Input)
+		if err != nil || !validID(candidate.ID) {
+			continue
+		}
+		key := string(candidate.Input.Type) + "\x00" + candidate.Input.Name + "\x00" + candidate.Input.Content
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		records = append(records, Record{
+			ID: candidate.ID, ZoneID: zoneID, Type: candidate.Input.Type, Name: candidate.Input.Name,
+			Content: candidate.Input.Content, TTL: candidate.Input.TTL, Proxied: candidate.Input.Proxied,
+			Priority: priority, ModifiedAt: s.now(),
+		})
+	}
+	err = s.db.InTx(ctx, func(txCtx context.Context, tx storage.Tx) error {
+		if err := s.repo.deleteRecordsByZone(txCtx, tx, zoneID); err != nil {
+			return err
+		}
+		for _, record := range records {
+			if err := s.repo.createRecord(txCtx, tx, record); err != nil {
+				return err
+			}
+		}
+		return s.audit.AppendTx(txCtx, tx, s.event(subjectID, ActionRecordsRead, "success", requestID, nil, "dns_records_sync"))
+	})
+	if err != nil {
+		return nil, err
+	}
+	return records, nil
+}
+
 func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID string, input RecordInput) (Record, error) {
 	if err := s.requireRequest(requestID); err != nil {
 		return Record{}, err
@@ -43,7 +102,7 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 	if err != nil {
 		return Record{}, err
 	}
-	providerID, err := provider.CreateRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, input)
+	providerID, err := provider.CreateRecord(s.withSecretScope(ctx, subjectID, requestID, account), credential, zone.ProviderZoneID, input)
 	if err != nil {
 		if providerOutcomeUnknown(err) {
 			return Record{}, fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
@@ -66,7 +125,7 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 	})
 	if err != nil {
 		compCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		compCtx = WithSecretScope(compCtx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+		compCtx = s.withSecretScope(compCtx, subjectID, requestID, account)
 		compErr := provider.DeleteRecord(compCtx, credential, zone.ProviderZoneID, providerID)
 		cancel()
 		if compErr != nil {
@@ -100,7 +159,7 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 	if err != nil {
 		return Record{}, err
 	}
-	if err := provider.UpdateRecord(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential, zone.ProviderZoneID, current.ID, input); err != nil {
+	if err := provider.UpdateRecord(s.withSecretScope(ctx, subjectID, requestID, account), credential, zone.ProviderZoneID, current.ID, input); err != nil {
 		if providerOutcomeUnknown(err) {
 			return Record{}, fmt.Errorf("%w: %w", ErrProviderOutcomeUnknown, err)
 		}
@@ -119,7 +178,7 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 	})
 	if err != nil {
 		compCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
-		compCtx = WithSecretScope(compCtx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+		compCtx = s.withSecretScope(compCtx, subjectID, requestID, account)
 		compErr := provider.UpdateRecord(compCtx, credential, zone.ProviderZoneID, current.ID, recordInputFrom(current))
 		cancel()
 		if compErr != nil {
@@ -150,7 +209,7 @@ func (s *Service) DeleteRecord(ctx context.Context, subjectID, requestID, record
 		return err
 	}
 	providerAbsent := false
-	scoped := WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID})
+	scoped := s.withSecretScope(ctx, subjectID, requestID, account)
 	var deleteErr error
 	if checked, ok := provider.(CheckedRecordDeleter); ok {
 		deleteErr = checked.DeleteVerifiedRecord(scoped, credential, zone.ProviderZoneID, current.ID, recordInputFrom(current))

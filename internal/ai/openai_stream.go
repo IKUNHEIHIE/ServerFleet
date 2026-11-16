@@ -54,6 +54,11 @@ func decodeProviderStream(ctx context.Context, reader io.Reader, model string) (
 		sequence = *e.Sequence
 		switch e.Type {
 		case "response.created", "response.in_progress", "response.content_part.added", "response.content_part.done", "response.output_text.done":
+		case "response.reasoning_text.delta", "response.reasoning_text.done",
+			"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done",
+			"response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
+			// Chain-of-thought and summaries stay private; only final output text
+			// is accumulated. Sequence continuity is still enforced above.
 		case "response.output_item.added", "response.output_item.done":
 			if e.Item.Type != "message" && e.Item.Type != "reasoning" {
 				return ErrGenerationUnknown

@@ -13,6 +13,7 @@ import type {
   AIResourceRecommendation,
   AISecurityPolicy,
   AISession,
+  AISessionSummary,
   Page,
   PluginCatalogEntry,
   PluginOperation,
@@ -66,6 +67,7 @@ export const aiAgentApi = {
 
 export const aiApi = {
   createSession: () => apiClient.request<AISession>("/api/v1/ai/sessions", { method: "POST", body: {} }),
+  sessions: (signal?: AbortSignal) => apiClient.request<{ items: readonly AISessionSummary[] }>("/api/v1/ai/sessions", { signal }),
   getSession: (sessionId: string, signal?: AbortSignal) =>
     apiClient.request<AISession>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}`, { signal }),
   grant: (sessionId: string, body: { resourceType: "node" | "service_group"; resourceId: string; allowedActions: readonly string[] }) =>
@@ -116,7 +118,12 @@ export const aiApi = {
   messages: (sessionId: string, query: { limit?: number; cursor?: string } = {}, signal?: AbortSignal) =>
     apiClient.request<Page<AIMessage>>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, { query, signal }),
   sendMessage: (sessionId: string, body: { content: string; clientMessageId: string; scopeRevision: number }) =>
-    apiClient.request<AIMessage>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, { method: "POST", body }),
+    apiClient.request<AIMessage>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, {
+      method: "POST",
+      body,
+      // 真实 Controller 要求 Idempotency-Key；用客户端消息 ID 让重试保持同一意图。
+      idempotencyKey: body.clientMessageId,
+    }),
   // 显式生成：无请求体/查询参数；响应是服务端缓冲上游 SSE 至终态后的完整脱敏消息，
   // 不是浏览器逐 token 流。排队/回显用户文本不算生成成功。
   generate: (sessionId: string, messageId: string) =>

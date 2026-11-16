@@ -1,5 +1,13 @@
 # 任务登记板
 
+## AI 运维端点接入（2026-11-16）
+
+AI-OPS-20261116 / 工作区未提交，用户提供测试密钥与 OpenAI 兼容端点。范围：`-ai-text-endpoint` 部署参数与端点校验、推理流事件兼容、`ai.use/ai.manage/ai.approve` 权限、消息幂等键、AI 页审批审计 404 空态、文档。测试站先接阿里云 MaaS（密钥中途失效，未验收），后切换 StepFun `step-5-preview`；浏览器端到端生成成功（真实助手回复、事件 succeeded）。2026-11-17 追加：移除预算界面与生成前预算拦截；模型配置迁入系统设置 → AI 模型；AI 会话页改为聊天窗口 + 右侧资源拖选授权（点击/拖入写授权并插入 @名称）。2026-11-17 二次调整：入口即聊天 + 左侧历史 + 右侧资源拖选；发送自动生成；多轮 assistant 历史改为 output_text 分段；授权动作扩展为 nodes.read/tasks.command/tasks.exec.v1/host.root。未推 GitHub；生产/VPS 未部署。
+
+## DNS 独立可用与真实账号联调（2026-11-16）
+
+DNS-STANDALONE-20261116 / 工作区未提交，用户提供 Cloudflare Token 要求完善 DNS 功能。范围：`internal/dns` 账号修订号/供应商 Zone 列表/记录缓存同步、`apps/controller/server` 独立凭据借用与门控、DNS 页面 Token 直填与 Zone/记录刷新、追加迁移 ds/0091 与现行文档。不改既有迁移/checksum、不引入依赖、不把远端写操作改为免审批。验证：`go build/vet`、`go test ./internal/dns/...`、`check:web` 54 文件 / 484 用例；测试站已部署并实测：Token 校验 active、3 个 Zone 可读、wentian.org 导入并刷新 11 条真实记录。停止于用户验收；未推 GitHub。回滚需同时恢复 Controller 二进制与 DNS 页面构建，ds/0091 为追加列。
+
 ## 结构整理与交接文档刷新（2026-11-16）
 
 FILES-STRUCTURE-20261116 / `feature/files-structure-docs-20261116`，基线 main `71dbca3c9d4a69890468d2f574362eaf6ea15c48`。用户要求按当前进度更新文档并优化目录结构：文件互传前端拆为 `file-pane.tsx`（单栏）/ `transfer-history.tsx`（历史弹窗，打开时才请求）/ `files-page.tsx`（页面骨架），行为与 REST 调用不变；同步 PROJECT-STRUCTURE、HANDOFF、FEATURES、CURRENT-STATE 与本节。范围只限上述前端模块与现行文档，不动 Controller/Agent/协议/迁移/依赖。验证：awskr 上 `npm run typecheck`、`check:web`（54 文件 / 482 用例 0 失败）、vite 生产构建通过；文档相对链接与 diff 空白检查通过；未改 Go 侧故不重跑 Go 测试。停止于精确 head CI 通过与 expected-head 合并；结果补 PR 评论。

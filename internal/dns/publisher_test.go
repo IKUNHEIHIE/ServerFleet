@@ -12,7 +12,7 @@ func newACMEDNSFixture(t *testing.T) dnsFixture {
 	t.Helper()
 	fixture := newDNSFixture(t, nil, newFakeProvider(), nil)
 	account, err := fixture.service.CreateAccount(context.Background(), "admin", "req-account", dns.CreateAccountInput{
-		ID: "account-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true, Credential: "secret/cf-1",
+		ID: "account-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true, Credential: "secret/cf-1", CredentialRevision: 1,
 	})
 	if err != nil {
 		t.Fatal(err)

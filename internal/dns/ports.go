@@ -16,12 +16,19 @@ type ZoneInfo struct {
 	Status         string
 }
 
+// ProviderRecord is one record read from the provider during a zone refresh.
+type ProviderRecord struct {
+	ID    string
+	Input RecordInput
+}
+
 // Provider is the outbound Cloudflare port. Implementations live outside this
 // package and are injected; a nil Provider makes every provider operation fail
 // closed. Methods receive only opaque credential references.
 type Provider interface {
 	Test(ctx context.Context, credential CredentialRef) (ConnectionTest, error)
 	ListZones(ctx context.Context, credential CredentialRef) ([]ZoneInfo, error)
+	ListRecords(ctx context.Context, credential CredentialRef, zoneProviderID string) ([]ProviderRecord, error)
 	CreateRecord(ctx context.Context, credential CredentialRef, zoneProviderID string, input RecordInput) (string, error)
 	UpdateRecord(ctx context.Context, credential CredentialRef, zoneProviderID, recordProviderID string, input RecordInput) error
 	DeleteRecord(ctx context.Context, credential CredentialRef, zoneProviderID, recordProviderID string) error

@@ -56,6 +56,18 @@ describe("LegacyNodeList", () => {
     expect(screen.getByRole("menuitem", { name: "删除" })).toBeVisible();
   });
 
+  it("deletes without asking for a reason but still requires acknowledgement", () => {
+    render(<LegacyNodeList rows={[rows()[0]]} canDelete />);
+    fireEvent.click(screen.getByRole("button", { name: "Tokyo 更多操作" }));
+    fireEvent.click(screen.getByRole("menuitem", { name: "删除" }));
+    const dialog = screen.getByRole("dialog", { name: "删除节点" });
+    const confirm = within(dialog).getByRole("button", { name: "确认删除" });
+    expect(within(dialog).queryByLabelText("原因")).toBeNull();
+    expect(confirm).toBeDisabled();
+    fireEvent.click(within(dialog).getByRole("checkbox"));
+    expect(confirm).toBeEnabled();
+  });
+
   it("encodes the node id in the detail link", () => {
     render(<LegacyNodeList rows={[{ ...rows()[0], id: "node/a?#" }]} />);
     expect(screen.getByRole("link", { name: "Tokyo" })).toHaveAttribute("href", "#/nodes/node%2Fa%3F%23");

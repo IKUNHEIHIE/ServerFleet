@@ -312,6 +312,9 @@ func ExtraPermissions() []auth.PermissionDefinition {
 		{Key: notifications.ActionRetry, Description: "Retry failed notification deliveries", ResourceType: "node"},
 		{Key: workflows.ActionRead, Description: "Read own automation workflows", ResourceType: "node", ReadOnly: true},
 		{Key: workflows.ActionWrite, Description: "Create, update and run automation workflows", ResourceType: "node"},
+		{Key: "ai.use", Description: "Use AI operations sessions and generation", ResourceType: "system", AdminOnly: true},
+		{Key: "ai.manage", Description: "Configure AI models, budgets and sessions", ResourceType: "system", AdminOnly: true},
+		{Key: "ai.approve", Description: "Approve AI requested operations", ResourceType: "system", AdminOnly: true},
 	}
 }
 

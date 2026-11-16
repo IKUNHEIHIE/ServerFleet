@@ -13,11 +13,13 @@ import { authApi, credentialsApi } from "@/lib/api/endpoints";
 import { NotificationsSettings } from "./notifications-settings";
 import { RestrictedTokensPanel } from "./restricted-tokens-panel";
 import { ControllerUpdatePanel } from "@/features/updates/updates-page";
+import { DnsAccountsPanel } from "@/features/dns/dns-accounts-panel";
+import { AiModelSettingsPanel } from "@/features/ai/ai-model-settings-panel";
 import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
-type Tab = "credentials" | "security" | "notifications" | "updates";
+type Tab = "credentials" | "dns" | "ai" | "security" | "notifications" | "updates";
 
 const KIND_LABEL: Record<CredentialMetadata["kind"], string> = {
   cloudflare_token: "Cloudflare API Token",
@@ -237,6 +239,8 @@ export function SettingsPage() {
         onChange={setTab}
         tabs={[
           { id: "credentials", label: "安全凭据" },
+          { id: "dns", label: "DNS 账号" },
+          { id: "ai", label: "AI 模型" },
           { id: "security", label: "账号安全与会话" },
           { id: "notifications", label: "通知渠道" },
           { id: "updates", label: "系统更新" },
@@ -315,6 +319,10 @@ export function SettingsPage() {
       ) : null}
 
       {tab === "notifications" ? <NotificationsSettings onOpenCredentials={() => setTab("credentials")} /> : null}
+
+      {tab === "dns" ? <DnsAccountsPanel key={session.viewEpoch} /> : null}
+
+      {tab === "ai" ? <AiModelSettingsPanel key={session.viewEpoch} /> : null}
 
       {tab === "updates" ? (
         <div className="space-y-4">

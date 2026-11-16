@@ -45,6 +45,7 @@ type Options struct {
 	ResidentSupervisor    string
 	BuildVersion          string
 	CredentialKeyDir      string
+	AITextEndpoint        string
 	DisableCleanupRetries bool
 }
 
@@ -74,6 +75,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.ReleaseSource, "release-source", "", "private fixed HTTPS signed Agent release feed (requires provisioned PKI and -update-deployment)")
 	flags.StringVar(&options.ResidentSupervisor, "resident-supervisor", "", "private owning Controller supervisor configuration")
 	flags.StringVar(&options.ACMEDeployment, "acme-deployment", "", "private ACME/Cloudflare task configuration (provisioned PKI only)")
+	flags.StringVar(&options.AITextEndpoint, "ai-text-endpoint", "", "private deployment-level OpenAI-compatible Responses endpoint URL (https, ends with /responses)")
 	flags.BoolVar(&options.DisableCleanupRetries, "disable-cleanup-retries", false, "disable automatic retries of owned ACME cleanup records")
 	if err := flags.Parse(args); err != nil {
 		return Options{}, err
@@ -327,6 +329,7 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		DisableCleanupRetries: options.DisableCleanupRetries,
 		DBPath:                options.DBPath,
 		CredentialKeyDir:      options.CredentialKeyDir,
+		AITextEndpoint:        options.AITextEndpoint,
 		Origin:                options.Origin,
 		EnrollmentIssuer:      material.Issuer,
 		AgentAuthority:        authority,

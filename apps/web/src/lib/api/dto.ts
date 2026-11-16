@@ -668,6 +668,13 @@ export interface DNSZone {
   readonly status?: string;
 }
 
+/** Cloudflare 账号下仍可导入的 Zone；providerZoneId 由服务商返回，不猜测。 */
+export interface DNSProviderZone {
+  readonly providerZoneId: string;
+  readonly name: string;
+  readonly status?: string;
+}
+
 export interface DNSRecordInput {
   readonly type: "A" | "AAAA" | "CNAME" | "TXT" | "MX";
   readonly name: string;
@@ -800,6 +807,15 @@ export interface AIResourceGrant {
   readonly allowedActions: readonly string[];
   readonly grantedAt?: string;
   readonly grantedBy?: string;
+}
+
+export interface AISessionSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly status: "active" | "closed";
+  readonly scopeRevision: number;
+  readonly createdAt?: string;
+  readonly lastActivityAt?: string;
 }
 
 export interface AISession {

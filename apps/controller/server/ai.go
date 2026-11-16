@@ -35,17 +35,18 @@ func (s *Server) setupAI(cfg Config) error {
 	}
 	quota := cfg.AIGenerationQuota
 	if quota == nil {
-		quota = func(ctx context.Context, request ai.GenerationRequest) error {
-			if s.AIBudget == nil {
-				return ai.ErrModelUnavailable
-			}
-			return s.AIBudget.Admit(ctx, request)
-		}
+		// 预算窗口功能已按用户要求停用：不再在生成前按请求/token 额度拦截。
+		quota = func(context.Context, ai.GenerationRequest) error { return nil }
 	}
 	factory := ai.NewBYOKRuntime
 	if cfg.LocalAIProvider != nil {
 		factory = func(sessions *ai.SessionService, credentials *auth.CredentialService, filter func(context.Context, ai.SessionView, string, string) (string, error), quota ai.GenerationQuota) (*ai.BYOKRuntime, error) {
 			return ai.NewLocalTLSBYOKRuntime(sessions, credentials, filter, quota, *cfg.LocalAIProvider)
+		}
+	} else if cfg.AITextEndpoint != "" {
+		endpoint := ai.OpenAICompatibleEndpoint{URL: cfg.AITextEndpoint}
+		factory = func(sessions *ai.SessionService, credentials *auth.CredentialService, filter func(context.Context, ai.SessionView, string, string) (string, error), quota ai.GenerationQuota) (*ai.BYOKRuntime, error) {
+			return ai.NewOpenAIEndpointBYOKRuntime(sessions, credentials, filter, quota, endpoint)
 		}
 	}
 	backend, err := factory(sessions, s.Credentials, s.aiContentFilter, quota)

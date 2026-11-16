@@ -60,6 +60,26 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 
 节点能力接口 `GET /api/v1/nodes/{nodeId}/capabilities` 在握手诊断中额外返回 `cpuModel/cpuCores/memoryTotalBytes/diskTotalBytes`（AgentHello 新增字段 9–12，append-only；缺失表示未采集，不按 0 处理）。安装脚本改为创建专用用户与 systemd 服务并带 `-file-root`；文件能力需要非 root 身份，控制器启用文件分发时协议次版本为 1.1。
 
+## DNS 独立可用（2026-11-16，工作区待提交）
+
+- `POST /api/v1/dns/accounts` 与 `PATCH /api/v1/dns/accounts/{accountId}` 新增 `credentialRevision`（与 `credentialRef` 同传，0 拒绝）。账号记住凭据修订号，服务端借用凭据前按该修订校验。
+- 新增 `GET /api/v1/dns/accounts/{accountId}/provider-zones`：实时读取 Cloudflare 账号下可导入 Zone（`providerZoneId/name/status`），只读，不写入本地。
+- 新增 `POST /api/v1/dns/zones/{zoneId}/records/sync`：读取该 Zone 的 Cloudflare 记录并替换本地缓存；仅保留 A/AAAA/CNAME/TXT/MX，跳过其它类型；不修改远端记录。
+- 账号检查改为同步 `POST /api/v1/dns/accounts/{accountId}/test`，返回 `status/zoneRead/recordWrite` 并回填凭据状态；控制台 Token 直填后自动创建 DNS 专用凭据，仅提交引用。
+- 独立 DNS 请求不再依赖 ACME 执行配置：服务端为每次请求建立一次性凭据借用窗口（模块 `dns`、绑定修订号），窗口外拒绝；远端写操作仍走统一审批任务。
+- 迁移 `ds/0091_dns_credential_revision` 追加 `credential_revision` 列；历史行为 0，需重新绑定凭据（控制台“轮换”）后才能通过供应商校验。
+
+## AI 端点配置（2026-11-16，工作区待提交）
+
+- Controller 新增私有启动参数 `-ai-text-endpoint`：部署级 OpenAI 兼容 Responses URL（必须 `https`、无 userinfo/query/fragment、路径以 `/responses` 结尾，例如 `https://<网关>/compatible-mode/v1/responses`）。未配置时沿用默认 OpenAI 端点。
+- 端点只来自部署配置，浏览器/模型档案不能提交或覆盖 base URL；模型标识、凭据引用与 `credentialRevision` 仍由模型档案提交。
+- 流式解析会忽略 `response.reasoning_text.*` / `response.reasoning_summary_*` 推理事件并保持序号连续性；只返回正式输出文本，未知事件仍拒绝。
+- 新增系统权限 `ai.use` / `ai.manage` / `ai.approve`（管理员），此前未注册导致 AI 页面锁死。
+- 修复消息提交缺少 `Idempotency-Key` 导致的 400：现在以客户端消息 ID 作为幂等键。
+- 审批事件列表接口尚未实现；控制台对 404 显示“当前 Controller 未提供”，不再当作加载失败。
+- 2026-11-17：预算窗口 API 保留但生成链路不再按预算拦截，控制台已移除“用量与预算”界面；模型配置迁入系统设置的 AI 模型页签。
+- 新增 `GET /api/v1/ai/sessions`：列出当前用户自己的会话摘要（标题取首条用户消息，最多 50 条）；控制台左侧历史对话使用该接口。发送消息后控制台立即调用生成接口，不再需要手动点“生成回复”。OpenAI 兼容网关要求历史 assistant 消息以 `output_text` 分段提交。
+
 ## 手动监控探测
 
 `POST /api/v1/availability-monitors/{monitorId}/probe`：无查询参数，空体或严格空JSON对象；使用已保存的目标/来源，不从请求体覆盖。写权限与实际点击者的源节点授权必须同时满足。响应包含 `monitorId/status/state/checkedAt/consecutiveFailures`，可选 `latencyMs/statusCode/error/sourceNodeId/taskId`；没有观测值不补零。

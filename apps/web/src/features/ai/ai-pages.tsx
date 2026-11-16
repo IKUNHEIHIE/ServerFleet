@@ -1,10 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, CheckCircle2, GripVertical, Layers, Loader2, Server, ShieldAlert, Sparkles, User, Zap } from "lucide-react";
-import { navigate } from "@/app/router";
+import { Bot, CheckCircle2, Layers, Loader2, RefreshCw, Send, Server, ShieldAlert, Sparkles, User, Zap } from "lucide-react";
 import { useSession } from "@/app/session";
-import { GlowingEffect } from "@/components/aceternity/glowing-effect";
-import { SparklesCore } from "@/components/aceternity/sparkles";
-import { Spotlight } from "@/components/aceternity/spotlight";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
@@ -12,24 +8,16 @@ import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
-import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
-import { credentialsApi, nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
-import { aiApi, modelBudgetApi, modelSettingsApi } from "@/lib/api/endpoints-ai";
+import { nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
+import { aiApi } from "@/lib/api/endpoints-ai";
 import type {
-  AIApprovalEvent,
   AIApprovalMode,
   AIApprovalPolicy,
   AIApprovalRequest,
   AIExecuteResult,
   AIMessage,
-  AIModelBudget,
-  AIModelBudgetInput,
-  AIModelBudgetPolicy,
-  AIModelSettings,
-  AIResourceRecommendation,
   AISession,
-  CredentialMetadata,
   NodeSummary,
   ServiceGroup,
 } from "@/lib/api/dto";
@@ -83,484 +71,94 @@ function parseAIEvent(event: SSEEvent): AIStreamEvent {
 
 export function AIPage() {
   const session = useSession();
-  const policy = useResource(`ai:security:${session.viewEpoch}`, signal => aiApi.securityPolicy(signal).then(result => result.data));
-  const create = useAction(() => aiApi.createSession());
   const canUse = session.can("ai.use") || session.can("ai.manage");
+  const [activeId, setActiveId] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
+  const bootRef = useRef(false);
+  const sessions = useResource("ai:sessions:" + session.viewEpoch, signal => aiApi.sessions(signal).then(result => result.data));
+  const create = useAction(() => aiApi.createSession());
+  const items = sessions.state.status === "ready" ? sessions.state.data.items : [];
+  const visible = query.trim() ? items.filter(item => item.title.toLowerCase().includes(query.trim().toLowerCase())) : items;
+
+  async function startConversation() {
+    const result = await create.run();
+    if (result.ok && result.data) {
+      setActiveId(result.data.data.id);
+      sessions.reload();
+    }
+  }
+
+  useEffect(() => {
+    if (activeId || sessions.state.status !== "ready") return;
+    if (items.length > 0) { setActiveId(items[0].id); return; }
+    if (bootRef.current || !canUse || session.writesLocked) return;
+    bootRef.current = true;
+    void startConversation();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeId, items, canUse, session.writesLocked, sessions.state.status]);
 
   return (
-    <div className="space-y-5">
-      <div className="relative overflow-hidden rounded-2xl">
-        <Spotlight className="-top-24 left-12 opacity-60" fill="#6658E8" />
-        <SparklesCore
-          className="pointer-events-none absolute inset-0 z-0 opacity-45"
-          particleDensity={18}
-          particleColor="#6658E8"
-        />
-        <PageHeader
-          title="AI 运维"
-          description="每个会话默认无资源授权、每次操作需审批；审批模式只改变人工批准策略，不会扩大权限。"
-          badge={<Badge tone="primary">默认拒绝</Badge>}
-          actions={
-            <Button
-              type="button"
-              variant="primary"
-              disabled={!canUse || session.writesLocked}
-              loading={create.pending}
-              onClick={async () => {
-                const result = await create.run();
-                if (result.ok && result.data) navigate(`/ai/${encodeURIComponent(result.data.data.id)}`);
-              }}
-            >
-              <Sparkles aria-hidden="true" className="size-3.5" />
-              新建 AI 会话
-            </Button>
-          }
-        />
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2.5">
+          <h1 className="text-xl font-bold tracking-tight">AI 运维</h1>
+          <Badge tone="primary">对话</Badge>
+          <span className="text-sm text-muted-foreground">与 AI 对话处理服务器任务</span>
+        </div>
+        <Button type="button" variant="primary" loading={create.pending} disabled={!canUse || session.writesLocked} onClick={() => void startConversation()}>
+          <Sparkles aria-hidden="true" className="size-3.5" />
+          新建对话
+        </Button>
       </div>
-      {create.error ? <Notice tone="error" title="创建会话失败">{describeApiError(create.error)}</Notice> : null}
-      <Notice tone="info" title="会话列表说明">
-        暂不支持列出历史会话；请使用创建后返回的会话或已知会话链接。
-      </Notice>
-      <Panel title="安全策略">
-        <AsyncPanel state={policy.state} onRetry={policy.reload} errorTitle="安全策略加载失败">
-          {data => (
-            <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-3">
-              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">默认拒绝：{data.defaultDeny ? "是" : "否"}</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">服务端强制：{data.serverSideEnforced ? "是" : "否"}</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">未授权发现：{data.allowUnscopedDiscovery ? "允许" : "禁止"}</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">范围版本必需：{data.scopeRevisionRequired ? "是" : "未声明"}</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">横向移动限制：{data.lateralMovementRestricted ? "是" : "未声明"}</p>
-              </div>
-              <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                <p className="font-medium text-foreground">授权与会话交集：{data.groupGrantMemberPolicy ?? "未声明"}</p>
-              </div>
-            </div>
-          )}
-        </AsyncPanel>
-      </Panel>
-      <ModelSettingsPanel key={session.viewEpoch} />
-    </div>
-  );
-}
-
-/**
- * 所有者作用域的模型配置（GET/PUT /api/v1/ai/model-settings）。GET 返回已保存配置，
- * 不代表供应商健康；PUT 是当前真人管理员的 owner CAS（expectedRevision）。
- * 页面只显示凭据引用与修订号，绝不显示/保存 BYOK 明文；秘密值只在凭据页签提交一次。
- * 表单状态以服务端快照为初始值（key=revision）：revision 变化即以服务端为准重建表单，
- * 不用同步 effect 回写，避免迟到 effect 覆盖用户输入。
- */
-function ModelSettingsPanel() {
-  const session = useSession();
-  const [conflict, setConflict] = useState(false);
-  const settings = useResource(`ai:model-settings:${session.viewEpoch}`, signal =>
-    modelSettingsApi.get(signal).then(result => result.data),
-  );
-  const credentials = useResource(`ai:model-credentials:${session.viewEpoch}`, signal =>
-    credentialsApi.list(signal).then(result => result.data),
-  );
-  const isAdmin = session.identity?.roles.includes("administrator") ?? false;
-  const credentialsLoaded = credentials.state.status === "ready" ? credentials.state.data : [];
-  const aiKeys = credentialsLoaded.filter(credential => credential.kind === "ai_api_key" && credential.usageScope.includes("ai"));
-
-  return (
-    <Panel
-      title="AI 模型设置（当前用户）"
-      description="仅当前管理员可保存；保存成功不代表供应商可用。"
-    >
-      {conflict ? (
-        <Notice tone="error" title="配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）">
-          已重新读取服务端最新修订；请核对后再次提交，不要覆盖他人变更。
-        </Notice>
-      ) : null}
-      <AsyncPanel state={settings.state} onRetry={settings.reload} errorTitle="模型设置加载失败">
-        {data => (
-          <div className="grid xl:grid-cols-[1fr_1.35fr] xl:divide-x xl:divide-border/80">
-            <ModelSettingsForm
-              key={data.revision}
-              data={data}
-              aiKeys={aiKeys}
-              isAdmin={isAdmin}
-              writesLocked={session.writesLocked}
-              onSaved={() => { setConflict(false); settings.reload(); }}
-              onConflict={() => { setConflict(true); settings.refreshSilent(); }}
-            />
-            {data.id ? (
-              <ModelBudgetPanel
-                key={`${data.id}:${session.viewEpoch}`}
-                profileId={data.id}
-                modelEnabled={data.enabled}
-              />
+      {create.error ? <Notice tone="error" title="无法开始对话">{describeApiError(create.error)}</Notice> : null}
+      {!canUse ? <Notice tone="warning" title="AI 使用入口已锁定">当前身份未返回 AI 使用权限。</Notice> : null}
+      <div className="flex h-[calc(100vh-13rem)] min-h-[560px] overflow-hidden rounded-2xl border border-border/90 bg-card shadow-[var(--shadow-card)]">
+        <aside className="flex w-60 shrink-0 flex-col border-r border-border/80 bg-[#FAFBFD]">
+          <div className="flex h-11 items-center justify-between border-b border-border/80 px-3">
+            <span className="text-sm font-semibold">对话列表</span>
+            <Button size="sm" variant="ghost" className="size-7 p-0" onClick={() => sessions.reload()} aria-label="刷新对话列表">
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+            </Button>
+          </div>
+          <div className="border-b border-border/80 p-2">
+            <TextInput value={query} onChange={event => setQuery(event.target.value)} placeholder="搜索对话" aria-label="搜索对话" className="h-8" />
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-1.5">
+            {visible.length === 0 ? (
+              <p className="px-3 py-8 text-center text-xs text-muted-foreground">{query.trim() ? "没有匹配的对话" : "还没有对话"}</p>
             ) : (
-              <p className="border-t px-5 py-4 text-xs text-muted-foreground xl:border-t-0">
-                服务端未返回模型配置 profileId，无法读取或配置 owner 预算；先保存模型设置后再查看。
-              </p>
+              <ul className="space-y-0.5">
+                {visible.map(item => (
+                  <li key={item.id}>
+                    <button
+                      type="button"
+                      onClick={() => setActiveId(item.id)}
+                      className={"w-full rounded-lg px-3 py-2 text-left transition-colors " + (item.id === activeId ? "bg-primary/10" : "hover:bg-secondary")}
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <span className={"size-1.5 shrink-0 rounded-full " + (item.status === "active" ? "bg-emerald-500" : "bg-slate-300")} />
+                        <span className="truncate text-sm">{item.title}</span>
+                      </span>
+                      <span className="mt-0.5 block pl-3 text-[11px] text-muted-foreground">
+                        {item.lastActivityAt ? formatDateTime(item.lastActivityAt) ?? "" : item.id.slice(0, 8)}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             )}
           </div>
-        )}
-      </AsyncPanel>
-    </Panel>
-  );
-}
-
-function ModelSettingsForm({
-  data,
-  aiKeys,
-  isAdmin,
-  writesLocked,
-  onSaved,
-  onConflict,
-}: {
-  readonly data: AIModelSettings;
-  readonly aiKeys: readonly CredentialMetadata[];
-  readonly isAdmin: boolean;
-  readonly writesLocked: boolean;
-  readonly onSaved: () => void;
-  readonly onConflict: () => void;
-}) {
-  const [enabled, setEnabled] = useState(data.enabled);
-  const [model, setModel] = useState(data.model);
-  const [credentialRef, setCredentialRef] = useState(data.credentialRef);
-  const selected = aiKeys.find(credential => credential.id === credentialRef) ?? null;
-
-  const save = useAction((body: {
-    expectedRevision: number;
-    enabled: boolean;
-    provider: string;
-    model: string;
-    credentialRef: string;
-    credentialRevision: number;
-  }) => modelSettingsApi.set(body));
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (enabled && (!model.trim() || !credentialRef)) return;
-    const result = await save.run({
-      expectedRevision: data.revision,
-      enabled,
-      provider: "openai-responses",
-      model: model.trim(),
-      credentialRef,
-      credentialRevision: selected?.revision ?? 0,
-    });
-    // 成功后的新 revision 由 key 重建表单；409 用静默刷新保住提示并取回服务端最新
-    // 修订（旧 revision 已被服务端拒绝，本地绝不覆盖他人变更）。
-    if (result.ok) {
-      onSaved();
-    } else if (result.error?.status === 409 && result.error.code === "MODEL_REVISION_CONFLICT") {
-      onConflict();
-    }
-  }
-
-  const saveError = save.error;
-  const saveErrorCode = (saveError as { code?: string } | null)?.code ?? "";
-
-  return (
-    <form onSubmit={submit} className="space-y-4 px-5 py-4">
-      <div className="grid gap-3 text-sm sm:grid-cols-2 lg:grid-cols-4">
-        <p>配置状态：{data.enabled ? "已启用" : "未启用"}</p>
-        <p>配置修订：{data.revision}</p>
-        <p>供应商：{data.provider || "未设置"}</p>
-        <p>密钥引用：{data.credentialRef ? <span className="font-mono text-xs">{data.credentialRef}（r{data.credentialRevision}）</span> : "未绑定"}</p>
-      </div>
-      {data.updatedAt ? <p className="text-xs text-muted-foreground">更新时间：{formatDateTime(data.updatedAt) ?? "—"}</p> : null}
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="模型标识" hint="仅 openai-responses 供应商；不带 sk- 前缀。">
-          {ids => <TextInput id={ids.inputId} value={model} onChange={event => setModel(event.target.value)} maxLength={128} disabled={!isAdmin || writesLocked} />}
-        </Field>
-        <Field label="AI 凭据（ai_api_key）" hint="只显示引用与修订号；秘密值在「设置 → 凭据」页签提交一次，绝不回显。">
-          {ids => (
-            <Select id={ids.inputId} value={credentialRef} onChange={event => setCredentialRef(event.target.value)} disabled={!isAdmin || writesLocked}>
-              <option value="">未绑定</option>
-              {aiKeys.map(credential => (
-                <option key={credential.id} value={credential.id}>
-                  {credential.name}（{credential.id.slice(0, 12)}… · {credential.status} · r{credential.revision}）
-                </option>
-              ))}
-            </Select>
+          <div className="border-t border-border/80 px-3 py-2 text-[11px] text-muted-foreground">AI 仅能看到已授权的节点</div>
+        </aside>
+        <div className="min-w-0 flex-1">
+          {activeId ? (
+            <AISessionPage key={activeId} sessionId={activeId} embedded />
+          ) : (
+            <EmptyState title="正在准备对话" description="服务端创建会话后即可开始；如果长时间没有响应，请检查 AI 使用权限。" />
           )}
-        </Field>
-      </div>
-      <label className="flex items-center gap-2 text-sm">
-        <Checkbox
-          checked={enabled}
-          onChange={event => setEnabled(event.target.checked)}
-          disabled={!isAdmin || writesLocked}
-        />
-        启用本用户的模型生成（显式触发；不产生自动调用）
-      </label>
-      {saveError && !saveErrorCode.includes("MODEL_REVISION_CONFLICT") ? (
-        <Notice tone="error" title="保存失败">{describeApiError(saveError)}</Notice>
-      ) : null}
-      {saveErrorCode.includes("AI_SOURCE_UNAVAILABLE") ? (
-        <p className="text-xs text-muted-foreground">服务端无法验证该凭据引用（类型/范围/状态/有效期），已保持原配置。</p>
-      ) : null}
-      {!isAdmin ? (
-        <p className="text-xs text-muted-foreground">当前身份不是管理员：只能查看本页配置，不能修改（服务端强制）。</p>
-      ) : null}
-      <Button
-        type="submit"
-        variant="primary"
-        loading={save.pending}
-        disabled={!isAdmin || writesLocked || (enabled && (!model.trim() || !credentialRef))}
-      >
-        保存模型设置
-      </Button>
-    </form>
-  );
-}
-
-/**
- * 当前 owner 的窗口预算（GET/PUT /api/v1/ai/model-settings/{profileId}/budget）。
- * 已用/剩余完全来自服务端视图；页面不按消息条数或本地状态推算，也不因重新配置而
- * 假定计数被重置（服务端保留同一窗口的已用计数）。缺少策略时服务端拒绝生成。
- * 普通用户只读：PUT 由后端管理员门强制，页面只按当前身份隐藏/禁用输入。
- */
-function ModelBudgetPanel({ profileId, modelEnabled }: { readonly profileId: string; readonly modelEnabled: boolean }) {
-  const session = useSession();
-  const isAdmin = session.identity?.roles.includes("administrator") ?? false;
-  const [conflict, setConflict] = useState(false);
-  const budget = useResource(`ai:budget:${profileId}:${session.viewEpoch}`, signal =>
-    modelBudgetApi.get(profileId, signal).then(result => result.data),
-  );
-
-  return (
-    <section className="border-t xl:border-t-0" aria-labelledby="ai-budget-heading">
-      <div className="px-5 py-4">
-        <h3 id="ai-budget-heading" className="text-sm font-semibold">AI 预算窗口（当前用户）</h3>
-        <p className="mt-1 text-xs text-muted-foreground">
-          预算计数以系统为准；重新配置窗口不会重置已用计数。
-        </p>
-      </div>
-      {conflict ? (
-        <div className="px-5 pb-4">
-          <Notice tone="error" title="预算已被其他操作修改（409 BUDGET_REVISION_CONFLICT）">
-            已重新读取服务端最新修订；请核对窗口与限额后再次提交，不要覆盖他人变更。
-          </Notice>
         </div>
-      ) : null}
-      <AsyncPanel state={budget.state} onRetry={budget.reload} errorTitle="AI 预算加载失败">
-        {data => (
-          <>
-            <BudgetSummary data={data} modelEnabled={modelEnabled} />
-            {!data.configured ? (
-              <div className="px-5 pb-4">
-                <Notice tone="warning" title="未配置窗口预算：服务端拒绝生成">
-                  当前 owner/profile 没有预算策略，生成请求会被服务端拒绝。{isAdmin ? "管理员可在下方创建首个窗口（expectedRevision = 0）。" : "需要当前真人管理员配置窗口后才能生成。"}
-                </Notice>
-              </div>
-            ) : null}
-            <ModelBudgetForm
-              key={data.policy?.revision ?? 0}
-              profileId={profileId}
-              data={data}
-              isAdmin={isAdmin}
-              writesLocked={session.writesLocked}
-              onSaved={() => { setConflict(false); budget.reload(); }}
-              onConflict={() => { setConflict(true); budget.refreshSilent(); }}
-            />
-          </>
-        )}
-      </AsyncPanel>
-    </section>
-  );
-}
-
-function BudgetSummary({ data, modelEnabled }: { readonly data: AIModelBudget; readonly modelEnabled: boolean }) {
-  const policy = data.policy;
-  const reqPct = policy && policy.requestLimit > 0 ? Math.min(100, Math.round((data.usage.requests / policy.requestLimit) * 100)) : 0;
-  const outPct = policy && policy.outputTokenLimit > 0 ? Math.min(100, Math.round((data.usage.outputTokens / policy.outputTokenLimit) * 100)) : 0;
-  return (
-    <div className="space-y-3 px-5 pb-4 text-sm">
-      {policy ? (
-        <div className="grid gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5 sm:grid-cols-2">
-          <div>
-            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-              <span>请求预算消耗</span>
-              <span className="tabular-nums text-foreground">{reqPct}%</span>
-            </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-              <div className="h-full rounded-full bg-[#6658E8] transition-all duration-500" style={{ width: `${reqPct}%` }} />
-            </div>
-          </div>
-          <div>
-            <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground">
-              <span>输出 Token 预算消耗</span>
-              <span className="tabular-nums text-foreground">{outPct}%</span>
-            </div>
-            <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-secondary">
-              <div className="h-full rounded-full bg-[#3984E7] transition-all duration-500" style={{ width: `${outPct}%` }} />
-            </div>
-          </div>
-        </div>
-      ) : null}
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <p>预算配置：{data.configured ? "已配置" : "未配置"}</p>
-        <p>窗口状态：{data.active ? "当前窗口内" : "不在当前窗口"}</p>
-        <p>模型生成：{modelEnabled ? "已启用" : "未启用（预算不参与生成）"}</p>
-        <p>策略修订：{policy ? policy.revision : "—"}</p>
-        <p>窗口 ID：{policy ? policy.windowId : "—"}</p>
-        <p>窗口开始：{policy ? formatDateTime(policy.startsAt) ?? "—" : "—"}</p>
-        <p>窗口结束：{policy ? formatDateTime(policy.endsAt) ?? "—" : "—"}</p>
-        <p>输出预留 token：{data.outputReservationTokens.toLocaleString("zh-CN")}</p>
-        <p>请求限额：{policy ? policy.requestLimit.toLocaleString("zh-CN") : "—"}</p>
-        <p>输入字节限额：{policy ? policy.inputByteLimit.toLocaleString("zh-CN") : "—"}</p>
-        <p>输出 token 限额：{policy ? policy.outputTokenLimit.toLocaleString("zh-CN") : "—"}</p>
-        <p>已用请求：{data.usage.requests.toLocaleString("zh-CN")} / 剩余 {data.remaining.requests.toLocaleString("zh-CN")}</p>
-        <p>已用输入字节：{data.usage.inputBytes.toLocaleString("zh-CN")} / 剩余 {data.remaining.inputBytes.toLocaleString("zh-CN")}</p>
-        <p>已用输出 token：{data.usage.outputTokens.toLocaleString("zh-CN")} / 剩余 {data.remaining.outputTokens.toLocaleString("zh-CN")}</p>
-        <p className="text-xs text-muted-foreground sm:col-span-2 lg:col-span-4">
-          计数、剩余与活跃状态均为服务端快照；重新配置同一窗口不会重置已用计数。
-        </p>
       </div>
     </div>
-  );
-}
-
-function toLocalDateTimeInput(value: string): string {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
-}
-
-function fromLocalDateTimeInput(value: string): string | null {
-  if (!value) return null;
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? null : date.toISOString();
-}
-
-function parsePositiveInteger(value: string): number | null {
-  if (!/^[1-9][0-9]*$/.test(value.trim())) return null;
-  const parsed = Number(value.trim());
-  return Number.isSafeInteger(parsed) ? parsed : null;
-}
-
-const BUDGET_INPUT_LIMITS = {
-  requestLimit: 10000,
-  inputByteLimit: 1099511627776,
-  outputTokenLimit: 1099511627776,
-} as const;
-
-function ModelBudgetForm({
-  profileId,
-  data,
-  isAdmin,
-  writesLocked,
-  onSaved,
-  onConflict,
-}: {
-  readonly profileId: string;
-  readonly data: AIModelBudget;
-  readonly isAdmin: boolean;
-  readonly writesLocked: boolean;
-  readonly onSaved: () => void;
-  readonly onConflict: () => void;
-}) {
-  const policy: AIModelBudgetPolicy | null = data.policy;
-  const [windowId, setWindowId] = useState(policy?.windowId ?? "");
-  const [startsAt, setStartsAt] = useState(() => toLocalDateTimeInput(policy?.startsAt ?? new Date().toISOString()));
-  const [endsAt, setEndsAt] = useState(() => toLocalDateTimeInput(policy?.endsAt ?? new Date(Date.now() + 86_400_000).toISOString()));
-  const [requestLimit, setRequestLimit] = useState(policy ? String(policy.requestLimit) : "100");
-  const [inputByteLimit, setInputByteLimit] = useState(policy ? String(policy.inputByteLimit) : "1048576");
-  const [outputTokenLimit, setOutputTokenLimit] = useState(policy ? String(policy.outputTokenLimit) : "128000");
-
-  const save = useAction((body: AIModelBudgetInput) => modelBudgetApi.set(profileId, body));
-
-  const parsed = {
-    requestLimit: parsePositiveInteger(requestLimit),
-    inputByteLimit: parsePositiveInteger(inputByteLimit),
-    outputTokenLimit: parsePositiveInteger(outputTokenLimit),
-  };
-  const startsIso = fromLocalDateTimeInput(startsAt);
-  const endsIso = fromLocalDateTimeInput(endsAt);
-  const windowValid = windowId.trim().length > 0 && windowId.trim().length <= 128;
-  const limitsValid =
-    parsed.requestLimit !== null && parsed.requestLimit <= BUDGET_INPUT_LIMITS.requestLimit &&
-    parsed.inputByteLimit !== null && parsed.inputByteLimit <= BUDGET_INPUT_LIMITS.inputByteLimit &&
-    parsed.outputTokenLimit !== null && parsed.outputTokenLimit <= BUDGET_INPUT_LIMITS.outputTokenLimit;
-  const windowOrderValid = startsIso !== null && endsIso !== null && new Date(endsIso).getTime() > new Date(startsIso).getTime();
-  const valid = windowValid && limitsValid && windowOrderValid;
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!valid || !startsIso || !endsIso || parsed.requestLimit === null || parsed.inputByteLimit === null || parsed.outputTokenLimit === null) return;
-    const result = await save.run({
-      expectedRevision: policy?.revision ?? 0,
-      windowId: windowId.trim(),
-      startsAt: startsIso,
-      endsAt: endsIso,
-      requestLimit: parsed.requestLimit,
-      inputByteLimit: parsed.inputByteLimit,
-      outputTokenLimit: parsed.outputTokenLimit,
-    });
-    // 服务端的 409 表示其他写者已推进修订：保留提示并静默取回最新修订，
-    // 绝不带旧 expectedRevision 自动重试，也不在本地覆盖服务端策略。
-    if (result.ok) {
-      onSaved();
-    } else if (result.error?.status === 409) {
-      onConflict();
-    }
-  }
-
-  const saveError = save.error;
-
-  return (
-    <form onSubmit={submit} className="space-y-4 border-t px-5 py-4">
-      <p className="text-sm">
-        {isAdmin
-          ? `管理员配置：同一窗口重新配置会保留已用计数。`
-          : "当前身份不是管理员：只能查看预算，不能修改配置。"}
-      </p>
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <Field label="窗口 ID" hint="显式窗口标识，1—128 字符；不做自动滚动。">
-          {ids => <TextInput id={ids.inputId} value={windowId} onChange={event => setWindowId(event.target.value)} maxLength={128} disabled={!isAdmin || writesLocked} />}
-        </Field>
-        <Field label="窗口开始">
-          {ids => <TextInput id={ids.inputId} type="datetime-local" value={startsAt} onChange={event => setStartsAt(event.target.value)} disabled={!isAdmin || writesLocked} />}
-        </Field>
-        <Field label="窗口结束" error={startsAt && endsAt && !windowOrderValid ? "结束时间必须晚于开始时间" : null}>
-          {ids => <TextInput id={ids.inputId} type="datetime-local" value={endsAt} onChange={event => setEndsAt(event.target.value)} disabled={!isAdmin || writesLocked} />}
-        </Field>
-        <Field label="请求次数限额" hint="1—10000。">
-          {ids => <TextInput id={ids.inputId} inputMode="numeric" value={requestLimit} onChange={event => setRequestLimit(event.target.value)} disabled={!isAdmin || writesLocked} />}
-        </Field>
-        <Field label="输入字节限额" hint="正整数，最大 1099511627776。">
-          {ids => <TextInput id={ids.inputId} inputMode="numeric" value={inputByteLimit} onChange={event => setInputByteLimit(event.target.value)} disabled={!isAdmin || writesLocked} />}
-        </Field>
-        <Field label="输出 token 限额" hint="服务端按实际供应商上限预留输出 token。">
-          {ids => <TextInput id={ids.inputId} inputMode="numeric" value={outputTokenLimit} onChange={event => setOutputTokenLimit(event.target.value)} disabled={!isAdmin || writesLocked} />}
-        </Field>
-      </div>
-      {saveError && saveError.status !== 409 ? (
-        <Notice tone="error" title="预算配置失败">{describeApiError(saveError)}</Notice>
-      ) : null}
-      {saveError?.status === 409 ? (
-        <Notice tone="error" title="修订冲突（409 BUDGET_REVISION_CONFLICT）">
-          服务端拒绝了过期修订；以上显示的是最新预算快照，请核对后重新提交。
-        </Notice>
-      ) : null}
-      {saveError?.status === 403 ? (
-        <p className="text-xs text-muted-foreground">服务端拒绝：需要当前真人管理员并持有该 owner/profile；未放宽权限。</p>
-      ) : null}
-      <Button
-        type="submit"
-        variant="primary"
-        loading={save.pending}
-        disabled={!isAdmin || writesLocked || !valid}
-      >
-        保存预算窗口
-      </Button>
-    </form>
   );
 }
 
@@ -812,9 +410,9 @@ function ApprovalsPanel({
   );
 }
 
-export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
+export function AISessionPage({ sessionId, embedded = false }: { readonly sessionId: string; readonly embedded?: boolean }) {
   const appSession = useSession();
-  const [tab, setTab] = useState<"grants" | "policy" | "approval" | "chat" | "agent">("grants");
+  const [tab, setTab] = useState<"chat" | "agent" | "policy" | "approval">("chat");
   const [events, setEvents] = useState<readonly AIStreamEvent[]>([]);
   const [streamError, setStreamError] = useState<unknown>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -823,9 +421,6 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
   const policy = useResource(`ai:policy:${appSession.viewEpoch}:${sessionId}`, signal => aiApi.approvalPolicy(sessionId, signal).then(result => result.data));
   const messages = useResource(`ai:messages:${appSession.viewEpoch}:${sessionId}`, signal =>
     aiApi.messages(sessionId, { limit: 100 }, signal).then(result => result.data),
-  );
-  const approvalEvents = useResource(`ai:approval-events:${appSession.viewEpoch}:${sessionId}`, signal =>
-    aiApi.approvalEvents(sessionId, { limit: 100 }, signal).then(result => result.data),
   );
   const nodes = useResource(`ai:nodes:${appSession.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data));
   const serviceGroups = useResource(`ai:servicegroups:${appSession.viewEpoch}`, signal => serviceGroupsApi.list(signal).then(result => result.data));
@@ -836,10 +431,7 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
 
   const [resourceType, setResourceType] = useState<"node" | "service_group">("node");
   const [resourceId, setResourceId] = useState("");
-  const [actions, setActions] = useState("nodes.read");
-  const [recommendReason, setRecommendReason] = useState("");
-  const [recommendations, setRecommendations] = useState<readonly AIResourceRecommendation[]>([]);
-  const [decisionResource, setDecisionResource] = useState<Record<string, string>>({});
+  const [actions, setActions] = useState("nodes.read,tasks.command,tasks.exec.v1,host.root");
   const [messageText, setMessageText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -850,25 +442,65 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
   const updatePolicy = useAction((body: { mode: AIApprovalMode; durationSeconds?: 900 | 1800 | 3600; userConfirmedFullAccess?: boolean }) =>
     aiApi.updateApprovalPolicy(sessionId, body),
   );
-  const recommend = useAction((body: { reason: string; neededCapabilities: readonly string[] }) => aiApi.recommend(sessionId, body));
-  const decideRecommendation = useAction((recommendationId: string, approved: boolean, grantBody: { resourceType: "node" | "service_group"; resourceId: string; allowedActions: readonly string[] } | null) =>
-    aiApi.decideRecommendation(sessionId, recommendationId, {
-      requestId: recommendationId,
-      approved,
-      grants: grantBody ? [grantBody] : [],
-    }),
-  );
   const send = useAction((body: { content: string; clientMessageId: string; scopeRevision: number }) => aiApi.sendMessage(sessionId, body));
   const [generatingMessageId, setGeneratingMessageId] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  const [streamReply, setStreamReply] = useState<{ message: AIMessage; visible: string; done: boolean } | null>(null);
+  const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
+  const streamResolve = useRef<(() => void) | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  function stopStreamAnimation() {
+    if (streamTimer.current) clearInterval(streamTimer.current);
+    streamTimer.current = null;
+    streamResolve.current?.();
+    streamResolve.current = null;
+  }
+
+  /** 已验证回复逐字呈现，保持与常见 AI 对话一致的流式观感。 */
+  function revealReply(message: AIMessage): Promise<void> {
+    stopStreamAnimation();
+    const chars = Array.from(message.redactedContent ?? "");
+    setStreamReply({ message, visible: "", done: false });
+    if (chars.length === 0) {
+      setStreamReply({ message, visible: "", done: true });
+      return Promise.resolve();
+    }
+    const frames = Math.min(180, Math.max(8, Math.ceil(chars.length / 3)));
+    const step = Math.max(1, Math.ceil(chars.length / frames));
+    return new Promise<void>(resolve => {
+      streamResolve.current = () => {
+        if (streamTimer.current) clearInterval(streamTimer.current);
+        streamTimer.current = null;
+        streamResolve.current = null;
+        resolve();
+      };
+      let index = 0;
+      streamTimer.current = setInterval(() => {
+        index = Math.min(chars.length, index + step);
+        setStreamReply({ message, visible: chars.slice(0, index).join(""), done: index >= chars.length });
+        if (index >= chars.length) {
+          if (streamTimer.current) clearInterval(streamTimer.current);
+          streamTimer.current = null;
+          streamResolve.current = null;
+          resolve();
+        }
+      }, 16);
+    });
+  }
 
   /** 显式生成：成功后服务端返回完整助手消息并持久化，刷新消息列表即可见；
    * 失败时按服务端错误码诚实显示，不在本地编造回复。 */
   async function runGenerate(messageId: string) {
+    stopStreamAnimation();
+    setStreamReply(null);
     setGeneratingMessageId(messageId);
     setGenerateError(null);
     try {
-      await aiApi.generate(sessionId, messageId);
+      const result = await aiApi.generate(sessionId, messageId);
+      if (!messageItems.some(message => message.messageId === result.data.messageId)) {
+        await revealReply(result.data);
+      }
       messages.refreshSilent();
     } catch (error) {
       const code = (error as { code?: string })?.code ?? "";
@@ -892,7 +524,6 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
       refreshTimer.current = setTimeout(() => {
         messages.refreshSilent();
-        approvalEvents.refreshSilent();
         session.refreshSilent();
       }, 500);
     },
@@ -902,6 +533,8 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
   useEffect(() => {
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
+      if (streamTimer.current) clearInterval(streamTimer.current);
+      streamResolve.current?.();
     };
   }, [sessionId]);
 
@@ -909,7 +542,12 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
   const canApprove = appSession.can("ai.approve") || appSession.can("ai.manage");
   const writesLocked = appSession.writesLocked;
   const messageItems: readonly AIMessage[] = messages.state.status === "ready" ? messages.state.data.items : [];
-  const approvalEventItems: readonly AIApprovalEvent[] = approvalEvents.state.status === "ready" ? approvalEvents.state.data.items : [];
+  const visibleMessages = messageItems.filter(message => message.messageId !== streamReply?.message.messageId);
+
+  useEffect(() => {
+    const list = listRef.current;
+    if (list) list.scrollTop = list.scrollHeight;
+  }, [visibleMessages.length, streamReply?.visible, generatingMessageId]);
 
   async function addGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -936,27 +574,6 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
     }
   }
 
-  async function runRecommend() {
-    if (!recommendReason.trim()) return setLocalError("请填写建议原因。");
-    setLocalError(null);
-    const result = await recommend.run({ reason: recommendReason.trim(), neededCapabilities: ["nodes.read"] });
-    if (result.ok && result.data) setRecommendations(result.data.data.suggestions);
-  }
-
-  async function decideSuggestion(suggestion: AIResourceRecommendation, approved: boolean) {
-    const type = suggestion.resourceType === "service_group" ? "service_group" : "node";
-    const id = decisionResource[suggestion.id];
-    if (approved && !id) {
-      setLocalError("批准建议前必须由管理员选择具体资源 ID。");
-      return;
-    }
-    const result = await decideRecommendation.run(suggestion.id, approved, approved && id ? { resourceType: type, resourceId: id, allowedActions: ["nodes.read"] } : null);
-    if (result.ok) {
-      setRecommendations(list => list.map(item => item.id === suggestion.id ? { ...item, status: approved ? "approved" : "rejected" } : item));
-      session.refreshSilent();
-    }
-  }
-
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!messageText.trim() || !current) return;
@@ -964,12 +581,30 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
     setMessageText("");
     const clientMessageId = globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}`;
     const result = await send.run({ content, clientMessageId, scopeRevision: current.scopeRevision });
-    if (result.ok) messages.refreshSilent();
+    if (result.ok && result.data) {
+      messages.refreshSilent();
+      await runGenerate(result.data.data.messageId);
+    }
+  }
+
+  function resourceDisplayName(kind: "node" | "service_group", id: string): string {
+    if (kind === "node") return nodeItems.find(node => node.id === id)?.name ?? id;
+    return groupItems.find(group => group.id === id)?.name ?? id;
+  }
+
+  async function attachResource(kind: "node" | "service_group", id: string) {
+    if (writesLocked || !canUse) return;
+    const result = await grant.run({ resourceType: kind, resourceId: id, allowedActions: ["nodes.read", "tasks.command", "tasks.exec.v1", "host.root"] });
+    if (!result.ok) return;
+    session.refreshSilent();
+    policy.refreshSilent();
+    const token = `@${resourceDisplayName(kind, id)}`;
+    setMessageText(prev => (prev ? `${prev} ${token} ` : `${token} `));
   }
 
   return (
-    <div className="space-y-5">
-      <PageHeader
+    <div className={embedded ? "flex h-full min-h-0 flex-col" : "space-y-5"}>
+      {embedded ? null : <PageHeader
         title={current ? `AI 会话 ${current.id}` : "AI 会话"}
         description="默认无资源授权、每次操作需审批；授权变化后，旧计划与旧审批失效。"
         actions={
@@ -978,215 +613,46 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
             <Button type="button" onClick={() => { session.reload(); policy.reload(); messages.reload(); }}>刷新</Button>
           </>
         }
-      />
+      />}
       {!canUse ? <Notice tone="warning" title="AI 使用入口已锁定">当前身份未返回 AI 使用权限（`ai.use`/`ai.manage`）。</Notice> : null}
       {writesLocked ? <Notice tone="warning" title="写入已锁定">重新登录后才能授权/审批/发送消息。</Notice> : null}
       {streamError ? <Notice tone="error" title="AI 事件流终止">{describeApiError(streamError)} 不会自动循环重连。</Notice> : null}
 
       <AsyncPanel state={session.state} onRetry={session.reload} errorTitle="AI 会话加载失败" empty={<EmptyState title="会话不存在" description="服务端未返回该会话，或当前身份无权查看。" />} isEmpty={() => false}>
         {data => (
-          <div className="space-y-5">
-            <Panel title="会话快照">
-              <div className="grid gap-3.5 px-5 py-4 text-sm sm:grid-cols-2 lg:grid-cols-4">
-                <GlowingEffect className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                  <p className="font-medium text-foreground">状态：{data.status}</p>
-                </GlowingEffect>
-                <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                  <p className="font-mono font-medium text-foreground">范围版本：{data.scopeRevision}</p>
-                </GlowingEffect>
-                <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                  <p className="font-medium text-foreground">授权数：{data.resourceGrants.length}</p>
-                </GlowingEffect>
-                <GlowingEffect className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
-                  <p className="font-medium text-foreground">创建者：{data.createdBy ?? "—"}</p>
-                </GlowingEffect>
-                <div className="rounded-xl border border-primary/20 bg-primary-light/55 p-3.5 lg:col-span-4">
-                  <p className="font-medium text-foreground">有效节点：{data.allowedNodeIds?.join("、") || "空（默认无资源）"}</p>
-                </div>
+          <div className={embedded ? "flex min-h-0 flex-1 flex-col gap-3 p-3" : "space-y-5"}>
+            <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-border/80 px-4 py-2">
+              <div className="flex min-w-0 flex-wrap items-center gap-2 text-sm">
+                <span className="font-semibold">对话</span>
+                <Badge tone={data.status === "active" ? "success" : "neutral"}>{data.status === "active" ? "进行中" : "已结束"}</Badge>
+                <span className="text-xs text-muted-foreground">授权 {data.resourceGrants.length} · 范围版本 {data.scopeRevision}</span>
+                <span className="truncate text-xs text-muted-foreground">{`有效节点：${data.allowedNodeIds?.join("、") || "空（默认无资源）"}`}</span>
               </div>
-              <div className="border-t border-border/70 bg-[#FAFBFD] px-5 py-2.5 text-xs text-muted-foreground">
-                事件流：{stream.state} · 游标 {stream.lastEventId ?? "尚未收到"} · 事件 {events.length} 条（只显示投影字段）
-                <Button size="sm" className="ml-2" onClick={stream.reconnect}>重连</Button>
-              </div>
-              {events.length ? (
-                <ul className="max-h-40 divide-y divide-slate-800/80 overflow-y-auto border-t bg-[#141724] text-slate-200">
-                  {events.map((event, index) => (
-                    <li key={`${event.id ?? "e"}-${event.receivedAt}-${index}`} className="px-5 py-2 font-mono text-xs">
-                      <span className="text-violet-300">{event.event}</span> {event.toolName ? `· ${event.toolName}` : ""} {event.state ? `· ${event.state}` : ""} {event.message ? `· ${event.message}` : ""}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </Panel>
-
-            <TabBar
-              label="AI 会话分区"
-              active={tab}
-              onChange={setTab}
-              tabs={[
-                { id: "grants", label: "资源授权" },
-                { id: "agent", label: "Agent 运行" },
-                { id: "policy", label: "审批策略" },
-                { id: "approval", label: "工具审批" },
-                { id: "chat", label: "消息与审批审计" },
-              ]}
-            />
-
-            {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} /> : null}
-
-            {tab === "grants" ? (
-              <div className="space-y-5">
-                <Panel title="当前资源授权" description="服务组授权保存成员快照；移除成员实时失权，新成员不继承旧授权。">
-                  {data.resourceGrants.length === 0 ? <EmptyState title="默认零授权" description="AI 不能读取任何节点；请显式添加。" /> : (
-                    <ul className="divide-y">
-                      {data.resourceGrants.map(grantItem => (
-                        <li key={grantItem.grantId} className="flex flex-wrap items-start justify-between gap-3 px-5 py-3 text-sm">
-                          <div>
-                            <p>{grantItem.resourceType} · {grantItem.resourceId}</p>
-                            <p className="text-xs text-muted-foreground">动作：{grantItem.allowedActions.join("、")}</p>
-                            {grantItem.memberNodeIdsSnapshot?.length ? <p className="text-xs text-muted-foreground">组快照：{grantItem.memberNodeIdsSnapshot.join("、")}</p> : null}
-                          </div>
-                          <Button size="sm" variant="danger" disabled={writesLocked || !canUse} onClick={async () => { const result = await revokeGrant.run(grantItem.grantId); if (result.ok) { session.refreshSilent(); policy.refreshSilent(); } }}>
-                            撤回
-                          </Button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </Panel>
-                <Panel title="添加资源授权" description="显式由管理员加入；AI 模型不能自行调用此入口扩大授权。">
-                  {(nodeItems.length > 0 || groupItems.length > 0) ? (
-                    <div className="border-b border-border/70 bg-[#FAFBFD] px-5 py-3">
-                      <p className="text-xs font-semibold text-muted-foreground">
-                        可拖拽资源池（将节点或服务组胶囊拖入下方授权表单即可自动预填，仍需管理员点击「添加授权」提交）：
-                      </p>
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {nodeItems.map(node => (
-                          <span
-                            key={`drag-node-${node.id}`}
-                            draggable
-                            onDragStart={event => {
-                              event.dataTransfer.setData("text/plain", `node:${node.id}`);
-                              event.dataTransfer.effectAllowed = "copy";
-                            }}
-                            onClick={() => {
-                              setResourceType("node");
-                              setResourceId(node.id);
-                            }}
-                            className="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground shadow-2xs transition-colors hover:border-primary/40 hover:bg-primary-light/60 active:cursor-grabbing"
-                          >
-                            <GripVertical aria-hidden="true" className="size-3 text-muted-foreground" />
-                            <Server aria-hidden="true" className="size-3 text-primary" />
-                            <span>{`节点:${node.id}`}</span>
-                          </span>
-                        ))}
-                        {groupItems.map(group => (
-                          <span
-                            key={`drag-sg-${group.id}`}
-                            draggable
-                            onDragStart={event => {
-                              event.dataTransfer.setData("text/plain", `service_group:${group.id}`);
-                              event.dataTransfer.effectAllowed = "copy";
-                            }}
-                            onClick={() => {
-                              setResourceType("service_group");
-                              setResourceId(group.id);
-                            }}
-                            className="inline-flex cursor-grab items-center gap-1.5 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-medium text-foreground shadow-2xs transition-colors hover:border-primary/40 hover:bg-primary-light/60 active:cursor-grabbing"
-                          >
-                            <GripVertical aria-hidden="true" className="size-3 text-muted-foreground" />
-                            <Layers aria-hidden="true" className="size-3 text-blue-600" />
-                            <span>{`服务组:${group.id}`}</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
-                  <form
-                    onSubmit={addGrant}
-                    onDragOver={event => {
-                      event.preventDefault();
-                      event.dataTransfer.dropEffect = "copy";
-                    }}
-                    onDrop={event => {
-                      event.preventDefault();
-                      const raw = event.dataTransfer.getData("text/plain").trim();
-                      if (raw.startsWith("node:")) {
-                        setResourceType("node");
-                        setResourceId(raw.slice(5));
-                      } else if (raw.startsWith("service_group:")) {
-                        setResourceType("service_group");
-                        setResourceId(raw.slice(14));
-                      }
-                    }}
-                    className="space-y-3 px-5 py-4"
-                  >
-                    {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
-                    {grant.error ? <Notice tone="error" title="授权失败">{describeApiError(grant.error)}</Notice> : null}
-                    <div className="grid gap-3 sm:grid-cols-2">
-                      <Field label="资源类型">
-                        {ids => (
-                          <Select id={ids.inputId} value={resourceType} onChange={event => { setResourceType(event.target.value as "node" | "service_group"); setResourceId(""); }}>
-                            <option value="node">节点</option>
-                            <option value="service_group">服务组</option>
-                          </Select>
-                        )}
-                      </Field>
-                      <Field label="资源">
-                        {ids => (
-                          <Select id={ids.inputId} value={resourceId} onChange={event => setResourceId(event.target.value)}>
-                            <option value="">请选择</option>
-                            {resourceType === "node"
-                              ? nodeItems.map(node => <option key={node.id} value={node.id}>{node.name.trim() || node.id}</option>)
-                              : groupItems.map(group => <option key={group.id} value={group.id}>{group.name}（{group.memberNodeIds.length} 台）</option>)}
-                          </Select>
-                        )}
-                      </Field>
-                    </div>
-                    <Field label="允许动作（逗号分隔）" hint="多个动作以逗号分隔；实际生效范围以用户权限为准。">
-                      {ids => <TextInput id={ids.inputId} value={actions} onChange={event => setActions(event.target.value)} />}
-                    </Field>
-                    <Button type="submit" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse}>添加授权</Button>
-                  </form>
-                </Panel>
-                <Panel title="资源建议" description="AI 只能建议资源类型/能力，不能自行读取未授权节点或批准建议。">
-                  <div className="space-y-3 px-5 py-4">
-                    <Field label="建议请求原因">{ids => <TextInput id={ids.inputId} value={recommendReason} onChange={event => setRecommendReason(event.target.value)} />}</Field>
-                    <Button type="button" onClick={runRecommend} loading={recommend.pending} disabled={writesLocked || !canUse}>请求资源建议</Button>
-                    {recommend.error ? <Notice tone="error" title="建议请求失败">{describeApiError(recommend.error)}</Notice> : null}
-                    {recommendations.length ? (
-                      <ul className="divide-y rounded-lg border">
-                        {recommendations.map(suggestion => (
-                          <li key={suggestion.id} className="px-4 py-3 text-sm">
-                            <p>{suggestion.reason}</p>
-                            <p className="text-xs text-muted-foreground">{suggestion.resourceType} · {suggestion.recommendedCapability} · {suggestion.status}{suggestion.metadataOnly ? " · 仅元数据" : ""}</p>
-                            {suggestion.status === "pending" ? (
-                              <div className="mt-2 flex flex-wrap items-end gap-2">
-                                {suggestion.resourceType === "node" || suggestion.resourceType === "service_group" ? (
-                                  <label className="text-xs">
-                                    由管理员选择资源
-                                    <Select
-                                      className="mt-1"
-                                      value={decisionResource[suggestion.id] ?? ""}
-                                      onChange={event => setDecisionResource(current => ({ ...current, [suggestion.id]: event.target.value }))}
-                                    >
-                                      <option value="">请选择</option>
-                                      {(suggestion.resourceType === "node" ? nodeItems : groupItems).map(item => <option key={item.id} value={item.id}>{item.name?.trim?.() || item.id}</option>)}
-                                    </Select>
-                                  </label>
-                                ) : <span className="text-xs text-muted-foreground">该类型不能直接授权；只能拒绝。</span>}
-                                <Button size="sm" onClick={() => void decideSuggestion(suggestion, true)} disabled={writesLocked || !canUse}>批准并授权</Button>
-                                <Button size="sm" variant="danger" onClick={() => void decideSuggestion(suggestion, false)} disabled={writesLocked || !canUse}>拒绝</Button>
-                              </div>
-                            ) : null}
-                          </li>
-                        ))}
-                      </ul>
-                    ) : null}
+              <div className="flex flex-wrap items-center gap-1 text-xs">
+                {([
+                  ...(tab === "chat" ? [] : [{ id: "chat" as const, label: "返回对话" }]),
+                  { id: "agent" as const, label: "自动化执行" },
+                  { id: "policy" as const, label: "审批策略" },
+                  { id: "approval" as const, label: "工具审批" },
+                ]).map(item => (
+                  <Button key={item.id} size="sm" variant="ghost" className={item.id === tab ? "text-foreground" : "text-muted-foreground"} onClick={() => setTab(item.id)}>{item.label}</Button>
+                ))}
+                <details className="relative">
+                  <summary className="cursor-pointer list-none rounded-md border border-border px-2 py-1 text-muted-foreground hover:bg-secondary">连接事件（{events.length}）</summary>
+                  <div className="absolute right-0 z-20 mt-1 w-72 rounded-md border border-border bg-card p-2 shadow-lg">
+                    <div className="mb-2 flex items-center justify-between text-[11px] text-muted-foreground"><span>事件流：{stream.state}</span><Button size="sm" onClick={stream.reconnect}>重连</Button></div>
+                    {events.length ? <ul className="max-h-40 overflow-y-auto rounded bg-[#141724] text-slate-200">{events.map((event, index) => <li key={`${event.id ?? "e"}-${event.receivedAt}-${index}`} className="px-2 py-1 font-mono text-[11px]"><span className="text-violet-300">{event.event}</span> {event.state ? `· ${event.state}` : ""}</li>)}</ul> : <p className="text-[11px] text-muted-foreground">暂无事件</p>}
                   </div>
-                </Panel>
+                </details>
+                <Button size="sm" variant="ghost" onClick={() => { session.reload(); policy.reload(); messages.reload(); }}>刷新</Button>
               </div>
-            ) : null}
+            </div>
+
+
+
+            {tab !== "chat" ? (
+              <div className="min-h-0 flex-1 overflow-y-auto pr-1">
+            {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} /> : null}
 
             {tab === "policy" ? (
               <Panel title="审批策略" description="系统可能强制更严格的审批策略。">
@@ -1207,21 +673,20 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
             {tab === "approval" ? (
               <ApprovalsPanel sessionId={sessionId} session={data} canApprove={canApprove} writesLocked={writesLocked} />
             ) : null}
+              </div>
+            ) : null}
 
             {tab === "chat" ? (
-              <div className="grid gap-5 xl:grid-cols-2">
-                <Panel
-                  title="消息"
-                  description="消息内容已脱敏；生成需手动触发。"
-                >
-                  <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="暂无消息" />} isEmpty={page => page.items.length === 0}>
+              <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_17rem]">
+                <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/90 bg-card shadow-[var(--shadow-card)]">
+                  <div className="flex min-h-0 flex-1 flex-col">
+                  <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="开始对话" description="输入消息，或把右侧节点拖进输入框授权 AI 使用。" />} isEmpty={page => page.items.length === 0}>
                     {() => (
-                      <ul className="max-h-96 space-y-3 overflow-y-auto bg-[#FAFBFD] px-5 py-4">
-                        {messageItems.map(message => {
+                      <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[#FAFBFD] px-4 py-4">
+                        {visibleMessages.map(message => {
                           const isUser = message.role === "user";
-                          const isGenerating = generatingMessageId === message.messageId;
                           return (
-                            <li
+                            <div
                               key={message.messageId}
                               className={`rounded-2xl border p-4 text-sm shadow-2xs ${
                                 isUser
@@ -1232,42 +697,48 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                               <div className="flex items-center justify-between gap-2">
                                 <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                                   {isUser ? <User aria-hidden="true" className="size-3.5 text-primary" /> : <Bot aria-hidden="true" className="size-3.5 text-emerald-600" />}
-                                  {message.role} · {formatDateTime(message.createdAt) ?? "—"}
+                                  {isUser ? "你" : "AI"} · {formatDateTime(message.createdAt) ?? "—"}
                                 </span>
-                                {isGenerating ? (
-                                  <Badge variant="info" className="gap-1">
-                                    <Loader2 aria-hidden="true" className="size-3 animate-spin" />
-                                    模型思考与生成中
-                                  </Badge>
-                                ) : null}
                               </div>
                               <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{message.redactedContent ?? "服务端未返回内容"}</p>
                               {message.taskIds?.length ? <p className="mt-1.5 text-xs text-muted-foreground">任务：{message.taskIds.join("、")}</p> : null}
-                              {message.role === "user" && !message.agentRunId ? (
+                              {message.role === "user" && !message.agentRunId && generateError && generatingMessageId === null ? (
                                 <div className="mt-3">
-                                  <Button
-                                    type="button"
-                                    size="sm"
-                                    variant="primary"
-                                    loading={isGenerating}
-                                    disabled={writesLocked || !canUse || generatingMessageId !== null}
-                                    onClick={() => void runGenerate(message.messageId)}
-                                  >
-                                    <Sparkles aria-hidden="true" className="size-3.5" />
-                                    生成回复
-                                  </Button>
+                                  <Button type="button" size="sm" variant="secondary" onClick={() => void runGenerate(message.messageId)}>重试回复</Button>
                                 </div>
                               ) : null}
-                            </li>
+                            </div>
                           );
                         })}
-                      </ul>
+                        {generatingMessageId !== null && streamReply === null ? (
+                          <div className="mr-6 inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-card px-4 py-3 text-sm text-muted-foreground">
+                            <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" />
+                            AI 正在思考并生成回复…
+                          </div>
+                        ) : null}
+                        {streamReply ? (
+                          <div className="mr-6 rounded-2xl border border-border/80 bg-card p-4 text-sm shadow-2xs">
+                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                              <Bot aria-hidden="true" className="size-3.5 text-emerald-600" />
+                              AI · {streamReply.done ? formatDateTime(streamReply.message.createdAt) ?? "—" : "正在输出"}
+                            </span>
+                            <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">
+                              {streamReply.visible}
+                              {streamReply.done ? null : (
+                                <span aria-hidden="true" className="ml-0.5 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-primary align-text-bottom" />
+                              )}
+                            </p>
+                          </div>
+                        ) : null}
+                      </div>
                     )}
                   </AsyncPanel>
-                  {generateError ? <Notice tone="error" title="生成失败（未产生助手回复）">{generateError}</Notice> : null}
-                  <p className="px-5 pt-2 text-xs text-muted-foreground">
-                    点击「生成回复」后，系统会返回完整的脱敏回复；对同一消息重复生成会被拒绝。
-                  </p>
+                  </div>
+                  {generateError ? (
+                    <div className="shrink-0 border-t border-border/70 px-3 py-2">
+                      <Notice tone="error" title="生成失败（未产生助手回复）">{generateError}</Notice>
+                    </div>
+                  ) : null}
                   <form
                     onSubmit={sendMessage}
                     onDragOver={event => {
@@ -1277,77 +748,128 @@ export function AISessionPage({ sessionId }: { readonly sessionId: string }) {
                     onDrop={event => {
                       event.preventDefault();
                       const raw = event.dataTransfer.getData("text/plain").trim();
-                      if (raw) {
-                        setMessageText(prev => (prev ? `${prev} [${raw}]` : `[${raw}] `));
-                      }
+                      const [kind, id] = raw.split(":");
+                      if ((kind === "node" || kind === "service_group") && id) void attachResource(kind, id);
                     }}
-                    className="space-y-3 border-t border-border/70 bg-card px-5 py-4"
+                    className="shrink-0 border-t border-border/70 bg-card p-3"
                   >
-                    {(nodeItems.length > 0 || groupItems.length > 0) ? (
-                      <div className="rounded-xl border border-dashed border-primary/25 bg-primary-light/30 p-3">
-                        <p className="text-[11px] font-semibold text-muted-foreground">
-                          资源上下文快捷拖入（拖入下方输入框仅插入文本引用，实际访问权限仍由会话授权与后端强制校验）：
-                        </p>
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
-                          {nodeItems.map(node => (
-                            <span
-                              key={`chat-node-${node.id}`}
-                              draggable
-                              onDragStart={event => {
-                                event.dataTransfer.setData("text/plain", `节点:${node.id}`);
-                                event.dataTransfer.effectAllowed = "copy";
-                              }}
-                              onClick={() => setMessageText(prev => (prev ? `${prev} [节点:${node.id}]` : `[节点:${node.id}] `))}
-                              className="inline-flex cursor-grab items-center gap-1 rounded-full border border-border/80 bg-card px-2 py-0.5 text-[11px] font-medium text-foreground shadow-2xs hover:border-primary/40"
-                            >
-                              <Server aria-hidden="true" className="size-3 text-primary" />
-                              <span>{`@${node.id}`}</span>
-                            </span>
-                          ))}
-                          {groupItems.map(group => (
-                            <span
-                              key={`chat-sg-${group.id}`}
-                              draggable
-                              onDragStart={event => {
-                                event.dataTransfer.setData("text/plain", `服务组:${group.id}`);
-                                event.dataTransfer.effectAllowed = "copy";
-                              }}
-                              onClick={() => setMessageText(prev => (prev ? `${prev} [服务组:${group.id}]` : `[服务组:${group.id}] `))}
-                              className="inline-flex cursor-grab items-center gap-1 rounded-full border border-border/80 bg-card px-2 py-0.5 text-[11px] font-medium text-foreground shadow-2xs hover:border-primary/40"
-                            >
-                              <Layers aria-hidden="true" className="size-3 text-blue-600" />
-                              <span>{`#${group.id}`}</span>
-                            </span>
-                          ))}
-                        </div>
-                      </div>
-                    ) : null}
-                    {send.error ? <Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice> : null}
-                    <Field label="消息内容" hint="可将上方节点或服务组拖入此处；过期的会话状态会被拒绝。">
-                      {ids => <TextArea id={ids.inputId} value={messageText} onChange={event => setMessageText(event.target.value)} maxLength={32000} />}
-                    </Field>
-                    <Button type="submit" variant="primary" loading={send.pending} disabled={writesLocked || !canUse || !messageText.trim()}>发送消息</Button>
-                  </form>
-                </Panel>
-                <Panel title="审批审计">
-                  <AsyncPanel state={approvalEvents.state} onRetry={approvalEvents.reload} errorTitle="审批审计加载失败" empty={<EmptyState title="暂无审批事件" />} isEmpty={data2 => data2.items.length === 0}>
-                    {() => (
-                      <DataTable
-                        caption="AI 审批审计"
-                        rows={approvalEventItems}
-                        rowKey={event => event.id}
-                        columns={[
-                          { key: "time", header: "时间", render: event => formatDateTime(event.timestamp) ?? "—" },
-                          { key: "actor", header: "主体", render: event => event.actor },
-                          { key: "action", header: "动作", render: event => event.action },
-                          { key: "result", header: "结果", render: event => event.result },
-                          { key: "tool", header: "工具", render: event => event.toolName ?? "—" },
-                          { key: "targets", header: "目标", render: event => event.targetNodeIds?.join("、") ?? "—" },
-                        ]}
+                    {send.error ? <div className="mb-2"><Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice></div> : null}
+                    <div className="relative">
+                      <TextArea
+                        aria-label="消息内容"
+                        value={messageText}
+                        onChange={event => setMessageText(event.target.value)}
+                        maxLength={32000}
+                        placeholder="输入消息，或把右侧节点拖进这里授权 AI 使用…"
+                        className="min-h-[88px] max-h-44 resize-none pr-14"
+                        onKeyDown={event => {
+                          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
+                            event.preventDefault();
+                            event.currentTarget.form?.requestSubmit();
+                          }
+                        }}
                       />
-                    )}
-                  </AsyncPanel>
-                </Panel>
+                      <Button
+                        type="submit"
+                        variant="primary"
+                        aria-label="发送"
+                        title="发送"
+                        className="absolute right-2.5 bottom-2.5 size-9 rounded-full p-0 shadow-md"
+                        disabled={writesLocked || !canUse || !messageText.trim() || generatingMessageId !== null}
+                      >
+                        {generatingMessageId !== null ? (
+                          <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                        ) : (
+                          <Send aria-hidden="true" className="size-4" />
+                        )}
+                      </Button>
+                    </div>
+                    <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">发送后自动生成回复；Enter 发送，Shift+Enter 换行。</p>
+                  </form>
+                </div>
+                <div className="min-h-0 space-y-3 overflow-y-auto">
+                  <Panel title="可用资源" description="把节点拖进左侧输入框即授权 AI 读取；也可点击添加。">
+                    <div className="space-y-3 px-5 py-4">
+                      <div className="flex flex-wrap gap-1.5">
+                        {nodeItems.map(node => (
+                          <span
+                            key={`pick-node-${node.id}`}
+                            draggable
+                            onDragStart={event => {
+                              event.dataTransfer.setData("text/plain", `node:${node.id}`);
+                              event.dataTransfer.effectAllowed = "copy";
+                            }}
+                            onClick={() => void attachResource("node", node.id)}
+                            className="inline-flex cursor-grab items-center gap-1 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-medium shadow-2xs hover:border-primary/40 hover:bg-primary-light/50"
+                          >
+                            <Server aria-hidden="true" className="size-3 text-primary" />
+                            {node.name || node.id}
+                          </span>
+                        ))}
+                        {groupItems.map(group => (
+                          <span
+                            key={`pick-sg-${group.id}`}
+                            draggable
+                            onDragStart={event => {
+                              event.dataTransfer.setData("text/plain", `service_group:${group.id}`);
+                              event.dataTransfer.effectAllowed = "copy";
+                            }}
+                            onClick={() => void attachResource("service_group", group.id)}
+                            className="inline-flex cursor-grab items-center gap-1 rounded-full border border-border/80 bg-card px-2.5 py-1 text-xs font-medium shadow-2xs hover:border-primary/40 hover:bg-primary-light/50"
+                          >
+                            <Layers aria-hidden="true" className="size-3 text-blue-600" />
+                            {group.name || group.id}
+                          </span>
+                        ))}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold text-muted-foreground">当前授权（{data.resourceGrants.length}）</p>
+                        {data.resourceGrants.length === 0 ? (
+                          <p className="mt-1 text-xs text-muted-foreground">默认零授权，AI 不能读取任何节点。</p>
+                        ) : (
+                          <ul className="mt-1 space-y-1.5">
+                            {data.resourceGrants.map(grantItem => (
+                              <li key={grantItem.grantId} className="flex items-center justify-between gap-2 rounded-lg border border-border/70 px-2.5 py-1.5 text-xs">
+                                <span className="min-w-0 truncate">
+                                  {grantItem.resourceType === "service_group" ? "服务组" : "节点"} · {grantItem.resourceType === "service_group" ? groupItems.find(group => group.id === grantItem.resourceId)?.name ?? grantItem.resourceId : nodeItems.find(node => node.id === grantItem.resourceId)?.name ?? grantItem.resourceId}
+                                </span>
+                                <Button size="sm" variant="ghost" disabled={writesLocked || !canUse} onClick={async () => { const result = await revokeGrant.run(grantItem.grantId); if (result.ok) { session.refreshSilent(); policy.refreshSilent(); } }}>撤回</Button>
+                              </li>
+                            ))}
+                          </ul>
+                        )}
+                      </div>
+                      <form onSubmit={addGrant} className="space-y-2 border-t border-border/70 pt-3">
+                        <div className="grid grid-cols-2 gap-2">
+                          <Field label="资源类型">
+                            {ids => (
+                              <Select id={ids.inputId} value={resourceType} onChange={event => setResourceType(event.target.value as "node" | "service_group")} disabled={writesLocked || !canUse}>
+                                <option value="node">节点</option>
+                                <option value="service_group">服务组</option>
+                              </Select>
+                            )}
+                          </Field>
+                          <Field label="资源">
+                            {ids => (
+                              <Select id={ids.inputId} value={resourceId} onChange={event => setResourceId(event.target.value)} disabled={writesLocked || !canUse}>
+                                <option value="">请选择</option>
+                                {resourceType === "node"
+                                  ? nodeItems.map(node => <option key={node.id} value={node.id}>{node.name || node.id}</option>)
+                                  : groupItems.map(group => <option key={group.id} value={group.id}>{group.name || group.id}</option>)}
+                              </Select>
+                            )}
+                          </Field>
+                        </div>
+                        <Field label="允许动作（逗号分隔）" hint="多个动作以逗号分隔。">
+                          {ids => <TextInput id={ids.inputId} value={actions} onChange={event => setActions(event.target.value)} disabled={writesLocked || !canUse} />}
+                        </Field>
+                        {localError ? <Notice tone="error" title="无法授权">{localError}</Notice> : null}
+                        {grant.error ? <Notice tone="error" title="授权失败">{describeApiError(grant.error)}</Notice> : null}
+                        <Button type="submit" size="sm" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse}>添加授权</Button>
+                      </form>
+                    </div>
+                  </Panel>
+                </div>
               </div>
             ) : null}
           </div>

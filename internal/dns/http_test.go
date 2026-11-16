@@ -29,7 +29,7 @@ func TestDNSHTTPAccountZoneAndRecordFlow(t *testing.T) {
 	providers.Body.Close()
 
 	body, _ := json.Marshal(map[string]any{
-		"displayName": "Primary", "credentialRef": "vault://cloudflare/primary", "makeDefault": true,
+		"displayName": "Primary", "credentialRef": "vault://cloudflare/primary", "credentialRevision": 1, "makeDefault": true,
 	})
 	create, err := http.Post(server.URL+"/api/v1/dns/accounts", "application/json", bytes.NewReader(body))
 	if err != nil || create.StatusCode != http.StatusCreated {
@@ -67,6 +67,23 @@ func TestDNSHTTPAccountZoneAndRecordFlow(t *testing.T) {
 		t.Fatal("missing zone id")
 	}
 
+	providerZones, err := http.Get(server.URL + "/api/v1/dns/accounts/" + account.ID + "/provider-zones")
+	if err != nil || providerZones.StatusCode != http.StatusOK {
+		t.Fatalf("provider zones = %v %d", err, providerZones.StatusCode)
+	}
+	var providerList struct {
+		Items []struct {
+			ProviderZoneID string `json:"providerZoneId"`
+			Name           string `json:"name"`
+		} `json:"items"`
+	}
+	json.NewDecoder(providerZones.Body).Decode(&providerList)
+	providerZones.Body.Close()
+	if len(providerList.Items) != 1 || providerList.Items[0].ProviderZoneID != "pz-1" || providerList.Items[0].Name != "example.com" {
+		t.Fatalf("unexpected provider zones: %+v", providerList.Items)
+	}
+
+
 	rbody, _ := json.Marshal(map[string]any{
 		"type": "A", "name": "www", "content": "203.0.113.10", "ttl": 120,
 	})
@@ -93,4 +110,29 @@ func TestDNSHTTPAccountZoneAndRecordFlow(t *testing.T) {
 		t.Fatalf("delete record = %v %d", err, del.StatusCode)
 	}
 	del.Body.Close()
+
+	f.provider.records = []dns.ProviderRecord{{ID: "rec-provider-1", Input: dns.RecordInput{Type: dns.RecordA, Name: "app", Content: "203.0.113.50", TTL: 120}}}
+	syncRecords, err := http.Post(server.URL+"/api/v1/dns/zones/"+zone.ID+"/records/sync", "application/json", nil)
+	if err != nil || syncRecords.StatusCode != http.StatusOK {
+		t.Fatalf("sync records = %v %d", err, syncRecords.StatusCode)
+	}
+	var synced struct {
+		Items []struct {
+			ID   string `json:"id"`
+			Name string `json:"name"`
+		} `json:"items"`
+	}
+	json.NewDecoder(syncRecords.Body).Decode(&synced)
+	syncRecords.Body.Close()
+	if len(synced.Items) != 1 || synced.Items[0].ID != "rec-provider-1" || synced.Items[0].Name != "app" {
+		t.Fatalf("unexpected synced records: %+v", synced.Items)
+	}
+
+	rotateBody, _ := json.Marshal(map[string]any{"credentialRef": "vault://cloudflare/secondary", "credentialRevision": 2})
+	rotateReq, _ := http.NewRequest(http.MethodPatch, server.URL+"/api/v1/dns/accounts/"+account.ID, bytes.NewReader(rotateBody))
+	rotate, err := http.DefaultClient.Do(rotateReq)
+	if err != nil || rotate.StatusCode != http.StatusOK {
+		t.Fatalf("rotate credential = %v %d", err, rotate.StatusCode)
+	}
+	rotate.Body.Close()
 }

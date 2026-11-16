@@ -48,6 +48,8 @@ type Config struct {
 	CredentialKeyDir          string
 	AIGenerationQuota         ai.GenerationQuota
 	LocalAIProvider           *ai.LocalTLSProviderConfig
+	// AITextEndpoint is a deployment-level OpenAI-compatible Responses URL.
+	AITextEndpoint            string
 	Origin                    string
 	StagingDir                string
 	Dispatcher                tasks.Dispatcher
@@ -441,8 +443,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			if op.Module == "backups" && s != nil {
 				return s.backupCredentialGate(ctx, op)
 			}
-			if publicCertificates != nil && op.Module == "dns" {
-				return publicCertificates.credentialGate(ctx, op)
+			if op.Module == "dns" {
+				if publicCertificates != nil && publicCertificates.credentialGate(ctx, op) == nil {
+					return nil
+				}
+				return s.standaloneDNSGate(ctx, op)
 			}
 			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" {
 				return auth.ErrDenied
@@ -765,12 +770,19 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	dnsProvider := cfg.DNSProvider
+	if dnsProvider == nil {
+		dnsProvider, err = dns.NewCloudflareProvider(dns.CloudflareConfig{Secrets: dns.SecretBorrowerFunc(s.borrowStandaloneDNS)})
+		if err != nil {
+			return cleanup(err)
+		}
+	}
 	dnsService, err := dns.NewService(dns.Options{
 		DB:         db,
 		Repo:       dnsRepo,
 		Audit:      auditRecorder,
 		Authorizer: authorizer,
-		Provider:   cfg.DNSProvider,
+		Provider:   dnsProvider,
 		Now:        now,
 	})
 	if err != nil {

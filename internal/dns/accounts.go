@@ -99,6 +99,7 @@ func (s *Service) UpdateAccount(ctx context.Context, subjectID, requestID, accou
 		record.Enabled = input.Enabled
 		if input.Credential != "" {
 			record.CredentialRef = input.Credential
+			record.CredentialRevision = input.CredentialRevision
 			record.CredentialStatus = CredentialPendingVerification
 		}
 		record.UpdatedAt = s.now()
@@ -131,7 +132,7 @@ func (s *Service) TestAccount(ctx context.Context, subjectID, requestID, account
 	if account.CredentialRef == "" {
 		return ConnectionTest{}, ErrCredentialNotConfigured
 	}
-	result, err := s.provider.Test(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), account.CredentialRef)
+	result, err := s.provider.Test(s.withSecretScope(ctx, subjectID, requestID, account), account.CredentialRef)
 	if err != nil {
 		return ConnectionTest{}, ErrProviderFailed
 	}

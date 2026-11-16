@@ -125,7 +125,9 @@ type accountRecord struct {
 	Enabled          bool
 	IsDefault        bool
 	CredentialRef    CredentialRef
-	CredentialStatus CredentialStatus
+	// CredentialRevision pins the secret-store revision this account may use.
+	CredentialRevision uint64
+	CredentialStatus   CredentialStatus
 	CreatedAt        time.Time
 	UpdatedAt        time.Time
 }
@@ -147,6 +149,9 @@ type CreateAccountInput struct {
 	Enabled     bool
 	MakeDefault bool
 	Credential  CredentialRef
+	// CredentialRevision is the secret-store revision returned when the
+	// credential was created; zero is rejected when a credential is bound.
+	CredentialRevision uint64
 }
 
 // UpdateAccountInput updates local metadata. A non-empty Credential replaces the
@@ -156,6 +161,8 @@ type UpdateAccountInput struct {
 	Note        string
 	Enabled     bool
 	Credential  CredentialRef
+	// CredentialRevision is required whenever Credential is replaced.
+	CredentialRevision uint64
 }
 
 type CreateZoneInput struct {

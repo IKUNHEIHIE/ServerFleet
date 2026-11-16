@@ -16,6 +16,34 @@ func (s *Service) ListZones(ctx context.Context, subjectID, accountID string) ([
 	return s.repo.listZones(ctx, accountID)
 }
 
+// ListProviderZones returns the zones the provider currently exposes for an
+// account so the console can import them by name instead of asking the
+// operator to copy opaque provider zone IDs.
+func (s *Service) ListProviderZones(ctx context.Context, subjectID, requestID, accountID string) ([]ZoneInfo, error) {
+	if err := s.requireRequest(requestID); err != nil {
+		return nil, err
+	}
+	if !validID(accountID) {
+		return nil, ErrAccountNotFound
+	}
+	if err := s.authorizeRead(ctx, subjectID, ActionZonesRead); err != nil {
+		return nil, err
+	}
+	account, err := s.repo.getAccount(ctx, s.db, accountID)
+	if err != nil {
+		return nil, err
+	}
+	provider, credential, err := s.credentialProvider(account)
+	if err != nil {
+		return nil, err
+	}
+	infos, err := provider.ListZones(s.withSecretScope(ctx, subjectID, requestID, account), credential)
+	if err != nil {
+		return nil, ErrProviderFailed
+	}
+	return infos, nil
+}
+
 // CreateZone imports a zone after syncing it from the provider. The zone name and
 // status always come from the provider response, never from the caller.
 func (s *Service) CreateZone(ctx context.Context, subjectID, requestID, accountID string, input CreateZoneInput) (Zone, error) {
@@ -39,7 +67,7 @@ func (s *Service) CreateZone(ctx context.Context, subjectID, requestID, accountI
 	if err != nil {
 		return Zone{}, err
 	}
-	infos, err := provider.ListZones(WithSecretScope(ctx, SecretScope{SubjectID: subjectID, RequestID: requestID}), credential)
+	infos, err := provider.ListZones(s.withSecretScope(ctx, subjectID, requestID, account), credential)
 	if err != nil {
 		return Zone{}, ErrProviderFailed
 	}

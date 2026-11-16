@@ -15,6 +15,25 @@
 - 验证：`check:web` 54 文件 / 482 用例、`check:contracts`、`go test -race ./apps/controller/server/` 通过；PR #46/#47/#48/#49/#50/#51/#52 精确 head 的 CI 全绿。
 - 边界：整机模式以 root 运行文件服务（显式选择）；浏览器点击未自动化，接口层已实测；G2 全量验收仍未记录完成。
 
+## 2026-11-16 DNS 独立可用（未提交、已部署测试站）
+
+- 账号：控制台直接粘贴 Cloudflare API Token，自动创建 DNS 专用凭据（kind `cloudflare_token`、scope `dns`），账号只保存引用与凭据修订号；轮换同样走 Token。账号管理位于“系统设置 → DNS 账号”，DNS 页固定使用默认账号。
+- Zone：`GET /dns/accounts/{id}/provider-zones` 实时读取账号下可导入 Zone；`POST /dns/accounts/{id}/zones/sync` 按服务商 Zone ID 导入；`POST /dns/zones/{id}/records/sync` 拉取记录替换本地缓存（保留 A/AAAA/CNAME/TXT/MX，其余跳过，不修改远端）。
+- 凭据借用：独立 DNS 请求不再依赖 ACME 配置；服务端为每次请求建立一次性借用窗口（模块 `dns`、账号绑定的修订号、窗口外拒绝），远端写操作仍走统一审批任务。
+- 迁移：追加 `ds/0091_dns_credential_revision`（`dns_accounts.credential_revision`，默认 0）；历史账号需“轮换”重新绑定后才能通过供应商校验。
+- 验证：`go test ./internal/dns/...`、`go vet`、`check:web` 54 文件 / 484 用例通过；测试站真实账号（3 个 Zone）检查通过，wentian.org 导入并刷新出 11 条真实记录。
+
+## 2026-11-16 AI 运维端点接入（未提交、已部署测试站，已联调通过）
+
+- 端点：Controller 新增 `-ai-text-endpoint` 私有启动参数；测试站当前指向 StepFun `https://api.stepfun.com/step_plan/v1/responses`，模型 `step-5-preview`（模型 ID 由模型档案决定，未配置时保持默认 OpenAI）。
+- 修复：流式解析忽略 `reasoning_text.*` / `reasoning_summary_*` 推理事件；补齐 `ai.use/ai.manage/ai.approve` 权限（此前管理员也被锁）；消息提交补 `Idempotency-Key`（此前真实 Controller 必然 400）；审批事件 404 显示为“当前 Controller 未提供”，不再当作加载失败。
+- 配置：测试站已创建 `ai_api_key` 凭据（StepFun）与模型档案；模型配置已迁入“系统设置 → AI 模型”。
+- 联调：浏览器新建 AI 会话 → 发送消息 → 显式生成，服务端流式调用 StepFun 并落库助手回复，事件 `ai.generation.state=succeeded`。
+- 2026-11-17 交互调整：移除“用量与预算”界面并在生成前停用预算拦截；模型配置迁入系统设置；AI 运维入口即聊天窗口（左侧历史会话、中间对话、右侧资源拖选），发送消息后自动生成回复；授权节点默认包含读取/命令/受控执行/root 任务动作。
+- 兼容修复：OpenAI 兼容网关要求历史 assistant 消息以 `output_text` 分段提交，已修正（此前多轮对话会 503）。新增 `GET /api/v1/ai/sessions` 列出当前用户会话。
+- 布局参考宝塔面板：左侧扁平对话列表（搜索/刷新）、中间满高聊天（发送即自动回复）、右侧节点资源拖选；移除大幅页头与独立状态卡，状态并入会话顶栏。
+- 2026-11-17 对话区排版：消息列表撑满可用高度、输入框贴底；发送改为输入框内右侧纸飞机按钮（Enter 发送 / Shift+Enter 换行）；已校验的助手回复逐字流式呈现，生成等待期间显示思考占位。
+
 ## 2026-11-15 节点管理补丁（未提交、已部署）
 
 用户追加批准在 awskr 安装 C 编译器、验证后部署线上 VPS。本轮已安装 build-essential/GCC 14.2；nodes、transport、Controller server、v09 集成相关 race 通过，显式 NGINX_BIN=/usr/sbin/nginx 的 platform race 370.362 秒、services race 6.022 秒通过。全仓 race 未获得完整成功结果；internal/updates 既有超时仍保留 FAIL，不宣称全仓全绿。
@@ -36,7 +55,7 @@ awskr 的 fix/node-management-20261115 从 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb0
 | 仓库 | 公有 `IKUNHEIHIE/ServerFleet` |
 | 代码基线 | main `71dbca3c9d4a69890468d2f574362eaf6ea15c48`（2026-11-16，PR #52 合并后） |
 | 最新发布 | [v0.9.2](https://github.com/IKUNHEIHIE/ServerFleet/releases/tag/v0.9.2)，Linux amd64/arm64 |
-| 迁移 | 52 项（含 ds/0089_node_archives、ds/0090_node_live_metrics）；历史 SQL/checksum 不变 |
+| 迁移 | 53 项（含 ds/0089_node_archives、ds/0090_node_live_metrics、工作区待提交的 ds/0091_dns_credential_revision）；历史 SQL/checksum 不变 |
 | 工具 | Go 1.27.4、Node 24.22.1、npm 11.x；版本源见 [工具链](TOOLCHAIN.md) |
 | 产品验收 | 核心代码已交付；完整 G2 冻结/原始需求全量验收未记录完成；实机验收开放 |
 

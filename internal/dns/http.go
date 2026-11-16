@@ -38,8 +38,10 @@ func RegisterHTTP(mux *http.ServeMux, service *Service, authenticator Authentica
 	mux.HandleFunc("POST /api/v1/dns/accounts/{accountId}/default", api.setDefault)
 	mux.HandleFunc("POST /api/v1/dns/accounts/{accountId}/test", api.testAccount)
 	mux.HandleFunc("GET /api/v1/dns/accounts/{accountId}/zones", api.listZones)
+	mux.HandleFunc("GET /api/v1/dns/accounts/{accountId}/provider-zones", api.listProviderZones)
 	mux.HandleFunc("POST /api/v1/dns/accounts/{accountId}/zones/sync", api.syncZone)
 	mux.HandleFunc("GET /api/v1/dns/zones/{zoneId}/records", api.listRecords)
+	mux.HandleFunc("POST /api/v1/dns/zones/{zoneId}/records/sync", api.syncRecords)
 	mux.HandleFunc("POST /api/v1/dns/zones/{zoneId}/records", api.createRecord)
 	mux.HandleFunc("PATCH /api/v1/dns/zones/{zoneId}/records/{recordId}", api.updateRecord)
 	mux.HandleFunc("DELETE /api/v1/dns/zones/{zoneId}/records/{recordId}", api.deleteRecord)
@@ -106,11 +108,12 @@ func (api *httpAPI) createAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName   string `json:"displayName"`
-		Note          string `json:"note"`
-		Enabled       *bool  `json:"enabled"`
-		CredentialRef string `json:"credentialRef"`
-		MakeDefault   bool   `json:"makeDefault"`
+		DisplayName        string `json:"displayName"`
+		Note               string `json:"note"`
+		Enabled            *bool  `json:"enabled"`
+		CredentialRef      string `json:"credentialRef"`
+		CredentialRevision uint64 `json:"credentialRevision"`
+		MakeDefault        bool   `json:"makeDefault"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -130,6 +133,7 @@ func (api *httpAPI) createAccount(w http.ResponseWriter, r *http.Request) {
 	account, err := api.service.CreateAccount(r.Context(), principal.SubjectID, principal.RequestID, CreateAccountInput{
 		ID: newID("dnsacct"), DisplayName: body.DisplayName, Note: body.Note,
 		Enabled: enabled, MakeDefault: body.MakeDefault, Credential: credential,
+		CredentialRevision: body.CredentialRevision,
 	})
 	if err != nil {
 		writeError(w, err)
@@ -162,10 +166,11 @@ func (api *httpAPI) updateAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var body struct {
-		DisplayName   *string `json:"displayName"`
-		Note          *string `json:"note"`
-		Enabled       *bool   `json:"enabled"`
-		CredentialRef *string `json:"credentialRef"`
+		DisplayName        *string `json:"displayName"`
+		Note               *string `json:"note"`
+		Enabled            *bool   `json:"enabled"`
+		CredentialRef      *string `json:"credentialRef"`
+		CredentialRevision uint64  `json:"credentialRevision"`
 	}
 	if !decodeJSON(w, r, &body) {
 		return
@@ -187,6 +192,7 @@ func (api *httpAPI) updateAccount(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		input.Credential = ref
+		input.CredentialRevision = body.CredentialRevision
 	}
 	account, err := api.service.UpdateAccount(r.Context(), principal.SubjectID, principal.RequestID, current.ID, input)
 	if err != nil {
@@ -246,6 +252,27 @@ func (api *httpAPI) listZones(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
+func (api *httpAPI) listProviderZones(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.RawQuery != "" || r.ContentLength != 0 {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "invalid query")
+		return
+	}
+	zones, err := api.service.ListProviderZones(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("accountId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	items := make([]map[string]string, 0, len(zones))
+	for _, zone := range zones {
+		items = append(items, map[string]string{"providerZoneId": zone.ProviderZoneID, "name": zone.Name, "status": zone.Status})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+}
+
 func (api *httpAPI) syncZone(w http.ResponseWriter, r *http.Request) {
 	principal, ok := api.principal(w, r)
 	if !ok {
@@ -264,6 +291,27 @@ func (api *httpAPI) syncZone(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, zoneDTO{ID: zone.ID, AccountID: zone.AccountID, Name: zone.Name, Status: string(zone.Status)})
+}
+
+func (api *httpAPI) syncRecords(w http.ResponseWriter, r *http.Request) {
+	principal, ok := api.principal(w, r)
+	if !ok {
+		return
+	}
+	if r.URL.RawQuery != "" || r.ContentLength != 0 {
+		writeFixed(w, http.StatusBadRequest, "invalid_request", "invalid query")
+		return
+	}
+	records, err := api.service.SyncZoneRecords(r.Context(), principal.SubjectID, principal.RequestID, r.PathValue("zoneId"))
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+	items := make([]recordDTO, 0, len(records))
+	for _, record := range records {
+		items = append(items, dtoFromRecord(record))
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
 func (api *httpAPI) listRecords(w http.ResponseWriter, r *http.Request) {

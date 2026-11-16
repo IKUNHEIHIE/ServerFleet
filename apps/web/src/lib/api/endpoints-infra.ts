@@ -7,6 +7,7 @@ import type {
   DNSConnectionTest,
   DNSRecord,
   DNSRecordInput,
+  DNSProviderZone,
   DNSZone,
   GatewayHealthChecks,
   GatewayNode,
@@ -91,7 +92,7 @@ export const dnsApi = {
       .then(result => ({ ...result, data: normalizeDnsProviders(result.data, "dns providers") })),
   accounts: (signal?: AbortSignal) => apiClient.request<{ items: readonly DNSAccount[] }>("/api/v1/dns/accounts", { signal }),
   // 真实 Controller：{displayName, note, enabled, credentialRef, makeDefault}；凭据只接受 secret-store 引用，不接受明文 token。
-  createAccount: (body: { providerCode: "cloudflare"; displayName: string; note?: string; enabled?: boolean; apiToken: string }) =>
+  createAccount: (body: { providerCode: "cloudflare"; displayName: string; note?: string; enabled?: boolean; apiToken: string; credentialRevision: number }) =>
     apiClient.request<DNSAccount>("/api/v1/dns/accounts", {
       method: "POST",
       body: {
@@ -99,6 +100,7 @@ export const dnsApi = {
         note: body.note ?? "",
         enabled: body.enabled ?? true,
         credentialRef: body.apiToken,
+        credentialRevision: body.credentialRevision,
         makeDefault: false,
       },
     }),
@@ -107,10 +109,10 @@ export const dnsApi = {
   removeAccount: (accountId: string) =>
     apiClient.request<void>(`/api/v1/dns/accounts/${encodeURIComponent(accountId)}`, { method: "DELETE" }),
   // 真实 Controller 无独立换凭据端点：凭据更新走 PATCH 账号的 credentialRef。
-  rotateCredential: (accountId: string, apiToken: string) =>
+  rotateCredential: (accountId: string, apiToken: string, credentialRevision: number) =>
     apiClient.request<DNSAccount>(`/api/v1/dns/accounts/${encodeURIComponent(accountId)}`, {
       method: "PATCH",
-      body: { credentialRef: apiToken },
+      body: { credentialRef: apiToken, credentialRevision },
     }),
   // 真实 Controller 的设默认是 POST。
   setDefault: (accountId: string) =>
@@ -119,6 +121,8 @@ export const dnsApi = {
     apiClient.request<DNSConnectionTest>(`/api/v1/dns/accounts/${encodeURIComponent(accountId)}/test`, { method: "POST" }),
   zones: (accountId: string, signal?: AbortSignal) =>
     apiClient.request<{ items: readonly DNSZone[] }>(`/api/v1/dns/accounts/${encodeURIComponent(accountId)}/zones`, { signal }),
+  providerZones: (accountId: string, signal?: AbortSignal) =>
+    apiClient.request<{ items: readonly DNSProviderZone[] }>(`/api/v1/dns/accounts/${encodeURIComponent(accountId)}/provider-zones`, { signal }),
   // 真实 Controller：POST {providerZoneId}，返回单个 zone 对象；候选契约为 {items}。两者都归一化为列表。
   syncZones: (accountId: string, body: { providerZoneId: string }) =>
     apiClient
@@ -133,6 +137,8 @@ export const dnsApi = {
       })),
   records: (zoneId: string, signal?: AbortSignal) =>
     apiClient.request<{ items: readonly DNSRecord[] }>(`/api/v1/dns/zones/${encodeURIComponent(zoneId)}/records`, { signal }),
+  syncRecords: (zoneId: string) =>
+    apiClient.request<{ items: readonly DNSRecord[] }>(`/api/v1/dns/zones/${encodeURIComponent(zoneId)}/records/sync`, { method: "POST" }),
   createRecord: (zoneId: string, body: DNSRecordInput) =>
     apiClient.request<DNSRecord>(`/api/v1/dns/zones/${encodeURIComponent(zoneId)}/records`, { method: "POST", body }),
   updateRecord: (zoneId: string, recordId: string, body: DNSRecordInput) =>

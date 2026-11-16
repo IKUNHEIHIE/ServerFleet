@@ -210,6 +210,7 @@ func (s *Server) registerAIRoutes() {
 		for _, pattern := range []string{
 			"GET /api/v1/ai/security-policy",
 			"POST /api/v1/ai/sessions",
+			"GET /api/v1/ai/sessions",
 			"GET /api/v1/ai/sessions/{sessionId}",
 			"GET /api/v1/ai/sessions/{sessionId}/approval-policy",
 			"PATCH /api/v1/ai/sessions/{sessionId}/approval-policy",
