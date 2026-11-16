@@ -28,6 +28,7 @@ curl -fsSL --proto '=https' --tlsv1.3 'https://<面板>/install/agent.sh' -o /tm
 - 脚本以 root 运行，创建专用系统用户 `serverfleet`、`/var/lib/serverfleet/{agent,files}`（0700）、`/usr/local/lib/serverfleet/agent-run` 与 `serverfleet-agent.service`；随后以该用户每 5 秒发起一次接入申请，管理员批准后启用并重启服务。
 - 服务以普通用户运行并显式带 `-file-root /var/lib/serverfleet/files`：文件能力要求非 root 身份，控制器启用文件分发时协议次版本为 1.1，缺少 `-file-root` 的 root agent 会以 `INVALID_PROTOCOL` 被拒绝。
 - 面板必须使用公开可信 HTTPS（ADR-BOOT-001）；面板若使用私有 CA，需要为 curl 提供 `--cacert` 后再执行上述命令。
+- 整机文件浏览是显式可选项：命令末尾追加 `--system-files` 时，服务以 root 运行并开放整机文件读写（与宝塔一致的体验）。默认不追加，文件互传只作用于专用目录 `/var/lib/serverfleet/files`。整机模式风险更高，请在明确需要时选择；控制台“添加节点”页提供对应勾选与提示。
 - 需要 Python 3/OpenSSL 的 `raw-install.sh` 流程仍用于分发准备、主控安装与离线包校验，不是控制台 Agent 命令的默认路径。
 
 ## 首次准备签名安装源

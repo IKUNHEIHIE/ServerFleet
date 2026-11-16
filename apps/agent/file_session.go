@@ -28,12 +28,12 @@ type agentFileSessions struct {
 	current func(context.Context, *agentv1.TaskOffer) error
 }
 
-func newAgentFileSessions(root, node string, current func(context.Context, *agentv1.TaskOffer) error) (*agentFileSessions, error) {
+func newAgentFileSessions(root, node string, allowSystemRoot bool, current func(context.Context, *agentv1.TaskOffer) error) (*agentFileSessions, error) {
 	if !transport.FileID(node) || current == nil {
 		return nil, errFileCapability
 	}
 	f := &agentFileSessions{tasks: map[string]*agentFileTask{}, node: node, current: current}
-	fileIO, err := openAgentFileCapability(root, func(ctx context.Context, b agentFileBinding, _ string) error {
+	fileIO, err := openAgentFileCapability(root, allowSystemRoot, func(ctx context.Context, b agentFileBinding, _ string) error {
 		// Handle holds f.mu while performing disk I/O. The captured task is
 		// retrieved from a context private to this registered session adapter.
 		t, ok := ctx.Value(agentFileTaskKey{}).(*agentFileTask)

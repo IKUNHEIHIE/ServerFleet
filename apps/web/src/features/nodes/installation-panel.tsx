@@ -4,7 +4,7 @@ import { useSession } from "@/app/session";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
-import { Field, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, Field, TextArea, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
 import { apiClient } from "@/lib/api/client";
 import { describeApiError } from "@/lib/api/errors";
@@ -36,8 +36,8 @@ interface Catalog {
 
 const quote = (s: string) => `'${s.replaceAll("'", `'"'"'`)}'`;
 
-export function installationShortCommand(script: Download, name: string): string {
-  return `curl -fsSL --proto '=https' --tlsv1.3 ${quote(script.url)} -o /tmp/sf-agent.sh && printf '%s  %s\\n' ${quote(script.sha256)} /tmp/sf-agent.sh | sha256sum --check --status && sh /tmp/sf-agent.sh ${quote(name)}`;
+export function installationShortCommand(script: Download, name: string, systemFiles = false): string {
+  return `curl -fsSL --proto '=https' --tlsv1.3 ${quote(script.url)} -o /tmp/sf-agent.sh && printf '%s  %s\\n' ${quote(script.sha256)} /tmp/sf-agent.sh | sha256sum --check --status && sh /tmp/sf-agent.sh ${quote(name)}${systemFiles ? " --system-files" : ""}`;
 }
 
 interface InstallationPanelProps {
@@ -52,9 +52,10 @@ function InstallationContent({ nodeName }: InstallationPanelProps) {
   const [fallbackName, setFallbackName] = useState("node");
   const name = nodeName ?? fallbackName;
   const [message, setMessage] = useState<string | null>(null);
+  const [systemFiles, setSystemFiles] = useState(false);
   const data = page.state.status === "ready" ? page.state.data : null;
   const valid = name.trim().length > 0 && name.length <= 128 && !/[\x00-\x1f\x7f]/.test(name);
-  const command = data?.catalog && valid ? installationShortCommand(data.catalog.agentScript, name.trim()) : "";
+  const command = data?.catalog && valid ? installationShortCommand(data.catalog.agentScript, name.trim(), systemFiles) : "";
 
   return (
     <div className="space-y-4 px-5 py-4">
@@ -84,6 +85,10 @@ function InstallationContent({ nodeName }: InstallationPanelProps) {
             {ids => <TextArea id={ids.inputId} readOnly rows={2} value={command} className="font-mono text-xs" />}
           </Field>
           <p className="text-xs text-muted-foreground">命令从本页面下载安装脚本并核对摘要，不含令牌；请在目标节点以 root 运行。</p>
+          <label className="flex items-start gap-2 text-xs text-muted-foreground">
+            <Checkbox aria-label="整机文件浏览" className="mt-0.5" checked={systemFiles} onChange={event => setSystemFiles(event.target.checked)} />
+            <span>整机文件浏览（以 root 运行）：可读写服务器上的所有文件，风险更高。不勾选时文件互传只作用于专用目录。</span>
+          </label>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-muted-foreground">运行后到下方「接入审批」批准该节点；批准后自动启动常驻服务并上线。</p>
             <Button

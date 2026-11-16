@@ -117,6 +117,13 @@ func agentConnectOnce(ctx context.Context, request agentruntime.ConnectRequest) 
 }
 
 func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, endpoint agentLinkEndpoint, roots *x509.CertPool, pin string, certificate tls.Certificate, facts agentIdentityFacts, result *agentruntime.ConnectResult) error {
+	fileRoot := request.FileRoot
+	if request.FileSystemRoot {
+		if request.FileRoot != "" || os.Geteuid() != 0 {
+			return errAgentConnect
+		}
+		fileRoot = "/"
+	}
 	ledger := filepath.Join(request.StateDir, "executions")
 	if err := os.MkdirAll(ledger, 0o700); err != nil {
 		return errAgentConnect
@@ -179,7 +186,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		if offer == nil {
 			return errExecutionRejected
 		}
-		if transport.IsFileAction(offer.ActionId) && request.FileRoot != "" {
+		if transport.IsFileAction(offer.ActionId) && fileRoot != "" {
 			_, err := transport.FileOffer(offer)
 			return err
 		}
@@ -216,8 +223,8 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		executor.actions[transport.CommandCapability] = guardedCommandAction(action, facts.NodeID, endpoint, tlsConfig)
 		semantic.AllowedActions[transport.CommandCapability] = "1"
 	}
-	if request.FileRoot != "" {
-		files, err = newAgentFileSessions(request.FileRoot, facts.NodeID, func(ctx context.Context, o *agentv1.TaskOffer) error {
+	if fileRoot != "" {
+		files, err = newAgentFileSessions(fileRoot, facts.NodeID, request.FileSystemRoot, func(ctx context.Context, o *agentv1.TaskOffer) error {
 			if verifyAgentLinkTrust(state, endpoint.serverName, pin) != nil {
 				return errAgentSession
 			}
@@ -235,7 +242,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		minor = 1
 	}
 	if request.CertificateRoot != "" {
-		capability, e := newCertificateCSRCapability(request.CertificateRoot, facts.NodeID, request.FileRoot)
+		capability, e := newCertificateCSRCapability(request.CertificateRoot, facts.NodeID, fileRoot)
 		if e != nil {
 			return errAgentConnect
 		}
@@ -260,7 +267,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		semantic.AllowedActions[transport.CertificateCSRAction] = "1"
 	}
 	if request.GatewayPrefix != "" {
-		if !agentPathWithinRoot(request.FileRoot, request.GatewayPrefix) {
+		if !agentPathWithinRoot(fileRoot, request.GatewayPrefix) {
 			return errAgentConnect
 		}
 		actions, err := newGatewayRegistration(gatewayRegistrationConfig{
@@ -280,7 +287,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 	cfg := agentSessionConfig{
 		NodeID: facts.NodeID, BootID: bootID, Version: request.AgentVersion, ServerName: endpoint.serverName,
 		RootSPKISHA256: pin, ProtocolMajor: 1, ProtocolMinor: minor, MaxConcurrent: 1, Semantic: semantic, Frames: frames, Files: files,
-		HostFacts: collectHostFacts(request.FileRoot),
+		HostFacts: collectHostFacts(fileRoot),
 		Current: func(_ context.Context, state tls.ConnectionState) error {
 			return verifyAgentLinkTrust(state, endpoint.serverName, pin)
 		},

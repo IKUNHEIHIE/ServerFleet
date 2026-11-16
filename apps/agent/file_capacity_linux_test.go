@@ -23,7 +23,7 @@ func TestFileCapacityChild(t *testing.T) {
 	if err := unix.Setrlimit(unix.RLIMIT_FSIZE, &unix.Rlimit{Cur: 1024, Max: 1024}); err != nil {
 		t.Fatal(err)
 	}
-	f, err := openAgentFileCapability(root, func(context.Context, agentFileBinding, string) error { return nil })
+	f, err := openAgentFileCapability(root, false, func(context.Context, agentFileBinding, string) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}
