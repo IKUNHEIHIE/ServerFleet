@@ -652,7 +652,7 @@ export function OverviewPage() {
                   header: "CPU",
                   align: "right",
                   render: node => (
-                    <LegacyMetricCell metric={adaptMetric(node.cpuPercent, node.online)} />
+                    <LegacyMetricCell metric={adaptMetric(node.cpuPercent, node.online)} sampledAt={node.sampledAt} />
                   ),
                 },
                 {
@@ -660,7 +660,7 @@ export function OverviewPage() {
                   header: "内存",
                   align: "right",
                   render: node => (
-                    <LegacyMetricCell metric={adaptMetric(node.memoryPercent, node.online)} />
+                    <LegacyMetricCell metric={adaptMetric(node.memoryPercent, node.online)} sampledAt={node.sampledAt} />
                   ),
                 },
                 {

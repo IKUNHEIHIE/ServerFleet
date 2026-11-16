@@ -14,7 +14,7 @@ function monitorRoutes(): FetchRoutes {
       jsonResponse([
         { id: "m-1", name: "Web", type: "http", target: "https://example.com", intervalSeconds: 60, timeoutSeconds: 5, failureCount: 3, recoveryCount: 2, state: "healthy", notifyChannels: ["smtp"] },
       ]),
-    "GET /api/v1/nodes": () => jsonResponse({ items: [{ id: "n-1", name: "Tokyo", online: true, cpuPercent: 12, memoryPercent: 34 }] }),
+    "GET /api/v1/nodes": () => jsonResponse({ items: [{ id: "n-1", name: "Tokyo", online: true, cpuPercent: 12, memoryPercent: 34, sampledAt: new Date(Date.now() - 5000).toISOString() }] }),
     "GET /api/v1/traffic-risks": () => jsonResponse([{ nodeId: "n-1", kind: "quota", severity: "warning", estimated: true }]),
     "GET /api/v1/notifications/channels": () => jsonResponse({ items: [] }),
     "GET /api/v1/notifications/deliveries": () => jsonResponse({ items: [] }),
@@ -42,6 +42,8 @@ describe("monitoring page", () => {
     expect(await screen.findByText("Tokyo")).toBeVisible();
     expect(screen.getByText(/quota\(warning，估算\)/)).toBeVisible();
     expect(screen.getByText(/暂无历史趋势/)).toBeVisible();
+    expect(screen.getAllByText(/^采样 /)).toHaveLength(2);
+    expect(screen.queryByText("无采样时间")).not.toBeInTheDocument();
   });
 
   it("creates, pauses and shows the real check history for service monitors", async () => {

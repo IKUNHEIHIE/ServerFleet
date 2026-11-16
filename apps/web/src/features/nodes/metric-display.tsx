@@ -1,3 +1,4 @@
+import { formatDateTime } from "@/lib/format";
 import type { LegacyMetric } from "./legacy-types";
 
 export function formatLegacyPercent(percent: number): string {
@@ -12,7 +13,7 @@ export function legacyMetricText(metric: LegacyMetric): string {
 }
 
 /** 旧 DTO 指标：有数值必须同时露出“无采样时间”；离线不显示历史百分比。 */
-export function LegacyMetricCell({ metric }: { readonly metric: LegacyMetric }) {
+export function LegacyMetricCell({ metric, sampledAt }: { readonly metric: LegacyMetric; readonly sampledAt?: string | null }) {
   if (metric.kind === "value") {
     const clamped = Math.max(0, Math.min(100, metric.percent));
     const barColor =
@@ -31,9 +32,11 @@ export function LegacyMetricCell({ metric }: { readonly metric: LegacyMetric }) 
           </span>
           <span className="font-semibold tabular-nums text-foreground">{formatLegacyPercent(metric.percent)}</span>
         </span>
-        <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">
-          无采样时间
-        </span>
+        {sampledAt && Number.isFinite(Date.parse(sampledAt)) ? (
+          <span className="text-[11px] text-muted-foreground">采样 {formatDateTime(sampledAt)}</span>
+        ) : (
+          <span className="rounded bg-amber-500/10 px-1.5 py-0.5 text-[11px] font-medium text-amber-800">无采样时间</span>
+        )}
       </span>
     );
   }
