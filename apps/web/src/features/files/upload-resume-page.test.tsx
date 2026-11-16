@@ -39,7 +39,7 @@ it("remounts after an interrupted upload and resumes from the server offset, pre
  expect(first.calls.filter(c=>c.method==="PUT")).toHaveLength(2);
  const creation = first.calls.find(c=>c.method==="POST"&&c.url.endsWith("/uploads"));
  expect(JSON.parse(String(creation?.init?.body)).conflictPolicy).toBe("overwrite");
- expect(screen.getAllByText("上传文件（按所选策略）").length).toBeGreaterThan(0);
+ expect(screen.getAllByText("上传文件").length).toBeGreaterThan(0);
  expect(loadUploadDrafts("u-admin","n-1")).toHaveLength(1);
  cleanup(); sessionStorage.clear(); window.location.hash="";
  const next = await renderAuthenticated("/files", { ...base,

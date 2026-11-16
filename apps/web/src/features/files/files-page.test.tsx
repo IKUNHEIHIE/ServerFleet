@@ -73,7 +73,7 @@ describe("files page", () => {
     expect(screen.getByText(/暂不支持下载/)).toBeVisible();
 
     fireEvent.click(within(table).getByLabelText("选择 readme.txt"));
-    fireEvent.click(screen.getByRole("button", { name: "发送到另一侧（1）" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送到右侧（1）" }));
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText("同名冲突策略"), { target: { value: "overwrite" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "确认发送" }));

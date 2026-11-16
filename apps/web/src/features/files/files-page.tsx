@@ -1,7 +1,7 @@
 import { AgentResumePanel } from "./agent-resume-panel";
 import { FileDistributionPanel } from "./file-distribution-panel";
 import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from "react";
-import { Folder, FileText, UploadCloud, ArrowLeftRight, RefreshCw } from "lucide-react";
+import { Folder, FileText, UploadCloud, RefreshCw, ChevronLeft, ChevronRight, Search } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
@@ -51,10 +51,6 @@ function parentPath(path: string): string {
   return index <= 0 ? "/" : trimmed.slice(0, index);
 }
 
-function isValidAbsolutePath(path: string): boolean {
-  return path.startsWith("/") && !path.split("/").some(segment => segment === "..");
-}
-
 async function sha256Hex(file: File): Promise<string | undefined> {
   if (!globalThis.crypto?.subtle) return undefined;
   try {
@@ -91,7 +87,6 @@ function FilePane({
   readonly onTransferCreated: () => void;
 }) {
   const session = useSession();
-  const [pathDraft, setPathDraft] = useState(state.path);
   const [searchDraft, setSearchDraft] = useState(state.search);
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set());
   const [createOpen, setCreateOpen] = useState(false);
@@ -118,6 +113,7 @@ function FilePane({
   const canRename = session.can("file.rename") || session.can("file.manage");
   const canDelete = session.can("file.delete") || session.can("file.manage");
   const canTransfer = session.can("file.transfer") || session.can("file.manage");
+  const otherLabel = label === "左侧" ? "右侧" : "左侧";
 
   const node = nodes.find(entry => entry.id === state.nodeId) ?? null;
   const list = useResource(
@@ -139,7 +135,6 @@ function FilePane({
   );
 
   useEffect(() => {
-    setPathDraft(state.path);
     setSearchDraft(state.search);
     setSelected(new Set());
     setSizeResult(null);
@@ -149,6 +144,7 @@ function FilePane({
   const entries = list.state.status === "ready" ? list.state.data.entries : [];
   const orderedEntries = useMemo(() => [...entries].sort((a, b) => Number(b.type === "directory") - Number(a.type === "directory")), [entries]);
   const selectedEntries = orderedEntries.filter(entry => selected.has(entry.path));
+  const selectableEntries = orderedEntries.filter(entry => entry.type !== "symlink");
   const otherNode = nodes.find(entry => entry.id === other.nodeId) ?? null;
   const sameTarget = state.nodeId !== null && state.nodeId === other.nodeId && state.path === other.path;
   const sendDisabled =
@@ -169,35 +165,21 @@ function FilePane({
 
   function selectNode(nodeId: string) {
     resetInteraction({ nodeId, path: "/", search: "" });
-    setPathDraft("/");
     setSearchDraft("");
   }
 
-  function applyPath(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const next = pathDraft.trim();
-    if (!isValidAbsolutePath(next)) {
-      setOutcome("路径必须是以 / 开头的绝对路径，且不能包含 ..。");
-      return;
-    }
-    setOutcome(null);
-    resetInteraction({ path: next || "/" });
+  function submitSearch() {
+    const next = searchDraft.trim();
+    resetInteraction({ search: next });
   }
+
 
   function openEntry(entry: FileEntry) {
     if (entry.type !== "directory") return;
     resetInteraction({ path: entry.path });
   }
 
-  function applySearch(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    resetInteraction({ search: searchDraft.trim() });
-  }
 
-  function clearSearch() {
-    setSearchDraft("");
-    resetInteraction({ search: "" });
-  }
 
   function toggle(entry: FileEntry, checked: boolean) {
     setSelected(current => {
@@ -564,20 +546,10 @@ function FilePane({
 
   return (
     <div className="min-w-0 rounded-xl border bg-card">
-      <div className="border-b px-4 py-3">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">{label}</h2>
-          {node ? <span className="text-xs text-muted-foreground">{node.online ? "在线" : "离线"}</span> : null}
-        </div>
-        <div className="mt-2 grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto]">
-          <label className="text-xs font-medium text-muted-foreground">
-            节点
-            <Select
-              className="mt-1"
-              value={state.nodeId ?? ""}
-              onChange={event => selectNode(event.target.value)}
-              aria-label={`${label}节点`}
-            >
+      <div className="space-y-3 p-4">
+        <div className="flex items-center gap-2">
+          <div className="w-44 shrink-0">
+            <Select aria-label={`${label}节点`} value={state.nodeId ?? ""} onChange={event => selectNode(event.target.value)} className="h-9">
               <option value="">请选择节点</option>
               {nodes.map(entry => (
                 <option key={entry.id} value={entry.id}>
@@ -585,80 +557,52 @@ function FilePane({
                 </option>
               ))}
             </Select>
-          </label>
-          <div className="flex items-end gap-2">
-            <Button
+          </div>
+          <div className="flex h-9 min-w-0 flex-1 items-center gap-1 rounded-lg border border-[#e5e8ef] bg-white px-2">
+            <button
               type="button"
-              size="sm"
+              aria-label={`${label}上级目录`}
               disabled={!state.nodeId || state.path === "/"}
               onClick={() => resetInteraction({ path: parentPath(state.path) })}
+              className="grid size-6 shrink-0 place-items-center rounded text-[#606266] hover:bg-[#f5f7fa] disabled:opacity-40"
             >
-              上级
-            </Button>
-            <Button type="button" size="sm" onClick={list.reload} disabled={!state.nodeId} loading={list.state.status === "loading"}>
-              刷新
-            </Button>
+              <ChevronLeft className="size-4" />
+            </button>
+            <nav aria-label={`${label}面包屑`} className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden whitespace-nowrap text-[13px] text-[#606266]">
+              <button type="button" onClick={() => resetInteraction({ path: "/" })} disabled={!state.nodeId} className="shrink-0 hover:text-[#2e7ff1]">
+                根目录
+              </button>
+              {state.path.split("/").filter(Boolean).map((segment, index, parts) => (
+                <span key={segment + index} className="flex min-w-0 items-center gap-1">
+                  <ChevronRight className="size-3.5 shrink-0 text-[#c0c4cc]" />
+                  <button
+                    type="button"
+                    onClick={() => resetInteraction({ path: `/${parts.slice(0, index + 1).join("/")}` })}
+                    className="truncate hover:text-[#2e7ff1]"
+                  >
+                    {segment}
+                  </button>
+                </span>
+              ))}
+            </nav>
+            <button type="button" aria-label={`${label}前进`} disabled className="grid size-6 shrink-0 place-items-center rounded text-[#c0c4cc]">
+              <ChevronRight className="size-4" />
+            </button>
           </div>
-        </div>
-        <form onSubmit={applyPath} className="mt-2 flex gap-2">
-          <TextInput aria-label={`${label}路径`} value={pathDraft} onChange={event => setPathDraft(event.target.value)} placeholder="/absolute/path" disabled={!state.nodeId} />
-          <Button type="submit" size="sm" disabled={!state.nodeId}>跳转</Button>
-        </form>
-        <nav aria-label={`${label}面包屑`} className="mt-2 flex flex-wrap items-center gap-1 text-xs">
-          <Button type="button" size="sm" variant="ghost" onClick={() => resetInteraction({ path: "/" })} disabled={!state.nodeId} className="h-6 px-1.5 font-mono text-xs">
-            /
-          </Button>
-          {state.path.split("/").filter(Boolean).map((segment, index, parts) => {
-            const target = `/${parts.slice(0, index + 1).join("/")}`;
-            return (
-              <span key={target} className="flex items-center gap-1">
-                <span aria-hidden="true">/</span>
-                <Button type="button" size="sm" variant="ghost" onClick={() => resetInteraction({ path: target })} className="h-6 px-1.5 font-mono text-xs">
-                  {segment}
-                </Button>
-              </span>
-            );
-          })}
-        </nav>
-        <form onSubmit={applySearch} className="mt-2 flex flex-wrap items-end gap-2">
-          <div className="min-w-40 flex-1">
-            <label htmlFor={`${label}-search`} className="block text-xs font-medium text-muted-foreground">当前目录搜索</label>
-            <TextInput
-              id={`${label}-search`}
-              type="search"
-              value={searchDraft}
-              onChange={event => setSearchDraft(event.target.value)}
-              className="h-8 px-2"
-              disabled={!state.nodeId}
-            />
-          </div>
-          <Button type="submit" size="sm" disabled={!state.nodeId}>搜索</Button>
-          <Button type="button" size="sm" variant="ghost" onClick={clearSearch} disabled={!state.search && !searchDraft}>清空</Button>
-        </form>
-      </div>
-
-      <div className="space-y-2 border-b px-4 py-3">
-        {outcome ? <Notice tone="info" title="操作结果" actions={<Button size="sm" onClick={() => setOutcome(null)}>关闭</Button>}>{outcome}</Notice> : null}
-        {!node ? <Notice tone="info" title="请选择节点">选择节点后才会读取目录；不会显示本地假文件。</Notice> : null}
-        {node && !node.online ? <Notice tone="warning" title="节点离线">目录与写操作会被服务端拒绝；不展示缓存文件。</Notice> : null}
-        <div className="flex flex-wrap gap-2">
-          <Button
+          <button
             type="button"
-            size="sm"
-            disabled={!state.nodeId || !node?.online || !canWrite || session.writesLocked}
-            onClick={() => setCreateOpen(true)}
+            aria-label={`${label}刷新`}
+            onClick={list.reload}
+            disabled={!state.nodeId}
+            className="grid size-9 shrink-0 place-items-center rounded-lg border border-[#e5e8ef] bg-white text-[#606266] hover:border-[#2e7ff1] hover:text-[#2e7ff1] disabled:opacity-40"
           >
-            新建文件夹
-          </Button>
-          <Field label="上传同名策略">
-            {ids => <Select id={ids.inputId} aria-label={`${label}上传同名策略`} value={uploadPolicy} disabled={uploadBusy || !canWrite || session.writesLocked}
-              onChange={event => setUploadPolicy(event.target.value as ConflictPolicy)}>
-              <option value="skip">跳过同名</option><option value="overwrite">覆盖同名</option><option value="rename">自动改名</option>
-            </Select>}
-          </Field>
-          <label className={`inline-flex h-8 items-center gap-1.5 rounded-xl border border-dashed border-primary/40 bg-primary/5 px-3 text-xs font-medium text-primary transition-colors ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed opacity-50" : "cursor-pointer hover:bg-primary/10"}`}>
-            <UploadCloud className="size-3.5" />
-            上传文件（按所选策略）
+            <RefreshCw className={list.state.status === "loading" ? "size-4 animate-spin" : "size-4"} />
+          </button>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <label className={`inline-flex h-9 items-center gap-1.5 rounded-md px-4 text-[13px] font-medium text-white ${!state.nodeId || !node?.online || !canWrite || session.writesLocked ? "cursor-not-allowed bg-[#8cc3f7]" : "cursor-pointer bg-[#2e7ff1] hover:bg-[#1f6fe0]"}`}>
+            <UploadCloud className="size-4" />
+            上传文件
             <input
               type="file"
               multiple
@@ -667,11 +611,46 @@ function FilePane({
               onChange={event => void handleFiles(event)}
             />
           </label>
-          <Button type="button" size="sm" variant="primary" onClick={() => setTransferOpen(true)} disabled={sendDisabled}>
-            <ArrowLeftRight className="size-3.5" />
-            发送到另一侧（{selectedEntries.length}）
+          <Button
+            type="button"
+            className="h-9 rounded-md border-[#dcdfe6] bg-white px-4 text-[13px] text-[#606266]"
+            disabled={!state.nodeId || !node?.online || !canWrite || session.writesLocked}
+            onClick={() => setCreateOpen(true)}
+          >
+            新建文件夹
           </Button>
+          <Select
+            aria-label={`${label}上传同名策略`}
+            value={uploadPolicy}
+            disabled={uploadBusy || !canWrite || session.writesLocked}
+            onChange={event => setUploadPolicy(event.target.value as ConflictPolicy)}
+            className="h-8 w-auto border-0 bg-transparent px-1 text-xs text-[#909399]"
+          >
+            <option value="skip">跳过同名</option>
+            <option value="overwrite">覆盖同名</option>
+            <option value="rename">自动改名</option>
+          </Select>
+          <div className="ml-auto flex h-9 w-64 items-center gap-1 rounded-lg border border-[#e5e8ef] bg-white px-3">
+            <input
+              aria-label={`${label}搜索`}
+              type="search"
+              value={searchDraft}
+              onChange={event => setSearchDraft(event.target.value)}
+              onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); submitSearch(); } }}
+              placeholder="请输入文件名称"
+              disabled={!state.nodeId}
+              className="h-full w-full min-w-0 border-0 bg-transparent text-[13px] outline-none placeholder:text-[#c0c4cc]"
+            />
+            <button type="button" aria-label={`${label}搜索按钮`} onClick={submitSearch} disabled={!state.nodeId} className="grid size-6 place-items-center text-[#909399] hover:text-[#2e7ff1]">
+              <Search className="size-4" />
+            </button>
+          </div>
         </div>
+      </div>
+      <div className="space-y-2 border-b px-4 py-3 empty:hidden">
+        {outcome ? <Notice tone="info" title="操作结果" actions={<Button size="sm" onClick={() => setOutcome(null)}>关闭</Button>}>{outcome}</Notice> : null}
+        {!node ? <Notice tone="info" title="请选择节点">选择节点后才会读取目录；不会显示本地假文件。</Notice> : null}
+        {node && !node.online ? <Notice tone="warning" title="节点离线">目录与写操作会被服务端拒绝；不展示缓存文件。</Notice> : null}
         {!canWrite ? <p className="text-xs text-muted-foreground">当前身份没有文件写入权限（`file.write`/`file.manage`）。</p> : null}
         {uploadOutcome ? (
           <Notice tone="info" title="上传结果" actions={<Button size="sm" onClick={() => setUploadOutcome(null)}>关闭</Button>}>
@@ -787,92 +766,143 @@ function FilePane({
           state={list.state}
           onRetry={list.reload}
           errorTitle="目录读取失败"
-          empty={<EmptyState title="当前目录为空" description="服务端返回空集合；不是本地缓存。" />}
+          empty={<EmptyState title="当前目录为空" description="该节点的专用文件目录（文件根）为空，不是系统根目录；上传文件或新建文件夹后会显示在这里。" />}
           isEmpty={data => data.entries.length === 0}
         >
           {data => (
             <>
-              <DataTable
-                caption={`${label}目录内容`}
-                rows={orderedEntries}
-                rowKey={entry => entry.path}
-                empty={<EmptyState title="当前目录为空" description="服务端返回空集合。" />}
-                columns={[
-                  {
-                    key: "select",
-                    header: "选择",
-                    render: entry => (
-                      <Checkbox
-                        aria-label={`选择 ${entry.name}`}
-                        checked={selected.has(entry.path)}
-                        disabled={entry.type === "symlink"}
-                        onChange={event => toggle(entry, event.target.checked)}
-                      />
-                    ),
-                  },
-                  {
-                    key: "name",
-                    header: "名称",
-                    render: entry =>
-                      entry.type === "directory" ? (
-                        <button type="button" className="inline-flex items-center gap-1.5 text-left font-medium text-primary underline-offset-2 hover:underline" onClick={() => openEntry(entry)}>
-                          <Folder className="size-3.5 text-primary" />
-                          {entry.name}/
-                        </button>
-                      ) : (
-                        <span className="inline-flex items-center gap-1.5">
-                          <FileText className="size-3.5 text-muted-foreground" />
-                          {entry.name}
-                        </span>
-                      ),
-                  },
-                  {
-                    key: "type",
-                    header: "类型",
-                    render: entry => (entry.type === "directory" ? "目录" : entry.type === "symlink" ? "符号链接（不跟随）" : "文件"),
-                  },
-                  { key: "size", header: "大小", render: entry => (entry.type === "directory" ? "—" : formatBytes(entry.sizeBytes ?? null) ?? "—") },
-                  { key: "modified", header: "修改时间", render: entry => formatDateTime(entry.modifiedAt) ?? "—" },
-                  {
-                    key: "actions",
-                    header: "操作",
-                    render: entry => (
-                      <div className="flex flex-wrap gap-1">
-                        {entry.type === "directory" ? <Button size="sm" onClick={() => openEntry(entry)}>打开</Button> : null}
-                        {entry.type !== "symlink" ? <Button size="sm" onClick={() => calculateSize(entry)} loading={size.pending}>大小</Button> : null}
-                        <Button size="sm" disabled={!node?.online || !canRename || session.writesLocked} onClick={() => setRenameTarget(entry)}>重命名</Button>
-                        <Button size="sm" variant="danger" disabled={!node?.online || !canDelete || session.writesLocked} onClick={() => setDeleteTarget(entry)}>删除</Button>
-                      </div>
-                    ),
-                  },
-                ]}
-              />
-              <div className="flex items-center justify-between border-t px-4 py-2">
+              <div className="border-t border-[#ebeef5]">
+                <table className="w-full table-fixed text-[13px]" aria-label={`${label}目录内容`}>
+                  <caption className="sr-only">{`${label}目录内容`}</caption>
+                  <thead className="bg-[#f8f9fb] text-[#606266]">
+                    <tr>
+                      <th className="w-10 py-2.5 pl-4 text-left">
+                        <Checkbox
+                          aria-label={`${label}全选`}
+                          checked={selectableEntries.length > 0 && selectableEntries.every(entry => selected.has(entry.path))}
+                          onChange={event => setSelected(event.target.checked ? new Set(selectableEntries.map(entry => entry.path)) : new Set())}
+                        />
+                      </th>
+                      <th className="py-2.5 text-left font-normal">文件名称</th>
+                      <th className="w-28 py-2.5 text-left font-normal">文件大小</th>
+                      <th className="w-56 py-2.5 pr-4 text-right font-normal">操作</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#f0f2f5] text-[#606266]">
+                    {orderedEntries.map(entry => {
+                      const sendRowDisabled = !otherNode?.online || !node?.online || sameTarget || entry.type === "symlink" || !canTransfer || session.writesLocked;
+                      return (
+                        <tr key={entry.path} className="hover:bg-[#f5f9ff]">
+                          <td className="py-2.5 pl-4">
+                            <Checkbox
+                              aria-label={`选择 ${entry.name}`}
+                              checked={selected.has(entry.path)}
+                              disabled={entry.type === "symlink"}
+                              onChange={event => toggle(entry, event.target.checked)}
+                            />
+                          </td>
+                          <td className="min-w-0 py-2 pr-2">
+                            {entry.type === "directory" ? (
+                              <button type="button" aria-label={`${entry.name}/`} className="inline-flex max-w-full items-center gap-2 text-left font-medium text-[#606266] hover:text-[#2e7ff1]" onClick={() => openEntry(entry)}>
+                                <Folder className="size-4 shrink-0 text-[#f7ba2a]" />
+                                <span className="truncate">{entry.name}</span>
+                              </button>
+                            ) : (
+                              <span className="inline-flex max-w-full items-center gap-2">
+                                <FileText className="size-4 shrink-0 text-[#a8abb2]" />
+                                <span className="truncate">{entry.name}</span>
+                              </span>
+                            )}
+                            {entry.type === "symlink" ? <span className="ml-2 text-xs text-[#909399]">符号链接（不跟随）</span> : null}
+                          </td>
+                          <td className="py-2 text-[#909399]">
+                            {entry.type === "directory" ? (
+                              <button type="button" className="text-[#2e7ff1] hover:underline" aria-label={`计算 ${entry.name} 大小`} onClick={() => calculateSize(entry)} disabled={size.pending}>
+                                计算
+                              </button>
+                            ) : (
+                              formatBytes(entry.sizeBytes ?? null) ?? "—"
+                            )}
+                          </td>
+                          <td className="py-2 pr-4 text-right">
+                            <button
+                              type="button"
+                              className="text-[#2e7ff1] hover:underline disabled:cursor-not-allowed disabled:text-[#c0c4cc] disabled:no-underline"
+                              disabled={sendRowDisabled}
+                              onClick={() => {
+                                if (sendRowDisabled) return;
+                                setSelected(new Set([entry.path]));
+                                setTransferOpen(true);
+                              }}
+                            >
+                              发送到{otherLabel}
+                            </button>
+                            <span className="px-1.5 text-[#dcdfe6]">|</span>
+                            <button
+                              type="button"
+                              className="text-[#2e7ff1] hover:underline disabled:cursor-not-allowed disabled:text-[#c0c4cc] disabled:no-underline"
+                              disabled={!node?.online || !canRename || session.writesLocked}
+                              onClick={() => setRenameTarget(entry)}
+                            >
+                              重命名
+                            </button>
+                            <span className="px-1.5 text-[#dcdfe6]">|</span>
+                            <button
+                              type="button"
+                              className="text-[#e54d42] hover:underline disabled:cursor-not-allowed disabled:text-[#c0c4cc] disabled:no-underline"
+                              disabled={!node?.online || !canDelete || session.writesLocked}
+                              onClick={() => setDeleteTarget(entry)}
+                            >
+                              删除
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {orderedEntries.length === 0 ? <p className="px-6 py-10 text-center text-sm text-[#909399]">当前目录为空（专用文件目录，非系统根）</p> : null}
+              </div>
+              <div className="flex items-center gap-3 border-t border-[#ebeef5] px-4 py-3">
                 <Button
                   type="button"
-                  size="sm"
-                  disabled={state.stack.length === 0}
-                  onClick={() => {
-                    const stack = [...state.stack];
-                    const previous = stack.pop() ?? null;
-                    setState(current => ({ ...current, stack, cursor: previous }));
-                    setSelected(new Set());
-                  }}
+                  disabled={sendDisabled}
+                  aria-label={`发送到${otherLabel}（${selectedEntries.length}）`}
+                  onClick={() => setTransferOpen(true)}
+                  className={`h-9 rounded-md px-4 text-[13px] font-medium text-white ${sendDisabled ? "bg-[#8cc3f7]" : "bg-[#2e7ff1] hover:bg-[#1f6fe0]"}`}
                 >
-                  上一页
+                  发送到{otherLabel}
                 </Button>
-                <span className="text-xs text-muted-foreground">目录：{data.path}</span>
-                <Button
-                  type="button"
-                  size="sm"
-                  disabled={!data.nextCursor}
-                  onClick={() => {
-                    setState(current => ({ ...current, stack: [...current.stack, current.cursor], cursor: data.nextCursor ?? null }));
-                    setSelected(new Set());
-                  }}
-                >
-                  下一页
-                </Button>
+                <span className="text-xs text-[#909399]">当前选中 {selectedEntries.length} 个文件</span>
+                <div className="ml-auto flex items-center gap-1">
+                  <button
+                    type="button"
+                    aria-label={`${label}上一页`}
+                    disabled={state.stack.length === 0}
+                    onClick={() => {
+                      const stack = [...state.stack];
+                      const previous = stack.pop() ?? null;
+                      setState(current => ({ ...current, stack, cursor: previous }));
+                      setSelected(new Set());
+                    }}
+                    className="grid size-8 place-items-center rounded border border-[#e5e8ef] bg-white text-[#606266] hover:border-[#2e7ff1] disabled:opacity-40"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                  <span className="grid h-7 min-w-7 place-items-center rounded bg-[#2e7ff1] px-2 text-xs font-medium text-white">{state.stack.length + 1}</span>
+                  <button
+                    type="button"
+                    aria-label={`${label}下一页`}
+                    disabled={!data.nextCursor}
+                    onClick={() => {
+                      setState(current => ({ ...current, stack: [...current.stack, current.cursor], cursor: data.nextCursor ?? null }));
+                      setSelected(new Set());
+                    }}
+                    className="grid size-8 place-items-center rounded border border-[#e5e8ef] bg-white text-[#606266] hover:border-[#2e7ff1] disabled:opacity-40"
+                  >
+                    <ChevronRight className="size-4" />
+                  </button>
+                </div>
               </div>
             </>
           )}
