@@ -15,7 +15,7 @@ func (p *CloudflareProvider) VerifyRecord(ctx context.Context, credential Creden
 		return err
 	}
 	actual := response.Result
-	if actual.ID != recordID || actual.Type != string(expected.Type) || actual.Name != expected.Name || actual.Content != expected.Content || actual.Proxied == nil || *actual.Proxied != expected.Proxied {
+	if actual.ID != recordID || actual.Type != string(expected.Type) || !sameRecordName(actual.Name, expected.Name) || normalizeRecordContent(expected.Type, actual.Content) != normalizeRecordContent(expected.Type, expected.Content) || actual.Proxied == nil || *actual.Proxied != expected.Proxied {
 		return ErrProviderRecordChanged
 	}
 	if expected.Type == RecordMX && (expected.Priority == nil || actual.Priority == nil || *expected.Priority != *actual.Priority) {

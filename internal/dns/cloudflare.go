@@ -334,7 +334,7 @@ func (p *CloudflareProvider) ListRecords(ctx context.Context, credential Credent
 			if !validProviderID(record.ID) || !recordType.valid() || record.Name == "" || record.Content == "" || record.TTL < 0 || record.TTL > 86400 {
 				continue
 			}
-			input := RecordInput{Type: recordType, Name: record.Name, Content: record.Content, TTL: record.TTL}
+			input := RecordInput{Type: recordType, Name: record.Name, Content: normalizeRecordContent(recordType, record.Content), TTL: record.TTL}
 			if record.Proxied != nil {
 				input.Proxied = *record.Proxied && recordType.proxiable()
 			}

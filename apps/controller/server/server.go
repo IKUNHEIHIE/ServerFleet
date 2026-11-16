@@ -597,7 +597,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return cleanup(err)
 		}
 		s.PublicCertificates = publicCertificates
-		cfg.DNSProvider = publicCertificates.provider
+		// ACME runs its own DNS provider inside task scope. The standalone DNS
+		// console keeps its own provider/borrow window so web record writes do
+		// not inherit the task-scoped credential gate.
 	}
 	workers := map[string]tasks.Worker{}
 	if publicCertificates != nil {

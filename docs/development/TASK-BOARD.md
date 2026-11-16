@@ -2,7 +2,7 @@
 
 ## 控制台缺陷修复与 AI 执行模式（2026-11-17）
 
-CONSOLE-FIX-20261117 / 分支 `feature/ai-dns-certs-ui-20261117`，[PR #54](https://github.com/IKUNHEIHIE/ServerFleet/pull/54)。用户要求先上传现有改动，再修复页面 403/权限、动态渐变与配色、证书签发配置、DNS 记录添加、AI Key 配置及 AI Agent 实控。已完成：权限键别名覆盖、统计卡片鼠标跟随渐变与多彩色调、DNS 记录增删改走 DNS 账号模块并补类型校验、测试站生成 ACME 账户密钥与部署文件并挂载 `-acme-deployment`、证书面板内联 CSR 登记、系统设置内新增 AI API Key、对话输入区“对话/执行任务”切换并创建自动推进的 Agent 运行。验证：awskr `check:web` 53 文件 / 480 用例 0 失败、生产构建成功、`/readyz` 五项 ready，首页资源 `index-r3fgJqMC.js`；浏览器端登录会话不可用，登录后的点击验收与真实 Agent 工具执行待人工复核。GitHub 直连 443 间歇不可用，追加提交经 Git Data API 推送。
+CONSOLE-FIX-20261117 / 分支 `feature/ai-dns-certs-ui-20261117`，[PR #54](https://github.com/IKUNHEIHIE/ServerFleet/pull/54)。用户要求先上传现有改动，再修复页面 403/权限、动态渐变与配色、证书签发配置、DNS 记录添加、AI Key 配置及 AI Agent 实控。已完成：权限键别名覆盖、统计卡片鼠标跟随渐变与多彩色调、DNS 记录增删改走 DNS 账号模块并补类型校验、测试站生成 ACME 账户密钥与部署文件并挂载 `-acme-deployment`、证书面板内联 CSR 登记、系统设置内新增 AI API Key、对话输入区“对话/执行任务”切换并创建自动推进的 Agent 运行。验证：awskr `check:web` 53 文件 / 480 用例 0 失败、生产构建成功、`/readyz` 五项 ready，首页资源 `index-r3fgJqMC.js`；`go test -count=1` 的 `internal/ai`、`internal/dns`、`apps/controller/server` 通过（迁移计数测试更新为 53）。真实管理员会话复验：登录、节点、任务、凭据、DNS、监控、内部证书、续签列表与 AI 会话接口均 200，未复现页面 403；公共证书配置 `configured=true`；真实 Cloudflare TXT 记录新增（201）→读回→删除（204）→确认不存在；AI 执行模式在人工批准 `nodes.read` 后读取真实节点状态并完成运行。DNS 遗留测试记录已清理，临时 AI 调试环境变量已移除。GitHub 直连 443 间歇不可用，追加提交经 Git Data API 推送。
 
 ## AI 运维端点接入（2026-11-16）
 

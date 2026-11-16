@@ -8,9 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"io"
+	"log"
 	"mime"
 	"net"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -62,6 +64,12 @@ func NewOpenAIStreamingTextProvider(credentials *auth.CredentialService, resolve
 func (p *OpenAITextProvider) Close() {
 	if p != nil && p.client != nil {
 		p.client.CloseIdleConnections()
+	}
+}
+
+func aiDebugf(format string, args ...any) {
+	if os.Getenv("SERVERFLEET_AI_DEBUG") == "1" {
+		log.Printf("ai provider debug: "+format, args...)
 	}
 }
 
@@ -288,6 +296,10 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		}
 		defer response.Body.Close()
 		if response.StatusCode != http.StatusOK {
+			if os.Getenv("SERVERFLEET_AI_DEBUG") == "1" {
+				prefix, _ := io.ReadAll(io.LimitReader(response.Body, 2048))
+				aiDebugf("upstream status=%d content-type=%q stream=%v agent=%v body=%q", response.StatusCode, response.Header.Get("Content-Type"), stream, r.Agent != nil, string(prefix))
+			}
 			return ErrGenerationUnknown
 		}
 		media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
@@ -309,6 +321,7 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 			}
 		}
 		if err != nil || strings.Contains(text, string(secret)) {
+			aiDebugf("decode rejected stream=%v agent=%v err=%v secretEcho=%v textLen=%d", stream, r.Agent != nil, err, strings.Contains(text, string(secret)), len(text))
 			text = ""
 			return ErrGenerationUnknown
 		}

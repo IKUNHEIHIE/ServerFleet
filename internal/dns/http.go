@@ -497,6 +497,8 @@ func writeError(w http.ResponseWriter, err error) {
 	case errors.Is(err, ErrAccountExists), errors.Is(err, ErrZoneExists), errors.Is(err, ErrZoneNameTaken),
 		errors.Is(err, ErrRecordConflict):
 		writeFixed(w, http.StatusConflict, "conflict", "resource already exists")
+	case errors.Is(err, ErrProviderRecordChanged):
+		writeFixed(w, http.StatusConflict, "provider_record_changed", "the record changed at the provider; refresh before retrying")
 	case errors.Is(err, ErrProviderUnavailable), errors.Is(err, ErrCredentialNotConfigured),
 		errors.Is(err, ErrCredentialUnverified):
 		writeFixed(w, http.StatusServiceUnavailable, "dns_unavailable", "DNS provider is not available")

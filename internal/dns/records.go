@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strings"
 	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
@@ -98,6 +99,7 @@ func (s *Service) CreateRecord(ctx context.Context, subjectID, requestID, zoneID
 	if err != nil {
 		return Record{}, err
 	}
+	input = normalizeRecordInput(zone.Name, input)
 	provider, credential, err := s.credentialProvider(account)
 	if err != nil {
 		return Record{}, err
@@ -155,6 +157,7 @@ func (s *Service) UpdateRecord(ctx context.Context, subjectID, requestID, record
 	if err != nil {
 		return Record{}, err
 	}
+	input = normalizeRecordInput(zone.Name, input)
 	provider, credential, err := s.credentialProvider(account)
 	if err != nil {
 		return Record{}, err
@@ -265,4 +268,42 @@ func providerOutcomeUnknown(err error) bool {
 	}
 	var netErr net.Error
 	return errors.As(err, &netErr)
+}
+
+// DNS providers normalize relative names to FQDNs and TXT values to quoted
+// strings. Normalize once at the service boundary so local cache, read-back and
+// verified delete/update compare the same representation.
+func normalizeRecordInput(zoneName string, input RecordInput) RecordInput {
+	input.Name = normalizeRecordName(input.Name, zoneName)
+	input.Content = normalizeRecordContent(input.Type, input.Content)
+	return input
+}
+
+func normalizeRecordName(name, zoneName string) string {
+	name = strings.TrimSpace(name)
+	zoneName = strings.TrimSuffix(strings.TrimSpace(zoneName), ".")
+	if name == "" || name == "@" {
+		return zoneName
+	}
+	name = strings.TrimSuffix(name, ".")
+	if strings.EqualFold(name, zoneName) || strings.HasSuffix(strings.ToLower(name), "."+strings.ToLower(zoneName)) {
+		return name
+	}
+	return name + "." + zoneName
+}
+
+func normalizeRecordContent(recordType RecordType, content string) string {
+	content = strings.TrimSpace(content)
+	if recordType != RecordTXT {
+		return content
+	}
+	if len(content) >= 2 && strings.HasPrefix(content, `"`) && strings.HasSuffix(content, `"`) {
+		content = content[1 : len(content)-1]
+		content = strings.ReplaceAll(content, `\"`, `"`)
+	}
+	return content
+}
+
+func sameRecordName(a, b string) bool {
+	return strings.EqualFold(strings.TrimSuffix(a, "."), strings.TrimSuffix(b, "."))
 }
