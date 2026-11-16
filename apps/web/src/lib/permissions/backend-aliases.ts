@@ -45,6 +45,7 @@ const BACKEND_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "notify.test": ["notifications.test"],
   "audit.read": ["audit.read"],
   "credential.manage": ["credentials.create", "credentials.rotate", "credentials.revoke"],
+  "grant.manage": ["user.manage"],
   "certificate.manage": ["certificates.distribution.create", "certificates.renew", "certificates.revoke", "certificates.rotate"],
   "certificates.manage": ["certificates.read", "certificates.distribution.create", "certificates.renew", "certificates.revoke", "certificates.rotate"],
   "certificates.csr.create": ["transport.certificate.csr", "certificates.csr.create"],
