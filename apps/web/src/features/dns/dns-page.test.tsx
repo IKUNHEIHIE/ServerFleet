@@ -29,6 +29,7 @@ function dnsRoutes(): FetchRoutes {
     "GET /api/v1/dns/zones/z-1/records": () =>
       jsonResponse({ items: [{ id: "r-1", zoneId: "z-1", type: "A", name: "www", content: "203.0.113.10", ttl: 120, proxied: false }] }),
     "GET /api/v1/dns/zones/z-2/records": () => jsonResponse({ items: [] }),
+    "POST /api/v1/dns/zones/z-1/records": () => jsonResponse({ id: "r-new", zoneId: "z-1", type: "A", name: "api", content: "203.0.113.11", proxied: false }, 201),
     "POST /api/v1/dns/record-tasks": () => jsonResponse({taskId:"dns-record-task",status:"awaiting_approval",planHash:"a".repeat(64)},202),
     "POST /api/v1/dns/provider-tasks": () => jsonResponse({taskId:"dns-check-task",status:"queued"},202),
     "POST /api/v1/dns/accounts": (_init) =>
@@ -38,7 +39,7 @@ function dnsRoutes(): FetchRoutes {
 }
 
 describe("dns page", () => {
-  it("shows the default account zones and submits an approval task without claiming a record write", async () => {
+  it("shows the default account zones and creates a record through the DNS account module", async () => {
     const { calls } = await renderAuthenticated("/dns", dnsRoutes());
     expect(await screen.findByRole("heading", { level: 1, name: "DNS 管理" })).toBeVisible();
     expect(await screen.findByText("example.com")).toBeVisible();
@@ -49,17 +50,14 @@ describe("dns page", () => {
     const dialog = await screen.findByRole("dialog");
     fireEvent.change(within(dialog).getByLabelText("名称"), { target: { value: "api" } });
     fireEvent.change(within(dialog).getByLabelText("内容"), { target: { value: "203.0.113.11" } });
-    fireEvent.click(within(dialog).getByRole("button", { name: "登记审批任务" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "添加记录" }));
     await waitFor(() => {
-      const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/dns/record-tasks");
+      const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/dns/zones/z-1/records");
       expect(call).toBeDefined();
-      const body=JSON.parse(String(call?.init?.body));
-      expect(body).toMatchObject({operation:"create",zoneId:"z-1",idempotencyKey:expect.any(String)});
-      expect(JSON.parse(body.recordJson)).toMatchObject({type:"A",name:"api",content:"203.0.113.11"});
+      expect(JSON.parse(String(call?.init?.body))).toEqual({ type: "A", name: "api", content: "203.0.113.11", proxied: false });
     });
-    expect(await screen.findByText(/DNS 修改审批任务已登记：dns-record-task/)).toBeVisible();
-    expect(calls.some(call=>call.method==="POST"&&call.url==="/api/v1/dns/zones/z-1/records")).toBe(false);
-    expect(screen.queryByText("203.0.113.11")).not.toBeInTheDocument();
+    expect(await screen.findByText(/已保存记录 A api/)).toBeVisible();
+    expect(calls.some(call => call.url === "/api/v1/dns/record-tasks")).toBe(false);
   });
 
   it("creates a DNS credential from a pasted token and binds only its reference", async () => {

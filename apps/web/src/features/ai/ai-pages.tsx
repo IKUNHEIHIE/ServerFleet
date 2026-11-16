@@ -10,7 +10,7 @@ import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
-import { aiApi } from "@/lib/api/endpoints-ai";
+import { aiAgentApi, aiApi, type AgentRunInput } from "@/lib/api/endpoints-ai";
 import type {
   AIApprovalMode,
   AIApprovalPolicy,
@@ -443,6 +443,9 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
     aiApi.updateApprovalPolicy(sessionId, body),
   );
   const send = useAction((body: { content: string; clientMessageId: string; scopeRevision: number }) => aiApi.sendMessage(sessionId, body));
+  const runAgent = useAction((body: AgentRunInput) => aiAgentApi.create(sessionId, body));
+  const [composerMode, setComposerMode] = useState<"chat" | "agent">("chat");
+  const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [generatingMessageId, setGeneratingMessageId] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [streamReply, setStreamReply] = useState<{ message: AIMessage; visible: string; done: boolean } | null>(null);
@@ -578,6 +581,16 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
     event.preventDefault();
     if (!messageText.trim() || !current) return;
     const content = messageText.trim();
+    if (composerMode === "agent") {
+      const goalKey = globalThis.crypto?.randomUUID?.() ?? `run-${Date.now()}`;
+      const result = await runAgent.run({ goal: content, clientRunId: goalKey, scopeRevision: current.scopeRevision, maxSteps: 8, timeoutSeconds: 900 });
+      if (result.ok && result.data) {
+        setMessageText("");
+        setActiveRunId(result.data.data.id);
+        setTab("agent");
+      }
+      return;
+    }
     setMessageText("");
     const clientMessageId = globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}`;
     const result = await send.run({ content, clientMessageId, scopeRevision: current.scopeRevision });
@@ -652,7 +665,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
 
             {tab !== "chat" ? (
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} /> : null}
+            {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} focusRunId={activeRunId} /> : null}
 
             {tab === "policy" ? (
               <Panel title="审批策略" description="系统可能强制更严格的审批策略。">
@@ -754,13 +767,34 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                     className="shrink-0 border-t border-border/70 bg-card p-3"
                   >
                     {send.error ? <div className="mb-2"><Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice></div> : null}
+                    {runAgent.error ? <div className="mb-2"><Notice tone="error" title="执行请求未确认">{describeApiError(runAgent.error)} 请先在“自动化执行”核对运行记录，不要重复创建。</Notice></div> : null}
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                      <Button type="button" size="sm" variant={composerMode === "chat" ? "secondary" : "ghost"} aria-pressed={composerMode === "chat"} onClick={() => setComposerMode("chat")}>
+                        对话
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={composerMode === "agent" ? "secondary" : "ghost"}
+                        aria-pressed={composerMode === "agent"}
+                        disabled={!data.allowedNodeIds?.length}
+                        onClick={() => setComposerMode("agent")}
+                      >
+                        执行任务
+                      </Button>
+                      <span className="ml-1 text-muted-foreground">
+                        {composerMode === "agent"
+                          ? "AI 将规划并调用已授权节点；危险操作仍需审批。"
+                          : "只对话，不改动服务器；需要操作时切到“执行任务”。"}
+                      </span>
+                    </div>
                     <div className="relative">
                       <TextArea
                         aria-label="消息内容"
                         value={messageText}
                         onChange={event => setMessageText(event.target.value)}
                         maxLength={32000}
-                        placeholder="输入消息，或把右侧节点拖进这里授权 AI 使用…"
+                        placeholder={composerMode === "agent" ? "描述要 AI 完成的运维目标，例如：检查已授权节点的磁盘占用并处理异常…" : "输入消息，或把右侧节点拖进这里授权 AI 使用…"}
                         className="min-h-[88px] max-h-44 resize-none pr-14"
                         onKeyDown={event => {
                           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -772,19 +806,21 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                       <Button
                         type="submit"
                         variant="primary"
-                        aria-label="发送"
-                        title="发送"
+                        aria-label={composerMode === "agent" ? "执行" : "发送"}
+                        title={composerMode === "agent" ? "执行任务" : "发送"}
                         className="absolute right-2.5 bottom-2.5 size-9 rounded-full p-0 shadow-md"
-                        disabled={writesLocked || !canUse || !messageText.trim() || generatingMessageId !== null}
+                        disabled={writesLocked || !canUse || !messageText.trim() || generatingMessageId !== null || runAgent.pending}
                       >
-                        {generatingMessageId !== null ? (
+                        {generatingMessageId !== null || runAgent.pending ? (
                           <Loader2 aria-hidden="true" className="size-4 animate-spin" />
                         ) : (
                           <Send aria-hidden="true" className="size-4" />
                         )}
                       </Button>
                     </div>
-                    <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">发送后自动生成回复；Enter 发送，Shift+Enter 换行。</p>
+                    <p className="mt-1.5 px-1 text-[11px] text-muted-foreground">
+                      {composerMode === "agent" ? "Enter 开始执行，Shift+Enter 换行；执行过程与审批在“自动化执行”中查看。" : "发送后自动生成回复；Enter 发送，Shift+Enter 换行。"}
+                    </p>
                   </form>
                 </div>
                 <div className="min-h-0 space-y-3 overflow-y-auto">

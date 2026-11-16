@@ -333,7 +333,7 @@ export function TasksPage() {
             </p>
           </div>
         </GlowingEffect>
-        <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+        <GlowingEffect tone="violet" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
           <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
             <PlayCircle className="size-4" />
           </span>
@@ -344,7 +344,7 @@ export function TasksPage() {
             </p>
           </div>
         </GlowingEffect>
-        <GlowingEffect glowColor="rgba(216, 155, 43, 0.15)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+        <GlowingEffect tone="blue" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
           <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-amber-700">
             <Clock className="size-4" />
           </span>
@@ -355,7 +355,7 @@ export function TasksPage() {
             </p>
           </div>
         </GlowingEffect>
-        <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+        <GlowingEffect tone="amber" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
           <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
             <CheckCircle2 className="size-4" />
           </span>

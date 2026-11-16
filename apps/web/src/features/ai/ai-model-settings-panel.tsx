@@ -30,6 +30,30 @@ export function AiModelSettingsPanel() {
   const isAdmin = session.identity?.roles.includes("administrator") ?? false;
   const credentialsLoaded = credentials.state.status === "ready" ? credentials.state.data : [];
   const aiKeys = credentialsLoaded.filter(credential => credential.kind === "ai_api_key" && credential.usageScope.includes("ai"));
+  const [keyName, setKeyName] = useState("");
+  const [keySecret, setKeySecret] = useState("");
+  const [keyRequest, setKeyRequest] = useState<string | null>(null);
+  const [keyNotice, setKeyNotice] = useState<string | null>(null);
+  const createKey = useAction((body: { name: string; kind: string; secret: string; usageScope: readonly string[] }, requestKey: string) =>
+    credentialsApi.create(body, requestKey),
+  );
+  const canCreateKey = session.can("credential.manage") || session.can("settings.manage") || session.can("user.manage");
+
+  async function addKey(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!keyName.trim() || !keySecret.trim()) return;
+    setKeyNotice(null);
+    const requestKey = keyRequest ?? globalThis.crypto.randomUUID();
+    setKeyRequest(requestKey);
+    const result = await createKey.run({ name: keyName.trim(), kind: "ai_api_key", secret: keySecret.trim(), usageScope: ["ai"] }, requestKey);
+    if (result.ok) {
+      setKeyRequest(null);
+      setKeyName("");
+      setKeySecret("");
+      setKeyNotice("AI 密钥已保存；请在下方模型设置中选中它并保存。");
+      credentials.refreshSilent();
+    }
+  }
 
   return (
     <Panel title="AI 模型" description="选择模型与密钥；保存成功不代表服务商当前可用。">
@@ -51,6 +75,29 @@ export function AiModelSettingsPanel() {
           />
         )}
       </AsyncPanel>
+      <div className="border-t border-border/80 px-5 py-4">
+        <details open={aiKeys.length === 0}>
+          <summary className="cursor-pointer text-sm font-semibold">新增 AI API Key</summary>
+          <form onSubmit={addKey} className="mt-3 space-y-3">
+            <p className="text-xs text-muted-foreground">密钥只在提交时传输一次，保存后不再显示；不会写入浏览器存储。</p>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Field label="密钥名称">
+                {ids => <TextInput id={ids.inputId} value={keyName} onChange={event => setKeyName(event.target.value)} placeholder="例如 StepFun" maxLength={64} disabled={!canCreateKey || session.writesLocked || createKey.pending} autoComplete="off" />}
+              </Field>
+              <Field label="API Key">
+                {ids => <TextInput id={ids.inputId} type="password" value={keySecret} onChange={event => setKeySecret(event.target.value)} placeholder="粘贴服务商密钥" maxLength={4096} disabled={!canCreateKey || session.writesLocked || createKey.pending} autoComplete="new-password" />}
+              </Field>
+            </div>
+            {keyNotice ? <Notice tone="success" title="已保存">{keyNotice}</Notice> : null}
+            {createKey.error ? <Notice tone="error" title="保存失败">{describeApiError(createKey.error)}</Notice> : null}
+            {keyRequest ? <Notice tone="warning" title="提交结果待核对">再次提交会复用同一请求编号，避免重复创建密钥。</Notice> : null}
+            {!canCreateKey ? <p className="text-xs text-muted-foreground">当前身份不能新增安全凭据。</p> : null}
+            <Button type="submit" size="sm" variant="primary" loading={createKey.pending} disabled={!canCreateKey || session.writesLocked || !keyName.trim() || !keySecret.trim()}>
+              保存 AI 密钥
+            </Button>
+          </form>
+        </details>
+      </div>
     </Panel>
   );
 }

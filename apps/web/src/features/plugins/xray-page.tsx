@@ -302,7 +302,7 @@ function XrayConsole() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="violet" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">可见节点 / 在线</span>
             <Radio className="size-4 text-primary" />
@@ -312,7 +312,7 @@ function XrayConsole() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="blue" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">已托管实例</span>
             <ShieldCheck className="size-4 text-emerald-600" />
@@ -322,7 +322,7 @@ function XrayConsole() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="green" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">托管用户 / 启用</span>
             <Users className="size-4 text-sky-600" />
@@ -332,7 +332,7 @@ function XrayConsole() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="amber" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">代理流量样本</span>
             <Activity className="size-4 text-amber-600" />

@@ -179,7 +179,7 @@ export function PluginsPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="violet" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">插件目录条目</span>
             <Blocks className="size-4 text-primary" />
@@ -187,7 +187,7 @@ export function PluginsPage() {
           <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">{catalogItems.length}</p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="blue" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">已安装 / 已启用</span>
             <PackageCheck className="size-4 text-emerald-600" />
@@ -197,7 +197,7 @@ export function PluginsPage() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="green" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">目录来源</span>
             <GitBranch className="size-4 text-sky-600" />

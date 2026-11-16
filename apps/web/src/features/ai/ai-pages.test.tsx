@@ -104,6 +104,31 @@ describe("AI session page", () => {
     expect(await screen.findByText("已脱敏回复")).toBeVisible();
   });
 
+  it("starts a real agent run from the composer when execution mode is selected", async () => {
+    const RUN = {
+      id: "run-1", sessionId: "s-1", goal: "检查节点磁盘", state: "completed", driverActive: false, revision: 3,
+      scopeRevision: 2, maxSteps: 8, createdAt: "2026-11-01T01:00:00Z", expiresAt: "2026-11-01T01:15:00Z",
+      steps: [{ number: 1, state: "completed", nodeIds: ["n-1"], startedAt: "2026-11-01T01:00:01Z", result: "节点运行正常" }],
+      finalText: "节点运行正常",
+    };
+    const { calls } = await renderAuthenticated("/ai/s-1", {
+      ...aiRoutes(),
+      "POST /api/v1/ai/sessions/s-1/runs": (_init) => jsonResponse({ ...RUN, state: "thinking", steps: [] }, 202),
+      "GET /api/v1/ai/sessions/s-1/runs": () => jsonResponse({ items: [RUN] }),
+      "GET /api/v1/ai/sessions/s-1/runs/run-1": () => jsonResponse(RUN),
+    });
+    await screen.findByRole("heading", { level: 1, name: "AI 会话 s-1" });
+    fireEvent.click(await screen.findByRole("button", { name: "执行任务" }));
+    fireEvent.change(screen.getByLabelText("消息内容"), { target: { value: "检查节点磁盘" } });
+    fireEvent.click(screen.getByRole("button", { name: "执行" }));
+    await waitFor(() => {
+      const call = calls.find(item => item.method === "POST" && item.url === "/api/v1/ai/sessions/s-1/runs");
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ goal: "检查节点磁盘", scopeRevision: 2, maxSteps: 8 });
+    });
+    expect((await screen.findAllByText("节点运行正常")).length).toBeGreaterThan(0);
+  });
+
   it("opens directly into a conversation and creates one when history is empty", async () => {
     const { calls } = await renderAuthenticated("/ai", {
       "GET /api/v1/ai/sessions": () => jsonResponse({ items: [] }),

@@ -11,9 +11,27 @@ import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
-import { dnsApi, dnsRecordTasksApi, type NodeCSRTask } from "@/lib/api/endpoints-infra";
+import { dnsApi } from "@/lib/api/endpoints-infra";
 import type { DNSAccount, DNSProviderZone, DNSRecord, DNSRecordInput, DNSZone } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
+
+function recordFQDN(name: string, zone: DNSZone | null): string {
+  const value = name.trim();
+  if (!zone || !value) return value;
+  if (value === "@") return zone.name;
+  if (value === zone.name || value.endsWith(`.${zone.name}`)) return value;
+  return `${value}.${zone.name}`;
+}
+
+function validateRecord(type: DNSRecordInput["type"], content: string, priority: string): string | null {
+  const value = content.trim();
+  if (type === "A" && !/^(\d{1,3}\.){3}\d{1,3}$/.test(value)) return "A 记录内容应为 IPv4 地址。";
+  if (type === "A" && value.split(".").some(part => Number(part) > 255)) return "A 记录的 IPv4 地址无效。";
+  if (type === "AAAA" && !value.includes(":")) return "AAAA 记录内容应为 IPv6 地址。";
+  if ((type === "CNAME" || type === "MX") && !value.includes(".")) return `${type} 记录内容应为域名。`;
+  if (type === "MX" && priority.trim() === "") return "MX 记录需要填写优先级。";
+  return null;
+}
 
 function RecordEditor({
   open,
@@ -26,71 +44,74 @@ function RecordEditor({
   readonly record: DNSRecord | null;
   readonly zone: DNSZone | null;
   readonly onClose: () => void;
-  readonly onSaved: (task:NodeCSRTask) => void;
+  readonly onSaved: (record: DNSRecord) => void;
 }) {
   const session = useSession();
   const [type, setType] = useState<DNSRecordInput["type"]>("A");
   const [name, setName] = useState("");
   const [content, setContent] = useState("");
-  const [ttl, setTtl] = useState("");
+  const [ttl, setTtl] = useState("auto");
   const [proxied, setProxied] = useState(false);
   const [priority, setPriority] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const [operationKey,setOperationKey] = useState<string|null>(null);
-  const action = useAction((body: DNSRecordInput,key:string) =>
-    record && zone ? dnsRecordTasksApi.update(zone.id, record.id, body,key) : zone ? dnsRecordTasksApi.create(zone.id, body,key) : Promise.reject(new Error("no zone")),
+  const action = useAction((body: DNSRecordInput) =>
+    record && zone ? dnsApi.updateRecord(zone.id, record.id, body) : zone ? dnsApi.createRecord(zone.id, body) : Promise.reject(new Error("no zone")),
   );
 
   useEffect(() => {
     if (!open) return;
     setType(record?.type ?? "A");
-    setName(record?.name ?? "");
+    setName(record?.name ?? "@");
     setContent(record?.content ?? "");
-    setTtl(record?.ttl === undefined ? "" : String(record.ttl));
+    setTtl(record?.ttl === undefined || record.ttl <= 1 ? "auto" : String(record.ttl));
     setProxied(record?.proxied ?? false);
     setPriority(record?.priority === undefined ? "" : String(record.priority));
     setLocalError(null);
-    setOperationKey(null);
+    action.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, record]);
+
+  const proxiable = type === "A" || type === "AAAA" || type === "CNAME";
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!name.trim() || !content.trim()) return setLocalError("记录名与内容不能为空。");
+    const problem = validateRecord(type, content, priority);
+    if (problem) return setLocalError(problem);
     const body: DNSRecordInput = {
       type,
       name: name.trim(),
       content: content.trim(),
-      ...(ttl ? { ttl: Number(ttl) } : {}),
-      proxied,
+      ...(ttl !== "auto" ? { ttl: Number(ttl) } : {}),
+      proxied: proxiable ? proxied : false,
       ...(priority ? { priority: Number(priority) } : {}),
     };
     setLocalError(null);
-    const key=operationKey??globalThis.crypto.randomUUID();setOperationKey(key);
-    const result = await action.run(body,key);
-    if(result.ok&&result.data){setOperationKey(null);onSaved(result.data.data);}
-    else if(result.error&&[400,401,403,422,429].includes(result.error.status))setOperationKey(null);
+    const result = await action.run(body);
+    if (result.ok && result.data) onSaved(result.data.data);
   }
 
   const disabled = !session.can("dns.record.manage") || session.writesLocked;
-  const inputsLocked=disabled||action.pending||operationKey!==null;
+  const inputsLocked = disabled || action.pending;
 
   return (
     <Modal
       open={open}
       title={record ? "编辑 DNS 记录" : "添加 DNS 记录"}
-      description={zone ? `Zone：${zone.name}（account ${zone.accountId}）` : undefined}
+      description={zone ? `Zone：${zone.name}` : undefined}
       onClose={() => {
         if (!action.pending) onClose();
       }}
       footer={
         <>
           <Button type="button" onClick={onClose} disabled={action.pending}>取消</Button>
-          <Button type="submit" form="dns-record-editor" variant="primary" loading={action.pending} disabled={disabled}>登记审批任务</Button>
+          <Button type="submit" form="dns-record-editor" variant="primary" loading={action.pending} disabled={disabled || !name.trim() || !content.trim()}>
+            {record ? "保存记录" : "添加记录"}
+          </Button>
         </>
       }
     >
       <form id="dns-record-editor" onSubmit={submit} className="space-y-4">
-        {operationKey?<Notice tone="warning" title="任务提交结果待核对">再次提交复用当前编号；请先在任务列表核对，不要重建未知结果操作。</Notice>:null}
         {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
         {action.error ? <Notice tone="error" title="保存失败">{describeApiError(action.error)}</Notice> : null}
         <div className="grid gap-3 sm:grid-cols-2">
@@ -101,16 +122,37 @@ function RecordEditor({
               </Select>
             )}
           </Field>
-          <Field label="TTL（可选）">{ids => <TextInput id={ids.inputId} type="number" min={1} value={ttl} onChange={event => setTtl(event.target.value)} disabled={inputsLocked} />}</Field>
+          <Field label="TTL" hint="自动由 Cloudflare 决定。">
+            {ids => (
+              <Select id={ids.inputId} value={ttl} onChange={event => setTtl(event.target.value)} disabled={inputsLocked}>
+                <option value="auto">自动</option>
+                <option value="60">1 分钟</option>
+                <option value="300">5 分钟</option>
+                <option value="600">10 分钟</option>
+                <option value="1200">20 分钟</option>
+                <option value="3600">1 小时</option>
+              </Select>
+            )}
+          </Field>
         </div>
-        <Field label="名称">{ids => <TextInput id={ids.inputId} value={name} onChange={event => setName(event.target.value)} required disabled={inputsLocked} />}</Field>
-        <Field label="内容">{ids => <TextInput id={ids.inputId} value={content} onChange={event => setContent(event.target.value)} required disabled={inputsLocked} />}</Field>
+        <Field label="名称" hint={`完整域名：${recordFQDN(name, zone) || "—"}；填 @ 表示根域名。`}>
+          {ids => <TextInput id={ids.inputId} value={name} onChange={event => setName(event.target.value)} placeholder="例如 www 或 @" required disabled={inputsLocked} autoComplete="off" />}
+        </Field>
+        <Field label="内容" hint={type === "A" ? "IPv4 地址，例如 203.0.113.10。" : type === "AAAA" ? "IPv6 地址。" : type === "CNAME" ? "目标域名，例如 example.com。" : type === "MX" ? "邮件服务器域名。" : "TXT 文本内容。"}>
+          {ids => <TextInput id={ids.inputId} value={content} onChange={event => setContent(event.target.value)} required disabled={inputsLocked} autoComplete="off" />}
+        </Field>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="优先级（MX 等，可选）">{ids => <TextInput id={ids.inputId} type="number" min={0} value={priority} onChange={event => setPriority(event.target.value)} disabled={inputsLocked} />}</Field>
-          <label className="mt-6 flex items-center gap-2 text-sm">
-            <Checkbox checked={proxied} onChange={event => setProxied(event.target.checked)} disabled={inputsLocked} />
-            Cloudflare 代理（供应商支持时）
-          </label>
+          {type === "MX" ? (
+            <Field label="优先级" hint="数值越小优先级越高。">
+              {ids => <TextInput id={ids.inputId} type="number" min={0} max={65535} value={priority} onChange={event => setPriority(event.target.value)} required disabled={inputsLocked} />}
+            </Field>
+          ) : <div />}
+          {proxiable ? (
+            <label className="mt-6 flex items-center gap-2 text-sm">
+              <Checkbox checked={proxied} onChange={event => setProxied(event.target.checked)} disabled={inputsLocked} />
+              经 Cloudflare 代理（橙云）
+            </label>
+          ) : null}
         </div>
       </form>
     </Modal>
@@ -211,7 +253,6 @@ export function DnsPage() {
   const canManageAccounts = session.can("dns.account.manage");
   const canManageRecords = session.can("dns.record.manage");
   const [selectedZoneId, setSelectedZoneId] = useState<string | null>(null);
-  const [deleteKeys,setDeleteKeys]=useState<Record<string,string>>({});
   const [recordEditor, setRecordEditor] = useState<{ open: boolean; record: DNSRecord | null }>({ open: false, record: null });
   const [deletingRecord, setDeletingRecord] = useState<DNSRecord | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
@@ -235,7 +276,7 @@ export function DnsPage() {
   );
   const recordItems = records.state.status === "ready" ? records.state.data.items : [];
 
-  const deleteRecordAction = useAction((record: DNSRecord,key:string) => dnsRecordTasksApi.remove(record.zoneId, record.id,key));
+  const deleteRecordAction = useAction((record: DNSRecord) => dnsApi.removeRecord(record.zoneId, record.id));
   const recordSyncAction = useAction((zoneId: string) => dnsApi.syncRecords(zoneId));
 
   async function syncRecords() {
@@ -251,13 +292,10 @@ export function DnsPage() {
 
   async function removeRecord() {
     if (!deletingRecord) return;
-    const scope=`${deletingRecord.zoneId}:${deletingRecord.id}`;
-    const key=deleteKeys[scope]??globalThis.crypto.randomUUID();setDeleteKeys(previous=>({...previous,[scope]:key}));
-    const result = await deleteRecordAction.run(deletingRecord,key);
+    const result = await deleteRecordAction.run(deletingRecord);
     if (result.ok) {
+      setOutcome(`已删除记录 ${deletingRecord.type} ${deletingRecord.name}。`);
       setDeletingRecord(null);
-      setDeleteKeys(previous=>{const next={...previous};delete next[scope];return next;});
-      setOutcome(`DNS 删除审批任务已登记：${result.data?.data.taskId??""}；审批及执行前记录尚未删除。`);
       records.reload();
     }
   }
@@ -273,7 +311,7 @@ export function DnsPage() {
 
       <div className="grid gap-3 sm:grid-cols-3">
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="violet" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">Cloudflare 账号</span>
             <Cloud className="size-4 text-primary" />
@@ -281,7 +319,7 @@ export function DnsPage() {
           <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-foreground">{accountItems.length}</p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="blue" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">当前账号可见 Zone</span>
             <Globe2 className="size-4 text-emerald-600" />
@@ -289,7 +327,7 @@ export function DnsPage() {
           <p className="relative z-10 mt-1.5 font-display text-2xl font-bold text-emerald-600">{zoneItems.length}</p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="green" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">当前 Zone 解析记录</span>
             <ListTree className="size-4 text-sky-600" />
@@ -383,9 +421,9 @@ export function DnsPage() {
         record={recordEditor.record}
         zone={selectedZone}
         onClose={() => setRecordEditor({ open: false, record: null })}
-        onSaved={task => {
+        onSaved={record => {
           setRecordEditor({ open: false, record: null });
-          setOutcome(`DNS 修改审批任务已登记：${task.taskId}；当前 ${task.status}，执行后再刷新记录。`);
+          setOutcome(`已保存记录 ${record.type} ${record.name}。`);
           records.reload();
         }}
       />
@@ -409,12 +447,12 @@ export function DnsPage() {
         footer={
           <>
             <Button type="button" onClick={() => setDeletingRecord(null)} disabled={deleteRecordAction.pending}>取消</Button>
-            <Button type="button" variant="danger" onClick={removeRecord} loading={deleteRecordAction.pending}>登记删除审批任务</Button>
+            <Button type="button" variant="danger" onClick={removeRecord} loading={deleteRecordAction.pending}>删除记录</Button>
           </>
         }
       >
         {deleteRecordAction.error ? <Notice tone="error" title="删除失败">{describeApiError(deleteRecordAction.error)}</Notice> : null}
-        <p className="text-sm text-muted-foreground">登记后需先完成人工审批，再由统一任务删除所选记录；请核对实际执行结果。</p>
+        <p className="text-sm text-muted-foreground">将从 Cloudflare 删除该条解析记录，并同步本地缓存。</p>
       </Modal>
     </div>
   );

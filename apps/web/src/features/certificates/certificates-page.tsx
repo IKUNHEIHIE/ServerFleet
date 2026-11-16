@@ -146,7 +146,7 @@ export function CertificatesPage() {
       {/* PKI Trust Hierarchy Visual Architecture */}
       <div className="grid gap-3 md:grid-cols-3">
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="blue" />
           <div className="relative z-10 flex items-start justify-between gap-2">
             <div>
               <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
@@ -162,7 +162,7 @@ export function CertificatesPage() {
           </div>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="green" />
           <div className="relative z-10 flex items-start justify-between gap-2">
             <div>
               <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
@@ -178,7 +178,7 @@ export function CertificatesPage() {
           </div>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="cyan" />
           <div className="relative z-10">
             <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
               <KeyRound className="size-3.5 text-sky-600" />

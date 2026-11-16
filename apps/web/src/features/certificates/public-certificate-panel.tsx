@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Notice } from "@/components/ui/feedback";
 import { Field, TextArea, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
-import { publicCertificateApi, type NodeCSRTask, type PublicCertificateOrder } from "@/lib/api/endpoints-infra";
+import { nodeCSRApi, publicCertificateApi, type NodeCSRTask, type PublicCertificateOrder } from "@/lib/api/endpoints-infra";
 import { describeApiError } from "@/lib/api/errors";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
@@ -24,9 +24,28 @@ export function PublicCertificatePanel() {
   const [lookup, setLookup] = useState("");
   const [order, setOrder] = useState<PublicCertificateOrder | null>(null);
   const [validation, setValidation] = useState<string | null>(null);
+  const [nodeId, setNodeId] = useState("");
+  const [domain, setDomain] = useState("");
+  const [keyRef, setKeyRef] = useState("");
+  const [csrTask, setCSRTask] = useState<NodeCSRTask | null>(null);
   const create = useAction((body: Parameters<typeof publicCertificateApi.create>[0]) => publicCertificateApi.create(body));
   const read = useAction((id: string) => publicCertificateApi.get(id));
+  const createCSR = useAction((body: Parameters<typeof nodeCSRApi.create>[0]) => nodeCSRApi.create(body));
   const locked = !allowed || session.writesLocked || profile.state.status !== "ready" || create.pending;
+
+  async function requestCSR(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!validID(nodeId) || !domain.trim() || domain !== domain.trim().toLowerCase() || !validID(keyRef)) {
+      setValidation("请填写节点 ID、小写域名和仅含字母数字/短横线/下划线的密钥引用。");
+      return;
+    }
+    setValidation(null);
+    const result = await createCSR.run({ nodeId, domain: domain.trim(), keyRef, idempotencyKey: globalThis.crypto.randomUUID() });
+    if (result.ok && result.data) {
+      setCSRTask(result.data.data);
+      setCSR(result.data.data.taskId);
+    }
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -80,6 +99,29 @@ export function PublicCertificatePanel() {
             {describeApiError(profile.state.error)} 请由管理员核对受信任的签发配置与凭据版本。
           </Notice>
         ) : null}
+        {profile.state.status === "ready" && profile.state.data.configured ? (
+          <p className="text-xs text-muted-foreground">签发配置已就绪 · DNS 凭据第 {profile.state.data.dnsCredentialRevision} 版 · 网站私钥不进入 Controller。</p>
+        ) : null}
+        <details className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+          <summary className="cursor-pointer text-sm font-semibold">先在节点生成 CSR（可选）</summary>
+          <form onSubmit={requestCSR} className="mt-3 space-y-3">
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="节点 ID">{ids => <TextInput id={ids.inputId} value={nodeId} onChange={event => setNodeId(event.target.value)} disabled={!allowed || createCSR.pending} autoComplete="off" />}</Field>
+              <Field label="网站域名">{ids => <TextInput id={ids.inputId} value={domain} onChange={event => setDomain(event.target.value)} placeholder="www.example.com" disabled={!allowed || createCSR.pending} autoComplete="off" />}</Field>
+              <Field label="密钥引用" hint="独立名称，不覆盖已存在密钥。">{ids => <TextInput id={ids.inputId} value={keyRef} onChange={event => setKeyRef(event.target.value)} disabled={!allowed || createCSR.pending} autoComplete="off" />}</Field>
+            </div>
+            {csrTask ? (
+              <Notice tone="info" title="CSR 任务已登记">
+                {csrTask.taskId} · {csrTask.status}。完成后该任务 ID 已自动带入下方签发。
+                <a href="#/tasks" className="ml-2 font-semibold text-primary underline">查看任务并审批</a>
+              </Notice>
+            ) : null}
+            {createCSR.error ? <Notice tone="error" title="CSR 任务未登记">{describeApiError(createCSR.error)}</Notice> : null}
+            <Button type="submit" size="sm" loading={createCSR.pending} disabled={!allowed || session.writesLocked || !nodeId.trim() || !domain.trim() || !keyRef.trim()}>
+              登记 CSR 生成任务
+            </Button>
+          </form>
+        </details>
         <form onSubmit={submit} className="space-y-3.5">
           <div className="grid gap-3.5 sm:grid-cols-2">
             <Field label="已完成的节点 CSR 任务 ID">

@@ -206,7 +206,7 @@ export function NodesPage() {
               当前返回：<strong className="font-semibold text-foreground">{list.state.status === "ready" && adapted?.ok ? `${items.length} 个节点` : "尚未取得"}</strong>
             </p>
           </GlowingEffect>
-          <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+          <GlowingEffect tone="blue" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
             <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
               <Activity className="size-4" />
             </span>
@@ -214,7 +214,7 @@ export function NodesPage() {
               在线：<strong className="font-semibold text-emerald-700">{list.state.status === "ready" && adapted?.ok ? `${online} 个` : "—"}</strong>
             </p>
           </GlowingEffect>
-          <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+          <GlowingEffect tone="green" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
             <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
               <Filter className="size-4" />
             </span>

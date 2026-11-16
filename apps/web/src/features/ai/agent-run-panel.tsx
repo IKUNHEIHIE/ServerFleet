@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Bot, Cpu, Loader2, ShieldAlert, Sparkles, Wrench } from "lucide-react";
 import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
@@ -22,7 +22,7 @@ const STATE_LABEL: Record<AgentRunState, string> = {
   canceled: "已取消", unknown: "结果未知，已停止", limit_reached: "达到步数或上下文上限",
 };
 
-export function AgentRunPanel({ session }: { readonly session: AISession }) {
+export function AgentRunPanel({ session, focusRunId }: { readonly session: AISession; readonly focusRunId?: string | null }) {
   const appSession = useSession();
   const [selected, setSelected] = useState("");
   const [goal, setGoal] = useState("");
@@ -37,6 +37,10 @@ export function AgentRunPanel({ session }: { readonly session: AISession }) {
   const runs = useResource(`ai:runs:${session.id}:${session.scopeRevision}:${appSession.viewEpoch}`, signal =>
     aiAgentApi.list(session.id, signal).then(result => result.data.items), { refreshIntervalMs: 4000 });
   const create = useAction((input: AgentRunInput) => aiAgentApi.create(session.id, input));
+
+  useEffect(() => {
+    if (focusRunId) setSelected(focusRunId);
+  }, [focusRunId]);
 
   async function start(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
