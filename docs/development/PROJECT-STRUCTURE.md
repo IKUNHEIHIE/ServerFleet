@@ -1,8 +1,8 @@
 # 项目结构与维护入口
 
-2026-11-14 核对。先读 [HANDOFF](HANDOFF.md)、[CURRENT-STATE](CURRENT-STATE.md)。本表提供现行源码导航；下述 R34 拆分背景是历史结构来源，不是未执行任务。
+2026-11-16 核对。先读 [HANDOFF](HANDOFF.md)、[CURRENT-STATE](CURRENT-STATE.md)。本表提供现行源码导航；下述 R34 拆分背景是历史结构来源，不是未执行任务。
 
-> v0.9.1 / R37：新增 Agent 身份续期与安全切换、明确接入读取授权、只读升级预检、通用就绪和有界节点诊断。现行迁移共50项（旧49项不变）。行为与接口见 [身份运维说明](IDENTITY-OPERATIONS.md)，升级/反代见仓库 deployment/UPGRADE.md 与 deployment/REVERSE-PROXY.md；旧审计/CI记录仅说明其当时基线。
+> v0.9.1 / R37：新增 Agent 身份续期与安全切换、明确接入读取授权、只读升级预检、通用就绪和有界节点诊断。R37 时迁移共50项（旧49项不变）；当前项数以 [CURRENT-STATE](CURRENT-STATE.md) 为准。行为与接口见 [身份运维说明](IDENTITY-OPERATIONS.md)，升级/反代见仓库 deployment/UPGRADE.md 与 deployment/REVERSE-PROXY.md；旧审计/CI记录仅说明其当时基线。
 
 
 R34 / 2026-11-12。保持既有Go模块、REST路径、数据目录和发行命令兼容；按职责拆文件和建立文档入口，未把业务搬入通用包或改变依赖方向。
@@ -31,6 +31,15 @@ R34 / 2026-11-12。保持既有Go模块、REST路径、数据目录和发行命�
 | `docs/audits` | 审计发现、证据、整改/剩余风险，不能冒充第三方认证 |
 | `docs/development` | 工作记录、操作专题、任务板和验证历史 |
 | `docs/architecture` / `docs/reference` | 架构来源/替代关系、原始不可变资料及批准ADR |
+
+### 文件互传前端（2026-11-16 拆分）
+
+| 路径 | 职责 |
+|---|---|
+| `apps/web/src/features/files/file-pane.tsx` | 单栏：节点选择、路径栏、四列表格、上传/新建/重命名/删除与发送入口 |
+| `apps/web/src/features/files/transfer-history.tsx` | 传输历史弹窗：状态筛选、进度、详情/取消；仅在打开时请求 |
+| `apps/web/src/features/files/files-page.tsx` | 页面骨架：节点装配、双栏布局、分发与续传分区、历史入口 |
+| `apps/web/src/features/files/upload-queue.ts` / `upload-resume.ts` | 待确认队列与断点续传的纯逻辑，不依赖页面组件 |
 
 ## 文档层次
 
