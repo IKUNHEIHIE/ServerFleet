@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 控制台缺陷修复与 AI 执行模式（2026-11-17）
+
+CONSOLE-FIX-20261117 / 分支 `feature/ai-dns-certs-ui-20261117`，[PR #54](https://github.com/IKUNHEIHIE/ServerFleet/pull/54)。用户要求先上传现有改动，再修复页面 403/权限、动态渐变与配色、证书签发配置、DNS 记录添加、AI Key 配置及 AI Agent 实控。已完成：权限键别名覆盖、统计卡片鼠标跟随渐变与多彩色调、DNS 记录增删改走 DNS 账号模块并补类型校验、测试站生成 ACME 账户密钥与部署文件并挂载 `-acme-deployment`、证书面板内联 CSR 登记、系统设置内新增 AI API Key、对话输入区“对话/执行任务”切换并创建自动推进的 Agent 运行。验证：awskr `check:web` 53 文件 / 480 用例 0 失败、生产构建成功、`/readyz` 五项 ready，首页资源 `index-r3fgJqMC.js`；浏览器端登录会话不可用，登录后的点击验收与真实 Agent 工具执行待人工复核。GitHub 直连 443 间歇不可用，追加提交经 Git Data API 推送。
+
 ## AI 运维端点接入（2026-11-16）
 
 AI-OPS-20261116 / 工作区未提交，用户提供测试密钥与 OpenAI 兼容端点。范围：`-ai-text-endpoint` 部署参数与端点校验、推理流事件兼容、`ai.use/ai.manage/ai.approve` 权限、消息幂等键、AI 页审批审计 404 空态、文档。测试站先接阿里云 MaaS（密钥中途失效，未验收），后切换 StepFun `step-5-preview`；浏览器端到端生成成功（真实助手回复、事件 succeeded）。2026-11-17 追加：移除预算界面与生成前预算拦截；模型配置迁入系统设置 → AI 模型；AI 会话页改为聊天窗口 + 右侧资源拖选授权（点击/拖入写授权并插入 @名称）。2026-11-17 二次调整：入口即聊天 + 左侧历史 + 右侧资源拖选；发送自动生成；多轮 assistant 历史改为 output_text 分段；授权动作扩展为 nodes.read/tasks.command/tasks.exec.v1/host.root。未推 GitHub；生产/VPS 未部署。
