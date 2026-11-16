@@ -69,7 +69,7 @@ func (f *agentFileCapability) checkpointPrefix(ctx context.Context, b agentFileB
 	}
 	h.Write(chunk)
 	checkpoint := agentPrefixCheckpoint{Version: 1, Binding: b, Offset: offset + uint64(len(chunk)), PrefixSHA256: hex.EncodeToString(h.Sum(nil))}
-	return writeAgentResumeRecord(f.root, ".sf-"+b.TransferID+"/prefix-"+strconv.FormatUint(checkpoint.Offset, 10)+".json", checkpoint)
+	return writeAgentResumeRecord(f.root, agentStagingDir(b.RelativePath, b.TransferID)+"/prefix-"+strconv.FormatUint(checkpoint.Offset, 10)+".json", checkpoint)
 }
 func (f *agentFileCapability) adoptResume(ctx context.Context, b agentFileBinding, raw string) (agentFileBinding, error) {
 	source, err := transport.ParseFileResumeSource(raw, uint64(b.Size))
@@ -78,7 +78,7 @@ func (f *agentFileCapability) adoptResume(ctx context.Context, b agentFileBindin
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	oldDir := ".sf-" + source.TransferID
+	oldDir := agentStagingDir(b.RelativePath, source.TransferID)
 	unlock, err := agentResumeLock(f.root, oldDir)
 	if err != nil {
 		return b, err
@@ -135,7 +135,7 @@ func (f *agentFileCapability) adoptResume(ctx context.Context, b agentFileBindin
 	if err = writeAgentResumeRecord(f.root, oldDir+"/adopted.json", b); err != nil {
 		return b, err
 	}
-	newDir := ".sf-" + b.TransferID
+	newDir := agentStagingDir(b.RelativePath, b.TransferID)
 	if f.root.Mkdir(newDir, 0700) != nil {
 		return b, errFileCapability
 	}

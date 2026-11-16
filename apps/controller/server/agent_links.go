@@ -78,7 +78,7 @@ func agentValidationLimits() transport.ValidationLimits {
 }
 
 func agentFrameLimits() transport.FrameDecodeLimits {
-	return transport.FrameDecodeLimits{MaxFrameBytes: 64 << 10, MaxFields: 64, MaxDepth: 16}
+	return transport.FrameDecodeLimits{MaxFrameBytes: 64 << 10, MaxFields: 2048, MaxDepth: 16}
 }
 
 type agentLinkBridge struct {

@@ -475,7 +475,7 @@ func agentSessionLimits() (transport.ValidationLimits, transport.FrameDecodeLimi
 		MaxOfferLifetime:   10 * time.Minute,
 		AllowedActions:     map[string]string{controlledCommandAction: controlledActionSchemaVersion},
 	}
-	return semantic, transport.FrameDecodeLimits{MaxFrameBytes: agentLinkFrameBytes, MaxFields: 64, MaxDepth: 16}
+	return semantic, transport.FrameDecodeLimits{MaxFrameBytes: agentLinkFrameBytes, MaxFields: 2048, MaxDepth: 16}
 }
 
 func parseAgentConnectionRoot(raw []byte) (*x509.CertPool, string, error) {
