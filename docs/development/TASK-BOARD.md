@@ -1,5 +1,9 @@
 # 任务登记板
 
+## 结构整理与交接文档刷新（2026-11-16）
+
+FILES-STRUCTURE-20261116 / `feature/files-structure-docs-20261116`，基线 main `71dbca3c9d4a69890468d2f574362eaf6ea15c48`。用户要求按当前进度更新文档并优化目录结构：文件互传前端拆为 `file-pane.tsx`（单栏）/ `transfer-history.tsx`（历史弹窗，打开时才请求）/ `files-page.tsx`（页面骨架），行为与 REST 调用不变；同步 PROJECT-STRUCTURE、HANDOFF、FEATURES、CURRENT-STATE 与本节。范围只限上述前端模块与现行文档，不动 Controller/Agent/协议/迁移/依赖。验证：awskr 上 `npm run typecheck`、`check:web`（54 文件 / 482 用例 0 失败）、vite 生产构建通过；文档相对链接与 diff 空白检查通过；未改 Go 侧故不重跑 Go 测试。停止于精确 head CI 通过与 expected-head 合并；结果补 PR 评论。
+
 ## 部署回执：节点管理与接入体验（2026-11-15）
 
 用户追加批准在 awskr 安装 C 编译器、验证后部署线上 VPS。本轮已安装 build-essential/GCC 14.2；nodes、transport、Controller server、v09 集成相关 race 通过，显式 NGINX_BIN=/usr/sbin/nginx 的 platform race 370.362 秒、services race 6.022 秒通过。全仓 race 未获得完整成功结果；internal/updates 既有超时仍保留 FAIL，不宣称全仓全绿。

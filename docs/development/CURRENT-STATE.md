@@ -1,6 +1,19 @@
 # 当前实现与交付状态
 
-核对日期：**2026-11-14**。这是当前状态汇总入口；历史进度与任务单不替代本文。后续代码合并须重新核对更新。
+核对日期：**2026-11-16**。这是当前状态汇总入口；历史进度与任务单不替代本文。后续代码合并须重新核对更新。
+
+## 2026-11-16 节点接入、整机文件能力与互传修复（已合并、已部署测试站）
+
+本轮以 `71dbca3` 为核对基线，合并 PR #41、#43、#44 与 #46–#52；下方 11-15 补丁段为历史事实，最新状态以本节为准。
+
+- 安装：控制台输出短命令（下载并校验 `/install/agent.sh` 摘要），脚本创建专用 `serverfleet` 用户 + systemd；追加 `--system-files` 为显式整机模式（root 运行、`-file-system-root`）。安装器修复了 runner 路径覆盖与重跑 `ETXTBSY`（临时文件 + 原子 install）。
+- 节点：`aliyun-hk-1b`、`azure-20-215` 在线，当前以整机模式运行发布版预编译 agent（`a18f1228`）；`wentian-host-01` 在线但为旧 agent（沙箱、无硬件字段，重装后补齐）。首个 Bootstrap 管理员覆盖当前节点授权不变。
+- 文件互传：修复帧字段上限（64→2048，目录列表不再 `FRAME_FIELD_LIMIT`）与暂存目录跨挂载点发布（`EXDEV`，改为目标同目录 `.sf-<transfer>`）；实测 `/etc` 列表、跨节点复制（sha256 一致）、上传、删除均通过。
+- 硬件与流量：AgentHello 9–12 上报 CPU 型号/核数/内存/磁盘；`GET /traffic-usage` 提供本月上下行；详情页移除账户授权与协议/能力清单。
+- 监控：节点资源与节点列表同为 5 秒刷新，指标显示“采样 时间”而非固定“无采样时间”。
+- 前端结构：文件互传拆为 `file-pane.tsx` / `transfer-history.tsx` / `files-page.tsx`，传输历史收进页头弹窗。
+- 验证：`check:web` 54 文件 / 482 用例、`check:contracts`、`go test -race ./apps/controller/server/` 通过；PR #46/#47/#48/#49/#50/#51/#52 精确 head 的 CI 全绿。
+- 边界：整机模式以 root 运行文件服务（显式选择）；浏览器点击未自动化，接口层已实测；G2 全量验收仍未记录完成。
 
 ## 2026-11-15 节点管理补丁（未提交、已部署）
 
@@ -21,9 +34,9 @@ awskr 的 fix/node-management-20261115 从 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb0
 | 项目 | 已核对事实 |
 |---|---|
 | 仓库 | 公有 `IKUNHEIHIE/ServerFleet` |
-| 代码基线 | main `c6204762c7fb285c475b619886474351c26dca31`，PR #31 已合并 |
+| 代码基线 | main `71dbca3c9d4a69890468d2f574362eaf6ea15c48`（2026-11-16，PR #52 合并后） |
 | 最新发布 | [v0.9.2](https://github.com/IKUNHEIHIE/ServerFleet/releases/tag/v0.9.2)，Linux amd64/arm64 |
-| 迁移 | 50 项；历史 SQL/checksum 不变；R39 无新迁移 |
+| 迁移 | 52 项（含 ds/0089_node_archives、ds/0090_node_live_metrics）；历史 SQL/checksum 不变 |
 | 工具 | Go 1.27.4、Node 24.22.1、npm 11.x；版本源见 [工具链](TOOLCHAIN.md) |
 | 产品验收 | 核心代码已交付；完整 G2 冻结/原始需求全量验收未记录完成；实机验收开放 |
 
