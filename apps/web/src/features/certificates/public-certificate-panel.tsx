@@ -28,6 +28,7 @@ export function PublicCertificatePanel() {
   const [domain, setDomain] = useState("");
   const [keyRef, setKeyRef] = useState("");
   const [csrTask, setCSRTask] = useState<NodeCSRTask | null>(null);
+  const [csrKey, setCSRKey] = useState<string | null>(null);
   const create = useAction((body: Parameters<typeof publicCertificateApi.create>[0]) => publicCertificateApi.create(body));
   const read = useAction((id: string) => publicCertificateApi.get(id));
   const createCSR = useAction((body: Parameters<typeof nodeCSRApi.create>[0]) => nodeCSRApi.create(body));
@@ -40,10 +41,15 @@ export function PublicCertificatePanel() {
       return;
     }
     setValidation(null);
-    const result = await createCSR.run({ nodeId, domain: domain.trim(), keyRef, idempotencyKey: globalThis.crypto.randomUUID() });
+    const requestKey = csrKey ?? globalThis.crypto.randomUUID();
+    setCSRKey(requestKey);
+    const result = await createCSR.run({ nodeId, domain: domain.trim(), keyRef, idempotencyKey: requestKey });
     if (result.ok && result.data) {
+      setCSRKey(null);
       setCSRTask(result.data.data);
       setCSR(result.data.data.taskId);
+    } else if (result.error && [400, 401, 403, 422, 429].includes(result.error.status)) {
+      setCSRKey(null);
     }
   }
 

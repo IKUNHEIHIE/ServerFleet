@@ -33,6 +33,7 @@ const BACKEND_ALIASES: Readonly<Record<string, readonly string[]>> = {
   "file.read": ["files.read"],
   "file.write": ["files.write"],
   "file.delete": ["files.write"],
+  "file.manage": ["files.write", "files.transfer"],
   "file.rename": ["files.write"],
   "files.write": ["files.write"],
   "file.transfer": ["files.transfer", "files.transfer_create", "files.transfer_execute"],
