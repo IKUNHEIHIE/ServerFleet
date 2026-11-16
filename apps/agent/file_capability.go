@@ -179,7 +179,7 @@ func (f *agentFileCapability) resolveWriteDestination(ctx context.Context, b age
 }
 
 func (f *agentFileCapability) priorWritePath(b agentFileBinding) (string, bool) {
-	raw, err := f.root.ReadFile(".sf-" + b.TransferID + "/binding.json")
+	raw, err := f.root.ReadFile(agentStagingDir(b.RelativePath, b.TransferID) + "/binding.json")
 	if err != nil || len(raw) > 4096 {
 		return "", false
 	}
@@ -235,6 +235,16 @@ func (f *agentFileCapability) Read(ctx context.Context, b agentFileBinding, offs
 // requires the SAME binding and current gate; a different offset or plan is
 // rejected. There are no bytes in task logs, execution ledger, audit metadata or
 // errors.
+// agentStagingDir keeps the private staging directory on the destination's
+// filesystem: publishing is a same-filesystem rename/link and fails with EXDEV
+// when the target lives on another mount (tmpfs, /proc, data disks).
+func agentStagingDir(relative, transfer string) string {
+	if i := strings.LastIndex(relative, "/"); i >= 0 {
+		return relative[:i] + "/.sf-" + transfer
+	}
+	return ".sf-" + transfer
+}
+
 func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, offset int64, chunk []byte, finish bool) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
@@ -244,7 +254,7 @@ func (f *agentFileCapability) Write(ctx context.Context, b agentFileBinding, off
 	if agentFileSpace(f.root, int64(len(chunk))+4096) != nil {
 		return errFileCapability
 	}
-	dir := ".sf-" + b.TransferID
+	dir := agentStagingDir(b.RelativePath, b.TransferID)
 	err := f.root.Mkdir(dir, 0700)
 	if err != nil && !os.IsExist(err) {
 		return errFileCapability
