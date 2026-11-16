@@ -37,6 +37,10 @@ describe("one-click installation", () => {
     expect(await screen.findByText("尚未配置可信安装分发")).toBeVisible();
     expect(screen.queryByLabelText("一键安装命令")).not.toBeInTheDocument();
   });
+  it("adds the whole-machine flag only when explicitly enabled", () => {
+    expect(installationShortCommand(catalog.agentScript, "node", true).endsWith("sh /tmp/sf-agent.sh 'node' --system-files")).toBe(true);
+    expect(installationShortCommand(catalog.agentScript, "node", false)).not.toContain("--system-files");
+  });
   it("verifies the downloaded script before running it with the quoted node name", () => {
     const cmd = installationShortCommand(catalog.agentScript, "node ' quoted");
     expect(cmd).toContain(`'${catalog.agentScript.sha256}'`);

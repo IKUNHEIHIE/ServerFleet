@@ -32,7 +32,7 @@ func TestAgentResumeProcessChild(t *testing.T) {
 		t.Skip("private file-resume subprocess only")
 	}
 	root := os.Getenv("SF_TEST_RESUME_ROOT")
-	f, err := openAgentFileCapability(root, func(context.Context, agentFileBinding, string) error {
+	f, err := openAgentFileCapability(root, false, func(context.Context, agentFileBinding, string) error {
 		if os.Getenv("SF_TEST_RESUME_DENY") == "1" {
 			return errFileCapability
 		}
@@ -113,7 +113,7 @@ func TestAgentConfirmedPrefixResumesInNewProcess(t *testing.T) {
 	if e != nil || !bytes.Equal(data, processResumeData()) {
 		t.Fatal("resumed publication bytes differ", e)
 	}
-	f, e := openAgentFileCapability(root, func(context.Context, agentFileBinding, string) error { return nil })
+	f, e := openAgentFileCapability(root, false, func(context.Context, agentFileBinding, string) error { return nil })
 	if e != nil {
 		t.Fatal(e)
 	}

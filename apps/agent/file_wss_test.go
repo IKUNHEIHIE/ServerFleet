@@ -124,7 +124,7 @@ func newFileWSSFixture(t *testing.T, node, root, ledger string, dropFinal ...boo
 		t.Fatal(err)
 	}
 	current := func(context.Context, *agentv1.TaskOffer) error { return nil } // synthetic LOCAL path/capability authority; Controller gate is separate
-	files, err := newAgentFileSessions(root, node, current)
+	files, err := newAgentFileSessions(root, node, false, current)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -33,7 +33,7 @@ func TestFileOpHandleOpDirect(t *testing.T) {
 		t.Skip("Linux non-root")
 	}
 	root, _, node := diropSeed(t)
-	files, err := newAgentFileSessions(root, node, func(context.Context, *agentv1.TaskOffer) error { return nil })
+	files, err := newAgentFileSessions(root, node, false, func(context.Context, *agentv1.TaskOffer) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

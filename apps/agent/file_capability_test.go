@@ -22,7 +22,7 @@ func TestAgentFileBytesResumeHashAndIndependentReadGate(t *testing.T) {
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
 	allowed := true
-	f, err := openAgentFileCapability(dir, func(context.Context, agentFileBinding, string) error {
+	f, err := openAgentFileCapability(dir, false, func(context.Context, agentFileBinding, string) error {
 		if !allowed {
 			return errFileCapability
 		}
@@ -37,7 +37,7 @@ func TestAgentFileBytesResumeHashAndIndependentReadGate(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.Close()
-	f, err = openAgentFileCapability(dir, func(context.Context, agentFileBinding, string) error {
+	f, err = openAgentFileCapability(dir, false, func(context.Context, agentFileBinding, string) error {
 		if !allowed {
 			return errFileCapability
 		}
@@ -76,7 +76,7 @@ func TestAgentFileRejectsPlanChangeEscapeHashOverwriteAndCancel(t *testing.T) {
 	}
 	dir := t.TempDir()
 	os.Chmod(dir, 0700)
-	f, err := openAgentFileCapability(dir, func(context.Context, agentFileBinding, string) error { return nil })
+	f, err := openAgentFileCapability(dir, false, func(context.Context, agentFileBinding, string) error { return nil })
 	if err != nil {
 		t.Fatal(err)
 	}

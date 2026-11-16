@@ -39,13 +39,21 @@ type agentFileCapability struct {
 	snapshots   map[string]*os.File
 }
 
-func openAgentFileCapability(directory string, gate agentFileGate) (*agentFileCapability, error) {
+func openAgentFileCapability(directory string, allowSystemRoot bool, gate agentFileGate) (*agentFileCapability, error) {
 	if runtime.GOOS != "linux" || !filepath.IsAbs(directory) || gate == nil {
 		return nil, errFileCapability
 	}
-	info, err := os.Lstat(directory)
-	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || runtime.GOOS == "linux" && (os.Geteuid() == 0 || info.Mode().Perm()&0077 != 0) {
-		return nil, errFileCapability
+	if allowSystemRoot {
+		// Whole-machine mode is an explicit root decision: it must never be
+		// reached implicitly, and it only makes sense for "/" as root.
+		if directory != "/" || os.Geteuid() != 0 {
+			return nil, errFileCapability
+		}
+	} else {
+		info, err := os.Lstat(directory)
+		if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 || runtime.GOOS == "linux" && (os.Geteuid() == 0 || info.Mode().Perm()&0077 != 0) {
+			return nil, errFileCapability
+		}
 	}
 	r, err := os.OpenRoot(directory)
 	if err != nil {
