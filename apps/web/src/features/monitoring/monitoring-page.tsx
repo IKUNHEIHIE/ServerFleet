@@ -270,7 +270,7 @@ export function MonitoringPage() {
   const [history, setHistory] = useState<AvailabilityMonitor | null>(null);
   const [outcome, setOutcome] = useState<string | null>(null);
 
-  const nodes = useResource(`monitor:nodes:${session.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data));
+  const nodes = useResource(`monitor:nodes:${session.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data), { refreshIntervalMs: 5000 });
   const risks = useResource(`monitor:risks:${session.viewEpoch}`, signal => trafficApi.risks(signal).then(result => result.data));
   const monitors = useResource(`monitor:list:${session.viewEpoch}`, signal => monitoringApi.list(signal).then(result => result.data), { refreshIntervalMs: 10000 });
   const channels = useResource(`monitor:channels:${session.viewEpoch}`, signal => notificationsApi.channels(signal).then(result => result.data));
@@ -414,8 +414,8 @@ export function MonitoringPage() {
                   columns={[
                     { key: "name", header: "节点", render: node => node.name.trim() || node.id },
                     { key: "online", header: "在线", render: node => (node.online ? "在线" : "离线") },
-                    { key: "cpu", header: "CPU", align: "right", render: node => <LegacyMetricCell metric={adaptMetric(node.cpuPercent, node.online)} /> },
-                    { key: "memory", header: "内存", align: "right", render: node => <LegacyMetricCell metric={adaptMetric(node.memoryPercent, node.online)} /> },
+                    { key: "cpu", header: "CPU", align: "right", render: node => <LegacyMetricCell metric={adaptMetric(node.cpuPercent, node.online)} sampledAt={node.sampledAt} /> },
+                    { key: "memory", header: "内存", align: "right", render: node => <LegacyMetricCell metric={adaptMetric(node.memoryPercent, node.online)} sampledAt={node.sampledAt} /> },
                     {
                       key: "risk",
                       header: "流量/到期风险",
