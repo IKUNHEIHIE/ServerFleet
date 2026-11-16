@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel, SectionDivider, SubCard } from "@/components/ui/panel";
+import { PageHeader, SectionDivider, SubCard } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { ApiError, describeApiError } from "@/lib/api/errors";
 import { filesApi, nodesApi, tasksApi, transfersApi } from "@/lib/api/endpoints";
@@ -996,12 +996,14 @@ export function FilesPage() {
   const [paneB, setPaneB] = useState<PaneState>(INITIAL_PANE);
   const [transferDetail, setTransferDetail] = useState<TransferJob | null>(null);
   const [transferFilter, setTransferFilter] = useState<string>("");
+  const [historyOpen, setHistoryOpen] = useState(false);
   const [outcome, setOutcome] = useState<string | null>(null);
 
   const nodes = useResource(`files:nodes:${session.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data));
   const transfers = useResource(
     `files:transfers:${session.viewEpoch}:${transferFilter}`,
     signal => transfersApi.list({ ...(transferFilter ? { status: transferFilter } : {}), limit: 50 }, signal).then(result => result.data),
+    { enabled: historyOpen },
   );
   const cancelTransfer = useAction((id: string) => transfersApi.cancel(id));
   const nodeItems = nodes.state.status === "ready" ? nodes.state.data.items : [];
@@ -1028,7 +1030,12 @@ export function FilesPage() {
         title="文件互传"
         description="双栏独立浏览目录，支持跨节点复制；符号链接默认不跟随。"
         badge={<Badge tone="primary" dot>异步复制</Badge>}
-        actions={<Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>}
+        actions={
+          <>
+            <Button type="button" onClick={() => setHistoryOpen(true)}>传输任务</Button>
+            <Button type="button" onClick={() => { nodes.reload(); transfers.reload(); }}><RefreshCw className="size-3.5" />刷新</Button>
+          </>
+        }
       />
       <Notice tone="info" title="说明">
         上传会校验文件完整性；界面区分“校验通过”与“未送达远端”。暂不支持下载。
@@ -1058,11 +1065,16 @@ export function FilesPage() {
         )}
       </AsyncPanel>
 
-      <Panel
+      <Modal
+        open={historyOpen}
         title="传输任务"
         description="取消是请求，不保证回滚。"
-        actions={
-          <>
+        wide
+        onClose={() => setHistoryOpen(false)}
+        footer={<Button type="button" onClick={() => setHistoryOpen(false)}>关闭</Button>}
+      >
+        <div className="space-y-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
             <label className="text-xs text-muted-foreground">
               状态
               <Select
@@ -1075,9 +1087,7 @@ export function FilesPage() {
               </Select>
             </label>
             <Button size="sm" onClick={transfers.reload} loading={transfers.state.status === "loading"}>刷新</Button>
-          </>
-        }
-      >
+            </div>
         <AsyncPanel
           state={transfers.state}
           onRetry={transfers.reload}
@@ -1117,7 +1127,7 @@ export function FilesPage() {
                   header: "操作",
                   render: job => (
                     <div className="flex flex-wrap gap-1">
-                      <Button size="sm" onClick={() => setTransferDetail(job)}>详情</Button>
+                      <Button size="sm" onClick={() => { setHistoryOpen(false); setTransferDetail(job); }}>详情</Button>
                       <Button
                         size="sm"
                         variant="danger"
@@ -1134,7 +1144,8 @@ export function FilesPage() {
             />
           )}
         </AsyncPanel>
-      </Panel>
+        </div>
+      </Modal>
 
       <SectionDivider label="多目标分发与断点偏移恢复" caption="Multi-Target Distribution & Offset Resume" />
       <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
@@ -1145,9 +1156,9 @@ export function FilesPage() {
       <Modal
         open={transferDetail !== null}
         title={transferDetail ? `传输任务 ${transferDetail.id}` : "传输任务"}
-        onClose={() => setTransferDetail(null)}
+        onClose={() => { setTransferDetail(null); setHistoryOpen(true); }}
         wide
-        footer={<Button type="button" onClick={() => setTransferDetail(null)}>关闭</Button>}
+        footer={<Button type="button" onClick={() => { setTransferDetail(null); setHistoryOpen(true); }}>关闭</Button>}
       >
         {transferDetail ? (
           <div className="space-y-3 text-sm">
