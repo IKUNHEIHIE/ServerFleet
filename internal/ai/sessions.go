@@ -756,7 +756,6 @@ func (s *SessionService) mutateRevision(ctx context.Context, id string, expected
 			return err
 		}
 		return s.audit(st, record, action, now, previousNodes...)
-		return nil
 	})
 	if err != nil {
 		return SessionView{}, err
