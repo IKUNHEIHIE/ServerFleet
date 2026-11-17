@@ -83,7 +83,6 @@ func TestDNSHTTPAccountZoneAndRecordFlow(t *testing.T) {
 		t.Fatalf("unexpected provider zones: %+v", providerList.Items)
 	}
 
-
 	rbody, _ := json.Marshal(map[string]any{
 		"type": "A", "name": "www", "content": "203.0.113.10", "ttl": 120,
 	})

@@ -42,14 +42,14 @@ import (
 
 // Config configures the composed Controller management runtime.
 type Config struct {
-	InstallationCatalog       *InstallationCatalog
-	WebDirectory              string
-	DBPath                    string
-	DBDriver                  string
-	DBDSN                     string
-	CredentialKeyDir          string
-	AIGenerationQuota         ai.GenerationQuota
-	LocalAIProvider           *ai.LocalTLSProviderConfig
+	InstallationCatalog *InstallationCatalog
+	WebDirectory        string
+	DBPath              string
+	DBDriver            string
+	DBDSN               string
+	CredentialKeyDir    string
+	AIGenerationQuota   ai.GenerationQuota
+	LocalAIProvider     *ai.LocalTLSProviderConfig
 	// AITextEndpoint is a deployment-level OpenAI-compatible Responses URL.
 	AITextEndpoint            string
 	Origin                    string
@@ -161,18 +161,18 @@ type Server struct {
 	FileWorker           *FileExecutionWorker
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
-	AI               *ai.SessionService
-	AIAgent          *ai.AgentLoop
-	AIAgentHTTP      *ai.AgentHTTP
-	AIBudget         *ai.PersistentGenerationBudget
-	AIConversation   *ai.ConversationService
-	AIRuntime        *ai.BYOKRuntime
-	AIModelsHTTP     *ai.ModelSettingsHTTP
+	AI                 *ai.SessionService
+	AIAgent            *ai.AgentLoop
+	AIAgentHTTP        *ai.AgentHTTP
+	AIBudget           *ai.PersistentGenerationBudget
+	AIConversation     *ai.ConversationService
+	AIRuntime          *ai.BYOKRuntime
+	AIModelsHTTP       *ai.ModelSettingsHTTP
 	AIModelCatalogHTTP *ai.ModelCatalogHTTP
-	AIGenerationHTTP *ai.GenerationHTTP
-	AIManagement     *ai.ManagementHTTP
-	AIMessagesHTTP   *ai.MessagesHTTP
-	AIEventsHTTP     *ai.MessageEventsHTTP
+	AIGenerationHTTP   *ai.GenerationHTTP
+	AIManagement       *ai.ManagementHTTP
+	AIMessagesHTTP     *ai.MessagesHTTP
+	AIEventsHTTP       *ai.MessageEventsHTTP
 
 	Plugins          *plugins.LifecycleManager
 	PluginRepository plugins.RepositoryStore

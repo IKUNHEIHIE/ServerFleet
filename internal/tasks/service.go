@@ -211,14 +211,14 @@ type SubmitRequest struct {
 	Params           map[string]string
 	CanonicalParams  []byte
 	IdempotencyKey   string
-	RequireApproval bool
+	RequireApproval  bool
 	// ApprovalSatisfied marks an AI-originated task whose human tool approval was
 	// already granted by the AI session; class-level approval is not required twice.
 	ApprovalSatisfied bool
-	ScopeRevision    uint64
-	Source           audit.Source
-	PluginID         string
-	ApprovalID       string
+	ScopeRevision     uint64
+	Source            audit.Source
+	PluginID          string
+	ApprovalID        string
 }
 
 // Submit persists a task and its frozen target snapshot. Authorization runs

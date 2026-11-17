@@ -136,10 +136,10 @@ func main() {
 		}
 		httpServer.TLSConfig = tlsConfig
 		driver := options.DBDriver
-	if driver == "" {
-		driver = "sqlite"
-	}
-	log.Printf("Server Fleet Controller: https://%s (%s management API and Agent enrollment active)", options.Listen, driver)
+		if driver == "" {
+			driver = "sqlite"
+		}
+		log.Printf("Server Fleet Controller: https://%s (%s management API and Agent enrollment active)", options.Listen, driver)
 		if err := httpServer.ListenAndServeTLS("", ""); err != nil && err != http.ErrServerClosed {
 			log.Fatal(err)
 		}

@@ -33,13 +33,13 @@ func (s *Server) borrowStandaloneDNS(ctx context.Context, use dns.SecretUse, con
 	digest := sha256.Sum256([]byte("dns-standalone:" + use.Ref + ":" +
 		use.SubjectID + ":" + use.RequestID + ":" + use.Operation + ":" + strconv.FormatUint(use.ExpectedRevision, 10)))
 	op := auth.CredentialOperation{
-		SubjectID:    use.SubjectID,
-		CredentialID: use.Ref,
-		Module:       "dns",
-		Source:       "web",
-		OperationID:  "dns-use-" + newRequestID(),
-		PlanDigest:   hex.EncodeToString(digest[:]),
-		Action:       "use",
+		SubjectID:        use.SubjectID,
+		CredentialID:     use.Ref,
+		Module:           "dns",
+		Source:           "web",
+		OperationID:      "dns-use-" + newRequestID(),
+		PlanDigest:       hex.EncodeToString(digest[:]),
+		Action:           "use",
 		ExpectedRevision: use.ExpectedRevision,
 	}
 	scope := &standaloneDNSBorrowScope{server: s, op: op}

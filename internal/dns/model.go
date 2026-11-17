@@ -118,18 +118,18 @@ type Record struct {
 }
 
 type accountRecord struct {
-	ID               string
-	ProviderCode     string
-	DisplayName      string
-	Note             string
-	Enabled          bool
-	IsDefault        bool
-	CredentialRef    CredentialRef
+	ID            string
+	ProviderCode  string
+	DisplayName   string
+	Note          string
+	Enabled       bool
+	IsDefault     bool
+	CredentialRef CredentialRef
 	// CredentialRevision pins the secret-store revision this account may use.
 	CredentialRevision uint64
 	CredentialStatus   CredentialStatus
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	CreatedAt          time.Time
+	UpdatedAt          time.Time
 }
 
 func (a accountRecord) view() AccountView {

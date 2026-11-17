@@ -199,8 +199,8 @@ type cloudflareRecord struct {
 }
 
 type cloudflareRecordListEnvelope struct {
-	Success    bool              `json:"success"`
-	Errors     []cloudflareErr   `json:"errors"`
+	Success    bool               `json:"success"`
+	Errors     []cloudflareErr    `json:"errors"`
 	Result     []cloudflareRecord `json:"result"`
 	ResultInfo struct {
 		Page       int `json:"page"`

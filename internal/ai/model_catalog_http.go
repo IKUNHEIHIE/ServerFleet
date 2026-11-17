@@ -10,10 +10,10 @@ import (
 // ModelCatalogHTTP lists models for the saved owner endpoint and key. It never
 // returns the endpoint credential or accepts a key in the request body.
 type ModelCatalogHTTP struct {
-	models *ModelSettingsService
+	models  *ModelSettingsService
 	runtime *BYOKRuntime
-	auth   Authenticator
-	mux    *http.ServeMux
+	auth    Authenticator
+	mux     *http.ServeMux
 }
 
 func NewModelCatalogHTTP(models *ModelSettingsService, runtime *BYOKRuntime, authenticate Authenticator) (*ModelCatalogHTTP, error) {
