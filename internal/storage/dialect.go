@@ -52,6 +52,7 @@ func (d dialect) prepare(query string) string {
 	}
 	q := query
 	q = strings.ReplaceAll(q, "INTEGER PRIMARY KEY AUTOINCREMENT", "BIGSERIAL PRIMARY KEY")
+	q = strings.ReplaceAll(q, "INTEGER", "BIGINT")
 	q = strings.ReplaceAll(q, "BLOB", "BYTEA")
 	q = strings.ReplaceAll(q, "COLLATE NOCASE", "")
 	q = strings.ReplaceAll(q, "length(payload)<=16777216", "octet_length(payload)<=16777216")
