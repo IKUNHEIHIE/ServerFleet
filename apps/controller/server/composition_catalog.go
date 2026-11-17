@@ -170,6 +170,8 @@ func AuditActions() []string {
 		"ai.sessions.grant",
 		"ai.sessions.revoke",
 		"ai.sessions.policy",
+		"ai.sessions.preferences",
+		"ai.context.compact",
 		"ai.sessions.close",
 		"ai.messages.create",
 		"ai.messages.read",

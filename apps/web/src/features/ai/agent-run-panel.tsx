@@ -214,11 +214,15 @@ export function InlineAgentRun({
   runId,
   canApprove,
   onOpen,
+  showGoal = true,
+  compact = false,
 }: {
   readonly sessionId: string;
   readonly runId: string;
   readonly canApprove: boolean;
   readonly onOpen: () => void;
+  readonly showGoal?: boolean;
+  readonly compact?: boolean;
 }) {
   const run = useResource(`ai:run:inline:${sessionId}:${runId}`, signal => aiAgentApi.get(sessionId, runId, signal).then(result => result.data), {
     refreshIntervalMs: 2000,
@@ -235,14 +239,14 @@ export function InlineAgentRun({
   }
 
   return (
-    <div className="mx-3 mb-3 rounded-xl border border-primary/20 bg-primary/[0.03] p-3">
+    <div className={`${compact ? "mx-0" : "mx-3 mb-3"} rounded-xl border border-primary/20 bg-primary/[0.03] p-3`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {data && !TERMINAL.has(data.state) ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /> : <Bot aria-hidden="true" className="size-4 text-emerald-600" />}
         <strong className="text-foreground">Agent {data ? STATE_LABEL[data.state] : "读取中"}</strong>
         {data ? <Badge variant="info">{data.steps.length} / {data.maxSteps} 步</Badge> : null}
         <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={onOpen}>查看完整过程</Button>
       </div>
-      {data?.goal ? <p className="mt-1.5 text-xs text-muted-foreground">目标：{data.goal}</p> : null}
+      {showGoal && data?.goal ? <p className="mt-1.5 text-xs text-muted-foreground">目标：{data.goal}</p> : null}
       {run.state.status === "error" ? <Notice tone="error" title="执行状态读取失败">{describeApiError(run.state.error)}</Notice> : null}
       {decide.error ? <Notice tone="error" title="审批未完成">{describeApiError(decide.error)}</Notice> : null}
       {advance.error ? <Notice tone="error" title="继续失败">{describeApiError(advance.error)}</Notice> : null}

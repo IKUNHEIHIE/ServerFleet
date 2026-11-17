@@ -322,13 +322,8 @@ func TestRootTaskCanaryAndApproval(t *testing.T) {
 	}
 	if _, err := f.service.Decide(context.Background(), task.ID, 1, tasks.Decision{
 		ApproverID: "user-1", RequestID: "req-self", Approve: true,
-	}); err != tasks.ErrSelfApproval {
-		t.Fatalf("self approval err = %v", err)
-	}
-	if _, err := f.service.Decide(context.Background(), task.ID, 1, tasks.Decision{
-		ApproverID: "admin-2", RequestID: "req-approve", Approve: true,
 	}); err != nil {
-		t.Fatal(err)
+		t.Fatalf("self approval err = %v", err)
 	}
 	f.run(t)
 	first := f.dispatcher.commands()

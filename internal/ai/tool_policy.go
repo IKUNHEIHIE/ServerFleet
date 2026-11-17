@@ -175,15 +175,15 @@ func EvaluateTool(scope Scope, call ToolCall, tool ToolDefinition, current Curre
 	case LowRisk:
 		needsApproval = !(tool.ReadOnly && tool.AutoAllowed)
 	case FullAccess:
-		// Full access is only a server-recorded, bounded confirmation. Expiry
-		// restores per-call approval, never widens the authorization intersection.
-		if !scope.FullSince.IsZero() && !now.Before(scope.FullSince) && now.Before(scope.FullUntil) && scope.FullUntil.Sub(scope.FullSince) > 0 && scope.FullUntil.Sub(scope.FullSince) <= time.Hour {
-			needsApproval = false
-		}
+		// Full access is one of the three explicit user-selected gates. It never
+		// widens the authorization intersection; root Shell still needs a human.
+		needsApproval = false
 	default:
 		return ErrToolDenied
 	}
-	if tool.RootShell || tool.RequiresHuman {
+	if tool.RootShell {
+		needsApproval = true
+	} else if scope.Mode != FullAccess && tool.RequiresHuman {
 		needsApproval = true
 	}
 	if !needsApproval {

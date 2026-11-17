@@ -53,6 +53,8 @@ func NewMessagesHTTP(conversation *ConversationService, authenticate func(*http.
 	h := &MessagesHTTP{conversation, authenticate, commitGate, http.NewServeMux()}
 	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}/messages", h.list)
 	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/messages", h.submit)
+	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}/context", h.context)
+	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/context/compact", h.compact)
 	return h, nil
 }
 
@@ -74,7 +76,11 @@ func (h *MessagesHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		messageStreamProblem(w, 405, "METHOD_NOT_ALLOWED")
 		return
 	}
-	bounded, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	limit := 10 * time.Second
+	if strings.HasSuffix(r.URL.Path, "/context/compact") {
+		limit = 60 * time.Second
+	}
+	bounded, cancel := context.WithTimeout(r.Context(), limit)
 	defer cancel()
 	h.mux.ServeHTTP(w, r.WithContext(bounded))
 }
@@ -172,23 +178,36 @@ func (h *MessagesHTTP) list(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	id := r.PathValue("sessionId")
-	view, err := h.conversation.sessions.Get(ctx, id)
-	if err != nil {
-		messageProblem(w, err)
-		return
-	}
-	after, err := decodeMessageCursor(q.Get("cursor"), id, view.ScopeRevision)
-	if err != nil {
-		messageProblem(w, err)
-		return
+	cursor := q.Get("cursor")
+	after := 0
+	var view SessionView
+	if cursor != "" {
+		var err error
+		view, err = h.conversation.sessions.Get(ctx, id)
+		if err != nil {
+			messageProblem(w, err)
+			return
+		}
+		after, err = decodeMessageCursor(cursor, id, view.ScopeRevision)
+		if err != nil {
+			messageProblem(w, err)
+			return
+		}
 	}
 	messages := []Message{}
 	// Domain reads are capped at 100; gather at most 201, with one lookahead.
+	// The first initial request takes a single authorized snapshot for the page.
 	for len(messages) < limit+1 {
 		n := min(100, limit+1-len(messages))
-		batch, err := h.conversation.Messages(ctx, id, after+len(messages), n)
+		batch, pageView, err := h.conversation.MessagesPage(ctx, id, after+len(messages), n)
 		if err != nil {
 			messageProblem(w, err)
+			return
+		}
+		if view.ID == "" {
+			view = pageView
+		} else if view.ScopeRevision != pageView.ScopeRevision || view.CreatedBy != pageView.CreatedBy || view.Status != pageView.Status || !slices.Equal(view.AllowedNodeIDs, pageView.AllowedNodeIDs) {
+			messageProblem(w, ErrToolDenied)
 			return
 		}
 		messages = append(messages, batch...)
@@ -213,11 +232,6 @@ func (h *MessagesHTTP) list(w http.ResponseWriter, r *http.Request) {
 	page.Page.HasMore = len(page.Items) < len(messages)
 	if page.Page.HasMore {
 		page.Page.NextCursor = encodeMessageCursor(id, view.ScopeRevision, after+len(page.Items))
-	}
-	fresh, err := h.conversation.sessions.Get(ctx, id)
-	if err != nil || fresh.ScopeRevision != view.ScopeRevision || fresh.CreatedBy != view.CreatedBy || fresh.Status != view.Status || !slices.Equal(fresh.AllowedNodeIDs, view.AllowedNodeIDs) {
-		messageProblem(w, ErrToolDenied)
-		return
 	}
 	h.send(w, ctx, page)
 }
@@ -276,6 +290,45 @@ func decodeMessageInput(w http.ResponseWriter, r *http.Request) (MessageInput, e
 		return out, ErrToolDenied
 	}
 	return out, nil
+}
+
+func (h *MessagesHTTP) context(w http.ResponseWriter, r *http.Request) {
+	ctx, ok := h.observed(w, r)
+	if !ok {
+		return
+	}
+	if r.ContentLength > 0 || len(r.TransferEncoding) != 0 || r.URL.RawQuery != "" {
+		messageStreamProblem(w, 400, "INVALID_REQUEST")
+		return
+	}
+	stats, err := h.conversation.ContextStats(ctx, r.PathValue("sessionId"))
+	if err != nil {
+		messageProblem(w, err)
+		return
+	}
+	h.send(w, ctx, stats)
+}
+
+func (h *MessagesHTTP) compact(w http.ResponseWriter, r *http.Request) {
+	ctx, ok := h.observed(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Keep int `json:"keep"`
+	}
+	if !decodeAIBody(w, r, &body, 4<<10) {
+		return
+	}
+	if body.Keep == 0 {
+		body.Keep = 6
+	}
+	stats, err := h.conversation.Compact(ctx, r.PathValue("sessionId"), body.Keep)
+	if err != nil {
+		messageProblem(w, err)
+		return
+	}
+	h.send(w, ctx, stats)
 }
 
 func (h *MessagesHTTP) submit(w http.ResponseWriter, r *http.Request) {

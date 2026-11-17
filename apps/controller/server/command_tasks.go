@@ -123,7 +123,11 @@ func (s *Server) agentCommandAdmission(root bool) http.HandlerFunc {
 		current, err := s.Tasks.CheckExecutionForNode(r.Context(), offer.TaskId, offer.PlanDigestSha256, peer.NodeID)
 		parameters, parameterErr := transport.ParseCommandParameters(offer.CanonicalParametersJson)
 		approval, approvalErr := s.TasksRepo.Approval(r.Context(), s.DB, current.ID, current.Revision)
-		if err != nil || parameterErr != nil || approvalErr != nil || !s.commandTaskSourceCurrent(r.Context(), current) || current.ActionID != expectedAction || current.OperationClass != expectedClass || !current.ApprovalRequired || !approval.CurrentFor(current, time.Now().UTC(), tasks.DefaultApprovalTTL) || root && (s.Identity.AuthorizeAdministrator(r.Context(), approval.ApproverID) != nil || s.Identity.AuthorizeAdministrator(r.Context(), current.SubmitterID) != nil) || string(offer.CanonicalParametersJson) != current.Params || offer.Privilege != expectedPrivilege || offer.ExecutionId != executionIDFor(current.ID, peer.NodeID, current.PlanHash) || offer.ActionSchemaVersion != "1" || offer.ActionId != current.ActionID || offer.PluginId != "" || offer.ScopeRevision != current.ScopeRevision || offer.TimeoutSeconds != uint32(parameters.TimeoutSeconds) || offer.ExpiresAtUnixMs <= time.Now().UnixMilli() || offer.ExpiresAtUnixMs > time.Now().Add(10*time.Minute).UnixMilli() {
+		aiBound := current.Source == "ai" && current.ScopeRevision > 0
+		if aiBound {
+			approvalErr = nil
+		}
+		if err != nil || parameterErr != nil || approvalErr != nil || !s.commandTaskSourceCurrent(r.Context(), current) || current.ActionID != expectedAction || current.OperationClass != expectedClass || !aiBound && !current.ApprovalRequired || !aiBound && !approval.CurrentFor(current, time.Now().UTC(), tasks.DefaultApprovalTTL) || !aiBound && root && (s.Identity.AuthorizeAdministrator(r.Context(), approval.ApproverID) != nil || s.Identity.AuthorizeAdministrator(r.Context(), current.SubmitterID) != nil) || string(offer.CanonicalParametersJson) != current.Params || offer.Privilege != expectedPrivilege || offer.ExecutionId != executionIDFor(current.ID, peer.NodeID, current.PlanHash) || offer.ActionSchemaVersion != "1" || offer.ActionId != current.ActionID || offer.PluginId != "" || offer.ScopeRevision != current.ScopeRevision || offer.TimeoutSeconds != uint32(parameters.TimeoutSeconds) || offer.ExpiresAtUnixMs <= time.Now().UnixMilli() || offer.ExpiresAtUnixMs > time.Now().Add(10*time.Minute).UnixMilli() {
 			releaseSourceJSON(w, 403, map[string]string{"code": "ROOT_ADMISSION_DENIED"})
 			return
 		}
@@ -140,6 +144,11 @@ func (s *Server) agentCommandAdmission(root bool) http.HandlerFunc {
 func (s *Server) authorizeCommandTask(ctx context.Context, t tasks.Task) error {
 	if !s.commandTaskSourceCurrent(ctx, t) {
 		return auth.ErrDenied
+	}
+	// AI-originated tasks already passed the single AI permission gate, which
+	// revalidates scope, bound step and any consumed human approval.
+	if t.Source == "ai" {
+		return nil
 	}
 	approval, err := s.TasksRepo.Approval(ctx, s.DB, t.ID, t.Revision)
 	if err != nil || !approval.Approved() || approval.PlanHash != t.PlanHash {

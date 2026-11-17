@@ -182,11 +182,12 @@ func TestAgentLoopInterruptedPlanAndScopeChange(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	if _, e = l.Get(ctx, v.ID, second.ID); !errors.Is(e, ErrScopeConflict) {
-		t.Fatal("stale scope read", e)
+	carried, e := l.Get(ctx, v.ID, second.ID)
+	if e != nil || carried.ScopeRevision != v.ScopeRevision {
+		t.Fatal("queued run was not carried to the approval-mode revision", carried, e)
 	}
-	if _, e = l.Create(ctx, v.ID, AgentRunInput{Goal: "new scope", ClientRunID: "third", ScopeRevision: v.ScopeRevision}); e != nil {
-		t.Fatal("stale run permanently blocked session", e)
+	if _, e = l.Create(ctx, v.ID, AgentRunInput{Goal: "new scope", ClientRunID: "third", ScopeRevision: v.ScopeRevision}); !errors.Is(e, ErrScopeConflict) {
+		t.Fatal("active run should block a second concurrent run", e)
 	}
 }
 

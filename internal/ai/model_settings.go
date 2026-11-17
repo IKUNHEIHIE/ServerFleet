@@ -309,7 +309,7 @@ func (m *ModelSettingsService) ResolveCredential(ctx context.Context, r Generati
 	if err != nil {
 		return auth.CredentialOperation{}, err
 	}
-	if r.Profile != (ModelProfile{cfg.ID, cfg.Model, cfg.CredentialRef, cfg.Revision}) {
+	if r.Profile.ID != cfg.ID || r.Profile.CredentialRef != cfg.CredentialRef || r.Profile.Revision != cfg.Revision || !exactID(r.Profile.Model) || len(r.Profile.Model) > 128 {
 		return auth.CredentialOperation{}, ErrToolDenied
 	}
 	return auth.CredentialOperation{SubjectID: r.SubjectID, CredentialID: cfg.CredentialRef, Module: "ai", Source: "ai", OperationID: r.OperationID, PlanDigest: digest, Action: "use", ExpectedRevision: cfg.CredentialRevision}, nil

@@ -76,7 +76,8 @@ func aiDebugf(format string, args ...any) {
 }
 
 func generationDigest(r GenerationRequest) (string, error) {
-	if !exactID(r.SubjectID) || !exactID(r.SessionID) || !exactID(r.MessageID) || r.OperationID != "ai-generation-"+r.MessageID || len(r.OperationID) > 128 || r.ScopeRevision == 0 || !validModelProfile(r.Profile) || len(r.Messages) == 0 || len(r.Messages) > 64 {
+	if !exactID(r.SubjectID) || !exactID(r.SessionID) || !exactID(r.MessageID) || r.OperationID != "ai-generation-"+r.MessageID || len(r.OperationID) > 128 || r.ScopeRevision == 0 || !validModelProfile(r.Profile) || len(r.Messages) == 0 || len(r.Messages) > 64 ||
+		r.ReasoningEffort != "" && r.ReasoningEffort != "low" && r.ReasoningEffort != "medium" && r.ReasoningEffort != "high" {
 		return "", ErrToolDenied
 	}
 	size := 0
@@ -261,6 +262,9 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 	}
 	stream := p.stream && r.Agent == nil
 	payload := map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": ProviderMaxOutputTokens}
+	if r.ReasoningEffort != "" {
+		payload["reasoning"] = map[string]any{"effort": r.ReasoningEffort}
+	}
 	if r.Agent != nil {
 		if err := agentProviderPayload(payload, r.Agent); err != nil {
 			return err
@@ -390,7 +394,9 @@ func (p *OpenAITextProvider) ListModels(ctx context.Context, op auth.CredentialO
 			return ErrGenerationUnknown
 		}
 		var payload struct {
-			Data   []struct{ ID string `json:"id"` } `json:"data"`
+			Data []struct {
+				ID string `json:"id"`
+			} `json:"data"`
 			Models []json.RawMessage `json:"models"`
 		}
 		if json.Unmarshal(raw, &payload) != nil {
@@ -406,7 +412,9 @@ func (p *OpenAITextProvider) ListModels(ctx context.Context, op auth.CredentialO
 				ids = append(ids, id)
 				continue
 			}
-			var object struct{ ID string `json:"id"` }
+			var object struct {
+				ID string `json:"id"`
+			}
 			if json.Unmarshal(item, &object) != nil {
 				return ErrGenerationUnknown
 			}

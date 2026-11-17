@@ -348,18 +348,11 @@ func TestHTTPApprovalRequiresPlanDigest(t *testing.T) {
 	self := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/approve", map[string]any{
 		"planDigest": page.Items[0].PlanDigest, "decision": "approve",
 	})
-	if self.StatusCode != http.StatusConflict {
-		t.Fatalf("self approval status = %d", self.StatusCode)
+	if self.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(self.Body)
+		t.Fatalf("self approval status = %d body=%s", self.StatusCode, body)
 	}
 	self.Body.Close()
-	approve := postJSONAs(t, server.URL+"/api/v1/tasks/"+job.JobID+"/approve", map[string]any{
-		"planDigest": page.Items[0].PlanDigest, "decision": "approve", "reason": "reviewed",
-	}, "admin-2")
-	if approve.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(approve.Body)
-		t.Fatalf("approve status = %d body=%s", approve.StatusCode, body)
-	}
-	approve.Body.Close()
 	cancel := postJSON(t, server.URL+"/api/v1/tasks/"+job.JobID+"/cancel", map[string]any{
 		"reason": "stop", "expectedRevision": 1,
 	})

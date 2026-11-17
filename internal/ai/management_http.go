@@ -47,6 +47,7 @@ func NewManagementHTTP(sessions *SessionService, authenticate Authenticator, exe
 	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}", h.getSession)
 	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}/approval-policy", h.getApprovalPolicy)
 	h.mux.HandleFunc("PATCH /api/v1/ai/sessions/{sessionId}/approval-policy", h.updateApprovalPolicy)
+	h.mux.HandleFunc("PATCH /api/v1/ai/sessions/{sessionId}/preferences", h.updatePreferences)
 	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/grants", h.addGrant)
 	h.mux.HandleFunc("DELETE /api/v1/ai/sessions/{sessionId}/grants/{grantId}", h.revokeGrant)
 	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/approvals", h.requestApproval)
@@ -261,6 +262,30 @@ func (h *ManagementHTTP) getApprovalPolicy(w http.ResponseWriter, r *http.Reques
 	writeAIJSON(w, http.StatusOK, view.ApprovalPolicy)
 }
 
+func (h *ManagementHTTP) updatePreferences(w http.ResponseWriter, r *http.Request) {
+	id, ok := h.sessionID(w, r)
+	if !ok {
+		return
+	}
+	ctx, _, ok := h.request(w, r, true)
+	if !ok {
+		return
+	}
+	var body struct {
+		Model           string `json:"model"`
+		ReasoningEffort string `json:"reasoningEffort"`
+	}
+	if !decodeAIBody(w, r, &body, 4<<10) {
+		return
+	}
+	view, err := h.sessions.SetPreferences(ctx, id, body.Model, body.ReasoningEffort)
+	if err != nil {
+		writeAIError(w, err)
+		return
+	}
+	writeAIJSON(w, http.StatusOK, view)
+}
+
 func (h *ManagementHTTP) updateApprovalPolicy(w http.ResponseWriter, r *http.Request) {
 	id, ok := h.sessionID(w, r)
 	if !ok {
@@ -271,35 +296,23 @@ func (h *ManagementHTTP) updateApprovalPolicy(w http.ResponseWriter, r *http.Req
 		return
 	}
 	var body struct {
-		Mode                    string `json:"mode"`
-		DurationSeconds         int    `json:"durationSeconds"`
-		UserConfirmedFullAccess bool   `json:"userConfirmedFullAccess"`
+		Mode string `json:"mode"`
 	}
 	if !decodeAIBody(w, r, &body, 64<<10) {
 		return
 	}
 	var mode ApprovalMode
-	minutes := 0
 	switch body.Mode {
 	case "per_action":
 		mode = EveryCall
-		if body.DurationSeconds != 0 {
-			writeAIProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
-			return
-		}
 	case "automatic":
 		mode = LowRisk
-		if body.DurationSeconds != 0 {
-			writeAIProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
-			return
-		}
 	case "full_access":
-		if !principal.Administrator || !body.UserConfirmedFullAccess || body.DurationSeconds != 900 && body.DurationSeconds != 1800 && body.DurationSeconds != 3600 {
+		if !principal.Administrator {
 			writeAIProblem(w, http.StatusBadRequest, "FULL_ACCESS_CONFIRMATION_REQUIRED")
 			return
 		}
 		mode = FullAccess
-		minutes = body.DurationSeconds / 60
 	default:
 		writeAIProblem(w, http.StatusBadRequest, "INVALID_REQUEST")
 		return
@@ -309,7 +322,7 @@ func (h *ManagementHTTP) updateApprovalPolicy(w http.ResponseWriter, r *http.Req
 		writeAIError(w, err)
 		return
 	}
-	updated, err := h.sessions.SetPolicy(ctx, id, view.ScopeRevision, mode, minutes)
+	updated, err := h.sessions.SetPolicy(ctx, id, view.ScopeRevision, mode, 0)
 	if err != nil {
 		writeAIError(w, err)
 		return

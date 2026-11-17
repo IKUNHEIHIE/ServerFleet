@@ -30,27 +30,39 @@ func NewAgentLoop(s *SessionService, c *ConversationService, cfg AgentLoopConfig
 	return &AgentLoop{sessions: s, conversation: c, config: cfg, workers: map[string]context.CancelFunc{}}, nil
 }
 
-func (l *AgentLoop) read(ctx context.Context, session, id string) (agentRunRecord, error) {
-	view, e := l.sessions.Get(ctx, session)
-	if e != nil {
-		return agentRunRecord{}, e
-	}
+func (l *AgentLoop) readRecord(ctx context.Context, session, id string) (agentRunRecord, error) {
 	var out agentRunRecord
-	e = l.sessions.store.View(ctx, func(raw []byte) error {
+	e := l.sessions.store.View(ctx, func(raw []byte) error {
 		st, e := decodeSessions(raw)
 		if e != nil {
 			return e
 		}
-		r := st.Sessions[session]
-		a, ok := r.AgentRuns[id]
-		if !ok || a.View.ScopeRevision != view.ScopeRevision {
+		a, ok := st.Sessions[session].AgentRuns[id]
+		if !ok {
 			return ErrScopeConflict
 		}
 		out = a
 		return nil
 	})
+	return out, e
+}
+
+func (l *AgentLoop) read(ctx context.Context, session, id string) (agentRunRecord, error) {
+	view, e := l.sessions.Get(ctx, session)
+	if e != nil {
+		return agentRunRecord{}, e
+	}
+	out, e := l.readRecord(ctx, session, id)
 	if e != nil {
 		return out, e
+	}
+	if out.View.ScopeRevision != view.ScopeRevision {
+		// A terminal run from an older resource scope stays readable as history;
+		// a live run is stopped by Advance instead of being replayed.
+		if agentTerminal(out.View.State) {
+			return out, nil
+		}
+		return agentRunRecord{}, ErrScopeConflict
 	}
 	for _, step := range out.View.Steps {
 		if len(step.NodeIDs) == 0 {
@@ -69,7 +81,7 @@ func (l *AgentLoop) Get(ctx context.Context, session, id string) (AgentRun, erro
 	}
 	v := a.View
 	view, e := l.sessions.Get(ctx, session)
-	if e != nil || view.ScopeRevision != v.ScopeRevision {
+	if e != nil || view.ScopeRevision != v.ScopeRevision && !agentTerminal(v.State) {
 		return AgentRun{}, ErrScopeConflict
 	}
 	for i := range v.Steps {
@@ -92,7 +104,7 @@ func (l *AgentLoop) Get(ctx context.Context, session, id string) (AgentRun, erro
 		}
 	}
 	current, e := l.sessions.Get(ctx, session)
-	if e != nil || current.ScopeRevision != v.ScopeRevision || !slices.Equal(current.AllowedNodeIDs, view.AllowedNodeIDs) {
+	if e != nil || !agentTerminal(v.State) && (current.ScopeRevision != v.ScopeRevision || !slices.Equal(current.AllowedNodeIDs, view.AllowedNodeIDs)) {
 		return AgentRun{}, ErrScopeConflict
 	}
 	l.workerMu.Lock()
@@ -105,6 +117,10 @@ func (l *AgentLoop) List(ctx context.Context, session string) ([]AgentRun, error
 	if e != nil {
 		return nil, e
 	}
+	allowed := map[string]bool{}
+	for _, id := range v.AllowedNodeIDs {
+		allowed[id] = true
+	}
 	out := []AgentRun{}
 	e = l.sessions.store.View(ctx, func(raw []byte) error {
 		st, e := decodeSessions(raw)
@@ -112,7 +128,24 @@ func (l *AgentLoop) List(ctx context.Context, session string) ([]AgentRun, error
 			return e
 		}
 		for _, r := range st.Sessions[session].AgentRuns {
-			if r.View.ScopeRevision == v.ScopeRevision {
+			if r.View.ScopeRevision != v.ScopeRevision {
+				continue
+			}
+			// The current view already intersects role grants with the frozen
+			// session scope; step targets outside it are no longer visible.
+			visible := true
+			for _, step := range r.View.Steps {
+				for _, id := range step.NodeIDs {
+					if !allowed[id] {
+						visible = false
+						break
+					}
+				}
+				if !visible {
+					break
+				}
+			}
+			if visible {
 				out = append(out, r.View)
 			}
 		}
@@ -122,16 +155,31 @@ func (l *AgentLoop) List(ctx context.Context, session string) ([]AgentRun, error
 		return nil, e
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].CreatedAt.After(out[j].CreatedAt) })
-	visible := []AgentRun{}
-	for _, r := range out {
-		v, e := l.Get(ctx, session, r.ID)
-		if e == nil {
-			visible = append(visible, v)
-		} else if !errors.Is(e, ErrToolDenied) && !errors.Is(e, ErrScopeConflict) {
+	for i := range out {
+		l.workerMu.Lock()
+		_, out[i].DriverActive = l.workers[out[i].ID]
+		l.workerMu.Unlock()
+		out[i].Goal, e = l.conversation.filter(ctx, v, "user", out[i].Goal)
+		if e != nil {
 			return nil, e
 		}
+		for j := range out[i].Steps {
+			if out[i].Steps[j].Result == "" {
+				continue
+			}
+			out[i].Steps[j].Result, e = l.conversation.filter(ctx, v, "assistant", out[i].Steps[j].Result)
+			if e != nil {
+				return nil, e
+			}
+		}
+		if out[i].FinalText != "" {
+			out[i].FinalText, e = l.conversation.filter(ctx, v, "assistant", out[i].FinalText)
+			if e != nil {
+				return nil, e
+			}
+		}
 	}
-	return visible, nil
+	return out, nil
 }
 func (l *AgentLoop) Create(ctx context.Context, session string, in AgentRunInput) (AgentRun, error) {
 	if in.MaxSteps == 0 {
@@ -159,7 +207,7 @@ func (l *AgentLoop) Create(ctx context.Context, session string, in AgentRunInput
 		return AgentRun{}, ErrToolDenied
 	}
 	in.Goal = text
-	profile, e := l.conversation.profile(ctx, actor.SubjectID)
+	profile, e := l.conversation.profileFor(ctx, view, actor.SubjectID)
 	if e != nil {
 		return AgentRun{}, e
 	}
@@ -312,9 +360,23 @@ func (l *AgentLoop) Advance(ctx context.Context, session, id string, expected ui
 		return AgentRun{}, ErrScopeConflict
 	}
 	defer mu.Unlock()
-	a, e := l.read(ctx, session, id)
+	current, e := l.sessions.Get(ctx, session)
 	if e != nil {
 		return AgentRun{}, e
+	}
+	raw, e := l.readRecord(ctx, session, id)
+	if e != nil {
+		return AgentRun{}, e
+	}
+	if raw.View.ScopeRevision != current.ScopeRevision && !agentTerminal(raw.View.State) {
+		return l.stopStale(ctx, raw, current)
+	}
+	a := raw
+	if a.View.ScopeRevision == current.ScopeRevision {
+		a, e = l.read(ctx, session, id)
+		if e != nil {
+			return AgentRun{}, e
+		}
 	}
 	if a.View.Revision != expected {
 		return AgentRun{}, ErrScopeConflict
@@ -334,7 +396,7 @@ func (l *AgentLoop) Advance(ctx context.Context, session, id string, expected ui
 		if e != nil {
 			return AgentRun{}, e
 		}
-		profile, e := l.conversation.profile(ctx, current.CreatedBy)
+		profile, e := l.conversation.profileFor(ctx, current, current.CreatedBy)
 		if e != nil || profile != a.Profile {
 			return l.stop(ctx, a, "failed", "model_profile_changed_or_unavailable")
 		}
@@ -496,6 +558,45 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 	}
 	return l.execute(ctx, a, "")
 }
+
+// stopStale closes a live run whose resource scope was replaced. It keeps the
+// historical steps and records UNKNOWN, never replaying side effects.
+func (l *AgentLoop) stopStale(ctx context.Context, a agentRunRecord, view SessionView) (AgentRun, error) {
+	cleanup, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	actor, e := l.sessions.actor(cleanup, "ai.runs.advance", a.View.SessionID, true)
+	if e != nil {
+		return AgentRun{}, e
+	}
+	var out AgentRun
+	e = l.sessions.change(cleanup, func(st *sessionState, now time.Time) error {
+		if _, e := l.sessions.recheck(cleanup, actor, "ai.runs.advance", a.View.SessionID, true); e != nil {
+			return e
+		}
+		record, ok := st.Sessions[a.View.SessionID]
+		if !ok || record.Scope.SubjectID != actor.SubjectID || record.Scope.Revision != view.ScopeRevision {
+			return ErrScopeConflict
+		}
+		run, ok := record.AgentRuns[a.View.ID]
+		if !ok || run.View.Revision != a.View.Revision || agentTerminal(run.View.State) {
+			return ErrScopeConflict
+		}
+		run.View.State, run.View.StopReason = "unknown", "scope_changed_no_replay"
+		if len(run.View.Steps) > 0 {
+			run.View.Steps[len(run.View.Steps)-1].State = "unknown"
+		}
+		run.View.Revision++
+		record.AgentRuns[a.View.ID] = run
+		st.Sessions[a.View.SessionID] = record
+		out = run.View
+		return l.sessions.audit(st, record, "ai.runs.advance", now)
+	})
+	if e != nil {
+		return AgentRun{}, e
+	}
+	return out, nil
+}
+
 func (l *AgentLoop) execute(ctx context.Context, a agentRunRecord, approval string) (AgentRun, error) {
 	call := a.Call
 	if call == nil {

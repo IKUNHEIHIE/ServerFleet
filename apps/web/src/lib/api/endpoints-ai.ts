@@ -5,6 +5,7 @@ import type {
   AIApprovalMode,
   AIApprovalPolicy,
   AIApprovalRequest,
+  AIContextStats,
   AIExecuteResult,
   AIMessage,
   AIModelBudget,
@@ -94,8 +95,14 @@ export const aiApi = {
     ),
   approvalPolicy: (sessionId: string, signal?: AbortSignal) =>
     apiClient.request<AIApprovalPolicy>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/approval-policy`, { signal }),
-  updateApprovalPolicy: (sessionId: string, body: { mode: AIApprovalMode; durationSeconds?: 900 | 1800 | 3600; userConfirmedFullAccess?: boolean }) =>
+  updateApprovalPolicy: (sessionId: string, body: { mode: AIApprovalMode }) =>
     apiClient.request<AIApprovalPolicy>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/approval-policy`, { method: "PATCH", body }),
+  updatePreferences: (sessionId: string, body: { model: string; reasoningEffort: "low" | "medium" | "high" | "" }) =>
+    apiClient.request<AISession>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/preferences`, { method: "PATCH", body }),
+  context: (sessionId: string, signal?: AbortSignal) =>
+    apiClient.request<AIContextStats>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/context`, { signal }),
+  compactContext: (sessionId: string, body: { keep: number }) =>
+    apiClient.request<AIContextStats>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/context/compact`, { method: "POST", body }),
   createApproval: (
     sessionId: string,
     body: { toolName: string; arguments: Record<string, unknown>; targetNodeIds: readonly string[]; scopeRevision: number },

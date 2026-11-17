@@ -66,9 +66,9 @@ describe("AI session page", () => {
       expect(JSON.parse(String(call?.init?.body))).toMatchObject({ resourceType: "node", resourceId: "n-2", allowedActions: ["nodes.read", "tasks.command", "tasks.exec.v1", "host.root"] });
     });
 
-    // switch policy
-    fireEvent.click(screen.getByRole("button", { name: "审批策略" }));
-    fireEvent.click(await screen.findByRole("button", { name: /自动审批/ }));
+    // switch policy from the composer
+    fireEvent.click(screen.getByRole("button", { name: "权限模式" }));
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: /自动审批/ }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "PATCH" && call.url === "/api/v1/ai/sessions/s-1/approval-policy");
       expect(JSON.parse(String(call?.init?.body))).toEqual({ mode: "automatic" });
@@ -291,5 +291,37 @@ describe("AI explicit generation (GM-W6-R1)", () => {
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText(/模型或配额不可用（503 AI_SOURCE_UNAVAILABLE）/)).toBeVisible();
     expect(screen.queryByText("节点运行时间为 3 小时")).toBeNull();
+  });
+
+  it("renders agent execution steps inline in the conversation", async () => {
+    const run = {
+      id: "run-1",
+      sessionId: "s-1",
+      goal: "读取节点并报告状态",
+      state: "completed",
+      driverActive: false,
+      revision: 3,
+      scopeRevision: 2,
+      maxSteps: 8,
+      createdAt: "2026-11-01T01:00:00Z",
+      expiresAt: "2026-11-01T01:15:00Z",
+      steps: [{ number: 1, state: "completed", toolName: "nodes.read", nodeIds: ["n-1"], plan: "先读取节点清单", result: "{\"nodes\":1}", startedAt: "2026-11-01T01:00:01Z" }],
+      finalText: "节点状态正常",
+    };
+    await renderAuthenticated("/ai/s-1", sessionRoutes({
+      "GET /api/v1/ai/sessions/s-1/messages": () =>
+        jsonResponse({ items: [
+          { messageId: "m-agent-user", sessionId: "s-1", role: "user", agentRunId: "run-1", createdAt: "2026-11-01T01:00:00Z", redactedContent: "Agent 运行 run-1：请在 Agent 运行页签查看步骤和结果。" },
+        ], page: { nextCursor: null, limit: 100, hasMore: false } }),
+      "GET /api/v1/ai/sessions/s-1/runs": () => jsonResponse({ items: [run] }),
+      "GET /api/v1/ai/sessions/s-1/runs/run-1": () => jsonResponse(run),
+      "GET /api/v1/ai/sessions/s-1/context": () => jsonResponse({ messageCount: 3, estimatedTokens: 120, summaryTokens: 0, compactedMessages: 0, summaryPresent: false }),
+    }), ADMIN_IDENTITY);
+
+    expect(await screen.findByText("读取节点并报告状态")).toBeVisible();
+    expect(await screen.findByText(/第 1 步/)).toBeVisible();
+    expect(await screen.findByText("节点状态正常")).toBeVisible();
+    expect(screen.queryByText(/请在 Agent 运行页签/)).toBeNull();
+    expect(screen.getByRole("button", { name: "压缩上下文" })).toBeVisible();
   });
 });

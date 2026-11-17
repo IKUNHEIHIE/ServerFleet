@@ -210,10 +210,16 @@ func (s *Server) aiAuthority(ctx context.Context, subject, action string) (ai.Cu
 	if err != nil {
 		return ai.CurrentAuthority{}, err
 	}
+	ids := make([]string, 0, len(list))
 	for _, node := range list {
-		if err := s.Identity.Authorize(ctx, auth.Check{SubjectID: subject, Action: action, NodeIDs: []string{node.ID}}); err == nil {
-			current.AllowedNodes = append(current.AllowedNodes, node.ID)
+		ids = append(ids, node.ID)
+	}
+	if len(ids) > 0 {
+		allowed, err := s.Identity.AuthorizeNodes(ctx, subject, action, ids)
+		if err != nil && !errors.Is(err, auth.ErrDenied) {
+			return ai.CurrentAuthority{}, err
 		}
+		current.AllowedNodes = allowed
 	}
 	groups, err := s.ServiceGroupsRepo.List(ctx)
 	if err != nil {
@@ -285,18 +291,21 @@ func (s *Server) aiExecuteTool(ctx context.Context, request ai.ToolExecutionRequ
 		class = tasks.OperationClassStandard
 	}
 	task, err := s.Tasks.Submit(ctx, tasks.SubmitRequest{
-		IdempotencyKey:  request.InvocationID,
-		RequireApproval: request.ToolID == transport.CommandCapability || request.ToolID == transport.RootCommandCapability,
-		SubjectID:       actor.SubjectID,
-		RequestID:       newRequestID(),
-		Name:            "ai " + request.ToolID,
-		ActionID:        request.ToolID,
-		OperationClass:  class,
-		TargetType:      "node_ids",
-		TargetNodeIDs:   append([]string{}, request.NodeIDs...),
-		CanonicalParams: append([]byte(nil), request.Parameters...),
-		ScopeRevision:   request.ScopeRevision,
-		Source:          audit.SourceAI,
+		IdempotencyKey: request.InvocationID,
+		// AI tool approval is the single human confirmation. Do not require a second
+		// approval on the derived task.
+		RequireApproval:   false,
+		ApprovalSatisfied: true,
+		SubjectID:         actor.SubjectID,
+		RequestID:         newRequestID(),
+		Name:              "ai " + request.ToolID,
+		ActionID:          request.ToolID,
+		OperationClass:    class,
+		TargetType:        "node_ids",
+		TargetNodeIDs:     append([]string{}, request.NodeIDs...),
+		CanonicalParams:   append([]byte(nil), request.Parameters...),
+		ScopeRevision:     request.ScopeRevision,
+		Source:            audit.SourceAI,
 	})
 	if err != nil {
 		if errors.Is(err, auth.ErrDenied) || errors.Is(err, tasks.ErrInvalidTask) {

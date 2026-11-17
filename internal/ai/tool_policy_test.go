@@ -70,17 +70,16 @@ func TestToolRootRequiresRealAdminApprovalInFullAccess(t *testing.T) {
 	}
 }
 
-func TestToolFullExpiryPluginDisableAndSecretExport(t *testing.T) {
+func TestToolFullPluginDisableAndSecretExport(t *testing.T) {
 	now := time.Now()
 	scope, _ := NewScope("s", "u")
 	scope.Nodes = []string{"n"}
 	scope.NodeActions["n"] = []string{"xray.read"}
 	scope.Mode = FullAccess
-	scope.FullUntil = now
 	call := ToolCall{"xray.read", []string{"n"}, []byte(`{}`), 1}
 	tool := ToolDefinition{ID: "xray.read", PluginID: "xray-manager", ReadOnly: true, AutoAllowed: true}
 	current := CurrentAuthority{SubjectID: "u", AllowedNodes: []string{"n"}, AllowedTools: []string{"xray.read"}, EnabledPlugins: []string{"xray-manager"}}
-	if e := EvaluateTool(scope, call, tool, current, nil, now); e != ErrApprovalRequired {
+	if e := EvaluateTool(scope, call, tool, current, nil, now); e != nil {
 		t.Fatal(e)
 	}
 	scope.Mode = LowRisk

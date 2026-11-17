@@ -214,6 +214,7 @@ func (s *Server) registerAIRoutes() {
 			"GET /api/v1/ai/sessions/{sessionId}",
 			"GET /api/v1/ai/sessions/{sessionId}/approval-policy",
 			"PATCH /api/v1/ai/sessions/{sessionId}/approval-policy",
+			"PATCH /api/v1/ai/sessions/{sessionId}/preferences",
 			"POST /api/v1/ai/sessions/{sessionId}/grants",
 			"DELETE /api/v1/ai/sessions/{sessionId}/grants/{grantId}",
 			"POST /api/v1/ai/sessions/{sessionId}/approvals",
@@ -237,6 +238,8 @@ func (s *Server) registerAIRoutes() {
 	if s.AIMessagesHTTP != nil {
 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
 		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/context", s.AIMessagesHTTP)
+		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/context/compact", s.AIMessagesHTTP)
 	}
 	if s.AIEventsHTTP != nil {
 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/events", s.AIEventsHTTP)

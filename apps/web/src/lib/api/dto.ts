@@ -826,6 +826,8 @@ export interface AISession {
   readonly status: "active" | "closed";
   readonly createdBy?: string;
   readonly createdAt?: string;
+  readonly model?: string;
+  readonly reasoningEffort?: "low" | "medium" | "high" | "";
   readonly approvalPolicy?: AIApprovalPolicy;
 }
 
@@ -837,6 +839,16 @@ export interface AIApprovalPolicy {
   readonly scopeRevision: number;
   readonly maxFullAccessSeconds?: number;
   readonly enforcedRestrictions?: readonly string[];
+}
+
+export interface AIContextStats {
+  readonly messageCount: number;
+  readonly estimatedTokens: number;
+  readonly summaryTokens: number;
+  readonly compactedMessages: number;
+  readonly summaryPresent: boolean;
+  readonly model?: string;
+  readonly reasoningEffort?: "low" | "medium" | "high" | "";
 }
 
 export interface AIResourceRecommendation {

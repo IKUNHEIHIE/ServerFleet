@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Bot, CheckCircle2, Layers, Loader2, RefreshCw, Send, Server, ShieldAlert, Sparkles, User, Zap } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { Bot, Brain, Check, CheckCircle2, ChevronDown, Gauge, Layers, Loader2, RefreshCw, Send, Server, ShieldAlert, Sparkles, User, Zap } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button, LinkButton } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
-import { Checkbox, Field, Select, TextArea, TextInput } from "@/components/ui/form";
-import { Modal } from "@/components/ui/modal";
+import { Field, Select, TextArea, TextInput } from "@/components/ui/form";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { describeApiError } from "@/lib/api/errors";
 import { nodesApi, serviceGroupsApi } from "@/lib/api/endpoints";
-import { aiAgentApi, aiApi, type AgentRunInput } from "@/lib/api/endpoints-ai";
+import { aiAgentApi, aiApi, modelSettingsApi, type AgentRunInput } from "@/lib/api/endpoints-ai";
 import type {
   AIApprovalMode,
   AIApprovalPolicy,
+  AIContextStats,
   AIApprovalRequest,
   AIExecuteResult,
   AIMessage,
@@ -28,15 +28,17 @@ import type { SSEEvent } from "@/lib/sse/event-stream";
 import { AgentRunPanel, InlineAgentRun } from "./agent-run-panel";
 
 const MODE_LABEL: Record<AIApprovalMode, string> = {
-  per_action: "每次审批",
+  per_action: "每次询问",
   automatic: "自动审批",
-  full_access: "完全访问（限时）",
+  full_access: "完全访问",
 };
 
+const EFFORT_LABEL: Record<string, string> = { "": "默认", low: "低", medium: "中", high: "高" };
+
 const MODE_DESCRIPTION: Record<AIApprovalMode, string> = {
-  per_action: "每次工具调用都需要人工批准；纯语言聊天不需要。",
-  automatic: "服务端白名单内的只读/低风险操作自动执行，其余仍需人工审批。",
-  full_access: "需风险确认并限时；仍不扩大资源范围，AI 任意 root Shell 仍需真人管理员确认。",
+  per_action: "执行命令、修改文件或访问网络前，始终询问",
+  automatic: "仅在检测到潜在风险时询问",
+  full_access: "不再询问，可自由操作已授权节点的文件和网络",
 };
 
 interface AIStreamEvent {
@@ -162,105 +164,161 @@ export function AIPage() {
   );
 }
 
-function ModeCards({
+function AccessModeMenu({
   policy,
-  canManage,
-  writesLocked,
+  disabled,
+  busy,
   onChange,
-  error,
 }: {
   readonly policy: AIApprovalPolicy | null;
-  readonly canManage: boolean;
-  readonly writesLocked: boolean;
-  readonly onChange: (mode: AIApprovalMode, duration?: 900 | 1800 | 3600) => void;
-  readonly error: unknown;
+  readonly disabled: boolean;
+  readonly busy: boolean;
+  readonly onChange: (mode: AIApprovalMode) => void;
 }) {
-  const [fullOpen, setFullOpen] = useState(false);
-  const [duration, setDuration] = useState<900 | 1800 | 3600>(900);
-  const [confirmed, setConfirmed] = useState(false);
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = policy?.effectiveMode ?? policy?.mode ?? "per_action";
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
   const modes: AIApprovalMode[] = ["per_action", "automatic", "full_access"];
+  const CurrentIcon = current === "per_action" ? ShieldAlert : current === "automatic" ? CheckCircle2 : Zap;
   return (
-    <div className="space-y-3 px-5 py-4">
-      {error ? <Notice tone="error" title="切换失败">{describeApiError(error)}</Notice> : null}
-      <div className="grid gap-3.5 md:grid-cols-3">
-        {modes.map(mode => {
-          const active = policy?.mode === mode;
-          const ModeIcon = mode === "per_action" ? ShieldAlert : mode === "automatic" ? CheckCircle2 : Zap;
-          return (
-            <button
-              key={mode}
-              type="button"
-              aria-pressed={active}
-              disabled={!canManage || writesLocked}
-              onClick={() => (mode === "full_access" ? setFullOpen(true) : onChange(mode))}
-              className={`group relative overflow-hidden rounded-xl border p-4 text-left text-sm transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
-                active
-                  ? "border-primary bg-primary-light/85 shadow-[var(--shadow-card-hover)] ring-1 ring-primary/35"
-                  : "border-border/80 bg-card shadow-[var(--shadow-card)] hover:-translate-y-0.5 hover:border-primary/30 hover:bg-secondary/40"
-              }`}
-            >
-              <span className="flex items-center justify-between gap-2">
-                <span className="inline-flex items-center gap-2 font-semibold text-foreground">
-                  <ModeIcon aria-hidden="true" className={`size-4 ${active ? "text-primary" : "text-muted-foreground"}`} />
-                  {MODE_LABEL[mode]}
-                </span>
-                {active ? (
-                  <Badge className="bg-primary text-white border-primary">
-                    当前模式
-                  </Badge>
-                ) : null}
-              </span>
-              <span className="mt-2 block text-xs leading-5 text-muted-foreground">{MODE_DESCRIPTION[mode]}</span>
-            </button>
-          );
-        })}
-      </div>
-      {policy ? (
-        <p className="text-xs text-muted-foreground">
-          生效模式：{MODE_LABEL[policy.effectiveMode]} · 范围版本 {policy.scopeRevision} · 到期 {formatDateTime(policy.expiresAt) ?? "未设置"}
-          {policy.enforcedRestrictions?.length ? ` · 强制限制：${policy.enforcedRestrictions.join("；")}` : ""}
-        </p>
-      ) : null}
-      <Modal
-        open={fullOpen}
-        title="启用完全访问（限时）"
-        description="完全访问不等于全部服务器权限，也不免除 AI 任意 root Shell 的真人管理员批准。"
-        onClose={() => setFullOpen(false)}
-        footer={
-          <>
-            <Button type="button" onClick={() => setFullOpen(false)}>取消</Button>
-            <Button
-              type="button"
-              variant="danger"
-              disabled={!confirmed}
-              onClick={() => {
-                setFullOpen(false);
-                onChange("full_access", duration);
-              }}
-            >
-              确认启用
-            </Button>
-          </>
-        }
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label="权限模式"
+        title="权限模式"
+        disabled={disabled}
+        onClick={() => setOpen(value => !value)}
+        className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-50"
       >
-        <div className="space-y-3">
-          <Field label="有效期">
-            {ids => (
-              <Select id={ids.inputId} value={duration} onChange={event => setDuration(Number(event.target.value) as 900 | 1800 | 3600)}>
-                <option value={900}>15 分钟</option>
-                <option value={1800}>30 分钟</option>
-                <option value={3600}>60 分钟</option>
-              </Select>
-            )}
-          </Field>
-          <label className="flex items-start gap-2 text-sm">
-            <Checkbox className="mt-1 accent-[var(--destructive)]" checked={confirmed} onChange={event => setConfirmed(event.target.checked)} />
-            我理解：完全访问只在当前资源授权和权限范围内生效，到期恢复每次审批；root Shell 仍需真人确认。
-          </label>
+        <CurrentIcon aria-hidden="true" className="size-3.5 text-primary" />
+        {MODE_LABEL[current]}
+        <ChevronDown aria-hidden="true" className="size-3 text-muted-foreground" />
+      </button>
+      {open ? (
+        <div
+          role="menu"
+          aria-label="权限模式"
+          className="absolute bottom-full left-0 z-30 mb-1.5 w-72 rounded-xl border border-border bg-card p-1.5 shadow-lg"
+        >
+          {modes.map(mode => {
+            const ModeIcon = mode === "per_action" ? ShieldAlert : mode === "automatic" ? CheckCircle2 : Zap;
+            return (
+              <button
+                key={mode}
+                type="button"
+                role="menuitemradio"
+                aria-checked={current === mode}
+                disabled={busy}
+                onClick={() => {
+                  setOpen(false);
+                  if (mode !== current) onChange(mode);
+                }}
+                className={`flex w-full items-start gap-2 rounded-lg px-2 py-2 text-left text-sm hover:bg-secondary disabled:opacity-50 ${
+                  mode === "full_access" ? "text-destructive" : "text-foreground"
+                }`}
+              >
+                <ModeIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                <span className="min-w-0 flex-1">
+                  <span className="block font-medium">{MODE_LABEL[mode]}</span>
+                  <span className="mt-0.5 block text-[11px] font-normal leading-4 text-muted-foreground">{MODE_DESCRIPTION[mode]}</span>
+                </span>
+                {current === mode ? <Check aria-hidden="true" className="mt-1 size-3.5 shrink-0" /> : null}
+              </button>
+            );
+          })}
         </div>
-      </Modal>
+      ) : null}
     </div>
   );
+}
+
+function CompactMenu({
+  label,
+  icon,
+  value,
+  options,
+  disabled,
+  loading,
+  onOpen,
+  onSelect,
+}: {
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly value: string;
+  readonly options: readonly { readonly value: string; readonly label: string }[];
+  readonly disabled: boolean;
+  readonly loading: boolean;
+  readonly onOpen: () => void;
+  readonly onSelect: (value: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const current = options.find(option => option.value === value)?.label ?? label;
+  useEffect(() => {
+    if (!open) return;
+    const close = (event: MouseEvent) => {
+      if (!ref.current?.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", close);
+    return () => document.removeEventListener("mousedown", close);
+  }, [open]);
+  return (
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        aria-label={label}
+        title={label}
+        disabled={disabled}
+        onClick={() => {
+          if (!open) onOpen();
+          setOpen(value => !value);
+        }}
+        className="inline-flex max-w-56 items-center gap-1 rounded-lg border border-border/80 bg-card px-2 py-1 text-xs font-medium text-foreground hover:bg-secondary disabled:opacity-50"
+      >
+        {icon}
+        <span className="truncate">{current}</span>
+        <ChevronDown aria-hidden="true" className="size-3 shrink-0 text-muted-foreground" />
+      </button>
+      {open ? (
+        <div role="menu" aria-label={label} className="absolute bottom-full left-0 z-30 mb-1.5 max-h-64 w-60 overflow-y-auto rounded-xl border border-border bg-card p-1.5 shadow-lg">
+          {loading ? <p className="px-2 py-2 text-xs text-muted-foreground">正在读取…</p> : null}
+          {options.map(option => (
+            <button
+              key={option.value}
+              type="button"
+              role="menuitemradio"
+              aria-checked={option.value === value}
+              disabled={loading}
+              onClick={() => {
+                setOpen(false);
+                if (option.value !== value) onSelect(option.value);
+              }}
+              className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs text-foreground hover:bg-secondary disabled:opacity-50"
+            >
+              <span className="min-w-0 flex-1 truncate">{option.label}</span>
+              {option.value === value ? <Check aria-hidden="true" className="size-3.5 shrink-0 text-primary" /> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function formatTokens(value: number): string {
+  return value >= 1000 ? `${(value / 1000).toFixed(1)}k` : String(value);
 }
 
 function ApprovalsPanel({
@@ -412,18 +470,19 @@ function ApprovalsPanel({
 
 export function AISessionPage({ sessionId, embedded = false }: { readonly sessionId: string; readonly embedded?: boolean }) {
   const appSession = useSession();
-  const [tab, setTab] = useState<"chat" | "agent" | "policy" | "approval">("chat");
+  const [tab, setTab] = useState<"chat" | "agent" | "approval">("chat");
   const [events, setEvents] = useState<readonly AIStreamEvent[]>([]);
   const [streamError, setStreamError] = useState<unknown>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const session = useResource(`ai:session:${appSession.viewEpoch}:${sessionId}`, signal => aiApi.getSession(sessionId, signal).then(result => result.data));
-  const policy = useResource(`ai:policy:${appSession.viewEpoch}:${sessionId}`, signal => aiApi.approvalPolicy(sessionId, signal).then(result => result.data));
   const messages = useResource(`ai:messages:${appSession.viewEpoch}:${sessionId}`, signal =>
     aiApi.messages(sessionId, { limit: 100 }, signal).then(result => result.data),
   );
   const nodes = useResource(`ai:nodes:${appSession.viewEpoch}`, signal => nodesApi.list({ signal }).then(result => result.data));
   const serviceGroups = useResource(`ai:servicegroups:${appSession.viewEpoch}`, signal => serviceGroupsApi.list(signal).then(result => result.data));
+  const runs = useResource(`ai:runs:chat:${appSession.viewEpoch}:${sessionId}`, signal => aiAgentApi.list(sessionId, signal).then(result => result.data.items), { refreshIntervalMs: 4000 });
+  const context = useResource(`ai:context:${appSession.viewEpoch}:${sessionId}:${session?.state.status === "ready" ? session.state.data.scopeRevision : 0}`, signal => aiApi.context(sessionId, signal).then(result => result.data), { refreshIntervalMs: 5000 });
 
   const current = session.state.status === "ready" ? session.state.data : null;
   const nodeItems: readonly NodeSummary[] = nodes.state.status === "ready" ? nodes.state.data.items : [];
@@ -434,14 +493,18 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const [actions, setActions] = useState("nodes.read,tasks.command,tasks.exec.v1,host.root");
   const [messageText, setMessageText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
+  const [policyOverride, setPolicyOverride] = useState<AIApprovalPolicy | null>(null);
+  const [models, setModels] = useState<readonly string[] | null>(null);
+  const policyData = policyOverride ?? current?.approvalPolicy ?? null;
 
   const grant = useAction((body: { resourceType: "node" | "service_group"; resourceId: string; allowedActions: readonly string[] }) =>
     aiApi.grant(sessionId, body),
   );
   const revokeGrant = useAction((grantId: string) => aiApi.revokeGrant(sessionId, grantId));
-  const updatePolicy = useAction((body: { mode: AIApprovalMode; durationSeconds?: 900 | 1800 | 3600; userConfirmedFullAccess?: boolean }) =>
-    aiApi.updateApprovalPolicy(sessionId, body),
-  );
+  const updatePolicy = useAction((body: { mode: AIApprovalMode }) => aiApi.updateApprovalPolicy(sessionId, body));
+  const updatePreferences = useAction((body: { model: string; reasoningEffort: "low" | "medium" | "high" | "" }) => aiApi.updatePreferences(sessionId, body));
+  const catalog = useAction(() => modelSettingsApi.catalog());
+  const compactContext = useAction((body: { keep: number }) => aiApi.compactContext(sessionId, body));
   const send = useAction((body: { content: string; clientMessageId: string; scopeRevision: number }) => aiApi.sendMessage(sessionId, body));
   const runAgent = useAction((body: AgentRunInput) => aiAgentApi.create(sessionId, body));
   const [composerMode, setComposerMode] = useState<"chat" | "agent">("chat");
@@ -546,6 +609,20 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const writesLocked = appSession.writesLocked;
   const messageItems: readonly AIMessage[] = messages.state.status === "ready" ? messages.state.data.items : [];
   const visibleMessages = messageItems.filter(message => message.messageId !== streamReply?.message.messageId);
+  const runItems = runs.state.status === "ready" ? runs.state.data : [];
+  const runById = new Map(runItems.map(run => [run.id, run]));
+  const renderedRunIds = new Set<string>();
+  const contextData: AIContextStats | null = context.state.status === "ready" ? context.state.data : null;
+  const currentEffort = current?.reasoningEffort ?? "";
+  const currentModel = current?.model ?? "";
+  const modelOptions = [
+    { value: "", label: "默认模型" },
+    ...(models ?? []).map(model => ({ value: model, label: model })),
+  ];
+  if (currentModel && !modelOptions.some(option => option.value === currentModel)) {
+    modelOptions.push({ value: currentModel, label: currentModel });
+  }
+  const effortOptions = (["", "low", "medium", "high"] as const).map(value => ({ value, label: EFFORT_LABEL[value] }));
 
   useEffect(() => {
     const list = listRef.current;
@@ -562,18 +639,39 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
     if (result.ok) {
       setResourceId("");
       session.refreshSilent();
-      policy.refreshSilent();
     }
   }
 
-  async function changeMode(mode: AIApprovalMode, duration?: 900 | 1800 | 3600) {
-    const result = await updatePolicy.run({
-      mode,
-      ...(mode === "full_access" ? { durationSeconds: duration ?? 900, userConfirmedFullAccess: true } : {}),
-    });
-    if (result.ok) {
-      policy.refreshSilent();
+  async function changeMode(mode: AIApprovalMode) {
+    const result = await updatePolicy.run({ mode });
+    if (result.ok && result.data) {
+      setPolicyOverride(result.data.data);
       session.refreshSilent();
+    }
+  }
+
+  async function loadModels() {
+    if (models !== null || catalog.pending) return;
+    const result = await catalog.run();
+    if (result.ok && result.data) setModels(result.data.data.items);
+  }
+
+  async function changePreferences(model: string, effort: "low" | "medium" | "high" | "") {
+    const result = await updatePreferences.run({ model, reasoningEffort: effort });
+    if (result.ok) {
+      setActiveRunId(null);
+      session.refreshSilent();
+      messages.refreshSilent();
+      runs.refreshSilent();
+      context.refreshSilent();
+    }
+  }
+
+  async function compressContext() {
+    const result = await compactContext.run({ keep: 6 });
+    if (result.ok) {
+      context.refreshSilent();
+      messages.refreshSilent();
     }
   }
 
@@ -610,7 +708,6 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
     const result = await grant.run({ resourceType: kind, resourceId: id, allowedActions: ["nodes.read", "tasks.command", "tasks.exec.v1", "host.root"] });
     if (!result.ok) return;
     session.refreshSilent();
-    policy.refreshSilent();
     const token = `@${resourceDisplayName(kind, id)}`;
     setMessageText(prev => (prev ? `${prev} ${token} ` : `${token} `));
   }
@@ -623,7 +720,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
         actions={
           <>
             <LinkButton href="#/ai">返回 AI 入口</LinkButton>
-            <Button type="button" onClick={() => { session.reload(); policy.reload(); messages.reload(); }}>刷新</Button>
+            <Button type="button" onClick={() => { session.reload(); messages.reload(); }}>刷新</Button>
           </>
         }
       />}
@@ -645,7 +742,6 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                 {([
                   ...(tab === "chat" ? [] : [{ id: "chat" as const, label: "返回对话" }]),
                   { id: "agent" as const, label: "自动化执行" },
-                  { id: "policy" as const, label: "审批策略" },
                   { id: "approval" as const, label: "工具审批" },
                 ]).map(item => (
                   <Button key={item.id} size="sm" variant="ghost" className={item.id === tab ? "text-foreground" : "text-muted-foreground"} onClick={() => setTab(item.id)}>{item.label}</Button>
@@ -657,7 +753,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                     {events.length ? <ul className="max-h-40 overflow-y-auto rounded bg-[#141724] text-slate-200">{events.map((event, index) => <li key={`${event.id ?? "e"}-${event.receivedAt}-${index}`} className="px-2 py-1 font-mono text-[11px]"><span className="text-violet-300">{event.event}</span> {event.state ? `· ${event.state}` : ""}</li>)}</ul> : <p className="text-[11px] text-muted-foreground">暂无事件</p>}
                   </div>
                 </details>
-                <Button size="sm" variant="ghost" onClick={() => { session.reload(); policy.reload(); messages.reload(); }}>刷新</Button>
+                <Button size="sm" variant="ghost" onClick={() => { session.reload(); messages.reload(); }}>刷新</Button>
               </div>
             </div>
 
@@ -666,22 +762,6 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
             {tab !== "chat" ? (
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
             {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} focusRunId={activeRunId} /> : null}
-
-            {tab === "policy" ? (
-              <Panel title="审批策略" description="系统可能强制更严格的审批策略。">
-                <AsyncPanel state={policy.state} onRetry={policy.reload} errorTitle="审批策略加载失败">
-                  {policyData => (
-                    <ModeCards
-                      policy={policyData}
-                      canManage={canUse}
-                      writesLocked={writesLocked}
-                      onChange={(mode, duration) => void changeMode(mode, duration)}
-                      error={updatePolicy.error}
-                    />
-                  )}
-                </AsyncPanel>
-              </Panel>
-            ) : null}
 
             {tab === "approval" ? (
               <ApprovalsPanel sessionId={sessionId} session={data} canApprove={canApprove} writesLocked={writesLocked} />
@@ -697,6 +777,33 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                     {() => (
                       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[#FAFBFD] px-4 py-4">
                         {visibleMessages.map(message => {
+                          if (message.agentRunId) {
+                            if (renderedRunIds.has(message.agentRunId)) return null;
+                            renderedRunIds.add(message.agentRunId);
+                            const run = runById.get(message.agentRunId);
+                            return (
+                              <div key={message.messageId} className="space-y-2">
+                                {message.role === "user" ? (
+                                  <div className="ml-6 rounded-2xl border border-primary/25 bg-primary-light/75 p-4 text-sm shadow-2xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                                        <User aria-hidden="true" className="size-3.5 text-primary" />你 · {formatDateTime(message.createdAt) ?? "—"}
+                                      </span>
+                                    </div>
+                                    <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{run?.goal ?? "Agent 任务"}</p>
+                                  </div>
+                                ) : null}
+                                <InlineAgentRun
+                                  sessionId={sessionId}
+                                  runId={message.agentRunId}
+                                  canApprove={canApprove}
+                                  showGoal={false}
+                                  compact
+                                  onOpen={() => setTab("agent")}
+                                />
+                              </div>
+                            );
+                          }
                           const isUser = message.role === "user";
                           return (
                             <div
@@ -743,18 +850,20 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                             </p>
                           </div>
                         ) : null}
+                        {activeRunId && !renderedRunIds.has(activeRunId) ? (
+                          <InlineAgentRun
+                            sessionId={sessionId}
+                            runId={activeRunId}
+                            canApprove={canApprove}
+                            showGoal={false}
+                            compact
+                            onOpen={() => setTab("agent")}
+                          />
+                        ) : null}
                       </div>
                     )}
                   </AsyncPanel>
                   </div>
-                  {activeRunId ? (
-                    <InlineAgentRun
-                      sessionId={sessionId}
-                      runId={activeRunId}
-                      canApprove={canApprove}
-                      onOpen={() => setTab("agent")}
-                    />
-                  ) : null}
                   {generateError ? (
                     <div className="shrink-0 border-t border-border/70 px-3 py-2">
                       <Notice tone="error" title="生成失败（未产生助手回复）">{generateError}</Notice>
@@ -777,6 +886,13 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                     {send.error ? <div className="mb-2"><Notice tone="error" title="发送失败">{describeApiError(send.error)}</Notice></div> : null}
                     {runAgent.error ? <div className="mb-2"><Notice tone="error" title="执行请求未确认">{describeApiError(runAgent.error)} 请先在“自动化执行”核对运行记录，不要重复创建。</Notice></div> : null}
                     <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                      <AccessModeMenu
+                        policy={policyData}
+                        disabled={writesLocked || !canUse || updatePolicy.pending}
+                        busy={updatePolicy.pending}
+                        onChange={mode => void changeMode(mode)}
+                      />
+                      <span aria-hidden="true" className="mx-0.5 h-4 w-px bg-border" />
                       <Button type="button" size="sm" variant={composerMode === "chat" ? "secondary" : "ghost"} aria-pressed={composerMode === "chat"} onClick={() => setComposerMode("chat")}>
                         对话
                       </Button>
@@ -792,10 +908,61 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                       </Button>
                       <span className="ml-1 text-muted-foreground">
                         {composerMode === "agent"
-                          ? "AI 将规划并调用已授权节点；危险操作仍需审批。"
+                          ? "AI 将按左侧权限模式规划并操作已授权节点。"
                           : "只对话，不改动服务器；需要操作时切到“执行任务”。"}
                       </span>
                     </div>
+                    {updatePolicy.error ? (
+                      <div className="mb-2">
+                        <Notice tone="error" title="权限模式切换失败">{describeApiError(updatePolicy.error)}</Notice>
+                      </div>
+                    ) : null}
+                    <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
+                      <CompactMenu
+                        label="模型"
+                        icon={<Brain aria-hidden="true" className="size-3.5 text-primary" />}
+                        value={currentModel}
+                        options={modelOptions}
+                        disabled={writesLocked || !canUse || updatePreferences.pending}
+                        loading={catalog.pending}
+                        onOpen={() => void loadModels()}
+                        onSelect={value => void changePreferences(value, currentEffort)}
+                      />
+                      <CompactMenu
+                        label="思考深度"
+                        icon={<Gauge aria-hidden="true" className="size-3.5 text-primary" />}
+                        value={currentEffort}
+                        options={effortOptions}
+                        disabled={writesLocked || !canUse || updatePreferences.pending}
+                        loading={false}
+                        onOpen={() => undefined}
+                        onSelect={value => void changePreferences(currentModel, value as "low" | "medium" | "high" | "")}
+                      />
+                      <span className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-card px-2 py-1 text-muted-foreground">
+                        <Gauge aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                        约 {formatTokens(contextData?.estimatedTokens ?? 0)} tokens · {contextData?.messageCount ?? 0} 条
+                        {contextData?.summaryPresent ? " · 已压缩" : ""}
+                      </span>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="h-6 px-2 text-xs"
+                        loading={compactContext.pending}
+                        disabled={writesLocked || !canUse || compactContext.pending || (contextData?.messageCount ?? 0) < 8}
+                        onClick={() => void compressContext()}
+                        title="把较早对话压缩为摘要，保留最近 6 条消息"
+                      >
+                        压缩上下文
+                      </Button>
+                    </div>
+                    {updatePreferences.error || compactContext.error || catalog.error ? (
+                      <div className="mb-2">
+                        <Notice tone="error" title="AI 设置未完成">
+                          {describeApiError(updatePreferences.error ?? compactContext.error ?? catalog.error)}
+                        </Notice>
+                      </div>
+                    ) : null}
                     <div className="relative">
                       <TextArea
                         aria-label="消息内容"
@@ -877,7 +1044,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                                 <span className="min-w-0 truncate">
                                   {grantItem.resourceType === "service_group" ? "服务组" : "节点"} · {grantItem.resourceType === "service_group" ? groupItems.find(group => group.id === grantItem.resourceId)?.name ?? grantItem.resourceId : nodeItems.find(node => node.id === grantItem.resourceId)?.name ?? grantItem.resourceId}
                                 </span>
-                                <Button size="sm" variant="ghost" disabled={writesLocked || !canUse} onClick={async () => { const result = await revokeGrant.run(grantItem.grantId); if (result.ok) { session.refreshSilent(); policy.refreshSilent(); } }}>撤回</Button>
+                                <Button size="sm" variant="ghost" disabled={writesLocked || !canUse} onClick={async () => { const result = await revokeGrant.run(grantItem.grantId); if (result.ok) { session.refreshSilent(); } }}>撤回</Button>
                               </li>
                             ))}
                           </ul>

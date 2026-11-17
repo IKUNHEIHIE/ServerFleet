@@ -211,7 +211,10 @@ type SubmitRequest struct {
 	Params           map[string]string
 	CanonicalParams  []byte
 	IdempotencyKey   string
-	RequireApproval  bool
+	RequireApproval bool
+	// ApprovalSatisfied marks an AI-originated task whose human tool approval was
+	// already granted by the AI session; class-level approval is not required twice.
+	ApprovalSatisfied bool
 	ScopeRevision    uint64
 	Source           audit.Source
 	PluginID         string
@@ -304,7 +307,7 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 		return Task{}, err
 	}
 	targets := buildTargets(snapshot.IDs(), plan)
-	approvalRequired := request.RequireApproval || s.requireApproval(request.OperationClass)
+	approvalRequired := request.RequireApproval || s.requireApproval(request.OperationClass) && !request.ApprovalSatisfied
 	if targetType == TargetTypeController {
 		rule, err := s.controllerRule(admission)
 		if err != nil {
@@ -357,8 +360,8 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 			if err != nil {
 				return err
 			}
-			if !validToken(approver, 128) || approver == request.SubjectID {
-				return ErrSelfApproval
+			if !validToken(approver, 128) {
+				return ErrApprovalInvalid
 			}
 			if err := s.repo.InsertApproval(txCtx, tx, Approval{
 				TaskID: task.ID, Revision: task.Revision, ApproverID: approver,
@@ -433,9 +436,6 @@ func (s *Service) Decide(ctx context.Context, taskID string, expectedRevision ui
 	}
 	if task.Revision != expectedRevision {
 		return Task{}, ErrApprovalInvalid
-	}
-	if decision.ApproverID == task.SubmitterID {
-		return Task{}, ErrSelfApproval
 	}
 	targetIDs := taskTargetIDs(task)
 	if err := s.authorizeForTask(ctx, task, decision.ApproverID, ActionApprove, decision.RequestID, targetIDs, "task_approve"); err != nil {

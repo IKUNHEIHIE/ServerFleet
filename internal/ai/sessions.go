@@ -54,23 +54,29 @@ type ApprovalPolicy struct {
 	EnforcedRestrictions []string   `json:"enforcedRestrictions"`
 }
 type SessionView struct {
-	ID             string          `json:"id"`
-	ScopeRevision  uint64          `json:"scopeRevision"`
-	ResourceGrants []ResourceGrant `json:"resourceGrants"`
-	AllowedNodeIDs []string        `json:"allowedNodeIds"`
-	Status         string          `json:"status"`
-	CreatedBy      string          `json:"createdBy"`
-	CreatedAt      time.Time       `json:"createdAt"`
-	ApprovalPolicy ApprovalPolicy  `json:"approvalPolicy"`
+	ID              string          `json:"id"`
+	ScopeRevision   uint64          `json:"scopeRevision"`
+	ResourceGrants  []ResourceGrant `json:"resourceGrants"`
+	AllowedNodeIDs  []string        `json:"allowedNodeIds"`
+	Status          string          `json:"status"`
+	CreatedBy       string          `json:"createdBy"`
+	CreatedAt       time.Time       `json:"createdAt"`
+	Model           string          `json:"model,omitempty"`
+	ReasoningEffort string          `json:"reasoningEffort,omitempty"`
+	ApprovalPolicy  ApprovalPolicy  `json:"approvalPolicy"`
 }
 type sessionRecord struct {
-	AgentRuns    map[string]agentRunRecord `json:",omitempty"`
-	Scope        Scope
-	Grants       map[string]ResourceGrant
-	Approvals    map[string]approvalRecord `json:",omitempty"`
-	Created      time.Time
-	Closed       bool
-	Conversation *conversationRecord `json:",omitempty"`
+	AgentRuns       map[string]agentRunRecord `json:",omitempty"`
+	Scope           Scope
+	Grants          map[string]ResourceGrant
+	Approvals       map[string]approvalRecord `json:",omitempty"`
+	Created         time.Time
+	Closed          bool
+	ModelOverride   string              `json:",omitempty"`
+	ReasoningEffort string              `json:",omitempty"`
+	ContextSummary  string              `json:",omitempty"`
+	ContextCutoff   int                 `json:",omitempty"`
+	Conversation    *conversationRecord `json:",omitempty"`
 }
 type sessionAudit struct {
 	SubjectID, Action, SessionID string
@@ -158,6 +164,11 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 		if scope.Mode != EveryCall && scope.Mode != LowRisk && scope.Mode != FullAccess {
 			return nil, ErrSessionUnavailable
 		}
+		if record.ModelOverride != "" && (!exactID(record.ModelOverride) || len(record.ModelOverride) > 128) ||
+			record.ReasoningEffort != "" && record.ReasoningEffort != "low" && record.ReasoningEffort != "medium" && record.ReasoningEffort != "high" ||
+			len(record.ContextSummary) > 16000 || record.ContextCutoff < 0 || record.ContextCutoff > 512 {
+			return nil, ErrSessionUnavailable
+		}
 		if validateConversation(id, record.Conversation) != nil {
 			return nil, ErrSessionUnavailable
 		}
@@ -221,6 +232,41 @@ func (s *SessionService) recheck(ctx context.Context, actor SessionActor, action
 	}
 	return fresh, nil
 }
+
+// inspect is a read-only snapshot. Unlike change it never rewrites the
+// session blob, so list/detail/policy reads do not serialize on one UPDATE.
+func (s *SessionService) inspect(ctx context.Context, fn func(*sessionState, time.Time) error) error {
+	if s == nil || ctx == nil || fn == nil || ctx.Err() != nil {
+		return ErrSessionUnavailable
+	}
+	err := s.store.View(ctx, func(b []byte) error {
+		st, err := decodeSessions(b)
+		if err != nil {
+			return err
+		}
+		now := s.now().UTC()
+		if now.IsZero() || now.Before(st.ClockFloor) {
+			return ErrSessionUnavailable
+		}
+		if err = fn(st, now); err != nil {
+			return err
+		}
+		if ctx.Err() != nil {
+			return ErrSessionUnavailable
+		}
+		return nil
+	})
+	for _, kind := range []error{ErrToolDenied, ErrSessionUnavailable, ErrScopeConflict, ErrApprovalRequired, ErrApprovalExpired, ErrGenerationUnknown, ErrModelUnavailable, ErrModelRevisionConflict} {
+		if errors.Is(err, kind) {
+			return kind
+		}
+	}
+	if err != nil || ctx.Err() != nil {
+		return ErrSessionUnavailable
+	}
+	return nil
+}
+
 func (s *SessionService) change(ctx context.Context, fn func(*sessionState, time.Time) error) error {
 	if s == nil || ctx == nil || ctx.Err() != nil {
 		return ErrSessionUnavailable
@@ -320,20 +366,11 @@ func recordScope(record sessionRecord) Scope {
 func (s *SessionService) view(ctx context.Context, record sessionRecord, now time.Time) (SessionView, error) {
 	scope := recordScope(record)
 	mode := map[ApprovalMode]string{EveryCall: "per_action", LowRisk: "automatic", FullAccess: "full_access"}[scope.Mode]
-	view := SessionView{ID: scope.SessionID, ScopeRevision: scope.Revision, ResourceGrants: []ResourceGrant{}, AllowedNodeIDs: []string{}, Status: "active", CreatedBy: scope.SubjectID, CreatedAt: record.Created, ApprovalPolicy: ApprovalPolicy{SessionID: scope.SessionID, Mode: mode, EffectiveMode: mode, ScopeRevision: scope.Revision, MaxFullAccessSeconds: 3600, EnforcedRestrictions: []string{"RESOURCE_AND_ACTION_INTERSECTION", "AI_ROOT_SHELL_HUMAN_ADMIN", "NO_PLATFORM_SECRET_EXPORT", "PLUGIN_ENABLEMENT_REQUIRED"}}}
-	if scope.Mode == FullAccess {
-		if now.Before(scope.FullUntil) && !now.Before(scope.FullSince) {
-			expiry := scope.FullUntil
-			view.ApprovalPolicy.ExpiresAt = &expiry
-		} else {
-			view.ApprovalPolicy.EffectiveMode = "per_action"
-		}
-	}
+	view := SessionView{ID: scope.SessionID, ScopeRevision: scope.Revision, ResourceGrants: []ResourceGrant{}, AllowedNodeIDs: []string{}, Status: "active", CreatedBy: scope.SubjectID, CreatedAt: record.Created, Model: record.ModelOverride, ReasoningEffort: record.ReasoningEffort, ApprovalPolicy: ApprovalPolicy{SessionID: scope.SessionID, Mode: mode, EffectiveMode: mode, ScopeRevision: scope.Revision, MaxFullAccessSeconds: 3600, EnforcedRestrictions: []string{"RESOURCE_AND_ACTION_INTERSECTION", "AI_ROOT_SHELL_HUMAN_ADMIN", "NO_PLATFORM_SECRET_EXPORT", "PLUGIN_ENABLEMENT_REQUIRED"}}}
 	if record.Closed {
 		view.Status = "closed"
 		view.ApprovalPolicy.Mode = "per_action"
 		view.ApprovalPolicy.EffectiveMode = "per_action"
-		view.ApprovalPolicy.ExpiresAt = nil
 	}
 	allowed := map[string]bool{}
 	for _, grant := range record.Grants {
@@ -415,8 +452,7 @@ func (s *SessionService) Get(ctx context.Context, id string) (SessionView, error
 		return SessionView{}, err
 	}
 	var out SessionView
-	// Persist observed expiry so a backward clock cannot revive full access.
-	err = s.change(ctx, func(st *sessionState, now time.Time) error {
+	err = s.inspect(ctx, func(st *sessionState, now time.Time) error {
 		if _, err := s.recheck(ctx, actor, "ai.sessions.read", id, false); err != nil {
 			return err
 		}
@@ -433,6 +469,7 @@ func (s *SessionService) Get(ctx context.Context, id string) (SessionView, error
 	}
 	return out, nil
 }
+
 type SessionSummary struct {
 	ID             string    `json:"id"`
 	Title          string    `json:"title"`
@@ -465,8 +502,16 @@ func (s *SessionService) List(ctx context.Context) ([]SessionSummary, error) {
 					if message.CreatedAt.After(last) {
 						last = message.CreatedAt
 					}
-					if title == "新会话" && message.Role == "user" && message.RedactedContent != "" {
-						title = sessionTitle(message.RedactedContent)
+					if title == "新会话" && message.Role == "user" {
+						content := message.RedactedContent
+						if message.AgentRunID != "" {
+							if run, ok := record.AgentRuns[message.AgentRunID]; ok {
+								content = run.View.Goal
+							}
+						}
+						if content != "" {
+							title = sessionTitle(content)
+						}
 					}
 				}
 			}
@@ -606,11 +651,11 @@ func (s *SessionService) SetPolicy(ctx context.Context, id string, expected uint
 			return ErrToolDenied
 		}
 		if mode == FullAccess {
-			if !actor.CanFullAccess || minutes != 15 && minutes != 30 && minutes != 60 {
+			if !actor.CanFullAccess || minutes != 0 {
 				return ErrToolDenied
 			}
 			record.Scope.FullSince = now
-			record.Scope.FullUntil = now.Add(time.Duration(minutes) * time.Minute)
+			record.Scope.FullUntil = time.Time{}
 		} else {
 			if minutes != 0 {
 				return ErrToolDenied
@@ -619,9 +664,49 @@ func (s *SessionService) SetPolicy(ctx context.Context, id string, expected uint
 			record.Scope.FullUntil = time.Time{}
 		}
 		record.Scope.Mode = mode
+		// Approval mode is not a resource change, but the scope revision still
+		// fences in-flight inference/pending approvals. Carry queued Agent runs
+		// forward; close anything already mid-call instead of stranding it.
+		nextRevision := record.Scope.Revision + 1
+		for key, run := range record.AgentRuns {
+			if agentTerminal(run.View.State) {
+				continue
+			}
+			switch run.View.State {
+			case "queued":
+				run.View.ScopeRevision = nextRevision
+				record.AgentRuns[key] = run
+			default:
+				run.View.State, run.View.StopReason = "unknown", "approval_policy_changed"
+				if len(run.View.Steps) > 0 {
+					run.View.Steps[len(run.View.Steps)-1].State = "unknown"
+				}
+				run.View.Revision++
+				record.AgentRuns[key] = run
+			}
+		}
 		return nil
 	})
 }
+
+// SetPreferences changes the model used by this session and the reasoning
+// depth sent to the provider. An empty model restores the configured default.
+func (s *SessionService) SetPreferences(ctx context.Context, id string, model, effort string) (SessionView, error) {
+	if model != "" && (!exactID(model) || len(model) > 128) ||
+		effort != "" && effort != "low" && effort != "medium" && effort != "high" {
+		return SessionView{}, ErrToolDenied
+	}
+	view, err := s.Get(ctx, id)
+	if err != nil {
+		return SessionView{}, err
+	}
+	return s.mutateRevision(ctx, id, view.ScopeRevision, "ai.sessions.preferences", false, func(record *sessionRecord, _ SessionActor, _ time.Time) error {
+		record.ModelOverride = model
+		record.ReasoningEffort = effort
+		return nil
+	})
+}
+
 func (s *SessionService) Close(ctx context.Context, id string, expected uint64) (SessionView, error) {
 	return s.mutate(ctx, id, expected, "ai.sessions.close", func(record *sessionRecord, _ SessionActor, _ time.Time) error {
 		record.Closed = true
@@ -632,6 +717,12 @@ func (s *SessionService) Close(ctx context.Context, id string, expected uint64) 
 	})
 }
 func (s *SessionService) mutate(ctx context.Context, id string, expected uint64, action string, fn func(*sessionRecord, SessionActor, time.Time) error) (SessionView, error) {
+	return s.mutateRevision(ctx, id, expected, action, true, fn)
+}
+
+// mutateRevision keeps the scope revision stable for preferences that do not
+// change resource authority (approval mode, model, reasoning depth).
+func (s *SessionService) mutateRevision(ctx context.Context, id string, expected uint64, action string, bump bool, fn func(*sessionRecord, SessionActor, time.Time) error) (SessionView, error) {
 	actor, err := s.actor(ctx, action, id, true)
 	if err != nil {
 		return SessionView{}, err
@@ -653,9 +744,11 @@ func (s *SessionService) mutate(ctx context.Context, id string, expected uint64,
 		if err := fn(&record, fresh, now); err != nil {
 			return err
 		}
-		record.Scope.Revision++
-		if record.Scope.Revision == 0 {
-			return ErrSessionUnavailable
+		if bump {
+			record.Scope.Revision++
+			if record.Scope.Revision == 0 {
+				return ErrSessionUnavailable
+			}
 		}
 		st.Sessions[id] = record
 		out, err = s.view(ctx, record, now)
@@ -663,6 +756,7 @@ func (s *SessionService) mutate(ctx context.Context, id string, expected uint64,
 			return err
 		}
 		return s.audit(st, record, action, now, previousNodes...)
+		return nil
 	})
 	if err != nil {
 		return SessionView{}, err
@@ -696,7 +790,7 @@ func (s *SessionService) AssessTool(ctx context.Context, id string, call ToolCal
 	}
 	call.Parameters = bytes.Clone(canonical)
 	var out ToolAssessment
-	err = s.change(ctx, func(st *sessionState, now time.Time) error {
+	err = s.inspect(ctx, func(st *sessionState, now time.Time) error {
 		if _, err := s.recheck(ctx, actor, "ai.tools.assess", id, false); err != nil {
 			return err
 		}

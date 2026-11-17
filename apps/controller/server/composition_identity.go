@@ -10,6 +10,7 @@ import (
 	"serverfleet.local/serverfleet/internal/publishing"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
+	"serverfleet.local/serverfleet/internal/transport"
 	"strings"
 )
 
@@ -93,7 +94,7 @@ func (a *composedAuthorizer) Authorize(ctx context.Context, check auth.Check) er
 		return auth.ErrInvalidCheck
 	}
 	err := a.identity.Authorize(ctx, check)
-	if errors.Is(err, auth.ErrDenied) && (check.Action == "tasks.command" || check.Action == "host.patch") {
+	if errors.Is(err, auth.ErrDenied) && (check.Action == "tasks.command" || check.Action == "host.patch" || check.Action == transport.CommandCapability) {
 		return a.identity.Authorize(ctx, auth.Check{
 			SubjectID: check.SubjectID,
 			Action:    tasks.ActionSubmit,
