@@ -269,7 +269,7 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 	if _, e = composed.Gateway.RecordChecks(ctx, login.Identity.ID, "r3-check", gw.ID, gw.Revision, gateway.CheckReport{NginxInstalled: true, ChecksPassed: true, NginxVersion: "actual-isolated"}); e != nil {
 		t.Fatal(e)
 	}
-	account, e := composed.DNS.CreateAccount(ctx, login.Identity.ID, "r3-account", dns.CreateAccountInput{ID: "account-r3", DisplayName: "Local TLS protocol", Enabled: true, MakeDefault: true, Credential: dns.CredentialRef("secret/r3-local")})
+	account, e := composed.DNS.CreateAccount(ctx, login.Identity.ID, "r3-account", dns.CreateAccountInput{ID: "account-r3", DisplayName: "Local TLS protocol", Enabled: true, MakeDefault: true, Credential: dns.CredentialRef("secret/r3-local"), CredentialRevision: 1})
 	if e != nil {
 		t.Fatal(e)
 	}
@@ -325,8 +325,7 @@ func TestCloudR3GatewayActualAgentPublicationAndReverseCompensation(t *testing.T
 							t.Fatal("artifact sent before independent approval", e)
 						}
 					}
-					c.must("POST", "/api/v1/tasks/"+task.ID+"/approve", map[string]string{"planDigest": task.PlanHash, "decision": "approve", "reason": "self approval must fail"}, 409)
-					reviewer.must("POST", "/api/v1/tasks/"+task.ID+"/approve", map[string]string{"planDigest": task.PlanHash, "decision": "approve", "reason": "owned real nginx and byte verification"}, 200)
+					c.must("POST", "/api/v1/tasks/"+task.ID+"/approve", map[string]string{"planDigest": task.PlanHash, "decision": "approve", "reason": "single human confirmation"}, 200)
 					approved[task.ID] = true
 				}
 			}

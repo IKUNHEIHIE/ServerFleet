@@ -128,7 +128,7 @@ func newReviewR2Fixture(t *testing.T, handler *reviewR2Handler) dnsFixture {
 	ctx := context.Background()
 	account, err := fixture.service.CreateAccount(ctx, "admin", "req-account", dns.CreateAccountInput{
 		ID: "acct-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true,
-		Credential: dns.CredentialRef("secret/cf-1"),
+		Credential: dns.CredentialRef("secret/cf-1"), CredentialRevision: 1,
 	})
 	if err != nil {
 		t.Fatalf("CreateAccount: %v", err)

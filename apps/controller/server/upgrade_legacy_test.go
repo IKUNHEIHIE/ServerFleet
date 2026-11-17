@@ -95,7 +95,7 @@ func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo52(t *testing.T) {
 		return nil
 	})
 	versions, e := storage.AppliedVersions(ctx, db)
-	if e != nil || len(versions) != 49 {
+	if e != nil || len(versions) != 50 {
 		t.Fatal("preflight applied migrations", len(versions), e)
 	}
 	_ = db.Close()
@@ -105,7 +105,7 @@ func TestLegacy49MigrationIdentityAndOriginalKeyringUpgradeTo52(t *testing.T) {
 	}
 	defer upgraded.Close()
 	versions, e = storage.AppliedVersions(ctx, upgraded.DB)
-	if e != nil || len(versions) != 52 {
+	if e != nil || len(versions) != 53 {
 		t.Fatal(len(versions), e)
 	}
 	current, e := upgraded.Identity.Authenticate(ctx, login.Secret, "", false)

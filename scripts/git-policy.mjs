@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { pathToFileURL } from "node:url";
 
-export const validTitle = title => /^(feat|fix|docs|chore|test|ci|refactor|build|perf|revert)(\([a-z0-9-]+\))?!?: .+/.test(title) && !/[\r\n]/.test(title);
+export const validTitle = title => /^(feat|fix|docs|chore|test|ci|refactor|build|perf|style|revert)(\([a-z0-9-]+(,[a-z0-9-]+)*\))?!?: .+/.test(title) && !/[\r\n]/.test(title);
 export const validBranch = branch => /^(main|(feature|fix|contract|integration|docs|chore)\/[a-z0-9][a-z0-9._-]*)$/.test(branch);
 
 export function checkGit() {

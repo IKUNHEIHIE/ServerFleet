@@ -14,11 +14,15 @@ func TestSupervisorAndSchedulerApprovalBindingCannotOutliveOrMoveDecision(t *tes
 	if !approval.CurrentFor(task, now, tasks.DefaultApprovalTTL) {
 		t.Fatal("current independently approved plan rejected")
 	}
+	self := approval
+	self.ApproverID = task.SubmitterID
+	if !self.CurrentFor(task, now, tasks.DefaultApprovalTTL) {
+		t.Fatal("same-admin confirmation rejected")
+	}
 	for _, change := range []func(*tasks.Approval){
 		func(a *tasks.Approval) { a.DecidedAt = now.Add(-tasks.DefaultApprovalTTL - time.Second) },
 		func(a *tasks.Approval) { a.DecidedAt = now.Add(time.Second) },
 		func(a *tasks.Approval) { a.DecidedAt = time.Time{} },
-		func(a *tasks.Approval) { a.ApproverID = task.SubmitterID },
 		func(a *tasks.Approval) { a.ApproverID = "" },
 		func(a *tasks.Approval) { a.TaskID = "different-task" },
 		func(a *tasks.Approval) { a.Revision-- },

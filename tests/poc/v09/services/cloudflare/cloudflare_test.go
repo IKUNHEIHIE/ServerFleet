@@ -134,6 +134,36 @@ func bodyFrom(input dns.RecordInput) recordBody {
 	}
 }
 
+func (p *cfProvider) ListRecords(ctx context.Context, ref dns.CredentialRef, zoneProviderID string) ([]dns.ProviderRecord, error) {
+	if ref != credentialRef {
+		return nil, fmt.Errorf("cloudflare: unknown credential ref")
+	}
+	raw, err := p.do(ctx, http.MethodGet, "/zones/"+zoneProviderID+"/dns_records?per_page=100", nil)
+	if err != nil {
+		return nil, err
+	}
+	var records []struct {
+		ID       string `json:"id"`
+		Type     string `json:"type"`
+		Name     string `json:"name"`
+		Content  string `json:"content"`
+		TTL      int    `json:"ttl"`
+		Proxied  bool   `json:"proxied"`
+		Priority *int   `json:"priority,omitempty"`
+	}
+	if err := json.Unmarshal(raw, &records); err != nil {
+		return nil, err
+	}
+	out := make([]dns.ProviderRecord, 0, len(records))
+	for _, record := range records {
+		out = append(out, dns.ProviderRecord{ID: record.ID, Input: dns.RecordInput{
+			Type: dns.RecordType(record.Type), Name: record.Name, Content: record.Content,
+			TTL: record.TTL, Proxied: record.Proxied, Priority: record.Priority,
+		}})
+	}
+	return out, nil
+}
+
 func (p *cfProvider) CreateRecord(ctx context.Context, ref dns.CredentialRef, zoneProviderID string, input dns.RecordInput) (string, error) {
 	if ref != credentialRef {
 		return "", fmt.Errorf("cloudflare: unknown credential ref")

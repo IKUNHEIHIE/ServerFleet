@@ -10,6 +10,7 @@ import (
 	"serverfleet.local/serverfleet/internal/publishing"
 	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/tasks"
+	"serverfleet.local/serverfleet/internal/transport"
 	"strings"
 )
 
@@ -18,9 +19,9 @@ func newIdentityStore(db *storage.DB, recorder *audit.SQLRecorder) (*auth.SQLIde
 		return auth.IdentitySQLStatements{
 			Read: func(ctx context.Context, query string, args ...any) ([]byte, bool, error) {
 				var payload []byte
-				var initialized bool
+				var initialized int64
 				err := q.QueryRow(ctx, query, args...).Scan(&payload, &initialized)
-				return payload, initialized, err
+				return payload, initialized != 0, err
 			},
 			Exec: func(ctx context.Context, query string, args ...any) (int64, error) {
 				result, err := q.Exec(ctx, query, args...)
@@ -93,7 +94,7 @@ func (a *composedAuthorizer) Authorize(ctx context.Context, check auth.Check) er
 		return auth.ErrInvalidCheck
 	}
 	err := a.identity.Authorize(ctx, check)
-	if errors.Is(err, auth.ErrDenied) && (check.Action == "tasks.command" || check.Action == "host.patch") {
+	if errors.Is(err, auth.ErrDenied) && (check.Action == "tasks.command" || check.Action == "host.patch" || check.Action == transport.CommandCapability) {
 		return a.identity.Authorize(ctx, auth.Check{
 			SubjectID: check.SubjectID,
 			Action:    tasks.ActionSubmit,

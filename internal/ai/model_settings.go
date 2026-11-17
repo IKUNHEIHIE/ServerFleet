@@ -2,8 +2,11 @@ package ai
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"math"
+	"net/url"
 	"strings"
 	"time"
 
@@ -15,6 +18,7 @@ var ErrModelRevisionConflict = errors.New("ai: model configuration revision conf
 type ModelSettingsInput struct {
 	Enabled            bool   `json:"enabled"`
 	Provider           string `json:"provider"`
+	Endpoint           string `json:"endpoint"`
 	Model              string `json:"model"`
 	CredentialRef      string `json:"credentialRef"`
 	CredentialRevision uint64 `json:"credentialRevision"`
@@ -45,10 +49,48 @@ func NewModelSettingsService(sessions *SessionService, credential CredentialMeta
 }
 
 func validModelSettingsInput(input ModelSettingsInput) bool {
-	if !input.Enabled && input.Provider == "" && input.Model == "" && input.CredentialRef == "" && input.CredentialRevision == 0 {
+	if !input.Enabled && input.Provider == "" && input.Endpoint == "" && input.Model == "" && input.CredentialRef == "" && input.CredentialRevision == 0 {
 		return true
 	}
-	return input.Provider == "openai-responses" && exactID(input.Model) && len(input.Model) <= 128 && !strings.HasPrefix(input.Model, "sk-") && exactID(input.CredentialRef) && input.CredentialRevision > 0
+	_, endpointErr := NormalizeModelEndpoint(input.Endpoint)
+	return endpointErr == nil && input.Provider == "openai-responses" && exactID(input.Model) && len(input.Model) <= 128 && !strings.HasPrefix(input.Model, "sk-") && exactID(input.CredentialRef) && input.CredentialRevision > 0
+}
+
+// NormalizeModelEndpoint stores one base URL without the /responses suffix. The
+// same value derives both the Responses and /models URLs.
+func NormalizeModelEndpoint(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || u.Scheme != "https" || u.Hostname() == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" || u.RawPath != "" || u.Opaque != "" {
+		return "", ErrModelUnavailable
+	}
+	path := strings.TrimSuffix(u.Path, "/")
+	path = strings.TrimSuffix(path, "/responses")
+	return "https://" + u.Host + path, nil
+}
+
+func ModelResponsesURL(base string) (string, error) {
+	normalized, err := NormalizeModelEndpoint(base)
+	if err != nil || normalized == "" {
+		return "", ErrModelUnavailable
+	}
+	return normalized + "/responses", nil
+}
+
+func ModelCatalogURL(base string) (string, error) {
+	normalized, err := NormalizeModelEndpoint(base)
+	if err != nil || normalized == "" {
+		return "", ErrModelUnavailable
+	}
+	return normalized + "/models", nil
+}
+
+func modelsPlanDigest(endpoint string) string {
+	sum := sha256.Sum256([]byte("serverfleet.ai.models.v1\x00" + endpoint))
+	return hex.EncodeToString(sum[:])
 }
 
 func (m *ModelSettingsService) check(ctx context.Context, owner string, input ModelSettingsInput) (result error) {
@@ -96,6 +138,11 @@ func (m *ModelSettingsService) Get(ctx context.Context) (ModelSettings, error) {
 // their own settings. It does not enable an HTTP route or select a production
 // AI framework. Turning off remains possible when metadata/provider is down.
 func (m *ModelSettingsService) Set(ctx context.Context, expected uint64, input ModelSettingsInput) (out ModelSettings, result error) {
+	normalized, err := NormalizeModelEndpoint(input.Endpoint)
+	if err != nil {
+		return out, ErrToolDenied
+	}
+	input.Endpoint = normalized
 	if m == nil || !validModelSettingsInput(input) {
 		return out, ErrToolDenied
 	}
@@ -174,6 +221,63 @@ func (m *ModelSettingsService) Profile(ctx context.Context, owner string) (Model
 	return ModelProfile{cfg.ID, cfg.Model, cfg.CredentialRef, cfg.Revision}, nil
 }
 
+// EndpointFor resolves the saved owner endpoint for one generation. Empty means
+// the deployment default; changing it increments the profile revision and is
+// therefore rejected by the normal generation fence.
+func (m *ModelSettingsService) EndpointFor(ctx context.Context, r GenerationRequest) (string, error) {
+	cfg, err := m.current(ctx, r.SubjectID)
+	if err != nil {
+		return "", err
+	}
+	return cfg.Endpoint, nil
+}
+
+// CatalogSettings returns the saved enabled profile for model discovery. It
+// requires the same current human owner context as generation.
+func (m *ModelSettingsService) CatalogSettings(ctx context.Context) (ModelSettings, error) {
+	owner := actorSubject(ctx)
+	if owner == "" {
+		return ModelSettings{}, ErrToolDenied
+	}
+	actor, err := m.sessions.actor(ctx, "ai.models.read", "", false)
+	if err != nil || actor.SubjectID != owner {
+		return ModelSettings{}, ErrToolDenied
+	}
+	cfg, err := m.read(ctx, actor, "ai.models.read")
+	if err != nil || cfg.Endpoint == "" || cfg.CredentialRef == "" || m.check(ctx, owner, cfg.ModelSettingsInput) != nil {
+		return ModelSettings{}, ErrModelUnavailable
+	}
+	return cfg, nil
+}
+
+// CheckModelsOperation authorizes exactly the model-list credential borrow for
+// the current saved endpoint. No generation or message is implied.
+func (m *ModelSettingsService) CheckModelsOperation(ctx context.Context, op auth.CredentialOperation) error {
+	if m == nil || op.Module != "ai" || op.Source != "ai" || op.Action != "use" || !strings.HasPrefix(op.OperationID, "ai-models-") {
+		return ErrToolDenied
+	}
+	actor, err := m.sessions.actor(ctx, "ai.models.read", "", false)
+	if err != nil {
+		return err
+	}
+	cfg, err := m.read(ctx, actor, "ai.models.read")
+	if err != nil || cfg.Endpoint == "" {
+		return ErrToolDenied
+	}
+	if op.SubjectID != actor.SubjectID || op.CredentialID != cfg.CredentialRef || op.ExpectedRevision != cfg.CredentialRevision || op.PlanDigest != modelsPlanDigest(cfg.Endpoint) {
+		return ErrToolDenied
+	}
+	return nil
+}
+
+func actorSubject(ctx context.Context) string {
+	actor, _, ok := ActorFromContext(ctx)
+	if !ok {
+		return ""
+	}
+	return actor.SubjectID
+}
+
 // CheckBudgetProfile is a read-only composition gate. The caller separately
 // proves the current administrator identity; this port binds the saved owner
 // profile without opening a nested writer inside budget configuration.
@@ -205,7 +309,7 @@ func (m *ModelSettingsService) ResolveCredential(ctx context.Context, r Generati
 	if err != nil {
 		return auth.CredentialOperation{}, err
 	}
-	if r.Profile != (ModelProfile{cfg.ID, cfg.Model, cfg.CredentialRef, cfg.Revision}) {
+	if r.Profile.ID != cfg.ID || r.Profile.CredentialRef != cfg.CredentialRef || r.Profile.Revision != cfg.Revision || !exactID(r.Profile.Model) || len(r.Profile.Model) > 128 {
 		return auth.CredentialOperation{}, ErrToolDenied
 	}
 	return auth.CredentialOperation{SubjectID: r.SubjectID, CredentialID: cfg.CredentialRef, Module: "ai", Source: "ai", OperationID: r.OperationID, PlanDigest: digest, Action: "use", ExpectedRevision: cfg.CredentialRevision}, nil

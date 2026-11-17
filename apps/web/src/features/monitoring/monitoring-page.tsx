@@ -346,7 +346,7 @@ export function MonitoringPage() {
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="blue" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">可见节点 / 在线</span>
             <Activity className="size-4 text-primary" />
@@ -356,7 +356,7 @@ export function MonitoringPage() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="amber" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">流量与到期风险</span>
             <AlertTriangle className="size-4 text-amber-600" />
@@ -366,7 +366,7 @@ export function MonitoringPage() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="green" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">可用性监控</span>
             <Radio className="size-4 text-emerald-600" />
@@ -376,7 +376,7 @@ export function MonitoringPage() {
           </p>
         </div>
         <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect />
+          <GlowingEffect tone="cyan" />
           <div className="relative z-10 flex items-center justify-between">
             <span className="text-xs font-medium text-muted-foreground">通知投递记录</span>
             <BellRing className="size-4 text-sky-600" />

@@ -121,22 +121,22 @@ func TestAIScopePolicyExpiryRevisionFailureAndRootApproval(t *testing.T) {
 	}
 	before := bytes.Clone(store.data)
 	store.fail = true
-	if _, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 15); err != ErrSessionUnavailable {
+	if _, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 0); err != ErrSessionUnavailable {
 		t.Fatal(err)
 	}
 	store.fail = false
 	if !bytes.Equal(before, store.data) {
 		t.Fatal("failed commit changed policy")
 	}
-	if _, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 10); err != ErrToolDenied {
-		t.Fatal("unsupported confirmation duration", err)
+	if _, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 15); err != ErrToolDenied {
+		t.Fatal("full access accepted a time limit", err)
 	}
 	actor.CanFullAccess = false
-	if _, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 15); err != ErrToolDenied {
+	if _, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 0); err != ErrToolDenied {
 		t.Fatal(err)
 	}
 	actor.CanFullAccess = true
-	session, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 15)
+	session, err = s.SetPolicy(ctx, session.ID, session.ScopeRevision, FullAccess, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,14 +152,10 @@ func TestAIScopePolicyExpiryRevisionFailureAndRootApproval(t *testing.T) {
 	}
 	*now = now.Add(15 * time.Minute)
 	assessed, err = s.AssessTool(ctx, session.ID, call)
-	if err != nil || !assessed.RequiresApproval {
-		t.Fatal("expired full mode did not restore every-call", assessed, err)
+	if err != nil || assessed.RequiresApproval {
+		t.Fatal("full mode did not persist without a time limit", assessed, err)
 	}
-	*now = now.Add(-time.Second)
-	if _, err = s.AssessTool(ctx, session.ID, call); err != ErrSessionUnavailable {
-		t.Fatal("clock rollback revived full mode", err)
-	}
-	*now = now.Add(time.Second)
+	// Read-only assessment no longer persists the clock floor; mutations still do.
 	session, err = s.Get(ctx, session.ID)
 	if err != nil {
 		t.Fatal(err)

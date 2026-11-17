@@ -47,6 +47,7 @@ type GenerationRequest struct {
 	Agent                                        *agentPrompt `json:",omitempty"`
 	SubjectID, SessionID, MessageID, OperationID string
 	ScopeRevision                                uint64
+	ReasoningEffort                              string `json:",omitempty"`
 	Profile                                      ModelProfile
 	Messages                                     []Message
 }
@@ -188,6 +189,17 @@ func (c *ConversationService) profile(ctx context.Context, owner string) (out Mo
 	}
 	return p, nil
 }
+func (c *ConversationService) profileFor(ctx context.Context, view SessionView, owner string) (ModelProfile, error) {
+	p, err := c.profile(ctx, owner)
+	if err != nil {
+		return ModelProfile{}, err
+	}
+	if view.Model != "" && view.Model != p.Model {
+		p.Model = view.Model
+	}
+	return p, nil
+}
+
 func (c *ConversationService) filter(ctx context.Context, view SessionView, role, text string) (out string, result error) {
 	defer func() {
 		if recover() != nil {
@@ -219,7 +231,7 @@ func (c *ConversationService) Submit(ctx context.Context, id, idempotencyKey str
 	if view.ScopeRevision != input.ScopeRevision || view.Status != "active" {
 		return Message{}, ErrScopeConflict
 	}
-	profile, err := c.profile(ctx, actor.SubjectID)
+	profile, err := c.profileFor(ctx, view, actor.SubjectID)
 	if err != nil {
 		return Message{}, err
 	}
@@ -299,7 +311,7 @@ func (c *ConversationService) Events(ctx context.Context, id string, after uint6
 		return nil, err
 	}
 	out := []MessageEvent{}
-	err = c.sessions.change(ctx, func(st *sessionState, _ time.Time) error {
+	err = c.sessions.inspect(ctx, func(st *sessionState, _ time.Time) error {
 		if _, err := c.sessions.recheck(ctx, actor, "ai.events.read", id, false); err != nil {
 			return err
 		}
@@ -324,25 +336,34 @@ func (c *ConversationService) Events(ctx context.Context, id string, after uint6
 }
 
 func (c *ConversationService) Messages(ctx context.Context, id string, after int, limit int) ([]Message, error) {
+	out, _, err := c.MessagesPage(ctx, id, after, limit)
+	return out, err
+}
+
+// MessagesPage reads one authorized snapshot and returns the same view used
+// for filtering, so HTTP list handlers do not repeat full session reads.
+func (c *ConversationService) MessagesPage(ctx context.Context, id string, after int, limit int) ([]Message, SessionView, error) {
 	if c == nil || after < 0 || limit < 1 || limit > 100 {
-		return nil, ErrToolDenied
+		return nil, SessionView{}, ErrToolDenied
 	}
 	actor, err := c.sessions.actor(ctx, "ai.messages.read", id, false)
 	if err != nil {
-		return nil, err
-	}
-	view, err := c.sessions.Get(ctx, id)
-	if err != nil {
-		return nil, err
+		return nil, SessionView{}, err
 	}
 	out := []Message{}
-	err = c.sessions.change(ctx, func(st *sessionState, _ time.Time) error {
+	var view SessionView
+	err = c.sessions.inspect(ctx, func(st *sessionState, now time.Time) error {
 		if _, err := c.sessions.recheck(ctx, actor, "ai.messages.read", id, false); err != nil {
 			return err
 		}
 		r, exists := st.Sessions[id]
 		if !exists || r.Scope.SubjectID != actor.SubjectID {
 			return ErrToolDenied
+		}
+		var err error
+		view, err = c.sessions.view(ctx, r, now)
+		if err != nil {
+			return err
 		}
 		length := 0
 		if r.Conversation != nil {
@@ -357,7 +378,7 @@ func (c *ConversationService) Messages(ctx context.Context, id string, after int
 		return nil
 	})
 	if err != nil {
-		return nil, err
+		return nil, SessionView{}, err
 	}
 	for i, m := range out {
 		// Opaque provider continuation items stay private. A reader sees the run
@@ -369,14 +390,10 @@ func (c *ConversationService) Messages(ctx context.Context, id string, after int
 		out[i].RedactedContent, err = c.filter(ctx, view, m.Role, m.RedactedContent)
 		out[i].TaskIDs = []string{}
 		if err != nil {
-			return nil, err
+			return nil, SessionView{}, err
 		}
 	}
-	fresh, err := c.sessions.Get(ctx, id)
-	if err != nil || fresh.ScopeRevision != view.ScopeRevision || !slices.Equal(fresh.AllowedNodeIDs, view.AllowedNodeIDs) {
-		return nil, ErrToolDenied
-	}
-	return out, nil
+	return out, view, nil
 }
 
 func (c *ConversationService) markUnknown(ctx context.Context, id, messageID string) {
@@ -416,11 +433,11 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	if err != nil || view.Status != "active" {
 		return Message{}, ErrToolDenied
 	}
-	profile, err := c.profile(ctx, actor.SubjectID)
+	profile, err := c.profileFor(ctx, view, actor.SubjectID)
 	if err != nil {
 		return Message{}, err
 	}
-	request := GenerationRequest{SubjectID: actor.SubjectID, SessionID: id, MessageID: messageID, OperationID: "ai-generation-" + messageID, ScopeRevision: view.ScopeRevision, Profile: profile}
+	request := GenerationRequest{SubjectID: actor.SubjectID, SessionID: id, MessageID: messageID, OperationID: "ai-generation-" + messageID, ScopeRevision: view.ScopeRevision, Profile: profile, ReasoningEffort: view.ReasoningEffort}
 	if prompt, ok := ctx.Value(agentPromptKey{}).(*agentPrompt); ok {
 		request.Agent = cloneAgentPrompt(prompt)
 	}
@@ -457,13 +474,23 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if r.Scope.Revision != view.ScopeRevision || run.ScopeRevision != view.ScopeRevision || run.Profile != profile {
 			return ErrScopeConflict
 		}
-		for _, message := range r.Conversation.Messages {
-			if message.Role != "user" {
-				continue
-			}
+		summaryPrefix := ""
+		if r.ContextSummary != "" {
+			summaryPrefix = "【较早对话摘要】" + r.ContextSummary + "\n\n"
+		}
+		for i, message := range r.Conversation.Messages {
 			if message.MessageID == messageID {
+				if summaryPrefix != "" && len(request.Messages) == 0 {
+					message.RedactedContent = summaryPrefix + message.RedactedContent
+				}
 				request.Messages = append(request.Messages, message)
 				break
+			}
+			if i < r.ContextCutoff {
+				continue
+			}
+			if message.Role != "user" {
+				continue
 			}
 			prior := r.Conversation.Runs[message.MessageID]
 			if request.Agent != nil || prior.AgentRunID != "" {
@@ -473,6 +500,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 				return ErrScopeConflict
 			}
 			if prior.State == "succeeded" {
+				if summaryPrefix != "" && len(request.Messages) == 0 {
+					message.RedactedContent = summaryPrefix + message.RedactedContent
+				}
 				request.Messages = append(request.Messages, message)
 				for _, response := range r.Conversation.Messages {
 					if response.MessageID == prior.ResponseID {
@@ -525,7 +555,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if err != nil || fresh.ScopeRevision != view.ScopeRevision || fresh.Status != "active" || !slices.Equal(fresh.AllowedNodeIDs, view.AllowedNodeIDs) {
 			return ErrToolDenied
 		}
-		p, err := c.profile(bounded, actor.SubjectID)
+		p, err := c.profileFor(bounded, view, actor.SubjectID)
 		if err != nil || p != profile {
 			return ErrModelUnavailable
 		}
@@ -604,6 +634,169 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	})
 	if err != nil {
 		return Message{}, ErrGenerationUnknown
+	}
+	return out, nil
+}
+
+// ContextStats describes the effective text context, not a provider tokenizer
+// estimate. Compaction never deletes audit messages; it records a summary and a
+// cutoff so later generations send summary + recent turns only.
+type ContextStats struct {
+	MessageCount      int    `json:"messageCount"`
+	EstimatedTokens   int    `json:"estimatedTokens"`
+	SummaryTokens     int    `json:"summaryTokens"`
+	CompactedMessages int    `json:"compactedMessages"`
+	SummaryPresent    bool   `json:"summaryPresent"`
+	Model             string `json:"model,omitempty"`
+	ReasoningEffort   string `json:"reasoningEffort,omitempty"`
+}
+
+func estimateContextTokens(text string) int {
+	return (utf8.RuneCountInString(text) + 1) / 2
+}
+
+func compactableMessage(message Message, run generationRecord) bool {
+	return message.AgentRunID == "" && run.ClientID != "" && run.State != "generating" && run.State != "queued" && run.State != "unknown"
+}
+
+func contextStats(record sessionRecord, profile ModelProfile) ContextStats {
+	stats := ContextStats{SummaryPresent: record.ContextSummary != "", SummaryTokens: estimateContextTokens(record.ContextSummary), CompactedMessages: record.ContextCutoff, Model: profile.Model, ReasoningEffort: record.ReasoningEffort}
+	if record.ModelOverride != "" {
+		stats.Model = record.ModelOverride
+	}
+	if record.Conversation == nil {
+		return stats
+	}
+	text := record.ContextSummary
+	for i, message := range record.Conversation.Messages {
+		if i < record.ContextCutoff || message.AgentRunID != "" {
+			continue
+		}
+		if stats.MessageCount == 0 && record.ContextSummary != "" {
+			text += "\n"
+		}
+		stats.MessageCount++
+		text += message.RedactedContent
+	}
+	stats.EstimatedTokens = estimateContextTokens(text)
+	return stats
+}
+
+func (c *ConversationService) ContextStats(ctx context.Context, id string) (ContextStats, error) {
+	actor, err := c.sessions.actor(ctx, "ai.context.read", id, false)
+	if err != nil {
+		return ContextStats{}, err
+	}
+	var out ContextStats
+	err = c.sessions.inspect(ctx, func(st *sessionState, now time.Time) error {
+		if _, err := c.sessions.recheck(ctx, actor, "ai.context.read", id, false); err != nil {
+			return err
+		}
+		record, ok := st.Sessions[id]
+		if !ok || record.Scope.SubjectID != actor.SubjectID {
+			return ErrToolDenied
+		}
+		view, err := c.sessions.view(ctx, record, now)
+		if err != nil {
+			return err
+		}
+		profile, err := c.profileFor(ctx, view, actor.SubjectID)
+		if err != nil {
+			profile = ModelProfile{Model: view.Model}
+		}
+		out = contextStats(record, profile)
+		return nil
+	})
+	if err != nil {
+		return ContextStats{}, err
+	}
+	return out, nil
+}
+
+// Compact replaces older plain-chat transcript with a bounded local digest.
+// Audit messages stay intact; later generations send digest + recent turns.
+// It deliberately performs no model call, so compaction is instant and cannot
+// consume BYOK credentials or fail on provider availability.
+func (c *ConversationService) Compact(ctx context.Context, id string, keep int) (ContextStats, error) {
+	if c == nil || keep < 2 || keep > 20 {
+		return ContextStats{}, ErrToolDenied
+	}
+	actor, err := c.sessions.actor(ctx, "ai.context.compact", id, true)
+	if err != nil {
+		return ContextStats{}, err
+	}
+	view, err := c.sessions.Get(ctx, id)
+	if err != nil || view.Status != "active" {
+		return ContextStats{}, ErrToolDenied
+	}
+	var digest []string
+	cutoff := 0
+	err = c.sessions.inspect(ctx, func(st *sessionState, _ time.Time) error {
+		record, ok := st.Sessions[id]
+		if !ok || record.Scope.SubjectID != actor.SubjectID || record.Closed || record.Conversation == nil {
+			return ErrToolDenied
+		}
+		type candidate struct {
+			index int
+			role  string
+			text  string
+		}
+		items := []candidate{}
+		for i, message := range record.Conversation.Messages {
+			if i < record.ContextCutoff || !compactableMessage(message, record.Conversation.Runs[message.MessageID]) {
+				continue
+			}
+			items = append(items, candidate{i, message.Role, message.RedactedContent})
+		}
+		if len(items) < 2 {
+			return ErrToolDenied
+		}
+		if keep >= len(items) {
+			keep = len(items) / 2
+		}
+		for _, item := range items[:len(items)-keep] {
+			text := []rune(strings.TrimSpace(item.text))
+			if len(text) > 240 {
+				text = append(text[:240], '…')
+			}
+			digest = append(digest, item.role+"："+string(text))
+			cutoff = item.index + 1
+		}
+		if record.ContextSummary != "" {
+			digest = append([]string{"此前摘要：" + record.ContextSummary}, digest...)
+		}
+		return nil
+	})
+	if err != nil {
+		return ContextStats{}, err
+	}
+	if len(digest) == 0 || cutoff <= 0 {
+		return ContextStats{}, ErrToolDenied
+	}
+	summary, err := c.filter(ctx, view, "assistant", strings.Join(digest, "；"))
+	if err != nil {
+		return ContextStats{}, err
+	}
+	runes := []rune(summary)
+	if len(runes) > 4000 {
+		summary = string(runes[:4000])
+	}
+	var out ContextStats
+	err = c.sessions.change(ctx, func(st *sessionState, now time.Time) error {
+		if _, err := c.sessions.recheck(ctx, actor, "ai.context.compact", id, true); err != nil {
+			return err
+		}
+		record, ok := st.Sessions[id]
+		if !ok || record.Closed || record.Scope.SubjectID != actor.SubjectID || record.Scope.Revision != view.ScopeRevision {
+			return ErrScopeConflict
+		}
+		record.ContextSummary, record.ContextCutoff = summary, cutoff
+		st.Sessions[id] = record
+		out = contextStats(record, ModelProfile{Model: view.Model})
+		return c.audit(st, record, "ai.context.compact", "", now)
+	})
+	if err != nil {
+		return ContextStats{}, err
 	}
 	return out, nil
 }

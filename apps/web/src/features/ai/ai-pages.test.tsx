@@ -63,19 +63,19 @@ describe("AI session page", () => {
     await waitFor(() => {
       const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/ai/sessions/s-1/grants");
       expect(call).toBeDefined();
-      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ resourceType: "node", resourceId: "n-2", allowedActions: ["nodes.read"] });
+      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ resourceType: "node", resourceId: "n-2", allowedActions: ["nodes.read", "tasks.command", "tasks.exec.v1", "host.root"] });
     });
 
-    // switch policy
-    fireEvent.click(screen.getByRole("tab", { name: "审批策略" }));
-    fireEvent.click(await screen.findByRole("button", { name: /自动审批/ }));
+    // switch policy from the composer
+    fireEvent.click(screen.getByRole("button", { name: "权限模式" }));
+    fireEvent.click(await screen.findByRole("menuitemradio", { name: /自动审批/ }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "PATCH" && call.url === "/api/v1/ai/sessions/s-1/approval-policy");
       expect(JSON.parse(String(call?.init?.body))).toEqual({ mode: "automatic" });
     });
 
     // create and approve a tool request
-    fireEvent.click(screen.getByRole("tab", { name: "工具审批" }));
+    fireEvent.click(screen.getByRole("button", { name: "工具审批" }));
     fireEvent.change(await screen.findByLabelText("工具名称"), { target: { value: "metrics.read" } });
     fireEvent.change(screen.getByLabelText("目标节点 ID（逗号分隔）"), { target: { value: "n-1" } });
     fireEvent.click(screen.getByRole("button", { name: "请求审批" }));
@@ -92,9 +92,8 @@ describe("AI session page", () => {
     const { calls } = await renderAuthenticated("/ai/s-1", aiRoutes());
     await screen.findByRole("heading", { level: 1, name: "AI 会话 s-1" });
     await waitFor(() => expect(screen.queryByText("SECRET-AI-OUTPUT")).not.toBeInTheDocument());
-    fireEvent.click(screen.getByRole("tab", { name: "消息与审批审计" }));
     fireEvent.change(await screen.findByLabelText("消息内容"), { target: { value: "check" } });
-    fireEvent.click(screen.getByRole("button", { name: "发送消息" }));
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/ai/sessions/s-1/messages");
       expect(call).toBeDefined();
@@ -105,9 +104,34 @@ describe("AI session page", () => {
     expect(await screen.findByText("已脱敏回复")).toBeVisible();
   });
 
-  it("creates a new session from the AI entry and navigates to it", async () => {
+  it("starts a real agent run from the composer when execution mode is selected", async () => {
+    const RUN = {
+      id: "run-1", sessionId: "s-1", goal: "检查节点磁盘", state: "completed", driverActive: false, revision: 3,
+      scopeRevision: 2, maxSteps: 8, createdAt: "2026-11-01T01:00:00Z", expiresAt: "2026-11-01T01:15:00Z",
+      steps: [{ number: 1, state: "completed", nodeIds: ["n-1"], startedAt: "2026-11-01T01:00:01Z", result: "节点运行正常" }],
+      finalText: "节点运行正常",
+    };
+    const { calls } = await renderAuthenticated("/ai/s-1", {
+      ...aiRoutes(),
+      "POST /api/v1/ai/sessions/s-1/runs": (_init) => jsonResponse({ ...RUN, state: "thinking", steps: [] }, 202),
+      "GET /api/v1/ai/sessions/s-1/runs": () => jsonResponse({ items: [RUN] }),
+      "GET /api/v1/ai/sessions/s-1/runs/run-1": () => jsonResponse(RUN),
+    });
+    await screen.findByRole("heading", { level: 1, name: "AI 会话 s-1" });
+    fireEvent.click(await screen.findByRole("button", { name: "执行任务" }));
+    fireEvent.change(screen.getByLabelText("消息内容"), { target: { value: "检查节点磁盘" } });
+    fireEvent.click(screen.getByRole("button", { name: "执行" }));
+    await waitFor(() => {
+      const call = calls.find(item => item.method === "POST" && item.url === "/api/v1/ai/sessions/s-1/runs");
+      expect(call).toBeDefined();
+      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ goal: "检查节点磁盘", scopeRevision: 2, maxSteps: 8 });
+    });
+    expect((await screen.findAllByText("节点运行正常")).length).toBeGreaterThan(0);
+  });
+
+  it("opens directly into a conversation and creates one when history is empty", async () => {
     const { calls } = await renderAuthenticated("/ai", {
-      "GET /api/v1/ai/security-policy": () => jsonResponse({ defaultDeny: true, serverSideEnforced: true }),
+      "GET /api/v1/ai/sessions": () => jsonResponse({ items: [] }),
       "POST /api/v1/ai/sessions": () => jsonResponse({ ...SESSION, id: "s-new" }, 201),
       "GET /api/v1/ai/sessions/s-new": () => jsonResponse({ ...SESSION, id: "s-new" }),
       "GET /api/v1/ai/sessions/s-new/approval-policy": () => jsonResponse({ ...POLICY, sessionId: "s-new" }),
@@ -118,9 +142,9 @@ describe("AI session page", () => {
       "GET /api/v1/service-groups": () => jsonResponse({ items: [] }),
     });
     expect(await screen.findByRole("heading", { level: 1, name: "AI 运维" })).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "新建 AI 会话" }));
-    await waitFor(() => expect(window.location.hash).toBe("#/ai/s-new"));
-    expect(calls.some(call => call.method === "POST" && call.url === "/api/v1/ai/sessions")).toBe(true);
+    expect(await screen.findByText("对话列表")).toBeVisible();
+    await waitFor(() => expect(calls.some(call => call.method === "POST" && call.url === "/api/v1/ai/sessions")).toBe(true));
+    expect(await screen.findByText(/进行中/)).toBeVisible();
   });
 });
 
@@ -141,17 +165,23 @@ describe("AI model settings (GM-W6-R1)", () => {
     };
   }
 
+  async function renderAiSettings(routes: FetchRoutes, identity = ADMIN_IDENTITY) {
+    const result = await renderAuthenticated("/settings", routes, identity);
+    fireEvent.click(await screen.findByRole("tab", { name: "AI 模型" }));
+    return result;
+  }
+
   it("saves owner-scoped model settings through CAS with the credential revision, never echoing secrets", async () => {
-    const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), ADMIN_IDENTITY);
-    expect(await screen.findByText("AI 模型设置（当前用户）")).toBeVisible();
+    const { calls } = await renderAiSettings(entryRoutes(SETTINGS_EMPTY), ADMIN_IDENTITY);
+    expect(await screen.findByRole("heading", { name: "AI 模型" })).toBeVisible();
     // 凭据只显示引用/状态/修订号；凭据下拉不包含 dns 作用域的其他类型。
-    const credentialSelect = await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" });
-    expect(credentialSelect.textContent).toContain("cred-ai-1");
-    expect(credentialSelect.textContent).not.toContain("cred-cf-1");
+    const credentialSelect = await screen.findByRole("combobox", { name: "模型密钥" });
+    expect(credentialSelect.textContent).toContain("本地模型 Key");
+    expect(credentialSelect.textContent).not.toContain("Cloudflare");
     expect(screen.queryByLabelText("秘密值")).toBeNull();
-    fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
+    fireEvent.change(await screen.findByLabelText("模型 ID"), { target: { value: "gpt-test" } });
     fireEvent.change(credentialSelect, { target: { value: "cred-ai-1" } });
-    fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: /启用模型生成/ }));
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "PUT" && call.url === "/api/v1/ai/model-settings");
@@ -168,46 +198,46 @@ describe("AI model settings (GM-W6-R1)", () => {
   });
 
   it("surfaces a revision conflict honestly and refetches instead of overwriting", async () => {
-    const { calls } = await renderAuthenticated("/ai", {
+    const { calls } = await renderAiSettings({
       ...entryRoutes(SETTINGS_EMPTY),
       "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "MODEL_REVISION_CONFLICT", status: 409 }, 409),
     }, ADMIN_IDENTITY);
-    await screen.findByText("AI 模型设置（当前用户）");
-    fireEvent.change(await screen.findByLabelText("模型标识"), { target: { value: "gpt-test" } });
-    fireEvent.change(await screen.findByRole("combobox", { name: "AI 凭据（ai_api_key）" }), { target: { value: "cred-ai-1" } });
-    fireEvent.click(await screen.findByRole("checkbox", { name: /启用本用户的模型生成/ }));
+    await screen.findByRole("heading", { name: "AI 模型" });
+    fireEvent.change(await screen.findByLabelText("模型 ID"), { target: { value: "gpt-test" } });
+    fireEvent.change(await screen.findByRole("combobox", { name: "模型密钥" }), { target: { value: "cred-ai-1" } });
+    fireEvent.click(await screen.findByRole("checkbox", { name: /启用模型生成/ }));
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
-    expect(await screen.findByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
+    expect(await screen.findByText(/配置已被其他操作修改/)).toBeVisible();
     await waitFor(() => expect(calls.filter(call => call.url === "/api/v1/ai/model-settings" && call.method === "GET").length).toBeGreaterThanOrEqual(2));
   });
 
   it("does not report provider unavailability as a revision conflict", async () => {
-    await renderAuthenticated("/ai", {
+    await renderAiSettings({
       ...entryRoutes(SETTINGS_EMPTY),
       "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "AI_SOURCE_UNAVAILABLE", status: 503 }, 503),
     }, ADMIN_IDENTITY);
     await screen.findByRole("option", { name: /本地模型 Key/ });
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
     expect(await screen.findByText("保存失败")).toBeVisible();
-    expect(screen.queryByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeNull();
+    expect(screen.queryByText(/配置已被其他操作修改/)).toBeNull();
   });
 
   it("retains the conflict explanation after receiving the actual newer revision", async () => {
     let reads = 0;
-    await renderAuthenticated("/ai", {
+    await renderAiSettings({
       ...entryRoutes(SETTINGS_EMPTY),
       "GET /api/v1/ai/model-settings": () => jsonResponse(reads++ === 0 ? SETTINGS_EMPTY : { ...SETTINGS_EMPTY, revision: 1, model: "other-admin-model" }),
       "PUT /api/v1/ai/model-settings": () => jsonResponse({ code: "MODEL_REVISION_CONFLICT", status: 409 }, 409),
     }, ADMIN_IDENTITY);
     await screen.findByRole("option", { name: /本地模型 Key/ });
     fireEvent.click(screen.getByRole("button", { name: "保存模型设置" }));
-    await waitFor(() => expect(screen.getByLabelText("模型标识")).toHaveValue("other-admin-model"));
-    expect(screen.getByText(/配置已被其他操作修改（409 MODEL_REVISION_CONFLICT）/)).toBeVisible();
+    await waitFor(() => expect(screen.getByLabelText("模型 ID")).toHaveValue("other-admin-model"));
+    expect(screen.getByText(/配置已被其他操作修改/)).toBeVisible();
   });
 
   it("keeps the panel read-only for a non-administrator identity", async () => {
-    const { calls } = await renderAuthenticated("/ai", entryRoutes(SETTINGS_EMPTY), { ...IDENTITY, roles: ["reader"] });
-    await screen.findByText("当前身份不是管理员：只能查看本页配置，不能修改（服务端强制）。");
+    const { calls } = await renderAiSettings(entryRoutes(SETTINGS_EMPTY), { ...IDENTITY, roles: ["reader"] });
+    await screen.findByText("当前身份不是管理员：只能查看，不能修改。");
     expect((screen.getByRole("button", { name: "保存模型设置" }) as HTMLButtonElement).disabled).toBe(true);
     await waitFor(() => expect(calls.some(call => call.method === "PUT")).toBe(false));
   });
@@ -227,9 +257,11 @@ describe("AI explicit generation (GM-W6-R1)", () => {
     };
   }
 
-  it("generates explicitly per message with no request body and renders the completed assistant message", async () => {
+  it("sends a message and generates the assistant reply automatically", async () => {
     const { calls } = await renderAuthenticated("/ai/s-1", sessionRoutes({
-      "POST /api/v1/ai/sessions/s-1/messages/m-user-1/generate": () =>
+      "POST /api/v1/ai/sessions/s-1/messages": () =>
+        jsonResponse({ messageId: "m-user-2", sessionId: "s-1", role: "user", createdAt: "2026-11-01T01:00:03Z", redactedContent: "列出节点运行时间" }),
+      "POST /api/v1/ai/sessions/s-1/messages/m-user-2/generate": () =>
         jsonResponse({ messageId: "m-assistant-1", sessionId: "s-1", role: "assistant", createdAt: "2026-11-01T01:00:05Z", redactedContent: "节点运行时间为 3 小时" }),
       "GET /api/v1/ai/sessions/s-1/messages": () =>
         jsonResponse({ items: [
@@ -237,22 +269,59 @@ describe("AI explicit generation (GM-W6-R1)", () => {
           { messageId: "m-assistant-1", sessionId: "s-1", role: "assistant", createdAt: "2026-11-01T01:00:05Z", redactedContent: "节点运行时间为 3 小时" },
         ], page: { nextCursor: null, limit: 100, hasMore: false } }),
     }), ADMIN_IDENTITY);
-    fireEvent.click(await screen.findByRole("tab", { name: "消息与审批审计" }));
-    fireEvent.click(await screen.findByRole("button", { name: "生成回复" }));
+
+    fireEvent.change(await screen.findByLabelText("消息内容"), { target: { value: "请总结节点" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText("节点运行时间为 3 小时")).toBeVisible();
-    const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/ai/sessions/s-1/messages/m-user-1/generate");
+    const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/ai/sessions/s-1/messages/m-user-2/generate");
     expect(call).toBeDefined();
     expect(call?.init?.body).toBeUndefined();
+    expect(screen.queryByRole("button", { name: "生成回复" })).toBeNull();
   });
 
   it("reports generation refusal honestly instead of fabricating an assistant reply", async () => {
     await renderAuthenticated("/ai/s-1", sessionRoutes({
-      "POST /api/v1/ai/sessions/s-1/messages/m-user-1/generate": () =>
+      "POST /api/v1/ai/sessions/s-1/messages": () =>
+        jsonResponse({ messageId: "m-user-2", sessionId: "s-1", role: "user", createdAt: "2026-11-01T01:00:03Z", redactedContent: "列出节点运行时间" }),
+      "POST /api/v1/ai/sessions/s-1/messages/m-user-2/generate": () =>
         jsonResponse({ code: "AI_SOURCE_UNAVAILABLE", status: 503 }, 503),
     }), ADMIN_IDENTITY);
-    fireEvent.click(await screen.findByRole("tab", { name: "消息与审批审计" }));
-    fireEvent.click(await screen.findByRole("button", { name: "生成回复" }));
+
+    fireEvent.change(await screen.findByLabelText("消息内容"), { target: { value: "请总结节点" } });
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
     expect(await screen.findByText(/模型或配额不可用（503 AI_SOURCE_UNAVAILABLE）/)).toBeVisible();
     expect(screen.queryByText("节点运行时间为 3 小时")).toBeNull();
+  });
+
+  it("renders agent execution steps inline in the conversation", async () => {
+    const run = {
+      id: "run-1",
+      sessionId: "s-1",
+      goal: "读取节点并报告状态",
+      state: "completed",
+      driverActive: false,
+      revision: 3,
+      scopeRevision: 2,
+      maxSteps: 8,
+      createdAt: "2026-11-01T01:00:00Z",
+      expiresAt: "2026-11-01T01:15:00Z",
+      steps: [{ number: 1, state: "completed", toolName: "nodes.read", nodeIds: ["n-1"], plan: "先读取节点清单", result: "{\"nodes\":1}", startedAt: "2026-11-01T01:00:01Z" }],
+      finalText: "节点状态正常",
+    };
+    await renderAuthenticated("/ai/s-1", sessionRoutes({
+      "GET /api/v1/ai/sessions/s-1/messages": () =>
+        jsonResponse({ items: [
+          { messageId: "m-agent-user", sessionId: "s-1", role: "user", agentRunId: "run-1", createdAt: "2026-11-01T01:00:00Z", redactedContent: "Agent 运行 run-1：请在 Agent 运行页签查看步骤和结果。" },
+        ], page: { nextCursor: null, limit: 100, hasMore: false } }),
+      "GET /api/v1/ai/sessions/s-1/runs": () => jsonResponse({ items: [run] }),
+      "GET /api/v1/ai/sessions/s-1/runs/run-1": () => jsonResponse(run),
+      "GET /api/v1/ai/sessions/s-1/context": () => jsonResponse({ messageCount: 3, estimatedTokens: 120, summaryTokens: 0, compactedMessages: 0, summaryPresent: false }),
+    }), ADMIN_IDENTITY);
+
+    expect(await screen.findByText("读取节点并报告状态")).toBeVisible();
+    expect(await screen.findByText(/第 1 步/)).toBeVisible();
+    expect(await screen.findByText("节点状态正常")).toBeVisible();
+    expect(screen.queryByText(/请在 Agent 运行页签/)).toBeNull();
+    expect(screen.getByRole("button", { name: "压缩上下文" })).toBeVisible();
   });
 });

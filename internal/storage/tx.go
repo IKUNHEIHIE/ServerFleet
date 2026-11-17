@@ -20,6 +20,7 @@ type Tx interface {
 
 type sqlTx struct {
 	conn     *sql.Conn
+	dialect  dialect
 	finished bool
 }
 
@@ -55,11 +56,15 @@ func (db *DB) InTx(ctx context.Context, fn func(context.Context, Tx) error) (err
 	if err != nil {
 		return err
 	}
-	if _, err := conn.ExecContext(ctx, "BEGIN IMMEDIATE"); err != nil {
+	begin := "BEGIN IMMEDIATE"
+	if db.dialect == dialectPostgres {
+		begin = "BEGIN"
+	}
+	if _, err := conn.ExecContext(ctx, begin); err != nil {
 		_ = conn.Close()
 		return fmt.Errorf("storage: begin immediate: %w", err)
 	}
-	tx := &sqlTx{conn: conn}
+	tx := &sqlTx{conn: conn, dialect: db.dialect}
 	closeConn := true
 	defer func() {
 		if recovered := recover(); recovered != nil {
@@ -99,14 +104,14 @@ func (tx *sqlTx) Exec(ctx context.Context, query string, args ...any) (Result, e
 	if tx == nil || tx.finished {
 		return nil, ErrClosed
 	}
-	return tx.conn.ExecContext(ctx, query, args...)
+	return tx.conn.ExecContext(ctx, tx.dialect.prepare(query), tx.dialect.args(args)...)
 }
 
 func (tx *sqlTx) Query(ctx context.Context, query string, args ...any) (Rows, error) {
 	if tx == nil || tx.finished {
 		return nil, ErrClosed
 	}
-	rows, err := tx.conn.QueryContext(ctx, query, args...)
+	rows, err := tx.conn.QueryContext(ctx, tx.dialect.prepare(query), tx.dialect.args(args)...)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +122,7 @@ func (tx *sqlTx) QueryRow(ctx context.Context, query string, args ...any) Row {
 	if tx == nil || tx.finished {
 		return errorRow{ErrClosed}
 	}
-	return tx.conn.QueryRowContext(ctx, query, args...)
+	return tx.conn.QueryRowContext(ctx, tx.dialect.prepare(query), tx.dialect.args(args)...)
 }
 
 func (tx *sqlTx) Commit(ctx context.Context) error {

@@ -10,6 +10,13 @@ import (
 // request. It retains only that live in-memory reauthentication callback, never
 // persists cookies, constructs a system actor or restores authority on restart.
 func (l *AgentLoop) Drive(ctx context.Context, session, id string, expected uint64) (AgentRun, error) {
+	current, e := l.sessions.Get(ctx, session)
+	if e != nil {
+		return AgentRun{}, e
+	}
+	if raw, rawErr := l.readRecord(ctx, session, id); rawErr == nil && raw.View.ScopeRevision != current.ScopeRevision && !agentTerminal(raw.View.State) {
+		return l.stopStale(ctx, raw, current)
+	}
 	r, e := l.Get(ctx, session, id)
 	if e != nil {
 		return AgentRun{}, e

@@ -1,6 +1,7 @@
 import { PublicationDNSPanel } from "./publication-dns-panel";
 import { useState, type FormEvent } from "react";
 import { useSession } from "@/app/session";
+import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -193,11 +194,12 @@ export function PublishingPage() {
         ].map(item => (
           <div
             key={item.step}
-            className="rounded-xl border border-border/80 bg-gradient-to-br from-white to-[#FAFBFD] p-4 shadow-[var(--shadow-card)]"
+            className="group relative overflow-hidden rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]"
           >
-            <span className="font-mono text-[11px] font-bold tracking-wider text-primary">{item.step}</span>
-            <p className="mt-1 text-sm font-semibold text-foreground">{item.title}</p>
-            <p className="mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
+            <GlowingEffect tone={item.step === "STEP 01" ? "blue" : item.step === "STEP 02" ? "green" : "amber"} />
+            <span className="relative z-10 font-mono text-[11px] font-bold tracking-wider text-primary">{item.step}</span>
+            <p className="relative z-10 mt-1 text-sm font-semibold text-foreground">{item.title}</p>
+            <p className="relative z-10 mt-0.5 text-xs text-muted-foreground">{item.desc}</p>
           </div>
         ))}
       </div>

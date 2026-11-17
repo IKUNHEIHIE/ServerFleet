@@ -41,5 +41,5 @@ func (s *Service) VerifyExecutionRecord(ctx context.Context, subject, request, z
 	if !ok {
 		return ErrProviderUnavailable
 	}
-	return verifier.VerifyRecord(WithSecretScope(ctx, SecretScope{SubjectID: subject, RequestID: request}), credential, zone.ProviderZoneID, record.ID, recordInputFrom(record))
+	return verifier.VerifyRecord(s.withSecretScope(ctx, subject, request, account), credential, zone.ProviderZoneID, record.ID, recordInputFrom(record))
 }

@@ -191,6 +191,9 @@ func (s *Service) ListGateways(ctx context.Context, subjectID string) ([]Gateway
 	if err != nil {
 		return nil, err
 	}
+	if len(gateways) == 0 {
+		return gateways, nil
+	}
 	nodeIDs := make([]string, 0, len(gateways))
 	seen := map[string]struct{}{}
 	for _, gateway := range gateways {

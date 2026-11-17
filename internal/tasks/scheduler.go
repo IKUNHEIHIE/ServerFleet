@@ -448,9 +448,6 @@ func (s *Service) checkApproval(ctx context.Context, task Task, scoped ...[]stri
 	if err != nil {
 		return ErrApprovalInvalid
 	}
-	if approval.ApproverID == task.SubmitterID {
-		return ErrSelfApproval
-	}
 	if !approval.CurrentFor(task, s.now().UTC(), s.approvalTTL) {
 		return ErrApprovalInvalid
 	}

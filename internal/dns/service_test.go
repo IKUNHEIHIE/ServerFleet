@@ -25,6 +25,7 @@ func (f authorizerFunc) Authorize(ctx context.Context, check auth.Check) error {
 
 type fakeProvider struct {
 	zones       []dns.ZoneInfo
+	records     []dns.ProviderRecord
 	test        dns.ConnectionTest
 	testErr     error
 	zoneErr     error
@@ -54,6 +55,10 @@ func (p *fakeProvider) ListZones(context.Context, dns.CredentialRef) ([]dns.Zone
 		return nil, p.zoneErr
 	}
 	return append([]dns.ZoneInfo(nil), p.zones...), nil
+}
+
+func (p *fakeProvider) ListRecords(context.Context, dns.CredentialRef, string) ([]dns.ProviderRecord, error) {
+	return append([]dns.ProviderRecord(nil), p.records...), nil
 }
 
 func (p *fakeProvider) CreateRecord(context.Context, dns.CredentialRef, string, dns.RecordInput) (string, error) {
@@ -140,7 +145,7 @@ func (f dnsFixture) readyAccount(t *testing.T, id string) dns.AccountView {
 	ctx := context.Background()
 	view, err := f.service.CreateAccount(ctx, "admin", "req-create-"+id, dns.CreateAccountInput{
 		ID: id, DisplayName: id, Enabled: true,
-		Credential: dns.CredentialRef("ref-" + id),
+		Credential: dns.CredentialRef("ref-" + id), CredentialRevision: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -362,7 +367,7 @@ func TestDNSNilProviderFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	f := newDNSFixture(t, nil, nil, nil)
 	account, err := f.service.CreateAccount(ctx, "admin", "req-1", dns.CreateAccountInput{
-		ID: "a1", DisplayName: "One", Enabled: true, Credential: "ref-a1",
+		ID: "a1", DisplayName: "One", Enabled: true, Credential: "ref-a1", CredentialRevision: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -390,7 +395,7 @@ func TestDNSCredentialReferenceNeverExposed(t *testing.T) {
 	const secretRef = "ref-super-secret-token-1"
 	f := newDNSFixture(t, nil, newFakeProvider(), nil)
 	view, err := f.service.CreateAccount(ctx, "admin", "req-1", dns.CreateAccountInput{
-		ID: "a1", DisplayName: "One", Enabled: true, Credential: secretRef,
+		ID: "a1", DisplayName: "One", Enabled: true, Credential: secretRef, CredentialRevision: 1,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -434,7 +439,7 @@ func TestDNSCredentialReferenceNeverExposed(t *testing.T) {
 		t.Fatalf("oversized ref err = %v", err)
 	}
 	if _, err := f.service.CreateAccount(ctx, "admin", "req-3", dns.CreateAccountInput{
-		ID: "a2", DisplayName: "Two", Credential: "bad ref",
+		ID: "a2", DisplayName: "Two", Credential: "bad ref", CredentialRevision: 1,
 	}); !errors.Is(err, dns.ErrInvalidCredentialRef) {
 		t.Fatalf("create with raw-ish ref err = %v", err)
 	}
@@ -485,7 +490,7 @@ func TestDNSTestAccountRecordsStatus(t *testing.T) {
 	provider.test = dns.ConnectionTest{OK: false, Status: dns.CredentialMissingPermissions}
 	f := newDNSFixture(t, nil, provider, nil)
 	if _, err := f.service.CreateAccount(ctx, "admin", "req-1", dns.CreateAccountInput{
-		ID: "a1", DisplayName: "One", Enabled: true, Credential: "ref-a1",
+		ID: "a1", DisplayName: "One", Enabled: true, Credential: "ref-a1", CredentialRevision: 1,
 	}); err != nil {
 		t.Fatal(err)
 	}

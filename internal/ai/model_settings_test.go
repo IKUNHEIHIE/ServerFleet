@@ -105,7 +105,7 @@ func TestModelSettingsConcurrentCASAndLegacyAuditSinkPreservesProfileEvents(t *t
 	}
 }
 func configuredModelInput() ModelSettingsInput {
-	return ModelSettingsInput{true, "openai-responses", "fixture-model", "credential-ref", 1}
+	return ModelSettingsInput{Enabled: true, Provider: "openai-responses", Model: "fixture-model", CredentialRef: "credential-ref", CredentialRevision: 1}
 }
 
 func TestModelSettingsDefaultDisabledCASPersistenceAndNoResourceGrant(t *testing.T) {

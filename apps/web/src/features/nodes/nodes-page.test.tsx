@@ -30,6 +30,13 @@ function nodesRoutes() {
     },
     "GET /api/v1/nodes/n-1": () => jsonResponse(detailFixtures[0]),
     "GET /api/v1/nodes/n-2": () => jsonResponse(detailFixtures[1]),
+    "GET /api/v1/nodes/n-1/capabilities": () => jsonResponse({
+      nodeId: "n-1", capabilities: [], recorded: true, cpuModel: "AMD EPYC 7B13",
+      cpuCores: 8, memoryTotalBytes: 8 * 1024 ** 3, diskTotalBytes: 160 * 1024 ** 3,
+    }),
+    "GET /api/v1/nodes/n-2/capabilities": () => jsonResponse({ nodeId: "n-2", capabilities: [], recorded: false }),
+    "GET /api/v1/nodes/n-1/traffic-usage": () => jsonResponse({ available: true, bytesIn: 2 * 1024 ** 3, bytesOut: 1024 ** 3 }),
+    "GET /api/v1/nodes/n-2/traffic-usage": () => jsonResponse({ available: false }),
   };
 }
 
@@ -96,6 +103,18 @@ describe("nodes page", () => {
     expect(calls.some(call => call.url === "/api/v1/nodes/n-2")).toBe(true);
     expect(screen.getByRole("link", { name: "Tokyo" })).toHaveAttribute("href", "#/nodes/n-1");
     expect(screen.getAllByText("linux/amd64").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("CPU 核数").length).toBeGreaterThan(0);
+    expect(screen.getByText("8 核")).toBeVisible();
+    expect(screen.getAllByText("内存大小").length).toBeGreaterThan(0);
+    expect(screen.getByText("8.0 GiB")).toBeVisible();
+    expect(screen.getAllByText("磁盘大小").length).toBeGreaterThan(0);
+    expect(screen.getByText("160 GiB")).toBeVisible();
+    expect(screen.getAllByText("本月下行").length).toBeGreaterThan(0);
+    expect(screen.getByText("2.0 GiB")).toBeVisible();
+    expect(screen.getAllByText("本月上行").length).toBeGreaterThan(0);
+    expect(screen.getByText("1.0 GiB")).toBeVisible();
+    expect(screen.getAllByText("本月合计").length).toBeGreaterThan(0);
+    expect(screen.getByText("3.0 GiB")).toBeVisible();
   });
 
   it("shows real rich details when revision is absent", async () => {
@@ -151,6 +170,7 @@ describe("nodes page", () => {
     await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
     expect(screen.getByText("Osaka")).toBeVisible();
     expect(calls.filter(call => call.url === "/api/v1/nodes/n-1").length).toBeGreaterThan(before);
+    expect(screen.queryByText("正在读取节点详情…")).not.toBeInTheDocument();
   });
 
   it.each([

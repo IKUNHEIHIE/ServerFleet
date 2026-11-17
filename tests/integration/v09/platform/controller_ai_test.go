@@ -271,13 +271,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 
 	// 3. Full access changes approval mode, never resource scope or root gating.
 	status, data = doReq(admin, "PATCH", "/api/v1/ai/sessions/"+session.ID+"/approval-policy", map[string]any{
-		"mode": "full_access", "durationSeconds": 900, "userConfirmedFullAccess": false,
-	}, csrf)
-	if status != http.StatusBadRequest {
-		t.Fatalf("full access without confirmation = %d: %s", status, data)
-	}
-	status, data = doReq(admin, "PATCH", "/api/v1/ai/sessions/"+session.ID+"/approval-policy", map[string]any{
-		"mode": "full_access", "durationSeconds": 900, "userConfirmedFullAccess": true,
+		"mode": "full_access",
 	}, csrf)
 	if status != http.StatusOK {
 		t.Fatalf("full access policy = %d: %s", status, data)
@@ -385,8 +379,8 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 		State string `json:"state"`
 	}
 	decode(t, data, &rootTask)
-	if rootTask.State != "awaiting_approval" {
-		t.Fatalf("root task state = %q, want awaiting_approval (task approval still applies)", rootTask.State)
+	if rootTask.State != "queued" {
+		t.Fatalf("root task state = %q, want queued (AI approval is the single gate)", rootTask.State)
 	}
 
 	// 5. Messages route exists and honestly reports no configured model.

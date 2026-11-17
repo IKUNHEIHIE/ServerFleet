@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -205,5 +206,46 @@ func TestInferenceReservationFailureDoesNotContactProvider(t *testing.T) {
 	}
 	if _, err = c.Generate(ctx, view.ID, message.MessageID); err != nil || calls != 1 {
 		t.Fatal(calls, err)
+	}
+}
+
+func TestContextCompactionSummarizesAndInjectsDigest(t *testing.T) {
+	ctx := context.Background()
+	s, _, _, _, _ := sessionFixture(t)
+	view, err := s.Create(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	captured := []GenerationRequest{}
+	c, _ := conversationFixture(t, s, func(_ context.Context, r GenerationRequest, emit func(string) error) error {
+		captured = append(captured, r)
+		return emit("answer")
+	})
+	for i := 0; i < 4; i++ {
+		message, err := c.Submit(ctx, view.ID, fmt.Sprintf("compact-request-%d", i), MessageInput{Content: fmt.Sprintf("old-question-%d", i), ClientMessageID: fmt.Sprintf("compact-client-%d", i), ScopeRevision: view.ScopeRevision})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err = c.Generate(ctx, view.ID, message.MessageID); err != nil {
+			t.Fatal(err)
+		}
+	}
+	stats, err := c.Compact(ctx, view.ID, 2)
+	if err != nil || !stats.SummaryPresent || stats.CompactedMessages == 0 {
+		t.Fatal("compaction not recorded", stats, err)
+	}
+	message, err := c.Submit(ctx, view.ID, "compact-request-next", MessageInput{Content: "new-question", ClientMessageID: "compact-client-next", ScopeRevision: view.ScopeRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	captured = nil
+	if _, err = c.Generate(ctx, view.ID, message.MessageID); err != nil {
+		t.Fatal(err)
+	}
+	if len(captured) != 1 || len(captured[0].Messages) == 0 || !strings.Contains(captured[0].Messages[0].RedactedContent, "【较早对话摘要】") {
+		t.Fatal("generation did not receive the compaction digest", captured)
+	}
+	if !strings.Contains(captured[0].Messages[len(captured[0].Messages)-1].RedactedContent, "new-question") {
+		t.Fatal("latest question missing after compaction", captured[0].Messages)
 	}
 }

@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Activity, Filter, Plus, RefreshCw, Server } from "lucide-react";
 import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
@@ -9,29 +9,58 @@ import { Button, LinkButton } from "@/components/ui/button";
 import { PageHeader, Panel } from "@/components/ui/panel";
 import { DefinitionList, TabBar } from "@/components/ui/table";
 import { nodesApi } from "@/lib/api/endpoints";
-import type { NodeDetail, NodeSummary } from "@/lib/api/dto";
-import { ApiError } from "@/lib/api/errors";
+import type { NodeCapabilities, NodeDetail, NodeSummary, TrafficUsage } from "@/lib/api/dto";
+import { ApiError, isAbortError } from "@/lib/api/errors";
 import { useResource } from "@/lib/data/use-resource";
+import { formatBytes } from "@/lib/format";
 import { adaptLegacyNodes } from "./legacy-adapter";
 import { LegacyNodeList } from "./legacy-node-list";
+
+interface RichNode {
+  readonly detail: NodeDetail;
+  readonly hardware: NodeCapabilities | null;
+  readonly usage: TrafficUsage | null;
+}
+
+async function optionalRead<T>(load: () => Promise<{ readonly data: T }>, signal: AbortSignal): Promise<T | null> {
+  try {
+    return (await load()).data;
+  } catch (error) {
+    if (signal.aborted || isAbortError(error)) throw error;
+    return null;
+  }
+}
 
 async function loadDetails(
   summaries: readonly NodeSummary[],
   signal: AbortSignal,
-): Promise<readonly NodeDetail[]> {
-  const results: NodeDetail[] = [];
+): Promise<readonly RichNode[]> {
+  const results: RichNode[] = [];
   let cursor = 0;
   const workers = Array.from({ length: Math.min(6, summaries.length) }, async () => {
     while (cursor < summaries.length) {
       const index = cursor++;
       const summary = summaries[index];
       if (!summary || signal.aborted) return;
-      const response = await nodesApi.detail(summary.id, signal);
-      results[index] = response.data;
+      const [detail, hardware, usage] = await Promise.all([
+        nodesApi.detail(summary.id, signal),
+        optionalRead(() => nodesApi.capabilities(summary.id, signal), signal),
+        optionalRead(() => nodesApi.trafficUsage(summary.id, signal), signal),
+      ]);
+      results[index] = { detail: detail.data, hardware, usage };
     }
   });
   await Promise.all(workers);
   return results;
+}
+
+function trafficBytes(usage: TrafficUsage | null, direction: "in" | "out" | "total"): string {
+  if (!usage?.available) return "暂无采样";
+  if (direction === "total") {
+    if (usage.bytesIn === undefined || usage.bytesOut === undefined) return "暂无采样";
+    return formatBytes(usage.bytesIn + usage.bytesOut) ?? "暂无采样";
+  }
+  return formatBytes(direction === "in" ? usage.bytesIn : usage.bytesOut) ?? "暂无采样";
 }
 
 function RichNodesView({
@@ -47,12 +76,12 @@ function RichNodesView({
   readonly onListRetry: () => void;
   readonly updatedAt: number;
 }) {
-  const summaryKey = JSON.stringify([updatedAt, summaries]);
+  // Key 只随列表作用域变化；列表刷新本身不应把已渲染的详情重置成加载态。
   const rich = useResource(
-    `nodes:rich:${listKey}:${summaryKey}`,
+    `nodes:rich:${listKey}`,
     async signal => {
       const details = await loadDetails(summaries, signal);
-      const ids = new Set(details.map(detail => detail.nodeId));
+      const ids = new Set(details.map(item => item.detail.nodeId));
       if (ids.size !== summaries.length || summaries.some(summary => !ids.has(summary.id))) {
         throw new ApiError({ kind: "invalid", status: 200 });
       }
@@ -60,6 +89,18 @@ function RichNodesView({
     },
     { enabled },
   );
+  const silentRefresh = useRef(rich.refreshSilent);
+  silentRefresh.current = rich.refreshSilent;
+  const lastUpdatedAt = useRef<number | null>(null);
+  useEffect(() => {
+    if (lastUpdatedAt.current === null) {
+      lastUpdatedAt.current = updatedAt;
+      return;
+    }
+    if (lastUpdatedAt.current === updatedAt) return;
+    lastUpdatedAt.current = updatedAt;
+    silentRefresh.current();
+  }, [updatedAt]);
 
   return (
     <div className="space-y-4">
@@ -77,19 +118,28 @@ function RichNodesView({
         >
           {items => (
             <div className="grid gap-4 px-4 py-4 lg:grid-cols-2">
-              {items.map(detail => (
-                <Panel key={detail.nodeId} title={
-                  <a className="text-primary hover:underline" href={`#/nodes/${encodeURIComponent(detail.nodeId)}`}>
-                    {detail.displayName || detail.nodeId}
-                  </a>
-                }>
+              {items.map(({ detail, hardware, usage }) => (
+                <GlowingEffect key={detail.nodeId} className="shadow-[var(--shadow-card)]" glowColor="rgba(102, 88, 232, 0.18)">
+                  <div className="border-b border-border/80 bg-gradient-to-r from-[#FAFBFD] via-white to-[#F0EEFF]/60 px-5 py-3.5">
+                    <h3 className="font-semibold tracking-tight text-foreground">
+                      <a className="text-primary hover:underline" href={`#/nodes/${encodeURIComponent(detail.nodeId)}`}>
+                        {detail.displayName || detail.nodeId}
+                      </a>
+                    </h3>
+                  </div>
                   <DefinitionList items={[
                     { term: "状态", value: detail.status },
                     { term: "平台", value: detail.platform ?? "未知" },
                     { term: "Agent 版本", value: detail.agentVersion ?? "未知" },
                     { term: "最近在线", value: detail.lastSeenAt ?? "未知" },
+                    { term: "CPU 核数", value: hardware?.cpuCores ? `${hardware.cpuCores} 核` : "未采集" },
+                    { term: "内存大小", value: formatBytes(hardware?.memoryTotalBytes) ?? "未采集" },
+                    { term: "磁盘大小", value: formatBytes(hardware?.diskTotalBytes) ?? "未采集" },
+                    { term: "本月下行", value: trafficBytes(usage, "in") },
+                    { term: "本月上行", value: trafficBytes(usage, "out") },
+                    { term: "本月合计", value: trafficBytes(usage, "total") },
                   ]} />
-                </Panel>
+                </GlowingEffect>
               ))}
             </div>
           )}
@@ -156,7 +206,7 @@ export function NodesPage() {
               当前返回：<strong className="font-semibold text-foreground">{list.state.status === "ready" && adapted?.ok ? `${items.length} 个节点` : "尚未取得"}</strong>
             </p>
           </GlowingEffect>
-          <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+          <GlowingEffect tone="blue" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
             <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
               <Activity className="size-4" />
             </span>
@@ -164,7 +214,7 @@ export function NodesPage() {
               在线：<strong className="font-semibold text-emerald-700">{list.state.status === "ready" && adapted?.ok ? `${online} 个` : "—"}</strong>
             </p>
           </GlowingEffect>
-          <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
+          <GlowingEffect tone="green" className="flex items-center gap-3 rounded-xl border border-border/70 bg-[#FAFBFD] p-3.5">
             <span aria-hidden="true" className="flex size-9 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
               <Filter className="size-4" />
             </span>

@@ -53,5 +53,11 @@ func Migrations() []storage.Migration {
 			)`,
 			`CREATE INDEX dns_records_zone ON dns_records (zone_id, name)`,
 		},
+	}, {
+		Version: "ds/0091_dns_credential_revision",
+		Name:    "pin the secret-store revision used by a DNS account",
+		Statements: []string{
+			`ALTER TABLE dns_accounts ADD COLUMN credential_revision INTEGER NOT NULL DEFAULT 0`,
+		},
 	}}
 }

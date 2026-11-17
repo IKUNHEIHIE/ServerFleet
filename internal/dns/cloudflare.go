@@ -18,6 +18,7 @@ const (
 	DefaultCloudflareBaseURL = "https://api.cloudflare.com/client/v4"
 	maxCloudflareBodyBytes   = 1 << 20
 	maxCloudflareZonePages   = 100
+	maxCloudflareRecordPages = 100
 	cloudflarePerPage        = 50
 )
 
@@ -40,6 +41,8 @@ type SecretUse struct {
 	PlanDigest string
 	Module     string
 	Purpose    string
+	// ExpectedRevision pins the secret-store revision the DNS account bound.
+	ExpectedRevision uint64
 }
 
 // SecretBorrower lends a credential only inside a callback so provider I/O and
@@ -63,6 +66,8 @@ type SecretScope struct {
 	SubjectID  string
 	RequestID  string
 	PlanDigest string
+	// ExpectedRevision is the secret-store revision the account was bound to.
+	ExpectedRevision uint64
 }
 
 func WithSecretScope(ctx context.Context, scope SecretScope) context.Context {
@@ -188,8 +193,19 @@ type cloudflareRecord struct {
 	Type     string `json:"type"`
 	Name     string `json:"name"`
 	Content  string `json:"content"`
+	TTL      int    `json:"ttl"`
 	Proxied  *bool  `json:"proxied"`
 	Priority *int   `json:"priority"`
+}
+
+type cloudflareRecordListEnvelope struct {
+	Success    bool               `json:"success"`
+	Errors     []cloudflareErr    `json:"errors"`
+	Result     []cloudflareRecord `json:"result"`
+	ResultInfo struct {
+		Page       int `json:"page"`
+		TotalPages int `json:"total_pages"`
+	} `json:"result_info"`
 }
 
 type cloudflareTokenVerify struct {
@@ -274,6 +290,67 @@ func (p *CloudflareProvider) ListZones(ctx context.Context, credential Credentia
 	return nil, fmt.Errorf("%w: zone page ceiling", ErrCloudflareResponse)
 }
 
+// ListRecords reads the zone's records so the console cache matches the
+// provider. Types outside the local allowlist are skipped rather than guessed.
+func (p *CloudflareProvider) ListRecords(ctx context.Context, credential CredentialRef, zoneProviderID string) ([]ProviderRecord, error) {
+	if err := credential.Validate(); err != nil {
+		return nil, fmt.Errorf("%w: credential ref", ErrCloudflareSecret)
+	}
+	if !validProviderID(zoneProviderID) {
+		return nil, ErrCloudflareResponse
+	}
+	records := make([]ProviderRecord, 0, cloudflarePerPage)
+	seen := make(map[string]struct{})
+	for page := 1; page <= maxCloudflareRecordPages; page++ {
+		query := fmt.Sprintf("?page=%d&per_page=%d&order=name&direction=asc", page, cloudflarePerPage)
+		var envelope cloudflareRecordListEnvelope
+		err := p.borrow(ctx, credential, "list records", func(borrowCtx context.Context, token string) error {
+			status, _, payload, err := p.rawRequest(borrowCtx, http.MethodGet,
+				"/zones/"+url.PathEscape(zoneProviderID)+"/dns_records"+query, token, nil, "list records")
+			if err != nil {
+				return err
+			}
+			decodeErr := json.Unmarshal(payload, &envelope)
+			if credentialStatus := cloudflareCredentialStatus(status, envelope.Errors); credentialStatus != "" {
+				return &cloudflareAPIError{Operation: "list records", StatusCode: status, Code: firstCloudflareCode(envelope.Errors), Credential: credentialStatus}
+			}
+			if status >= 500 || decodeErr != nil {
+				return cloudflareOutcomeUnknown(&cloudflareAPIError{Operation: "list records", StatusCode: status, Code: firstCloudflareCode(envelope.Errors)})
+			}
+			if status < 200 || status > 299 || !envelope.Success {
+				return &cloudflareAPIError{Operation: "list records", StatusCode: status, Code: firstCloudflareCode(envelope.Errors)}
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+		for _, record := range envelope.Result {
+			if _, ok := seen[record.ID]; ok {
+				continue
+			}
+			seen[record.ID] = struct{}{}
+			recordType := RecordType(record.Type)
+			if !validProviderID(record.ID) || !recordType.valid() || record.Name == "" || record.Content == "" || record.TTL < 0 || record.TTL > 86400 {
+				continue
+			}
+			input := RecordInput{Type: recordType, Name: record.Name, Content: normalizeRecordContent(recordType, record.Content), TTL: record.TTL}
+			if record.Proxied != nil {
+				input.Proxied = *record.Proxied && recordType.proxiable()
+			}
+			if record.Priority != nil && *record.Priority >= 0 && *record.Priority <= 65535 {
+				priority := *record.Priority
+				input.Priority = &priority
+			}
+			records = append(records, ProviderRecord{ID: record.ID, Input: input})
+		}
+		if envelope.ResultInfo.TotalPages <= page || len(envelope.Result) == 0 {
+			return records, nil
+		}
+	}
+	return nil, fmt.Errorf("%w: record page ceiling", ErrCloudflareResponse)
+}
+
 func (p *CloudflareProvider) CreateRecord(ctx context.Context, credential CredentialRef, zoneProviderID string, input RecordInput) (string, error) {
 	body, err := cloudflareRecordBody(input)
 	if err != nil {
@@ -349,6 +426,7 @@ func (p *CloudflareProvider) borrow(ctx context.Context, credential CredentialRe
 	use := SecretUse{Ref: string(credential), Operation: operation, Module: "dns", Purpose: "dns-provider"}
 	scope := secretScopeFrom(ctx)
 	use.SubjectID, use.RequestID, use.PlanDigest = scope.SubjectID, scope.RequestID, scope.PlanDigest
+	use.ExpectedRevision = scope.ExpectedRevision
 	ran := false
 	err := p.secrets.WithSecret(ctx, use, func(borrowCtx context.Context, token string) error {
 		ran = true

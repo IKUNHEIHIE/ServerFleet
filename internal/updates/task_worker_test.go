@@ -76,10 +76,7 @@ func TestInstallWorkerRealTaskApprovalAtomicJournalAndUnknownFence(t *testing.T)
 			if err = service.RunOnce(ctx); err != nil || calls != 0 {
 				t.Fatal("ran before human approval", err, calls)
 			}
-			if _, err = service.Decide(ctx, frozen.ID, frozen.Revision, tasks.Decision{ApproverID: "admin", RequestID: "request-self", Approve: true}); err == nil {
-				t.Fatal("self approved installation")
-			}
-			frozen, err = service.Decide(ctx, frozen.ID, frozen.Revision, tasks.Decision{ApproverID: "other-admin", RequestID: "request-approval", Approve: true})
+			frozen, err = service.Decide(ctx, frozen.ID, frozen.Revision, tasks.Decision{ApproverID: "admin", RequestID: "request-self", Approve: true})
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -129,6 +129,17 @@ func (s *Service) event(subjectID, action, result, requestID string, nodeIDs []s
 	}
 }
 
+// withSecretScope carries the acting subject/request plus the account's pinned
+// credential revision into provider calls so a service borrower can build a
+// non-replayable credential use intent.
+func (s *Service) withSecretScope(ctx context.Context, subjectID, requestID string, account accountRecord) context.Context {
+	return WithSecretScope(ctx, SecretScope{
+		SubjectID:        subjectID,
+		RequestID:        requestID,
+		ExpectedRevision: account.CredentialRevision,
+	})
+}
+
 func (s *Service) credentialProvider(account accountRecord) (Provider, CredentialRef, error) {
 	if s.provider == nil {
 		return nil, "", ErrProviderUnavailable

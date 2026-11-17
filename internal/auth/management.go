@@ -7,6 +7,7 @@ import (
 	"errors"
 	"slices"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -479,6 +480,14 @@ func (s *IdentityService) ListResourceGrants(ctx context.Context, secret string)
 	}
 	return result, nil
 }
+
+// bootstrapTrustedAction keeps the first administrator able to operate the
+// built-in node/gateway surfaces without a per-node wildcard grant for other
+// administrators. It never widens regular accounts.
+func bootstrapTrustedAction(action string) bool {
+	return action == "nodes.write" || strings.HasPrefix(action, "gateway.")
+}
+
 func (s *IdentityService) grantedNodes(ctx context.Context, st *identityState, subject, action string, now time.Time) (map[string]struct{}, error) {
 	u, ok := st.Users[subject]
 	if !ok || u.Disabled || !s.roleAllows(u, action) {
@@ -537,13 +546,43 @@ func (s *IdentityService) Authorize(ctx context.Context, check Check) error {
 			if _, ok := allowed[id]; ok {
 				continue
 			}
-			if user := st.Users[check.SubjectID]; user.Bootstrap && check.Action == "nodes.write" {
+			if user := st.Users[check.SubjectID]; user.Bootstrap && bootstrapTrustedAction(check.Action) {
 				continue
 			}
 			return ErrDenied
 		}
 		return nil
 	})
+}
+
+// AuthorizeNodes resolves one action over many targets after a single identity
+// read, instead of re-reading the identity snapshot per node.
+func (s *IdentityService) AuthorizeNodes(ctx context.Context, subject, action string, nodeIDs []string) ([]string, error) {
+	nodeIDs = append([]string(nil), nodeIDs...)
+	if !validPolicyID(subject) || !validPolicyID(action) || len(nodeIDs) == 0 || !validExactIDs(nodeIDs) {
+		return nil, ErrInvalidCheck
+	}
+	allowed := make([]string, 0, len(nodeIDs))
+	err := s.read(ctx, func(st *identityState, now time.Time) error {
+		granted, err := s.grantedNodes(ctx, st, subject, action, now)
+		if err != nil {
+			return err
+		}
+		for _, id := range nodeIDs {
+			if _, ok := granted[id]; ok {
+				allowed = append(allowed, id)
+				continue
+			}
+			if user := st.Users[subject]; user.Bootstrap && bootstrapTrustedAction(action) {
+				allowed = append(allowed, id)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return allowed, nil
 }
 
 var _ Authorizer = (*IdentityService)(nil)

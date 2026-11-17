@@ -26,7 +26,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 		filtered := []storage.Migration{}
 		for _, migration := range group {
 			total++
-			if completionOnlyMigration(migration.Version) || migration.Version == "ds/0089_node_archives" || migration.Version == "ds/0090_node_live_metrics" {
+			if completionOnlyMigration(migration.Version) || migration.Version == "ds/0089_node_archives" || migration.Version == "ds/0090_node_live_metrics" || migration.Version == "ds/0091_dns_credential_revision" {
 				continue
 			}
 			if migration.Version != "ds/0041_file_upload_task" && migration.Version != "ds/0043_upload_policies" && migration.Version != "cx/0008_file_execution_bindings" && migration.Version != "cx/0009_update_journal" && migration.Version != "ds/0062_acme_cleanup" && migration.Version != "ds/0063_cleanup_claim" && migration.Version != "ds/0042_file_distribution" && migration.Version != "cx/0010_gateway_artifact_bindings" {
@@ -44,7 +44,7 @@ func TestR2PlatformMigrationsUpgradeFromAdopted21AndReapply(t *testing.T) {
 	if legacyCount != 21 {
 		t.Fatal("historical fixture is not actual adopted21", legacyCount)
 	}
-	if total != 52 {
+	if total != 53 {
 		t.Fatal("unexpected composition migration count", total)
 	}
 	db := testkit.NewDB(t, old...)

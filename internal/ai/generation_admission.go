@@ -72,7 +72,7 @@ func (c *ConversationService) CheckCredentialOperation(ctx context.Context, op a
 	if err != nil || view.Status != "active" || view.ScopeRevision != r.ScopeRevision || !slices.Equal(view.AllowedNodeIDs, o.nodes) {
 		return ErrToolDenied
 	}
-	profile, err := c.profile(ctx, r.SubjectID)
+	profile, err := c.profileFor(ctx, view, r.SubjectID)
 	if err != nil || profile != r.Profile {
 		return ErrToolDenied
 	}

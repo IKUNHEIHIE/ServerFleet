@@ -35,17 +35,18 @@ func (s *Server) setupAI(cfg Config) error {
 	}
 	quota := cfg.AIGenerationQuota
 	if quota == nil {
-		quota = func(ctx context.Context, request ai.GenerationRequest) error {
-			if s.AIBudget == nil {
-				return ai.ErrModelUnavailable
-			}
-			return s.AIBudget.Admit(ctx, request)
-		}
+		// 预算窗口功能已按用户要求停用：不再在生成前按请求/token 额度拦截。
+		quota = func(context.Context, ai.GenerationRequest) error { return nil }
 	}
 	factory := ai.NewBYOKRuntime
 	if cfg.LocalAIProvider != nil {
 		factory = func(sessions *ai.SessionService, credentials *auth.CredentialService, filter func(context.Context, ai.SessionView, string, string) (string, error), quota ai.GenerationQuota) (*ai.BYOKRuntime, error) {
 			return ai.NewLocalTLSBYOKRuntime(sessions, credentials, filter, quota, *cfg.LocalAIProvider)
+		}
+	} else if cfg.AITextEndpoint != "" {
+		endpoint := ai.OpenAICompatibleEndpoint{URL: cfg.AITextEndpoint}
+		factory = func(sessions *ai.SessionService, credentials *auth.CredentialService, filter func(context.Context, ai.SessionView, string, string) (string, error), quota ai.GenerationQuota) (*ai.BYOKRuntime, error) {
+			return ai.NewOpenAIEndpointBYOKRuntime(sessions, credentials, filter, quota, endpoint)
 		}
 	}
 	backend, err := factory(sessions, s.Credentials, s.aiContentFilter, quota)
@@ -58,12 +59,17 @@ func (s *Server) setupAI(cfg Config) error {
 		backend.Close()
 		return err
 	}
+	catalogHTTP, err := ai.NewModelCatalogHTTP(backend.Models, backend, s.aiAuthenticate)
+	if err != nil {
+		backend.Close()
+		return err
+	}
 	generationHTTP, err := ai.NewGenerationHTTP(conversation, s.aiActorContext, s.aiCommitGate)
 	if err != nil {
 		backend.Close()
 		return err
 	}
-	s.AIRuntime, s.AIModelsHTTP, s.AIGenerationHTTP = backend, modelsHTTP, generationHTTP
+	s.AIRuntime, s.AIModelsHTTP, s.AIModelCatalogHTTP, s.AIGenerationHTTP = backend, modelsHTTP, catalogHTTP, generationHTTP
 	budgetStore, err := newAIBudgetStore(s.DB, s.Audit)
 	if err != nil {
 		return err
@@ -204,10 +210,16 @@ func (s *Server) aiAuthority(ctx context.Context, subject, action string) (ai.Cu
 	if err != nil {
 		return ai.CurrentAuthority{}, err
 	}
+	ids := make([]string, 0, len(list))
 	for _, node := range list {
-		if err := s.Identity.Authorize(ctx, auth.Check{SubjectID: subject, Action: action, NodeIDs: []string{node.ID}}); err == nil {
-			current.AllowedNodes = append(current.AllowedNodes, node.ID)
+		ids = append(ids, node.ID)
+	}
+	if len(ids) > 0 {
+		allowed, err := s.Identity.AuthorizeNodes(ctx, subject, action, ids)
+		if err != nil && !errors.Is(err, auth.ErrDenied) {
+			return ai.CurrentAuthority{}, err
 		}
+		current.AllowedNodes = allowed
 	}
 	groups, err := s.ServiceGroupsRepo.List(ctx)
 	if err != nil {
@@ -279,18 +291,21 @@ func (s *Server) aiExecuteTool(ctx context.Context, request ai.ToolExecutionRequ
 		class = tasks.OperationClassStandard
 	}
 	task, err := s.Tasks.Submit(ctx, tasks.SubmitRequest{
-		IdempotencyKey:  request.InvocationID,
-		RequireApproval: request.ToolID == transport.CommandCapability || request.ToolID == transport.RootCommandCapability,
-		SubjectID:       actor.SubjectID,
-		RequestID:       newRequestID(),
-		Name:            "ai " + request.ToolID,
-		ActionID:        request.ToolID,
-		OperationClass:  class,
-		TargetType:      "node_ids",
-		TargetNodeIDs:   append([]string{}, request.NodeIDs...),
-		CanonicalParams: append([]byte(nil), request.Parameters...),
-		ScopeRevision:   request.ScopeRevision,
-		Source:          audit.SourceAI,
+		IdempotencyKey: request.InvocationID,
+		// AI tool approval is the single human confirmation. Do not require a second
+		// approval on the derived task.
+		RequireApproval:   false,
+		ApprovalSatisfied: true,
+		SubjectID:         actor.SubjectID,
+		RequestID:         newRequestID(),
+		Name:              "ai " + request.ToolID,
+		ActionID:          request.ToolID,
+		OperationClass:    class,
+		TargetType:        "node_ids",
+		TargetNodeIDs:     append([]string{}, request.NodeIDs...),
+		CanonicalParams:   append([]byte(nil), request.Parameters...),
+		ScopeRevision:     request.ScopeRevision,
+		Source:            audit.SourceAI,
 	})
 	if err != nil {
 		if errors.Is(err, auth.ErrDenied) || errors.Is(err, tasks.ErrInvalidTask) {

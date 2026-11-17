@@ -210,9 +210,11 @@ func (s *Server) registerAIRoutes() {
 		for _, pattern := range []string{
 			"GET /api/v1/ai/security-policy",
 			"POST /api/v1/ai/sessions",
+			"GET /api/v1/ai/sessions",
 			"GET /api/v1/ai/sessions/{sessionId}",
 			"GET /api/v1/ai/sessions/{sessionId}/approval-policy",
 			"PATCH /api/v1/ai/sessions/{sessionId}/approval-policy",
+			"PATCH /api/v1/ai/sessions/{sessionId}/preferences",
 			"POST /api/v1/ai/sessions/{sessionId}/grants",
 			"DELETE /api/v1/ai/sessions/{sessionId}/grants/{grantId}",
 			"POST /api/v1/ai/sessions/{sessionId}/approvals",
@@ -227,12 +229,17 @@ func (s *Server) registerAIRoutes() {
 		s.mux.Handle("GET /api/v1/ai/model-settings", s.AIModelsHTTP)
 		s.mux.Handle("PUT /api/v1/ai/model-settings", s.AIModelsHTTP)
 	}
+	if s.AIModelCatalogHTTP != nil {
+		s.mux.Handle("POST /api/v1/ai/model-settings/models", s.AIModelCatalogHTTP)
+	}
 	if s.AIGenerationHTTP != nil {
 		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate", s.AIGenerationHTTP)
 	}
 	if s.AIMessagesHTTP != nil {
 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
 		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages", s.AIMessagesHTTP)
+		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/context", s.AIMessagesHTTP)
+		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/context/compact", s.AIMessagesHTTP)
 	}
 	if s.AIEventsHTTP != nil {
 		s.mux.Handle("GET /api/v1/ai/sessions/{sessionId}/events", s.AIEventsHTTP)

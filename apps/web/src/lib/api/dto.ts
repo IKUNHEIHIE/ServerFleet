@@ -668,6 +668,13 @@ export interface DNSZone {
   readonly status?: string;
 }
 
+/** Cloudflare 账号下仍可导入的 Zone；providerZoneId 由服务商返回，不猜测。 */
+export interface DNSProviderZone {
+  readonly providerZoneId: string;
+  readonly name: string;
+  readonly status?: string;
+}
+
 export interface DNSRecordInput {
   readonly type: "A" | "AAAA" | "CNAME" | "TXT" | "MX";
   readonly name: string;
@@ -802,6 +809,15 @@ export interface AIResourceGrant {
   readonly grantedBy?: string;
 }
 
+export interface AISessionSummary {
+  readonly id: string;
+  readonly title: string;
+  readonly status: "active" | "closed";
+  readonly scopeRevision: number;
+  readonly createdAt?: string;
+  readonly lastActivityAt?: string;
+}
+
 export interface AISession {
   readonly id: string;
   readonly scopeRevision: number;
@@ -810,6 +826,8 @@ export interface AISession {
   readonly status: "active" | "closed";
   readonly createdBy?: string;
   readonly createdAt?: string;
+  readonly model?: string;
+  readonly reasoningEffort?: "low" | "medium" | "high" | "";
   readonly approvalPolicy?: AIApprovalPolicy;
 }
 
@@ -821,6 +839,16 @@ export interface AIApprovalPolicy {
   readonly scopeRevision: number;
   readonly maxFullAccessSeconds?: number;
   readonly enforcedRestrictions?: readonly string[];
+}
+
+export interface AIContextStats {
+  readonly messageCount: number;
+  readonly estimatedTokens: number;
+  readonly summaryTokens: number;
+  readonly compactedMessages: number;
+  readonly summaryPresent: boolean;
+  readonly model?: string;
+  readonly reasoningEffort?: "low" | "medium" | "high" | "";
 }
 
 export interface AIResourceRecommendation {
@@ -896,6 +924,7 @@ export interface AIModelSettings {
   readonly updatedAt?: string;
   readonly enabled: boolean;
   readonly provider: string;
+  readonly endpoint?: string;
   readonly model: string;
   readonly credentialRef: string;
   readonly credentialRevision: number;

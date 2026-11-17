@@ -48,7 +48,7 @@ func TestR1MigrationPreservesExistingPublicationAndAddsOnlyNewVersions(t *testin
 		t.Fatal("migration replay changed history", err)
 	}
 	versions, err := storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 52 {
+	if err != nil || len(versions) != 53 {
 		t.Fatal(versions, err)
 	}
 	var name, gateways string
@@ -74,7 +74,7 @@ func TestUploadPolicyMigrationUpgradesActual28WithoutReinterpretingQueuedPlans(t
 	var old []storage.Migration
 	for _, set := range server.Migrations() {
 		for _, m := range set {
-			if completionOnlyMigration(m.Version) || m.Version == "ds/0089_node_archives" || m.Version == "ds/0090_node_live_metrics" {
+			if completionOnlyMigration(m.Version) || m.Version == "ds/0089_node_archives" || m.Version == "ds/0090_node_live_metrics" || m.Version == "ds/0091_dns_credential_revision" {
 				continue
 			}
 			if m.Version != "ds/0043_upload_policies" {
@@ -111,7 +111,7 @@ func TestUploadPolicyMigrationUpgradesActual28WithoutReinterpretingQueuedPlans(t
 		t.Fatal(err)
 	}
 	versions, err = storage.AppliedVersions(ctx, db)
-	if err != nil || len(versions) != 52 {
+	if err != nil || len(versions) != 53 {
 		t.Fatalf("upgrade count: %v %v", versions, err)
 	}
 }

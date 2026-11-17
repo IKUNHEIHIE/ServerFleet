@@ -1,6 +1,6 @@
 # 当前接口说明
 
-核对：2026-11-14 / v0.9.2。先读 [开发交接](../development/HANDOFF.md)、[当前状态](../development/CURRENT-STATE.md)。本文及增量修订用于定位实际接口，未宣称统一 OpenAPI 已全字段核验/冻结。
+核对：2026-11-17 / v0.9.2 增量。先读 [开发交接](../development/HANDOFF.md)、[当前状态](../development/CURRENT-STATE.md)。本文及增量修订用于定位实际接口，未宣称统一 OpenAPI 已全字段核验/冻结。
 
 v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完整证书链及有效旧回执的公开 PEM 响应，不新增业务路由或字段；撤销/过期/代次校验不变。安装 catalog 的既有 url/sha256 默认用于固定版本 raw 安装入口，新版命令增加公开 bootstrap CA，令牌仍不进入命令。
 
@@ -50,6 +50,12 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 | 更新/备份/恢复/处置 | `/system`、`/backups`、`/disaster-recovery`、`/operations/incidents` | 可信supervisor、加密/存储凭据、恢复隔离、独立审批和新鲜证据 |
 | 插件 | `/plugins`、`/plugins/xray-manager` | 目录/包/声明式元数据可存在；变更/执行需已准入Runtime和Host，当前存在明确501/503拒绝式入口 |
 
+## AI 运维增量（2026-11-17）
+
+AI 侧审批收敛为会话范围的三档：`per_action`（每次询问）、`automatic`（只读/低风险自动）、`full_access`（当前授权内不再逐项确认，root Shell 仍需管理员确认）。`PATCH /api/v1/ai/sessions/{sessionId}/approval-policy` 只接受 `{"mode": ...}`；审批模式变更不迁移资源授权，但会把排队中的 Agent 运行带入新范围，在途步骤无法安全继续时显式标记 unknown。
+
+`PATCH /api/v1/ai/sessions/{sessionId}/preferences` 接受 `model` 与 `reasoningEffort`（`low|medium|high|""`），仅改变本会话模型与 Responses `reasoning.effort`，不扩大资源范围。`GET /api/v1/ai/sessions/{sessionId}/context` 返回消息数、估算 tokens、摘要状态与当前模型；`POST /api/v1/ai/sessions/{sessionId}/context/compact` 接受 `{"keep": 2..20}`，生成并持久化本地抽取式摘要，不调用模型或凭据。`GET /messages` 对 Agent 运行消息保留 `agentRunId`，客户端按运行内嵌展示，不再把占位文本当作执行结果。`POST /api/v1/ai/sessions/{sessionId}/runs` 的 AI 任务不再要求任务层二次审批；`tasks.exec.v1` 与 `tasks.command` 一样使用任务提交权限回退，具体任务仍走统一授权、审批、审计与 UNKNOWN 语义。
+
 ## 节点管理补丁（2026-11-15，工作区待提交）
 
 新增 `GET/PATCH/DELETE /api/v1/nodes/{nodeId}`。GET 返回 `nodeId/displayName/status/address/region/provider/countryCode/tags/updatedAt`，可选最近在线与 Agent 版本；不伪造 revision。PATCH 只接受 `name/address/region/provider/countryCode/tags/expectedUpdatedAt`，要求 nodes.write 和读取授权；expectedUpdatedAt 为读取时的元数据版本，冲突返回 409 node_metadata_conflict。心跳不使元数据版本失效。DELETE 接受必填 reason，要求 nodes.revoke，事务内撤销并归档；普通列表隐藏，历史关联和审计记录保留，重复删除幂等。归档不等于远程程序已卸载。
@@ -59,6 +65,26 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 接入令牌创建支持 name；省略或空白时生成可区分的 node-随机名称。页面将同一个名称用于令牌和安装命令。新增迁移 ds/0089_node_archives，工作区迁移共 51 项，历史迁移不改写。
 
 节点能力接口 `GET /api/v1/nodes/{nodeId}/capabilities` 在握手诊断中额外返回 `cpuModel/cpuCores/memoryTotalBytes/diskTotalBytes`（AgentHello 新增字段 9–12，append-only；缺失表示未采集，不按 0 处理）。安装脚本改为创建专用用户与 systemd 服务并带 `-file-root`；文件能力需要非 root 身份，控制器启用文件分发时协议次版本为 1.1。
+
+## DNS 独立可用（2026-11-16，工作区待提交）
+
+- `POST /api/v1/dns/accounts` 与 `PATCH /api/v1/dns/accounts/{accountId}` 新增 `credentialRevision`（与 `credentialRef` 同传，0 拒绝）。账号记住凭据修订号，服务端借用凭据前按该修订校验。
+- 新增 `GET /api/v1/dns/accounts/{accountId}/provider-zones`：实时读取 Cloudflare 账号下可导入 Zone（`providerZoneId/name/status`），只读，不写入本地。
+- 新增 `POST /api/v1/dns/zones/{zoneId}/records/sync`：读取该 Zone 的 Cloudflare 记录并替换本地缓存；仅保留 A/AAAA/CNAME/TXT/MX，跳过其它类型；不修改远端记录。
+- 账号检查改为同步 `POST /api/v1/dns/accounts/{accountId}/test`，返回 `status/zoneRead/recordWrite` 并回填凭据状态；控制台 Token 直填后自动创建 DNS 专用凭据，仅提交引用。
+- 独立 DNS 请求不再依赖 ACME 执行配置：服务端为每次请求建立一次性凭据借用窗口（模块 `dns`、绑定修订号），窗口外拒绝；远端写操作仍走统一审批任务。
+- 迁移 `ds/0091_dns_credential_revision` 追加 `credential_revision` 列；历史行为 0，需重新绑定凭据（控制台“轮换”）后才能通过供应商校验。
+
+## AI 端点配置（2026-11-16，工作区待提交）
+
+- Controller 新增私有启动参数 `-ai-text-endpoint`：部署级 OpenAI 兼容 Responses URL（必须 `https`、无 userinfo/query/fragment、路径以 `/responses` 结尾，例如 `https://<网关>/compatible-mode/v1/responses`）。未配置时沿用默认 OpenAI 端点。
+- 端点只来自部署配置，浏览器/模型档案不能提交或覆盖 base URL；模型标识、凭据引用与 `credentialRevision` 仍由模型档案提交。
+- 流式解析会忽略 `response.reasoning_text.*` / `response.reasoning_summary_*` 推理事件并保持序号连续性；只返回正式输出文本，未知事件仍拒绝。
+- 新增系统权限 `ai.use` / `ai.manage` / `ai.approve`（管理员），此前未注册导致 AI 页面锁死。
+- 修复消息提交缺少 `Idempotency-Key` 导致的 400：现在以客户端消息 ID 作为幂等键。
+- 审批事件列表接口尚未实现；控制台对 404 显示“当前 Controller 未提供”，不再当作加载失败。
+- 2026-11-17：预算窗口 API 保留但生成链路不再按预算拦截，控制台已移除“用量与预算”界面；模型配置迁入系统设置的 AI 模型页签。
+- 新增 `GET /api/v1/ai/sessions`：列出当前用户自己的会话摘要（标题取首条用户消息，最多 50 条）；控制台左侧历史对话使用该接口。发送消息后控制台立即调用生成接口，不再需要手动点“生成回复”。OpenAI 兼容网关要求历史 assistant 消息以 `output_text` 分段提交。
 
 ## 手动监控探测
 

@@ -30,6 +30,7 @@ type AgentStep struct {
 	ApprovalID string          `json:"approvalId,omitempty"`
 	TaskID     string          `json:"taskId,omitempty"`
 	TaskState  string          `json:"taskState,omitempty"`
+	Plan       string          `json:"plan,omitempty"`
 	Result     string          `json:"result,omitempty"`
 	MessageID  string          `json:"messageId,omitempty"`
 	StartedAt  time.Time       `json:"startedAt"`
@@ -142,7 +143,7 @@ func validateAgentRuns(id string, record sessionRecord) error {
 			return ErrSessionUnavailable
 		}
 		for i, s := range v.Steps {
-			if s.Number != i+1 || !agentState(s.State) || s.StartedAt.IsZero() || len(s.NodeIDs) > 200 || !validIDs(s.NodeIDs) || len(s.Parameters) > 8<<10 || len(s.Result) > 32<<10 {
+			if s.Number != i+1 || !agentState(s.State) || s.StartedAt.IsZero() || len(s.NodeIDs) > 200 || !validIDs(s.NodeIDs) || len(s.Parameters) > 8<<10 || len(s.Plan) > 8<<10 || len(s.Result) > 32<<10 {
 				return ErrSessionUnavailable
 			}
 		}

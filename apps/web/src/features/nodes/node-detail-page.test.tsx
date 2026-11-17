@@ -231,7 +231,7 @@ describe("node detail page", () => {
     expect(calls.filter(call => call.method === "PATCH")).toHaveLength(1);
   });
 
-  it("requires reason and explicit removal acknowledgement, then deletes with CSRF", async () => {
+  it("requires only explicit removal acknowledgement, then deletes with CSRF", async () => {
     const routes = detailRoutes();
     routes["DELETE /api/v1/nodes/n-1"] = () => new Response(null, { status: 204 });
     routes["GET /api/v1/nodes"] = () => jsonResponse({ items: [] });
@@ -241,10 +241,8 @@ describe("node detail page", () => {
     const dialog = screen.getByRole("dialog", { name: "删除节点" });
     const confirm = within(dialog).getByRole("button", { name: "确认删除" });
     expect(confirm).toBeDisabled();
-    fireEvent.change(within(dialog).getByLabelText("原因"), { target: { value: "   " } });
+    expect(within(dialog).queryByLabelText("原因")).toBeNull();
     fireEvent.click(within(dialog).getByRole("checkbox", { name: "停止此节点接入并从列表移除，保留历史审计；重新使用须重新接入" }));
-    expect(confirm).toBeDisabled();
-    fireEvent.change(within(dialog).getByLabelText("原因"), { target: { value: "  设备退役  " } });
     expect(confirm).toBeEnabled();
     fireEvent.click(within(dialog).getByRole("checkbox"));
     expect(confirm).toBeDisabled();
@@ -254,7 +252,7 @@ describe("node detail page", () => {
     await waitFor(() => {
       const call = calls.find(call => call.method === "DELETE");
       expect(call?.url).toBe("/api/v1/nodes/n-1");
-      expect(JSON.parse(String(call?.init?.body))).toEqual({ reason: "设备退役" });
+      expect(JSON.parse(String(call?.init?.body))).toEqual({ reason: "未填写原因" });
       expect(new Headers(call?.init?.headers).get("X-CSRF-Token")).toBe("csrf-test");
       expect(window.location.hash).toBe("#/nodes");
     });
@@ -267,18 +265,17 @@ describe("node detail page", () => {
     const { calls } = await renderAuthenticated("/nodes/n-1", routes);
     await screen.findByText("aa:bb");
     fireEvent.click(screen.getByRole("button", { name: "删除节点" }));
-    fireEvent.change(screen.getByLabelText("原因"), { target: { value: "退役" } });
     fireEvent.click(screen.getByRole("checkbox", { name: "停止此节点接入并从列表移除，保留历史审计；重新使用须重新接入" }));
     fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
     expect(await screen.findByText("操作未完成")).toBeVisible();
     expect(screen.getByRole("dialog", { name: "删除节点" })).toBeVisible();
-    expect(screen.getByLabelText("原因")).toHaveValue("退役");
     expect(window.location.hash).toBe("#/nodes/n-1");
     expect(calls.filter(call => call.method === "DELETE")).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "取消" }));
     fireEvent.click(screen.getByRole("button", { name: "删除节点" }));
-    expect(screen.getByLabelText("原因")).toHaveValue("");
-    expect(within(screen.getByRole("dialog", { name: "删除节点" })).getByRole("checkbox")).not.toBeChecked();
+    const reopened = screen.getByRole("dialog", { name: "删除节点" });
+    expect(within(reopened).queryByLabelText("原因")).toBeNull();
+    expect(within(reopened).getByRole("checkbox")).not.toBeChecked();
     expect(screen.queryByText("操作未完成")).not.toBeInTheDocument();
   });
 

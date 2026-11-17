@@ -2,7 +2,7 @@ import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { MoreHorizontal, Search, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Checkbox, Field, TextArea, TextInput } from "@/components/ui/form";
+import { Checkbox, TextInput } from "@/components/ui/form";
 import { Notice } from "@/components/ui/feedback";
 import { Modal } from "@/components/ui/modal";
 import type { NodeDetail } from "@/lib/api/dto";
@@ -31,7 +31,6 @@ function NodeRowActions({ row, onChanged, canEdit, canDelete, writesLocked, view
   const [detailError, setDetailError] = useState<string | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [reason, setReason] = useState("");
   const [confirmed, setConfirmed] = useState(false);
   const remove = useAction((body: { reason: string }) => nodesApi.remove(row.id, body));
 
@@ -50,8 +49,8 @@ function NodeRowActions({ row, onChanged, canEdit, canDelete, writesLocked, view
   }
 
   async function deleteNode() {
-    if (!reason.trim() || !confirmed || remove.pending) return;
-    const result = await remove.run({ reason: reason.trim() });
+    if (!confirmed || remove.pending) return;
+    const result = await remove.run({ reason: "未填写原因" });
     if (result.ok) {
       setDeleteOpen(false);
       onChanged();
@@ -69,7 +68,7 @@ function NodeRowActions({ row, onChanged, canEdit, canDelete, writesLocked, view
           {menuOpen ? (
             <div role="menu" aria-label={`${row.name} 节点操作`} className="absolute right-0 z-20 mt-1 min-w-32 rounded-md border border-border bg-card p-1 text-left shadow-lg">
               {canEditAction ? <button type="button" role="menuitem" disabled={loadingDetail} onClick={edit} className="block w-full rounded px-3 py-2 text-sm hover:bg-secondary disabled:opacity-50">编辑</button> : null}
-              {canDeleteAction ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setReason(""); setConfirmed(false); remove.reset(); setDeleteOpen(true); }} className="block w-full rounded px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/5">删除</button> : null}
+              {canDeleteAction ? <button type="button" role="menuitem" onClick={() => { setMenuOpen(false); setConfirmed(false); remove.reset(); setDeleteOpen(true); }} className="block w-full rounded px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/5">删除</button> : null}
               {!canEditAction && !canDeleteAction ? <span className="block px-3 py-2 text-xs text-muted-foreground">无可用操作</span> : null}
             </div>
           ) : null}
@@ -78,13 +77,12 @@ function NodeRowActions({ row, onChanged, canEdit, canDelete, writesLocked, view
       {editor ? <NodeEditor key={`editor:${viewEpoch}:${row.id}`} nodeId={row.id} metadata={editor} canManage={canEditAction} writesLocked={writesLocked} onClose={() => setEditor(null)} onRefresh={() => { setEditor(null); void edit(); }} onSaved={() => { setEditor(null); onChanged(); }} /> : null}
       <Modal open={deleteOpen} title="删除节点" description="停止此节点接入并从列表移除，保留历史审计与关联记录；重新使用须重新接入。" onClose={() => { if (!remove.pending) setDeleteOpen(false); }} footer={<>
         <Button type="button" disabled={remove.pending} onClick={() => setDeleteOpen(false)}>取消</Button>
-        <Button type="button" variant="danger" loading={remove.pending} disabled={!canDeleteAction || !reason.trim() || !confirmed} onClick={deleteNode}>确认删除</Button>
+        <Button type="button" variant="danger" loading={remove.pending} disabled={!canDeleteAction || !confirmed} onClick={deleteNode}>确认删除</Button>
       </>}>
         {remove.error ? <Notice tone="error" title="操作未完成">{describeApiError(remove.error)}</Notice> : null}
         <div className="space-y-4">
-          <Field label="原因" hint="请勿包含秘密或凭据。">{ids => <TextArea id={ids.inputId} value={reason} onChange={event => setReason(event.target.value)} disabled={remove.pending} required />}</Field>
           <label className="flex items-start gap-2 text-sm"><Checkbox checked={confirmed} onChange={event => setConfirmed(event.target.checked)} disabled={remove.pending} />停止此节点接入并从列表移除，保留历史审计；重新使用须重新接入</label>
-          <p className="text-xs text-muted-foreground">操作原因会记录到审计中，实际结果以服务端返回为准。</p>
+          <p className="text-xs text-muted-foreground">删除会记录到审计中，实际结果以服务端返回为准。</p>
         </div>
       </Modal>
     </>
@@ -175,7 +173,7 @@ export function LegacyNodeList({ rows, onChanged = () => {}, canEdit = false, ca
           <thead className="sr-only"><tr>{["节点", "CPU", "内存", "存储", "上传", "下载", "操作"].map(label => <th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>
             {visible.map(row => (
-              <tr key={row.id} className="rounded-3xl bg-white align-middle shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_2px_4px_rgba(0,0,0,0.04)]">
+              <tr key={row.id} className="rounded-3xl bg-white align-middle shadow-[0_0_0_1px_rgba(0,0,0,0.08),0_2px_4px_rgba(0,0,0,0.04)] transition-[background,box-shadow] duration-300 hover:bg-[linear-gradient(90deg,rgba(102,88,232,0.07),rgba(57,132,231,0.05)_45%,rgba(255,255,255,0))] hover:shadow-[0_0_0_1px_rgba(102,88,232,0.22),0_10px_24px_rgba(102,88,232,0.10)]">
                 <th scope="row" className="w-[32%] rounded-l-3xl px-5 py-5 text-left font-normal">
                   <div className="flex items-center gap-3">
                     <span aria-label={row.online ? "在线" : "离线"} className={cn("size-2.5 shrink-0 rounded-full", row.online ? "bg-emerald-500" : "bg-slate-300")} />

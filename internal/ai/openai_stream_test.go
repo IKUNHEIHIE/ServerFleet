@@ -28,6 +28,24 @@ func TestOpenAIStreamTerminalAndBounds(t *testing.T) {
 		}
 	}
 }
+func TestOpenAIStreamIgnoresReasoningEvents(t *testing.T) {
+	reasoning := "event: response.created\ndata: {\"type\":\"response.created\",\"sequence_number\":0}\n\n" +
+		"event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"sequence_number\":1,\"item\":{\"type\":\"reasoning\"}}\n\n" +
+		"event: response.reasoning_text.delta\ndata: {\"type\":\"response.reasoning_text.delta\",\"sequence_number\":2,\"delta\":\"private chain\"}\n\n" +
+		"event: response.reasoning_text.done\ndata: {\"type\":\"response.reasoning_text.done\",\"sequence_number\":3}\n\n" +
+		"event: response.reasoning_summary_text.delta\ndata: {\"type\":\"response.reasoning_summary_text.delta\",\"sequence_number\":4,\"delta\":\"summary\"}\n\n" +
+		"event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"sequence_number\":5,\"delta\":\"visible\"}\n\n" +
+		"event: response.completed\ndata: {\"type\":\"response.completed\",\"sequence_number\":6,\"response\":" + providerResponse("visible") + "}\n\n"
+	text, err := decodeProviderStream(context.Background(), strings.NewReader(reasoning), "fixture-model")
+	if err != nil || text != "visible" {
+		t.Fatalf("reasoning events must not leak or fail the stream: %q %v", text, err)
+	}
+	unknown := strings.Replace(reasoning, "response.reasoning_text.delta", "response.reasoning_image.delta", 1)
+	if text, err := decodeProviderStream(context.Background(), strings.NewReader(unknown), "fixture-model"); err == nil || text != "" {
+		t.Fatal("unknown reasoning event must still be rejected")
+	}
+}
+
 func TestBYOKRuntimeLocalTLSSettingsQuotaAndRevocation(t *testing.T) {
 	for _, mode := range []string{"success", "quota-denied", "revoked", "disconnected"} {
 		t.Run(mode, func(t *testing.T) {

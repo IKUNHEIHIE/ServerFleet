@@ -411,7 +411,7 @@ export function ServiceGroupsPage() {
             </p>
           </div>
         </GlowingEffect>
-        <GlowingEffect glowColor="rgba(57, 132, 231, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+        <GlowingEffect tone="violet" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
           <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-blue-500/10 text-blue-700">
             <Network className="size-5" />
           </span>
@@ -422,7 +422,7 @@ export function ServiceGroupsPage() {
             </p>
           </div>
         </GlowingEffect>
-        <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
+        <GlowingEffect tone="blue" className="flex items-center gap-3 rounded-xl border border-border/80 bg-card p-4 shadow-[var(--shadow-card)]">
           <span aria-hidden="true" className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-emerald-500/10 text-emerald-700">
             <ShieldCheck className="size-5" />
           </span>

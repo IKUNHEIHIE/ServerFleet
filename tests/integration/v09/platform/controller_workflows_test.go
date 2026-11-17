@@ -341,10 +341,10 @@ func TestWave4WorkflowHTTPManagementApprovalAndAudit(t *testing.T) {
 		t.Fatalf("workflow task did not enter approval: %s", data)
 	}
 
-	// The submitter cannot approve their own automating task either.
+	// The submitting administrator may confirm their own automating task once.
 	if status, data := admin.do("POST", "/api/v1/tasks/"+taskID+"/approve", map[string]any{
-		"planDigest": task.PlanHash, "decision": "approve", "reason": "self approval attempt",
-	}, adminCSRF); status != http.StatusConflict {
+		"planDigest": task.PlanHash, "decision": "approve", "reason": "single human confirmation",
+	}, adminCSRF); status != http.StatusOK {
 		t.Fatalf("self approval = %d: %s", status, data)
 	}
 

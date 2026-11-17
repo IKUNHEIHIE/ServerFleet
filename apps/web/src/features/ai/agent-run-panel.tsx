@@ -1,4 +1,4 @@
-import { useRef, useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Bot, Cpu, Loader2, ShieldAlert, Sparkles, Wrench } from "lucide-react";
 import { useSession } from "@/app/session";
 import { GlowingEffect } from "@/components/aceternity/glowing-effect";
@@ -22,7 +22,7 @@ const STATE_LABEL: Record<AgentRunState, string> = {
   canceled: "已取消", unknown: "结果未知，已停止", limit_reached: "达到步数或上下文上限",
 };
 
-export function AgentRunPanel({ session }: { readonly session: AISession }) {
+export function AgentRunPanel({ session, focusRunId }: { readonly session: AISession; readonly focusRunId?: string | null }) {
   const appSession = useSession();
   const [selected, setSelected] = useState("");
   const [goal, setGoal] = useState("");
@@ -37,6 +37,10 @@ export function AgentRunPanel({ session }: { readonly session: AISession }) {
   const runs = useResource(`ai:runs:${session.id}:${session.scopeRevision}:${appSession.viewEpoch}`, signal =>
     aiAgentApi.list(session.id, signal).then(result => result.data.items), { refreshIntervalMs: 4000 });
   const create = useAction((input: AgentRunInput) => aiAgentApi.create(session.id, input));
+
+  useEffect(() => {
+    if (focusRunId) setSelected(focusRunId);
+  }, [focusRunId]);
 
   async function start(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -180,6 +184,14 @@ function StepCard({ step }: { readonly step: AgentStep }) {
           </pre>
         </details>
       ) : null}
+      {step.plan ? (
+        <details className="mt-2.5" open={step.state === "waiting_approval"}>
+          <summary className="cursor-pointer text-xs font-semibold text-primary">规划说明</summary>
+          <p className="mt-1 whitespace-pre-wrap rounded-lg border border-border/70 bg-[#FAFBFD] p-2.5 text-xs leading-5 text-muted-foreground">{step.plan}</p>
+        </details>
+      ) : step.toolName || step.state === "thinking" ? (
+        <p className="mt-2 text-xs text-muted-foreground">{step.toolName ? `规划：调用 ${step.toolName}${step.nodeIds.length ? ` 处理 ${step.nodeIds.length} 个节点` : ""}` : "模型正在规划下一步…"}</p>
+      ) : null}
       {step.taskId ? (
         <p className="mt-2 text-xs">
           <a className="font-semibold text-primary underline" href={`#/tasks/${encodeURIComponent(step.taskId)}`}>查看关联任务与审批</a> · {step.taskState ?? "等待状态"}
@@ -194,5 +206,97 @@ function StepCard({ step }: { readonly step: AgentStep }) {
         </details>
       ) : null}
     </li>
+  );
+}
+
+export function InlineAgentRun({
+  sessionId,
+  runId,
+  canApprove,
+  onOpen,
+  showGoal = true,
+  compact = false,
+}: {
+  readonly sessionId: string;
+  readonly runId: string;
+  readonly canApprove: boolean;
+  readonly onOpen: () => void;
+  readonly showGoal?: boolean;
+  readonly compact?: boolean;
+}) {
+  const run = useResource(`ai:run:inline:${sessionId}:${runId}`, signal => aiAgentApi.get(sessionId, runId, signal).then(result => result.data), {
+    refreshIntervalMs: 2000,
+    shouldPoll: value => !TERMINAL.has((value as AgentRun).state),
+  });
+  const decide = useAction((approvalId: string, decision: "approve" | "deny") => aiApi.decideApproval(sessionId, approvalId, { decision }));
+  const advance = useAction((revision: number) => aiAgentApi.advance(sessionId, runId, revision));
+  const data = run.state.status === "ready" ? run.state.data : null;
+  const last = data?.steps.at(-1);
+
+  async function decideCall(approvalId: string, decision: "approve" | "deny") {
+    await decide.run(approvalId, decision);
+    run.refreshSilent();
+  }
+
+  return (
+    <div className={`${compact ? "mx-0" : "mx-3 mb-3"} rounded-xl border border-primary/20 bg-primary/[0.03] p-3`}>
+      <div className="flex flex-wrap items-center gap-2 text-sm">
+        {data && !TERMINAL.has(data.state) ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /> : <Bot aria-hidden="true" className="size-4 text-emerald-600" />}
+        <strong className="text-foreground">Agent {data ? STATE_LABEL[data.state] : "读取中"}</strong>
+        {data ? <Badge variant="info">{data.steps.length} / {data.maxSteps} 步</Badge> : null}
+        <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={onOpen}>查看完整过程</Button>
+      </div>
+      {showGoal && data?.goal ? <p className="mt-1.5 text-xs text-muted-foreground">目标：{data.goal}</p> : null}
+      {run.state.status === "error" ? <Notice tone="error" title="执行状态读取失败">{describeApiError(run.state.error)}</Notice> : null}
+      {decide.error ? <Notice tone="error" title="审批未完成">{describeApiError(decide.error)}</Notice> : null}
+      {advance.error ? <Notice tone="error" title="继续失败">{describeApiError(advance.error)}</Notice> : null}
+      {data ? (
+        <ol className="mt-2 space-y-2">
+          {data.steps.map(step => (
+            <li key={step.number} className="rounded-lg border border-border/70 bg-card px-3 py-2 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold text-foreground">第 {step.number} 步 · {step.toolName ?? "模型规划"}</span>
+                <span className="text-muted-foreground">{STATE_LABEL[step.state]}</span>
+                {step.nodeIds.length ? <span className="text-muted-foreground">· {step.nodeIds.length} 个节点</span> : null}
+              </div>
+              {step.plan ? (
+                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">规划：{step.plan}</p>
+              ) : (
+                <p className="mt-1 text-muted-foreground">
+                  {step.toolName ? `规划：调用 ${step.toolName}${step.nodeIds.length ? ` 处理 ${step.nodeIds.length} 个节点` : ""}` : step.state === "thinking" ? "模型正在规划下一步…" : ""}
+                </p>
+              )}
+              {step.result ? (
+                <details className="mt-1">
+                  <summary className="cursor-pointer font-medium text-emerald-700">执行结果</summary>
+                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-[#141724] p-2 font-mono text-[11px] text-emerald-200">{step.result}</pre>
+                </details>
+              ) : null}
+              {step.taskId ? <a className="mt-1 inline-block font-medium text-primary underline" href={`#/tasks/${encodeURIComponent(step.taskId)}`}>查看任务 · {step.taskState ?? "等待状态"}</a> : null}
+            </li>
+          ))}
+        </ol>
+      ) : null}
+      {data?.state === "waiting_approval" && last?.approvalId ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2 text-xs">
+          <ShieldAlert aria-hidden="true" className="size-4 text-amber-600" />
+          <span className="text-foreground">需要你批准本次工具调用。</span>
+          <Button type="button" size="sm" variant="primary" disabled={!canApprove || decide.pending} onClick={() => void decideCall(last.approvalId!, "approve")}>批准</Button>
+          <Button type="button" size="sm" variant="danger" disabled={!canApprove || decide.pending} onClick={() => void decideCall(last.approvalId!, "deny")}>拒绝</Button>
+        </div>
+      ) : null}
+      {data && !TERMINAL.has(data.state) && !data.driverActive ? (
+        <div className="mt-2">
+          <Button type="button" size="sm" loading={advance.pending} onClick={async () => { await advance.run(data.revision); run.refreshSilent(); }}>继续运行</Button>
+        </div>
+      ) : null}
+      {data?.finalText ? (
+        <div className="mt-2 rounded-lg border border-emerald-500/25 bg-card px-3 py-2">
+          <p className="text-xs font-semibold text-emerald-700">AI 最终答复</p>
+          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{data.finalText}</p>
+        </div>
+      ) : null}
+      {data?.stopReason ? <p className="mt-1 break-all text-xs text-muted-foreground">停止原因：{data.stopReason}</p> : null}
+    </div>
   );
 }

@@ -39,7 +39,7 @@ func TestReviewFollowupMissingCreateIDThroughServiceAndHTTP(t *testing.T) {
 			provider := cloudflareServerProvider(t, ts)
 			f := newDNSFixture(t, nil, provider, nil)
 			ctx := context.Background()
-			account, err := f.service.CreateAccount(ctx, "admin", "r-account", dns.CreateAccountInput{ID: "acct-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true, Credential: dns.CredentialRef("secret/cf-1")})
+			account, err := f.service.CreateAccount(ctx, "admin", "r-account", dns.CreateAccountInput{ID: "acct-1", DisplayName: "Cloudflare", Enabled: true, MakeDefault: true, Credential: dns.CredentialRef("secret/cf-1"), CredentialRevision: 1})
 			if err != nil {
 				t.Fatal(err)
 			}

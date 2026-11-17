@@ -195,7 +195,8 @@ func (b *agentLinkBridge) admit(ctx context.Context, observation transport.LinkO
 	if task.ActionID == transport.CommandCapability || task.ActionID == transport.RootCommandCapability {
 		params, e := transport.ParseCommandParameters(offer.CanonicalParametersJson)
 		validSource := (task.Source == "web" && task.ScopeRevision == 0) || (task.Source == "ai" && task.ScopeRevision > 0)
-		if e != nil || !validSource || task.PluginID != "" || !task.ApprovalRequired || offer.TimeoutSeconds != uint32(params.TimeoutSeconds) {
+		approvalSatisfied := task.ApprovalRequired || task.Source == "ai" && task.ScopeRevision > 0
+		if e != nil || !validSource || task.PluginID != "" || !approvalSatisfied || offer.TimeoutSeconds != uint32(params.TimeoutSeconds) {
 			return transport.ErrLinkRejected
 		}
 		class := tasks.OperationClassModifying

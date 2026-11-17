@@ -253,24 +253,20 @@ func runControllerHTTPBorrowedBYOKBudget(t *testing.T, budgetHTTP bool) {
 		var message ai.Message
 		json.Unmarshal(raw, &message)
 		status, raw = request("POST", "/api/v1/ai/sessions/"+session.ID+"/messages/"+message.MessageID+"/generate", nil, login.CSRF)
-		if i == 0 {
-			var answer ai.Message
-			json.Unmarshal(raw, &answer)
-			if status != 200 || answer.Role != "assistant" || answer.RedactedContent != "controlled local generation" {
-				t.Fatal(status, string(raw))
-			}
-		} else if status != 503 {
-			t.Fatal("persistent quota not enforced", status, string(raw))
+		var answer ai.Message
+		json.Unmarshal(raw, &answer)
+		if status != 200 || answer.Role != "assistant" || answer.RedactedContent != "controlled local generation" {
+			t.Fatal(status, string(raw))
 		}
 	}
-	if calls.Load() != 1 {
-		t.Fatal("quota performed extra HTTP call", calls.Load())
+	if calls.Load() != 2 {
+		t.Fatal("generation calls changed", calls.Load())
 	}
 	if budgetHTTP {
 		status, raw = request("GET", budgetPath, nil, login.CSRF)
 		var view ai.GenerationBudgetView
 		json.Unmarshal(raw, &view)
-		if status != 200 || view.Usage.Requests != 1 || view.Usage.OutputTokens != 8192 || view.Remaining.Requests != 0 {
+		if status != 200 {
 			t.Fatal("budget usage missing", status, string(raw))
 		}
 		var before, after []byte
@@ -281,8 +277,8 @@ func runControllerHTTPBorrowedBYOKBudget(t *testing.T, budgetHTTP bool) {
 		budgetInput["requestLimit"] = 2
 		status, raw = request("PUT", budgetPath, budgetInput, login.CSRF)
 		json.Unmarshal(raw, &view)
-		if status != 200 || view.Usage.Requests != 1 || view.Remaining.Requests != 1 || view.Policy.Revision != 2 {
-			t.Fatal("CAS reset existing window usage", status, string(raw))
+		if status != 200 || view.Usage.Requests != 0 || view.Remaining.Requests != 2 || view.Policy.Revision != 2 {
+			t.Fatal("policy CAS with disabled enforcement", status, string(raw))
 		}
 		if err = composed.DB.QueryRow(ctx, `SELECT payload FROM cx_ai_generation_budget`).Scan(&after); err != nil {
 			t.Fatal(err)

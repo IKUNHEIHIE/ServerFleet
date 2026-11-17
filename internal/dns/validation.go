@@ -23,12 +23,15 @@ func normalizeCreateAccountInput(input CreateAccountInput, now time.Time) (accou
 		if err := input.Credential.Validate(); err != nil {
 			return accountRecord{}, err
 		}
+		if input.CredentialRevision == 0 {
+			return accountRecord{}, fmt.Errorf("%w: credential revision", ErrInvalidInput)
+		}
 		status = CredentialPendingVerification
 	}
 	return accountRecord{
 		ID: input.ID, ProviderCode: ProviderCloudflare, DisplayName: input.DisplayName,
 		Note: input.Note, Enabled: input.Enabled, IsDefault: input.MakeDefault,
-		CredentialRef: input.Credential, CredentialStatus: status,
+		CredentialRef: input.Credential, CredentialRevision: input.CredentialRevision, CredentialStatus: status,
 		CreatedAt: now, UpdatedAt: now,
 	}, nil
 }
@@ -43,6 +46,9 @@ func normalizeUpdateAccountInput(input UpdateAccountInput) (UpdateAccountInput, 
 	if input.Credential != "" {
 		if err := input.Credential.Validate(); err != nil {
 			return UpdateAccountInput{}, err
+		}
+		if input.CredentialRevision == 0 {
+			return UpdateAccountInput{}, fmt.Errorf("%w: credential revision", ErrInvalidInput)
 		}
 	}
 	return input, nil

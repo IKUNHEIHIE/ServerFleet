@@ -42,12 +42,16 @@ import (
 
 // Config configures the composed Controller management runtime.
 type Config struct {
-	InstallationCatalog       *InstallationCatalog
-	WebDirectory              string
-	DBPath                    string
-	CredentialKeyDir          string
-	AIGenerationQuota         ai.GenerationQuota
-	LocalAIProvider           *ai.LocalTLSProviderConfig
+	InstallationCatalog *InstallationCatalog
+	WebDirectory        string
+	DBPath              string
+	DBDriver            string
+	DBDSN               string
+	CredentialKeyDir    string
+	AIGenerationQuota   ai.GenerationQuota
+	LocalAIProvider     *ai.LocalTLSProviderConfig
+	// AITextEndpoint is a deployment-level OpenAI-compatible Responses URL.
+	AITextEndpoint            string
 	Origin                    string
 	StagingDir                string
 	Dispatcher                tasks.Dispatcher
@@ -157,17 +161,18 @@ type Server struct {
 	FileWorker           *FileExecutionWorker
 	AgentLinkHTTP        *transport.AgentLinkHTTP
 
-	AI               *ai.SessionService
-	AIAgent          *ai.AgentLoop
-	AIAgentHTTP      *ai.AgentHTTP
-	AIBudget         *ai.PersistentGenerationBudget
-	AIConversation   *ai.ConversationService
-	AIRuntime        *ai.BYOKRuntime
-	AIModelsHTTP     *ai.ModelSettingsHTTP
-	AIGenerationHTTP *ai.GenerationHTTP
-	AIManagement     *ai.ManagementHTTP
-	AIMessagesHTTP   *ai.MessagesHTTP
-	AIEventsHTTP     *ai.MessageEventsHTTP
+	AI                 *ai.SessionService
+	AIAgent            *ai.AgentLoop
+	AIAgentHTTP        *ai.AgentHTTP
+	AIBudget           *ai.PersistentGenerationBudget
+	AIConversation     *ai.ConversationService
+	AIRuntime          *ai.BYOKRuntime
+	AIModelsHTTP       *ai.ModelSettingsHTTP
+	AIModelCatalogHTTP *ai.ModelCatalogHTTP
+	AIGenerationHTTP   *ai.GenerationHTTP
+	AIManagement       *ai.ManagementHTTP
+	AIMessagesHTTP     *ai.MessagesHTTP
+	AIEventsHTTP       *ai.MessageEventsHTTP
 
 	Plugins          *plugins.LifecycleManager
 	PluginRepository plugins.RepositoryStore
@@ -232,7 +237,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("controller: create staging directory: %w", err)
 	}
 
-	db, err := storage.Open(ctx, storage.Config{Path: cfg.DBPath})
+	db, err := storage.Open(ctx, storage.Config{Path: cfg.DBPath, Driver: cfg.DBDriver, DSN: cfg.DBDSN})
 	if err != nil {
 		return nil, err
 	}
@@ -420,6 +425,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return ids, nil
 	})
 	var aiConversation *ai.ConversationService
+	var aiModels *ai.ModelSettingsService
 	var publicCertificates *publicCertificateExecution
 	keyDir := cfg.CredentialKeyDir
 	if keyDir == "" {
@@ -441,13 +447,22 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			if op.Module == "backups" && s != nil {
 				return s.backupCredentialGate(ctx, op)
 			}
-			if publicCertificates != nil && op.Module == "dns" {
-				return publicCertificates.credentialGate(ctx, op)
+			if op.Module == "dns" {
+				if publicCertificates != nil && publicCertificates.credentialGate(ctx, op) == nil {
+					return nil
+				}
+				return s.standaloneDNSGate(ctx, op)
 			}
 			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" {
 				return auth.ErrDenied
 			}
-			return aiConversation.CheckCredentialOperation(ctx, op)
+			if aiConversation.CheckCredentialOperation(ctx, op) == nil {
+				return nil
+			}
+			if aiModels != nil {
+				return aiModels.CheckModelsOperation(ctx, op)
+			}
+			return auth.ErrDenied
 		},
 		nil, // No registered reference reader: report unavailable, never a false empty list.
 	)
@@ -592,7 +607,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return cleanup(err)
 		}
 		s.PublicCertificates = publicCertificates
-		cfg.DNSProvider = publicCertificates.provider
+		// ACME runs its own DNS provider inside task scope. The standalone DNS
+		// console keeps its own provider/borrow window so web record writes do
+		// not inherit the task-scoped credential gate.
 	}
 	workers := map[string]tasks.Worker{}
 	if publicCertificates != nil {
@@ -722,6 +739,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	aiConversation = s.AIConversation
+	aiModels = s.AIRuntime.Models
 	if err := s.setupOperatorIncidents(); err != nil {
 		return cleanup(err)
 	}
@@ -765,12 +783,19 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 
+	dnsProvider := cfg.DNSProvider
+	if dnsProvider == nil {
+		dnsProvider, err = dns.NewCloudflareProvider(dns.CloudflareConfig{Secrets: dns.SecretBorrowerFunc(s.borrowStandaloneDNS)})
+		if err != nil {
+			return cleanup(err)
+		}
+	}
 	dnsService, err := dns.NewService(dns.Options{
 		DB:         db,
 		Repo:       dnsRepo,
 		Audit:      auditRecorder,
 		Authorizer: authorizer,
-		Provider:   cfg.DNSProvider,
+		Provider:   dnsProvider,
 		Now:        now,
 	})
 	if err != nil {

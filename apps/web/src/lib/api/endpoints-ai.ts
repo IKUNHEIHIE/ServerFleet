@@ -5,6 +5,7 @@ import type {
   AIApprovalMode,
   AIApprovalPolicy,
   AIApprovalRequest,
+  AIContextStats,
   AIExecuteResult,
   AIMessage,
   AIModelBudget,
@@ -13,6 +14,7 @@ import type {
   AIResourceRecommendation,
   AISecurityPolicy,
   AISession,
+  AISessionSummary,
   Page,
   PluginCatalogEntry,
   PluginOperation,
@@ -29,6 +31,7 @@ export interface AgentStep {
   readonly approvalId?: string;
   readonly taskId?: string;
   readonly taskState?: string;
+  readonly plan?: string;
   readonly result?: string;
   readonly messageId?: string;
   readonly startedAt: string;
@@ -66,6 +69,7 @@ export const aiAgentApi = {
 
 export const aiApi = {
   createSession: () => apiClient.request<AISession>("/api/v1/ai/sessions", { method: "POST", body: {} }),
+  sessions: (signal?: AbortSignal) => apiClient.request<{ items: readonly AISessionSummary[] }>("/api/v1/ai/sessions", { signal }),
   getSession: (sessionId: string, signal?: AbortSignal) =>
     apiClient.request<AISession>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}`, { signal }),
   grant: (sessionId: string, body: { resourceType: "node" | "service_group"; resourceId: string; allowedActions: readonly string[] }) =>
@@ -91,8 +95,14 @@ export const aiApi = {
     ),
   approvalPolicy: (sessionId: string, signal?: AbortSignal) =>
     apiClient.request<AIApprovalPolicy>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/approval-policy`, { signal }),
-  updateApprovalPolicy: (sessionId: string, body: { mode: AIApprovalMode; durationSeconds?: 900 | 1800 | 3600; userConfirmedFullAccess?: boolean }) =>
+  updateApprovalPolicy: (sessionId: string, body: { mode: AIApprovalMode }) =>
     apiClient.request<AIApprovalPolicy>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/approval-policy`, { method: "PATCH", body }),
+  updatePreferences: (sessionId: string, body: { model: string; reasoningEffort: "low" | "medium" | "high" | "" }) =>
+    apiClient.request<AISession>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/preferences`, { method: "PATCH", body }),
+  context: (sessionId: string, signal?: AbortSignal) =>
+    apiClient.request<AIContextStats>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/context`, { signal }),
+  compactContext: (sessionId: string, body: { keep: number }) =>
+    apiClient.request<AIContextStats>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/context/compact`, { method: "POST", body }),
   createApproval: (
     sessionId: string,
     body: { toolName: string; arguments: Record<string, unknown>; targetNodeIds: readonly string[]; scopeRevision: number },
@@ -116,7 +126,12 @@ export const aiApi = {
   messages: (sessionId: string, query: { limit?: number; cursor?: string } = {}, signal?: AbortSignal) =>
     apiClient.request<Page<AIMessage>>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, { query, signal }),
   sendMessage: (sessionId: string, body: { content: string; clientMessageId: string; scopeRevision: number }) =>
-    apiClient.request<AIMessage>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, { method: "POST", body }),
+    apiClient.request<AIMessage>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages`, {
+      method: "POST",
+      body,
+      // 真实 Controller 要求 Idempotency-Key；用客户端消息 ID 让重试保持同一意图。
+      idempotencyKey: body.clientMessageId,
+    }),
   // 显式生成：无请求体/查询参数；响应是服务端缓冲上游 SSE 至终态后的完整脱敏消息，
   // 不是浏览器逐 token 流。排队/回显用户文本不算生成成功。
   generate: (sessionId: string, messageId: string) =>
@@ -134,10 +149,12 @@ export const modelSettingsApi = {
     expectedRevision: number;
     enabled: boolean;
     provider: string;
+    endpoint?: string;
     model: string;
     credentialRef: string;
     credentialRevision: number;
   }) => apiClient.request<AIModelSettings>("/api/v1/ai/model-settings", { method: "PUT", body }),
+  catalog: () => apiClient.request<{ items: readonly string[]; endpoint: string }>("/api/v1/ai/model-settings/models", { method: "POST" }),
 };
 
 /**

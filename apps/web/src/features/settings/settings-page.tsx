@@ -1,4 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
+import { BellRing, Globe2, KeyRound, RefreshCw, Sparkles, UserRound, type LucideIcon } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
@@ -7,17 +8,19 @@ import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
 import { PageHeader, Panel } from "@/components/ui/panel";
-import { DataTable, TabBar } from "@/components/ui/table";
+import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { authApi, credentialsApi } from "@/lib/api/endpoints";
 import { NotificationsSettings } from "./notifications-settings";
 import { RestrictedTokensPanel } from "./restricted-tokens-panel";
 import { ControllerUpdatePanel } from "@/features/updates/updates-page";
+import { DnsAccountsPanel } from "@/features/dns/dns-accounts-panel";
+import { AiModelSettingsPanel } from "@/features/ai/ai-model-settings-panel";
 import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
-type Tab = "credentials" | "security" | "notifications" | "updates";
+type Tab = "credentials" | "dns" | "ai" | "security" | "notifications" | "updates";
 
 const KIND_LABEL: Record<CredentialMetadata["kind"], string> = {
   cloudflare_token: "Cloudflare API Token",
@@ -35,6 +38,21 @@ const STATUS_TEXT: Record<CredentialMetadata["status"], string> = {
   expired: "已过期",
   revoked: "已撤销",
 };
+
+const SETTINGS_TABS: readonly { id: Tab; label: string; description: string; icon: LucideIcon }[] = [
+  { id: "credentials", label: "安全凭据", description: "统一查看外部服务密钥；秘密只写不读。", icon: KeyRound },
+  { id: "security", label: "账号与会话", description: "当前账号、登录会话和受限访问令牌。", icon: UserRound },
+  { id: "dns", label: "DNS 账号", description: "添加、验证 Cloudflare 账号，并决定 DNS 页面使用哪个账号。", icon: Globe2 },
+  { id: "ai", label: "AI 模型", description: "选择模型和密钥，或直接新增 AI API Key。", icon: Sparkles },
+  { id: "notifications", label: "通知渠道", description: "配置告警发送渠道和投递方式。", icon: BellRing },
+  { id: "updates", label: "系统更新", description: "检查并安装 Controller 与 Agent 更新。", icon: RefreshCw },
+];
+
+const SETTINGS_GROUPS: readonly { label: string; ids: readonly Tab[] }[] = [
+  { label: "账号与密钥", ids: ["credentials", "security"] },
+  { label: "业务集成", ids: ["dns", "ai", "notifications"] },
+  { label: "维护", ids: ["updates"] },
+];
 
 function CredentialEditor({
   open,
@@ -223,30 +241,64 @@ export function SettingsPage() {
     }
   }
 
+  const activeTab = SETTINGS_TABS.find(item => item.id === tab) ?? SETTINGS_TABS[0];
+
   return (
     <div className="space-y-5">
       <PageHeader
         title="系统设置"
-        description="安全凭据、账号会话与系统级配置。秘密只写不读；页面不把隐藏按钮当作安全边界。"
+        description="按“账号与密钥、业务集成、维护”分组管理。秘密只写不读；不同业务在对应分组内维护。"
         badge={<Badge tone="primary" dot>设置</Badge>}
       />
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
-      <TabBar
-        label="系统设置分区"
-        active={tab}
-        onChange={setTab}
-        tabs={[
-          { id: "credentials", label: "安全凭据" },
-          { id: "security", label: "账号安全与会话" },
-          { id: "notifications", label: "通知渠道" },
-          { id: "updates", label: "系统更新" },
-        ]}
-      />
+      <div className="grid gap-4 lg:grid-cols-[15rem_minmax(0,1fr)]">
+        <nav aria-label="系统设置分区" className="h-fit rounded-2xl border border-border/90 bg-card p-2 shadow-[var(--shadow-card)] lg:sticky lg:top-4">
+          {SETTINGS_GROUPS.map(group => (
+            <div key={group.label} className="mb-1 last:mb-0">
+              <p className="px-2 pt-2 pb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted-foreground">{group.label}</p>
+              <div role="tablist" aria-label={group.label} className="space-y-0.5">
+                {SETTINGS_TABS.filter(item => group.ids.includes(item.id)).map(item => {
+                  const selected = tab === item.id;
+                  const Icon = item.icon;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      role="tab"
+                      aria-selected={selected}
+                      onClick={() => setTab(item.id)}
+                      className={
+                        "flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-sm transition-colors " +
+                        (selected
+                          ? "border border-primary/25 bg-primary/10 font-semibold text-primary"
+                          : "border border-transparent text-muted-foreground hover:bg-secondary hover:text-foreground")
+                      }
+                    >
+                      <Icon aria-hidden="true" className="size-4 shrink-0" />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          ))}
+        </nav>
+        <div className="min-w-0 space-y-4">
+          <div className="rounded-xl border border-border/80 bg-[#FAFBFD] px-4 py-3">
+            <p className="text-base font-semibold text-foreground">{activeTab.label}</p>
+            <p className="mt-0.5 text-sm text-muted-foreground">{activeTab.description}</p>
+          </div>
 
       {tab === "credentials" ? (
         <div className="space-y-5">
           {!canManage ? <Notice tone="warning" title="写操作已锁定">当前身份未返回凭据管理权限（`credential.manage`/`settings.manage`/`user.manage`）。</Notice> : null}
-          <Panel title="添加凭据" description="先选类型，再在弹窗中填写名称与秘密值。">
+          <Panel title="添加凭据" description="选择凭据类型后，在弹窗中填写名称与秘密值。">
+            <div className="flex flex-wrap items-center gap-2 border-b border-border/70 bg-[#FAFBFD] px-5 py-3 text-xs text-muted-foreground">
+              <span>常用入口：</span>
+              <Button type="button" size="sm" onClick={() => setTab("dns")}>Cloudflare Token 去「DNS 账号」</Button>
+              <Button type="button" size="sm" onClick={() => setTab("ai")}>AI Key 去「AI 模型」</Button>
+              <span>邮件、机器人与备份密钥在下方添加。</span>
+            </div>
             <div className="flex flex-wrap gap-2 px-5 py-4">
               {(Object.keys(KIND_LABEL) as CredentialMetadata["kind"][]).map(value => (
                 <Button
@@ -316,6 +368,10 @@ export function SettingsPage() {
 
       {tab === "notifications" ? <NotificationsSettings onOpenCredentials={() => setTab("credentials")} /> : null}
 
+      {tab === "dns" ? <DnsAccountsPanel key={session.viewEpoch} /> : null}
+
+      {tab === "ai" ? <AiModelSettingsPanel key={session.viewEpoch} /> : null}
+
       {tab === "updates" ? (
         <div className="space-y-4">
           <Notice tone="info" title="与更新中心共用同一份状态">
@@ -370,6 +426,8 @@ export function SettingsPage() {
           <RestrictedTokensPanel key={session.viewEpoch} />
         </div>
       ) : null}
+        </div>
+      </div>
 
       <CredentialEditor
         open={editor.open}

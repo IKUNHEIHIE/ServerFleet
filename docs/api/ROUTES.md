@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **278** 个不同的 method/path 声明，其中 **3** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **285** 个不同的 method/path 声明，其中 **10** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -22,16 +22,21 @@
 | GET | `/api/v1/ai/model-settings` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [getAIModelSettingsR6](../../api/openapi/revisions/v09-r6/ai-candidate.yaml) |
 | GET | `/api/v1/ai/model-settings/{profileId}/budget` | [ai_budget_http.go](../../apps/controller/server/ai_budget_http.go) · RegisterAIBudgetRoutes | [getOwnerAIBudgetR7](../../api/openapi/revisions/v09-r7/ai-budget-candidate.yaml) |
 | GET | `/api/v1/ai/security-policy` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [getAISecurityPolicy](../../api/openapi/g2-merged-candidate.yaml) |
+| GET | `/api/v1/ai/sessions` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
 | GET | `/api/v1/ai/sessions/{sessionId}` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [getAISession](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/ai/sessions/{sessionId}/approval-policy` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [getAISessionApprovalPolicy](../../api/openapi/g2-merged-candidate.yaml) |
+| GET | `/api/v1/ai/sessions/{sessionId}/context` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
 | GET | `/api/v1/ai/sessions/{sessionId}/events` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [streamAISessionEventsG2](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/ai/sessions/{sessionId}/messages` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [listAISessionMessagesG2](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/ai/sessions/{sessionId}/runs` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [listAIAgentRunsR28](../../api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml) |
 | GET | `/api/v1/ai/sessions/{sessionId}/runs/{runId}` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [getAIAgentRunR28](../../api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml) |
 | PATCH | `/api/v1/ai/sessions/{sessionId}/approval-policy` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [updateAISessionApprovalPolicy](../../api/openapi/g2-merged-candidate.yaml) |
+| PATCH | `/api/v1/ai/sessions/{sessionId}/preferences` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
+| POST | `/api/v1/ai/model-settings/models` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
 | POST | `/api/v1/ai/sessions` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [createAISession](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/approvals` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [createAIToolApproval](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/approvals/{approvalId}/decision` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [decideAIToolApproval](../../api/openapi/g2-merged-candidate.yaml) |
+| POST | `/api/v1/ai/sessions/{sessionId}/context/compact` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
 | POST | `/api/v1/ai/sessions/{sessionId}/grants` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [grantAIResource](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/messages` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [createAIMessageG2](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [generateAIQueuedMessageR6](../../api/openapi/revisions/v09-r6/ai-candidate.yaml) |
@@ -148,6 +153,7 @@
 | DELETE | `/api/v1/dns/zones/{zoneId}/records/{recordId}` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [deleteDNSRecord](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/dns/accounts` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [listDNSAccounts](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/dns/accounts/{accountId}` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [getDNSAccount](../../api/openapi/g2-merged-candidate.yaml) |
+| GET | `/api/v1/dns/accounts/{accountId}/provider-zones` | [http.go](../../internal/dns/http.go) · RegisterHTTP | 未覆盖；以源码和领域说明为准 |
 | GET | `/api/v1/dns/accounts/{accountId}/zones` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [listDNSZones](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/dns/providers` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [listDNSProviders](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/dns/zones/{zoneId}/records` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [listDNSRecords](../../api/openapi/g2-merged-candidate.yaml) |
@@ -160,6 +166,7 @@
 | POST | `/api/v1/dns/provider-tasks` | [dns_execution.go](../../apps/controller/server/dns_execution.go) · registerDNSProviderTaskRoutes | [submitDNSProviderInspectionR17](../../api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml) |
 | POST | `/api/v1/dns/record-tasks` | [dns_record_tasks.go](../../apps/controller/server/dns_record_tasks.go) · registerDNSRecordTaskRoutes | [submitDNSRecordChangeR18](../../api/openapi/revisions/v09-r18/dns-record-tasks-candidate.yaml) |
 | POST | `/api/v1/dns/zones/{zoneId}/records` | [http.go](../../internal/dns/http.go) · RegisterHTTP | [createDNSRecord](../../api/openapi/g2-merged-candidate.yaml) |
+| POST | `/api/v1/dns/zones/{zoneId}/records/sync` | [http.go](../../internal/dns/http.go) · RegisterHTTP | 未覆盖；以源码和领域说明为准 |
 
 ## enrollment-tokens
 
