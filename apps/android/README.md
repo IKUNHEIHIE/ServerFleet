@@ -1,5 +1,10 @@
 # Server Fleet Android App（预览版）
 
+[下载 Android 0.1.0-preview](https://agent.wentian.org:8443/assets/serverfleet-mobile-0.1.0-preview.apk)。
+安装后填写 https://agent.wentian.org:8443（或另一已更新的 Server Fleet 控制台）和管理员账号密码。
+[本次工件与验证回执](../../docs/development/DEPLOY-MOBILE-20261118.md)。
+
+
 Android 10 及以上，系统 Android System WebView 保持更新。启动填写 HTTPS 控制台网址、
 管理员账号与密码；仅保留网址和账号，不保存密码。支持自定义端口、粘贴网页控制台链接。
 服务端需包含 mobile-app-v1 移动入口（本次增量），无需额外端口或 AI 配置。
