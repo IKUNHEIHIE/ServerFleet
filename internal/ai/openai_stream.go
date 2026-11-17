@@ -143,6 +143,13 @@ func decodeResponseStreamObserved(ctx context.Context, reader io.Reader, model s
 			if err != nil || visible != delta.String() {
 				return ErrGenerationUnknown
 			}
+			finalReasoning, finalSummary := responseReasoning(e.Response)
+			if reasoning.Len() == 0 {
+				reasoning.WriteString(finalReasoning)
+			}
+			if summary.Len() == 0 {
+				summary.WriteString(finalSummary)
+			}
 			if observe != nil {
 				if summary.Len() > 0 {
 					if err := observe("summary_completed", summary.String()); err != nil {

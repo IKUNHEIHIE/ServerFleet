@@ -275,3 +275,18 @@ func TestChatModelCapabilityProbeUsesSelectedProtocol(t *testing.T) {
 		t.Fatal(result, err)
 	}
 }
+
+func TestResponsesCompletionPreservesPlaintextReasoningWithoutDeltas(t *testing.T) {
+	output := []any{
+		map[string]any{"type": "reasoning", "content": []any{map[string]string{"type": "reasoning_text", "text": "Full reasoning returned at completion"}}, "summary": []any{map[string]string{"type": "summary_text", "text": "Final summary"}}},
+		map[string]any{"type": "message", "role": "assistant", "status": "completed", "content": []any{map[string]string{"type": "output_text", "text": "Done"}}},
+	}
+	response := map[string]any{"id": "completed-fields", "object": "response", "model": "fixture-model", "status": "completed", "store": false, "output": output}
+	stream := "data: " + protocolJSON(t, map[string]any{"type": "response.output_text.delta", "sequence_number": 0, "delta": "Done"}) + "\n\n"
+	stream += "data: " + protocolJSON(t, map[string]any{"type": "response.completed", "sequence_number": 1, "response": response}) + "\n\n"
+	observed := map[string]string{}
+	text, err := decodeProviderStreamObserved(context.Background(), strings.NewReader(stream), "fixture-model", func(kind, value string) error { observed[kind] = value; return nil })
+	if err != nil || text != "Done" || observed["reasoning_completed"] != "Full reasoning returned at completion" || observed["summary_completed"] != "Final summary" {
+		t.Fatal(text, observed, err)
+	}
+}
