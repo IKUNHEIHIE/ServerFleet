@@ -1,5 +1,23 @@
 # 当前接口说明
 
+## 2026-11-18 AI 交互与模型协议增量
+
+修改：模型设置 provider 接受 openai-responses（原有）与 openai-chat-completions（新增），
+保存的基础端点统一移除 /responses 或 /chat/completions 后缀；
+聊天/Agent/能力检测按保存的协议调用，不自动重放另一协议。
+
+新增可选字段：AI Message、AgentStep 的 reasoningContent（64 KiB）；
+AgentStep 的 reasoningSummary（8 KiB），plan 仍为执行计划。
+POST generate 的 SSE preview.kind 新增 reasoning，现有 text/summary/completed 语义不变；
+预览与正式提交仍分离。执行中的 Agent 推理预览通过原运行 GET/轮询返回，
+只有最终验证成功才持久保存到步骤。
+前端新增 Markdown 呈现，不改变存储原文或工具回执。
+
+函数调用修改：每轮最多 8 个标准函数提案，可采用 Responses、Chat tool_calls 或旧式
+function_call 回包。多提案按顺序执行、分别关联 call_id，完成后再请求模型；
+不新增任务直连端点。profile 参数兼容数组/字符串 arguments 与数字/字符串 timeoutSeconds。
+既有状态枚举与审批接口保留；本增量不声明所有 hosted tools 可用。
+
 核对：2026-11-17 / v0.9.2 增量。先读 [开发交接](../development/HANDOFF.md)、[当前状态](../development/CURRENT-STATE.md)。本文及增量修订用于定位实际接口，未宣称统一 OpenAPI 已全字段核验/冻结。
 
 v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完整证书链及有效旧回执的公开 PEM 响应，不新增业务路由或字段；撤销/过期/代次校验不变。安装 catalog 的既有 url/sha256 默认用于固定版本 raw 安装入口，新版命令增加公开 bootstrap CA，令牌仍不进入命令。

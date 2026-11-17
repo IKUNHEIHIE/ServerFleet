@@ -34,6 +34,7 @@ func newBYOKRuntime(sessions *SessionService, credentials *auth.CredentialServic
 		return nil, err
 	}
 	provider.endpointFor = models.EndpointFor
+	provider.protocolFor = models.ProtocolFor
 	conversation, err := NewConversationService(sessions, ConversationConfig{Profile: models.Profile, Filter: filter, Generate: func(ctx context.Context, r GenerationRequest, emit func(string) error) error {
 		if quota(ctx, r) != nil || ctx.Err() != nil {
 			return ErrToolDenied

@@ -35,6 +35,8 @@ export interface AgentStep {
   readonly result?: string;
   readonly messageId?: string;
   readonly startedAt: string;
+  readonly reasoningContent?: string;
+  readonly reasoningSummary?: string;
 }
 export interface AgentRun {
   readonly id: string;

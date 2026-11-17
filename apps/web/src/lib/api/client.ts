@@ -304,7 +304,7 @@ export class ApiClient {
           const { done, value } = await reader.read();
           if (done) break;
           total += value.byteLength;
-          if (total > 16 * 1024 * 1024) throw new ApiError({ kind: "invalid", status: response.status });
+          if (total > 64 * 1024 * 1024) throw new ApiError({ kind: "invalid", status: response.status });
           buffer += decoder.decode(value, { stream: true });
           let boundary: number;
           while ((boundary = buffer.indexOf("\n\n")) >= 0) {

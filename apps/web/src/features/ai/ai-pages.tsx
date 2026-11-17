@@ -1,3 +1,4 @@
+import { AIMarkdown } from "./ai-markdown";
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import { Bot, Brain, Check, CheckCircle2, ChevronDown, Gauge, Layers, Loader2, RefreshCw, Send, Server, ShieldAlert, Sparkles, User, Zap } from "lucide-react";
 import { useSession } from "@/app/session";
@@ -474,6 +475,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const [events, setEvents] = useState<readonly AIStreamEvent[]>([]);
   const [livePreview, setLivePreview] = useState("");
   const [liveSummary, setLiveSummary] = useState("");
+  const [liveReasoning, setLiveReasoning] = useState("");
   const [runSteps, setRunSteps] = useState(16);
   const [runSeconds, setRunSeconds] = useState(1800);
   const [streamError, setStreamError] = useState<unknown>(null);
@@ -524,12 +526,14 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   async function runGenerate(messageId: string) {
     setLivePreview("");
     setLiveSummary("");
+    setLiveReasoning("");
     setGeneratingMessageId(messageId);
     setGenerateError(null);
     try {
       const result = await aiApi.generate(sessionId, messageId, (kind, text) => {
         if (kind === "text") setLivePreview(text);
         if (kind === "summary") setLiveSummary(text);
+        if (kind === "reasoning") setLiveReasoning(text);
       });
       if (!messageItems.some(message => message.messageId === result.data.messageId)) {
         setLivePreview(result.data.redactedContent ?? "");
@@ -548,6 +552,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
       setGeneratingMessageId(null);
       setLivePreview("");
       setLiveSummary("");
+    setLiveReasoning("");
     }
   }
 
@@ -700,7 +705,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
           if (result.ok && result.data) setCapability({ forModel, ...result.data.data });
         }}>检测模型能力</Button>
         <span>发送小型检测请求，不执行节点操作</span>
-        {capability && capability.forModel === (current?.model ?? "") ? <span>工具调用：{capability.toolCalls ? "已验证" : "未通过"} · 思考摘要：{capability.reasoning ? "已验证" : "未验证"}</span> : null}
+        {capability && capability.forModel === (current?.model ?? "") ? <span>工具调用：{capability.toolCalls ? "已验证" : "未通过"} · 推理输出：{capability.reasoning ? "已验证" : "未验证"}</span> : null}
         {probeModel.error ? <span role="alert">{describeApiError(probeModel.error)}</span> : null}
       </div>
       {composerMode === "agent" ? (
@@ -803,13 +808,19 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                                   {isUser ? "你" : "AI"} · {formatDateTime(message.createdAt) ?? "—"}
                                 </span>
                               </div>
-                              {message.reasoningSummary ? (
+                              {message.reasoningContent ? (
                                 <details className="mt-2">
-                                  <summary className="cursor-pointer text-sm text-muted-foreground">思考过程 · 简要摘要</summary>
-                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{message.reasoningSummary}</p>
+                                  <summary className="cursor-pointer text-sm text-muted-foreground">思考过程 · 模型输出</summary>
+                                  <AIMarkdown className="mt-2">{message.reasoningContent}</AIMarkdown>
                                 </details>
                               ) : null}
- <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{message.redactedContent ?? "服务端未返回内容"}</p>
+                              {message.reasoningSummary ? (
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-sm text-muted-foreground">思考摘要</summary>
+                                  <AIMarkdown className="mt-2">{message.reasoningSummary}</AIMarkdown>
+                                </details>
+                              ) : null}
+ {isUser ? <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{message.redactedContent ?? "服务端未返回内容"}</p> : <AIMarkdown className="mt-2">{message.redactedContent ?? "服务端未返回内容"}</AIMarkdown>}
                               {message.taskIds?.length ? <p className="mt-1.5 text-xs text-muted-foreground">任务：{message.taskIds.join("、")}</p> : null}
                               {message.role === "user" && !message.agentRunId && generateError && generatingMessageId === null ? (
                                 <div className="mt-3">
@@ -819,15 +830,21 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                             </div>
                           );
                         })}
-                        {generatingMessageId !== null && (livePreview || liveSummary) ? (
+                        {generatingMessageId !== null && (livePreview || liveSummary || liveReasoning) ? (
                           <div className="px-4 py-3" aria-live="polite">
-                            {liveSummary ? (
-                              <details>
-                                <summary className="cursor-pointer text-sm text-muted-foreground">思考过程 · 简要摘要</summary>
-                                <p className="whitespace-pre-wrap text-sm">{liveSummary}</p>
+                            {liveReasoning ? (
+                              <details open>
+                                <summary className="cursor-pointer text-sm text-muted-foreground">思考过程 · 模型输出</summary>
+                                <AIMarkdown>{liveReasoning}</AIMarkdown>
                               </details>
                             ) : null}
-                            <p className="whitespace-pre-wrap text-sm leading-7">{livePreview}</p>
+                            {liveSummary ? (
+                              <details>
+                                <summary className="cursor-pointer text-sm text-muted-foreground">思考摘要</summary>
+                                <AIMarkdown>{liveSummary}</AIMarkdown>
+                              </details>
+                            ) : null}
+                            <AIMarkdown>{livePreview}</AIMarkdown>
                             <span className="text-xs text-muted-foreground">正在生成，尚未确认完成</span>
                           </div>
                         ) : null}

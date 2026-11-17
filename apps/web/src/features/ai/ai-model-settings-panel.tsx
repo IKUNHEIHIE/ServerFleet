@@ -118,6 +118,7 @@ function ModelSettingsForm({
   readonly onConflict: () => void;
 }) {
   const [enabled, setEnabled] = useState(data.enabled);
+  const [provider, setProvider] = useState(data.provider || "openai-responses");
   const [endpoint, setEndpoint] = useState(data.endpoint ?? "");
   const [model, setModel] = useState(data.model);
   const [credentialRef, setCredentialRef] = useState(data.credentialRef);
@@ -147,7 +148,7 @@ function ModelSettingsForm({
     const result = await save.run({
       expectedRevision: data.revision,
       enabled,
-      provider: "openai-responses",
+      provider,
       ...(endpoint.trim() || data.endpoint ? { endpoint: endpoint.trim() } : {}),
       model: model.trim(),
       credentialRef,
@@ -176,11 +177,19 @@ function ModelSettingsForm({
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">连接信息</summary>
         <div className="mt-2 grid gap-1 sm:grid-cols-2">
-          <p>接入方式：OpenAI 兼容 Responses</p>
+          <p>接入方式：{data.provider === "openai-chat-completions" ? "Chat Completions" : "Responses"}</p>
           <p>密钥引用：{data.credentialRef ? `已绑定（第 ${data.credentialRevision} 版）` : "未绑定"}</p>
           <p>配置修订：{data.revision}</p>
         </div>
       </details>
+      <Field label="接口协议" hint="按服务商文档选择；保存后用于聊天、Agent 工具调用与流式输出。">
+        {ids => (
+          <Select id={ids.inputId} value={provider} onChange={event => setProvider(event.target.value)} disabled={!isAdmin || writesLocked}>
+            <option value="openai-responses">OpenAI Responses</option>
+            <option value="openai-chat-completions">OpenAI Chat Completions</option>
+          </Select>
+        )}
+      </Field>
       <Field label="模型端点" hint="OpenAI 兼容基础地址，例如 https://api.stepfun.com/step_plan/v1；留空使用部署默认。">
         {ids => <TextInput id={ids.inputId} type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} placeholder="https://api.example.com/v1" maxLength={512} disabled={!isAdmin || writesLocked} autoComplete="off" />}
       </Field>

@@ -104,7 +104,7 @@ func (h *ModelCatalogHTTP) probe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	op := auth.CredentialOperation{SubjectID: principal.SubjectID, CredentialID: cfg.CredentialRef, Module: "ai", Source: "ai", OperationID: "ai-models-probe-" + id, PlanDigest: modelsPlanDigest(cfg.Endpoint), Action: "use", ExpectedRevision: cfg.CredentialRevision}
-	result, err := h.runtime.ProbeModel(ctx, op, cfg.Endpoint, input.Model)
+	result, err := h.runtime.ProbeModel(ctx, op, cfg.Endpoint, input.Model, cfg.Provider)
 	if err != nil {
 		writeAIError(w, err)
 		return

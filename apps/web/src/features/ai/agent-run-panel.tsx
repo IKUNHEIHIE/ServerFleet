@@ -1,3 +1,4 @@
+import { AIMarkdown } from "./ai-markdown";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Bot, Cpu, Loader2, ShieldAlert, Sparkles, Wrench } from "lucide-react";
 import { useSession } from "@/app/session";
@@ -144,7 +145,7 @@ function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { r
                     <Bot aria-hidden="true" className="size-4 text-emerald-600" />
                     最终答复
                   </h3>
-                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-foreground">{data.finalText}</p>
+                  <AIMarkdown className="mt-2">{data.finalText}</AIMarkdown>
                 </GlowingEffect>
               ) : null}
               {data.stopReason ? <p className="break-all text-sm text-muted-foreground">停止原因：{data.stopReason}</p> : null}
@@ -184,14 +185,7 @@ function StepCard({ step }: { readonly step: AgentStep }) {
           </pre>
         </details>
       ) : null}
-      {step.plan ? (
-        <details className="mt-2.5" open={step.state === "waiting_approval"}>
-          <summary className="cursor-pointer text-xs font-semibold text-primary">规划说明</summary>
-          <p className="mt-1 whitespace-pre-wrap rounded-lg border border-border/70 bg-[#FAFBFD] p-2.5 text-xs leading-5 text-muted-foreground">{step.plan}</p>
-        </details>
-      ) : step.toolName || step.state === "thinking" ? (
-        <p className="mt-2 text-xs text-muted-foreground">{step.toolName ? `规划：调用 ${step.toolName}${step.nodeIds.length ? ` 处理 ${step.nodeIds.length} 个节点` : ""}` : "模型正在规划下一步…"}</p>
-      ) : null}
+      <AgentThoughts step={step} />
       {step.taskId ? (
         <p className="mt-2 text-xs">
           <a className="font-semibold text-primary underline" href={`#/tasks/${encodeURIComponent(step.taskId)}`}>查看关联任务与审批</a> · {step.taskState ?? "等待状态"}
@@ -255,12 +249,7 @@ export function InlineAgentRun({
         <ol className="mt-2 space-y-2">
           {data.steps.map(step => (
             <li key={step.number} className="py-2 text-sm">
-              <details className="mb-3">
-                <summary className="cursor-pointer text-muted-foreground">思考过程{step.state === "thinking" ? " · 正在规划" : ""}</summary>
-                <p className="mt-2 whitespace-pre-wrap leading-7">
-                  {step.plan || (step.toolName ? "计划调用 " + step.toolName + "，目标节点：" + step.nodeIds.join("、") : "模型未提供简要思考摘要。")}
-                </p>
-              </details>
+              <AgentThoughts step={step} />
               {step.toolName ? (
                 <details>
                   <summary className="cursor-pointer text-muted-foreground">
@@ -303,10 +292,36 @@ export function InlineAgentRun({
       {data?.finalText ? (
         <div className="mt-2 rounded-lg border border-emerald-500/25 bg-card px-3 py-2">
           <p className="text-xs font-semibold text-emerald-700">AI 最终答复</p>
-          <p className="mt-1 whitespace-pre-wrap text-sm leading-6 text-foreground">{data.finalText}</p>
+          <AIMarkdown className="mt-1">{data.finalText}</AIMarkdown>
         </div>
       ) : null}
       {data?.stopReason ? <p className="mt-1 break-all text-xs text-muted-foreground">停止原因：{data.stopReason}</p> : null}
+    </div>
+  );
+}
+
+
+export function AgentThoughts({ step }: { readonly step: AgentRun["steps"][number] }) {
+  return (
+    <div className="space-y-2">
+      {step.reasoningContent ? (
+        <details open={step.state === "thinking"}>
+          <summary className="cursor-pointer text-muted-foreground">思考过程 · 模型输出</summary>
+          <AIMarkdown className="mt-2">{step.reasoningContent}</AIMarkdown>
+        </details>
+      ) : null}
+      {step.reasoningSummary ? (
+        <details>
+          <summary className="cursor-pointer text-muted-foreground">思考摘要</summary>
+          <AIMarkdown className="mt-2">{step.reasoningSummary}</AIMarkdown>
+        </details>
+      ) : null}
+      {step.plan ? (
+        <details>
+          <summary className="cursor-pointer text-muted-foreground">执行计划</summary>
+          <AIMarkdown className="mt-2">{step.plan}</AIMarkdown>
+        </details>
+      ) : step.state === "thinking" ? <p className="text-muted-foreground">模型正在规划下一步…</p> : null}
     </div>
   );
 }

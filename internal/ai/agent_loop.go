@@ -21,6 +21,7 @@ type AgentLoop struct {
 	workers      map[string]context.CancelFunc
 	closed       bool
 	wg           sync.WaitGroup
+	previews     sync.Map
 }
 
 func NewAgentLoop(s *SessionService, c *ConversationService, cfg AgentLoopConfig) (*AgentLoop, error) {
@@ -84,7 +85,16 @@ func (l *AgentLoop) Get(ctx context.Context, session, id string) (AgentRun, erro
 	if e != nil || view.ScopeRevision != v.ScopeRevision && !agentTerminal(v.State) {
 		return AgentRun{}, ErrScopeConflict
 	}
+	l.applyPreview(&v)
 	for i := range v.Steps {
+		for _, field := range []*string{&v.Steps[i].ReasoningContent, &v.Steps[i].ReasoningSummary} {
+			if *field != "" {
+				*field, e = l.conversation.filter(ctx, view, "assistant", *field)
+				if e != nil {
+					return AgentRun{}, e
+				}
+			}
+		}
 		if v.Steps[i].Plan != "" {
 			v.Steps[i].Plan, e = l.conversation.filter(ctx, view, "assistant", v.Steps[i].Plan)
 			if e != nil {
@@ -169,7 +179,16 @@ func (l *AgentLoop) List(ctx context.Context, session string) ([]AgentRun, error
 		if e != nil {
 			return nil, e
 		}
+		l.applyPreview(&out[i])
 		for j := range out[i].Steps {
+			for _, field := range []*string{&out[i].Steps[j].ReasoningContent, &out[i].Steps[j].ReasoningSummary} {
+				if *field != "" {
+					*field, e = l.conversation.filter(ctx, v, "assistant", *field)
+					if e != nil {
+						return nil, e
+					}
+				}
+			}
 			if out[i].Steps[j].Plan != "" {
 				out[i].Steps[j].Plan, e = l.conversation.filter(ctx, v, "assistant", out[i].Steps[j].Plan)
 				if e != nil {
@@ -452,6 +471,9 @@ func (l *AgentLoop) Advance(ctx context.Context, session, id string, expected ui
 		}
 		return l.stop(ctx, a, "failed", "approval_missing")
 	case "queued":
+		if a.Call != nil {
+			return l.prepareTool(ctx, a)
+		}
 		return l.think(ctx, a)
 	default:
 		return AgentRun{}, ErrScopeConflict
@@ -512,7 +534,25 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 	if e != nil {
 		return AgentRun{}, e
 	}
-	response, e := l.conversation.Generate(modelCtx, view.ID, message.MessageID)
+	preview := agentStepPreview{MessageID: message.MessageID, Step: p.Step}
+	defer l.previews.Delete(a.View.ID)
+	modelCtx = withGenerationPreview(modelCtx, func(kind, text string) error {
+		switch kind {
+		case "text":
+			if len(text) <= 24000 {
+				preview.Plan = text
+			}
+		case "reasoning":
+			preview.Reasoning = text
+		case "summary":
+			preview.Summary = text
+		default:
+			return nil
+		}
+		l.previews.Store(a.View.ID, preview)
+		return nil
+	})
+	response, e := l.generateWithEino(modelCtx, view.ID, message.MessageID, p)
 	if e != nil {
 		return l.stop(ctx, a, "unknown", "model_response_not_confirmed")
 	}
@@ -520,12 +560,28 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 	if decodeAgentJSON([]byte(response.RedactedContent), &decision) != nil {
 		return l.stop(ctx, a, "unknown", "invalid_model_decision")
 	}
+	if decision.Reasoning == "" {
+		decision.Reasoning = response.ReasoningContent
+	}
+	if decision.Summary == "" {
+		decision.Summary = response.ReasoningSummary
+	}
+	if len(decision.Calls) > 0 {
+		if len(decision.Calls) > 8 || decision.Call == nil || agentHash(decision.Call) != agentHash(decision.Calls[0]) {
+			return l.stop(ctx, a, "unknown", "invalid_tool_batch")
+		}
+		if len(a.View.Steps)+len(decision.Calls)-1 > a.View.MaxSteps {
+			return l.stop(ctx, a, "limit_reached", "tool_batch_exceeds_step_budget")
+		}
+	}
 	a, e = l.change(ctx, view.ID, a.View.ID, a.View.Revision, func(r *agentRunRecord, _ time.Time) error {
 		r.History = append(r.History, decision.Items...)
 		b, _ := json.Marshal(r.History)
 		if len(b) > 128<<10 {
 			return ErrSessionUnavailable
 		}
+		r.View.Steps[p.Step-1].ReasoningContent = decision.Reasoning
+		r.View.Steps[p.Step-1].ReasoningSummary = decision.Summary
 		if decision.Call == nil {
 			if strings.TrimSpace(decision.Text) != "" {
 				r.View.State = "completed"
@@ -538,18 +594,13 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 			return nil
 		}
 		r.Call = decision.Call
+		if len(decision.Calls) > 1 {
+			r.PendingCalls = decision.Calls[1:]
+		}
 		s := &r.View.Steps[p.Step-1]
-		planText := decision.Summary
-		if planText == "" {
-			planText = decision.Text
-		}
-		if plan := strings.TrimSpace(planText); plan != "" {
-			runes := []rune(plan)
-			if len(runes) > 3000 {
-				runes = runes[:3000]
-			}
-			s.Plan = string(runes)
-		}
+		s.ReasoningContent = decision.Reasoning
+		s.ReasoningSummary = decision.Summary
+		s.Plan = strings.TrimSpace(decision.Text)
 		s.ToolName = decision.Call.ToolName
 		s.NodeIDs = slices.Clone(decision.Call.NodeIDs)
 		s.Parameters = bytes.Clone(decision.Call.Parameters)
@@ -560,6 +611,14 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 	}
 	if decision.Call == nil {
 		return a.View, nil
+	}
+	return l.prepareTool(ctx, a)
+}
+
+func (l *AgentLoop) prepareTool(ctx context.Context, a agentRunRecord) (AgentRun, error) {
+	view, e := l.sessions.Get(ctx, a.View.SessionID)
+	if e != nil {
+		return AgentRun{}, e
 	}
 	// The provider is a proposal source. Independently canonicalize, recheck
 	// scope and stop repeated side effects before creating any approval/task.
@@ -586,7 +645,7 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 		}
 		a, e = l.change(ctx, view.ID, a.View.ID, a.View.Revision, func(r *agentRunRecord, _ time.Time) error {
 			r.View.State = "waiting_approval"
-			s := &r.View.Steps[p.Step-1]
+			s := &r.View.Steps[len(r.View.Steps)-1]
 			s.State = "waiting_approval"
 			s.ApprovalID = approval.ID
 			return nil
@@ -721,6 +780,12 @@ func (l *AgentLoop) completeTool(ctx context.Context, a agentRunRecord, result, 
 		b, _ := json.Marshal(map[string]string{"type": "function_call_output", "call_id": r.Call.CallID, "output": text})
 		r.History = append(r.History, b)
 		r.Call = nil
+		if len(r.PendingCalls) > 0 {
+			next := r.PendingCalls[0]
+			r.PendingCalls = r.PendingCalls[1:]
+			r.Call = next
+			r.View.Steps = append(r.View.Steps, AgentStep{Number: len(r.View.Steps) + 1, State: "queued", ToolName: next.ToolName, NodeIDs: slices.Clone(next.NodeIDs), Parameters: bytes.Clone(next.Parameters), StartedAt: l.sessions.now().UTC()})
+		}
 		if b, _ := json.Marshal(r.History); len(b) > 128<<10 {
 			return ErrSessionUnavailable
 		}
