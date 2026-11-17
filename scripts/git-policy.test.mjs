@@ -7,5 +7,6 @@ test("task branches and conventional titles", () => {
   for (const branch of ["foo", "feature/../../oops", "feature/task name"]) assert.equal(validBranch(branch), false);
   assert.ok(validTitle("chore(repo): establish P1 foundation"));
   assert.ok(validTitle("fix(dns,ai): repair provider wiring"));
+  assert.ok(validTitle("style(go): format sources"));
   assert.equal(validTitle("unfinished"), false);
 });
