@@ -36,7 +36,7 @@ func (s *Server) RunResidentHealth(ctx context.Context, version string) error {
 		if s.residentHealthGate == nil || s.residentHealthGate(ctx) != nil {
 			return updates.ErrApplyUnknown
 		}
-		schema, e := updates.SQLiteSchemaFingerprint(ctx, s.DB)
+		schema, e := updates.SchemaFingerprint(ctx, s.DB)
 		if e != nil {
 			return e
 		}

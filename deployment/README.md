@@ -8,6 +8,9 @@
 
 异常／UNKNOWN的证据登记、后续任务、快照和独立复核流程见[人工处置闭环](../docs/development/INCIDENT-CLOSURE.md)。当前共有50项迁移，升级前备份并按[升级说明](UPGRADE.md)预检；保留原数据库与密钥，不通过清库或回写旧迁移解决问题。
 
+PostgreSQL 的一致性快照、空库恢复、监督器连接与更新指纹见
+[PostgreSQL 维护说明](POSTGRES-MAINTENANCE.md)；该增量不自动更新旧发行包或在线程序。
+
 ## 构建与目录
 
 准备Go1.27.4、Node24.22.1、npm11，在干净且已提交的源码目录执行：

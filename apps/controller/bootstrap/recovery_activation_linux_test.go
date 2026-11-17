@@ -13,8 +13,12 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"errors"
+	"fmt"
+	"github.com/jackc/pgx/v5"
+	"io"
 	"math/big"
 	"net"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -48,6 +52,15 @@ func TestRecoveryOwnedChild(t *testing.T) {
 }
 
 func TestOfflineRootMTLSFenceAndRecoveredControllerActivation(t *testing.T) {
+	testOfflineRootMTLSFenceAndRecoveredControllerActivation(t, false)
+}
+func TestOfflineRootMTLSFenceAndRecoveredControllerActivationPostgres(t *testing.T) {
+	if os.Getenv("SERVERFLEET_TEST_POSTGRES_DSN") == "" {
+		t.Skip("isolated PostgreSQL test connection required")
+	}
+	testOfflineRootMTLSFenceAndRecoveredControllerActivation(t, true)
+}
+func testOfflineRootMTLSFenceAndRecoveredControllerActivation(t *testing.T, postgres bool) {
 	if os.Geteuid() == 0 {
 		t.Skip("requires a genuine non-root process owner")
 	}
@@ -300,6 +313,61 @@ func TestOfflineRootMTLSFenceAndRecoveredControllerActivation(t *testing.T) {
 		t.Fatal(e)
 	}
 	_ = db.Close()
+	if postgres {
+		pgDSN := os.Getenv("SERVERFLEET_TEST_POSTGRES_DSN")
+		admin, e := pgx.Connect(ctx, pgDSN)
+		if e != nil {
+			t.Fatal(e)
+		}
+		var ownerExists bool
+		if e = admin.QueryRow(ctx, "SELECT EXISTS(SELECT 1 FROM pg_roles WHERE rolname='maintenance_owner')").Scan(&ownerExists); e != nil {
+			t.Fatal(e)
+		}
+		if !ownerExists {
+			if _, e = admin.Exec(ctx, "CREATE ROLE maintenance_owner LOGIN"); e != nil {
+				t.Fatal(e)
+			}
+		}
+		// This test database is isolated from both the live service and other tests.
+		var nonce [8]byte
+		if _, e = rand.Read(nonce[:]); e != nil {
+			t.Fatal(e)
+		}
+		dbName := fmt.Sprintf("activation_%x", nonce)
+		if _, e = admin.Exec(ctx, "CREATE DATABASE "+dbName+" OWNER maintenance_owner TEMPLATE template0"); e != nil {
+			t.Fatal(e)
+		}
+		t.Cleanup(func() {
+			_, _ = admin.Exec(context.Background(), "DROP DATABASE "+dbName+" WITH (FORCE)")
+			admin.Close(context.Background())
+		})
+		pc, e := pgx.ParseConfig(pgDSN)
+		if e != nil {
+			t.Fatal(e)
+		}
+		if pc.Password != "" {
+			password := "'" + strings.ReplaceAll(pc.Password, "'", "''") + "'"
+			if _, e = admin.Exec(ctx, "ALTER ROLE maintenance_owner PASSWORD "+password); e != nil {
+				t.Fatal(e)
+			}
+		}
+		u := url.URL{Scheme: "postgres", User: url.UserPassword("maintenance_owner", pc.Password), Path: "/" + dbName}
+		q := u.Query()
+		q.Set("host", pc.Host)
+		q.Set("port", fmt.Sprint(pc.Port))
+		q.Set("sslmode", "disable")
+		u.RawQuery = q.Encode()
+		dsn := u.String()
+		dsnFile := filepath.Join(base, "pg-dsn")
+		write(dsnFile, []byte(dsn))
+		if e = restoreReconciledPostgres(ctx, restored, dsnFile, io.Discard); e != nil {
+			t.Fatal("offline PG restore", e)
+		}
+		newConfig.DatabaseDriver = "postgres"
+		newConfig.DatabaseDSNFile = dsnFile
+		newConfig.DatabaseDSNSHA256 = recoveryDigest([]byte(dsn))
+		writeJSON(supervisorFile, newConfig)
+	}
 	if l, e := openActivatedRecovery(ctx, newConfig.RecoveryRuntime, newConfig); e == nil {
 		l.Close()
 		t.Fatal("reconciled snapshot ran without activation")

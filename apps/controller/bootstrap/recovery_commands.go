@@ -43,12 +43,16 @@ func RunRecoveryCommand(ctx context.Context, args []string, stdout, stderr io.Wr
 	newPKI := flags.String("new-pki-directory", "", "new separately provisioned Intermediate/key directory")
 	runtimeFile := flags.String("runtime", "", "private restored authority and independent fence client configuration")
 	supervisorFile := flags.String("resident-supervisor", "", "private new Controller supervisor configuration")
+	postgresDSNFile := flags.String("postgres-dsn-file", "", "private DSN file for an EMPTY isolated PostgreSQL restore target")
 	offline := flags.Bool("offline-ack", false, "confirm explicit offline recovery host, no live Controller or private Root in target")
 	if err := flags.Parse(args[1:]); err != nil {
 		return err
 	}
 	if flags.NArg() != 0 || !*offline {
 		return errors.New("recovery: explicit offline acknowledgement required")
+	}
+	if args[0] == "restore-postgres" {
+		return restoreReconciledPostgres(ctx, *destination, *postgresDSNFile, stdout)
 	}
 	if args[0] == "status" {
 		c, e := updates.LoadResidentSupervisor(*supervisorFile)

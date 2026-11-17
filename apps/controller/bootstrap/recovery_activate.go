@@ -79,7 +79,7 @@ func loadRecoveryActivationContext(ctx context.Context, filename string, c updat
 		return out, e
 	}
 	out.request = updates.ResidentFenceRequest{AuthorizationSHA256: r.AuthoritySHA256, OldAuthorityID: r.OldAuthorityID, NewAuthorityID: r.NewAuthorityID, TrustGeneration: r.TrustGeneration}
-	db, e := storage.Open(ctx, storage.Config{Path: c.Database, ReadOnly: true})
+	db, e := updates.OpenResidentDatabase(ctx, c, true)
 	if e != nil {
 		return out, e
 	}
@@ -109,7 +109,7 @@ func activatedRecoveryVerifier(filename string, c updates.ResidentSupervisorConf
 		if e != nil || expectedClearance != clearance {
 			return recovery.ErrQuarantined
 		}
-		db, e := storage.Open(ctx, storage.Config{Path: c.Database, ReadOnly: true})
+		db, e := updates.OpenResidentDatabase(ctx, c, true)
 		if e != nil {
 			return e
 		}
@@ -183,7 +183,7 @@ func activateRecoveredController(ctx context.Context, filename, supervisorFile s
 		if e != nil || live != fence {
 			return recovery.ReleaseClearance{}, recovery.ErrQuarantined
 		}
-		db, e := storage.Open(ctx, storage.Config{Path: c.Database})
+		db, e := updates.OpenResidentDatabase(ctx, c, false)
 		if e != nil {
 			return recovery.ReleaseClearance{}, e
 		}

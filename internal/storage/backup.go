@@ -12,13 +12,17 @@ import (
 )
 
 // BackupTo writes a consistent standalone snapshot of the live database using
-// VACUUM INTO. The destination must not exist; its parent directory is created.
+// VACUUM INTO on SQLite, or a repeatable-read portable export on PostgreSQL.
+// The destination must not exist; its parent directory is created.
 // The snapshot is verified with quick_check before the call returns. WAL content
 // visible to the snapshot transaction is included, so no separate -wal file is
 // needed for recovery.
 func (db *DB) BackupTo(ctx context.Context, destination string) error {
 	if db == nil || db.db == nil {
 		return ErrClosed
+	}
+	if ctx == nil {
+		return ErrInvalidConfig
 	}
 	abs, err := filepath.Abs(destination)
 	if err != nil {
@@ -31,6 +35,9 @@ func (db *DB) BackupTo(ctx context.Context, destination string) error {
 	}
 	if err := os.MkdirAll(filepath.Dir(abs), 0o700); err != nil {
 		return fmt.Errorf("storage: create backup directory: %w", err)
+	}
+	if db.dialect == dialectPostgres {
+		return db.backupPostgres(ctx, abs)
 	}
 	if _, err := db.Exec(ctx, "VACUUM INTO ?", abs); err != nil {
 		return fmt.Errorf("storage: backup: %w", err)

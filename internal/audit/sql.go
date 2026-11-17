@@ -83,19 +83,23 @@ func (r *SQLRecorder) Append(ctx context.Context, event Event) error {
 
 // AppendTx writes the event inside the caller's transaction. Sensitive mutations
 // must call this in the same transaction so an audit failure rolls them back.
-// Events are append-only; the event ID is assigned by SQLite.
+// Events are append-only; the event ID is assigned by the database.
 func (r *SQLRecorder) AppendTx(ctx context.Context, tx storage.Tx, event Event) error {
+	_, err := r.appendTx(ctx, tx, event)
+	return err
+}
+func (r *SQLRecorder) appendTx(ctx context.Context, tx storage.Tx, event Event) (int64, error) {
 	if r == nil || r.validator == nil {
-		return errors.New("audit: recorder is not configured")
+		return 0, errors.New("audit: recorder is not configured")
 	}
 	if tx == nil {
-		return errors.New("audit: transaction is required")
+		return 0, errors.New("audit: transaction is required")
 	}
 	if err := ctx.Err(); err != nil {
-		return err
+		return 0, err
 	}
 	if err := r.validator.Validate(event, r.now()); err != nil {
-		return err
+		return 0, err
 	}
 	nodes := event.NodeIDs
 	if nodes == nil {
@@ -103,18 +107,19 @@ func (r *SQLRecorder) AppendTx(ctx context.Context, tx storage.Tx, event Event) 
 	}
 	encodedNodes, err := json.Marshal(nodes)
 	if err != nil {
-		return fmt.Errorf("audit: encode nodes: %w", err)
+		return 0, fmt.Errorf("audit: encode nodes: %w", err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO audit_events
+	var id int64
+	err = tx.QueryRow(ctx, `INSERT INTO audit_events
 		(subject_id, action, result, request_id, task_id, node_ids, source, reason_code, at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
 		event.SubjectID, event.Action, event.Result, event.RequestID,
 		event.TaskID, string(encodedNodes), string(event.Source), event.ReasonCode,
-		event.At.UTC().Format(time.RFC3339Nano))
+		event.At.UTC().Format(time.RFC3339Nano)).Scan(&id)
 	if err != nil {
-		return fmt.Errorf("audit: append: %w", err)
+		return 0, fmt.Errorf("audit: append: %w", err)
 	}
-	return nil
+	return id, nil
 }
 
 // StoredPage is a page of fully attributed durable events. Unlike the legacy
@@ -346,21 +351,19 @@ func (r *SQLRecorder) Get(ctx context.Context, id int64) (Event, error) {
 	return event, nil
 }
 
-// Actual SQLite row ID, never a request correlation token. The ID returned by
+// Actual inserted row ID (SQLite or PostgreSQL), never a request correlation token. The ID returned by
 // the transaction port becomes durable only if the caller commits its owner tx.
 func (r *SQLRecorder) AppendTxWithID(ctx context.Context, tx storage.Tx, event Event) (int64, error) {
-	if e := r.AppendTx(ctx, tx, event); e != nil {
-		return 0, e
-	}
-	var id int64
-	if e := tx.QueryRow(ctx, `SELECT last_insert_rowid()`).Scan(&id); e != nil {
-		return 0, e
+	id, err := r.appendTx(ctx, tx, event)
+	if err != nil {
+		return 0, err
 	}
 	if id <= 0 {
 		return 0, errors.New("audit: appended event identity unavailable")
 	}
 	return id, nil
 }
+
 func (r *SQLRecorder) AppendWithID(ctx context.Context, event Event) (int64, error) {
 	if r == nil || r.db == nil {
 		return 0, errors.New("audit: recorder is not configured")

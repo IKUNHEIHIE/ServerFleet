@@ -30,8 +30,17 @@ func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.Reside
 	if e != nil {
 		return empty, nil, e
 	}
-	db, e := storage.Open(ctx, storage.Config{Path: c.Database})
+	db, e := updates.OpenResidentDatabase(ctx, c, false)
 	if e != nil {
+		return empty, nil, e
+	}
+	migrator, e := storage.NewMigrator(Migrations()...)
+	if e != nil {
+		db.Close()
+		return empty, nil, e
+	}
+	if e = migrator.VerifyApplied(ctx, db, true); e != nil {
+		db.Close()
 		return empty, nil, e
 	}
 	fail := func(e error) (updates.ResidentSupervisorHooks, func() error, error) { db.Close(); return empty, nil, e }
@@ -57,7 +66,7 @@ func ControllerSupervisorHooksWithRecovery(ctx context.Context, c updates.Reside
 	}
 	admitted := map[string]transport.ResidentUpdateIntent{}
 	schema := func(ctx context.Context) error {
-		actual, e := updates.SQLiteSchemaFingerprint(ctx, db)
+		actual, e := updates.SchemaFingerprint(ctx, db)
 		if e != nil || actual != c.SchemaSHA256 {
 			return updates.ErrApplyUnknown
 		}

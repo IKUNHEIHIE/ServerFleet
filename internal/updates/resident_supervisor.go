@@ -29,8 +29,11 @@ type ResidentSupervisorConfig struct {
 	Initial                  ReleaseManifest `json:"initial"`
 	Policy                   ReleasePolicy   `json:"policy"`
 	// Controller uses its live owner repositories even while the child is down.
-	Database     string `json:"database,omitempty"`
-	SchemaSHA256 string `json:"schemaSha256,omitempty"`
+	DatabaseDriver    string `json:"databaseDriver,omitempty"`
+	DatabaseDSNFile   string `json:"databaseDsnFile,omitempty"`
+	DatabaseDSNSHA256 string `json:"databaseDsnSha256,omitempty"`
+	Database          string `json:"database,omitempty"`
+	SchemaSHA256      string `json:"schemaSha256,omitempty"`
 	// Remote supervisors reuse the node's already enrolled private identity.
 	IdentityDir           string           `json:"identityDir,omitempty"`
 	ControllerOrigin      string           `json:"controllerOrigin,omitempty"`

@@ -23,7 +23,7 @@ func RunBootstrapTokenCommand(ctx context.Context, args []string, stdout, stderr
 		return errProvision
 	}
 	c, e := updates.LoadResidentSupervisor(*config)
-	if e != nil || c.Component != "controller" || !provisionExistingDatabase(c.Database) {
+	if e != nil || c.Component != "controller" || c.DatabaseDriver != "postgres" && !provisionExistingDatabase(c.Database) {
 		return errProvision
 	}
 	root, e := openProvisionPrivateDirectory(filepath.Dir(*output))
@@ -37,7 +37,11 @@ func RunBootstrapTokenCommand(ctx context.Context, args []string, stdout, stderr
 		return e
 	}
 	defer f.Close()
-	token, e := server.PrepareLocalBootstrap(ctx, c.Database)
+	cfg, e := c.DatabaseConfig(false)
+	if e != nil {
+		return e
+	}
+	token, e := server.PrepareLocalBootstrapConfig(ctx, cfg)
 	if e != nil {
 		return e
 	}

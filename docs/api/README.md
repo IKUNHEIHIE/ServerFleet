@@ -11,6 +11,14 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 
 供前端/脚本/联调定位实际接口；先读安全和状态语义，再从[路由索引](ROUTES.md)进入实际处理器及对应候选。可机读索引：[route-inventory.json](route-inventory.json)，数量以生成结果为准，不沿用 R34 旧计数。
 
+## PostgreSQL 维护兼容增量
+
+本次保持 HTTP 路径、DTO、加密包 format=1 与文件命名不变；
+备份验证仍验证可移植 SQLite 恢复快照，不能把在线 PostgreSQL 状态锚点当作备份。
+新增离线 CLI recovery restore-postgres、-db-dsn-file 与监督器可选数据库配置，
+不构成 HTTP 免审批导入/激活接口。[维护说明](../../deployment/POSTGRES-MAINTENANCE.md)。
+
+
 ## 入口与认证
 
 - 正式Web调用同源 `/api/v1`，直接HTTPS。浏览器会话Cookie为 `__Host-sf_session`，HttpOnly/Secure；写请求按当前会话发送 `X-CSRF-Token` 和精确Origin，不信任转发头来伪造TLS。请求ID由Controller产生并随响应/审计关联。

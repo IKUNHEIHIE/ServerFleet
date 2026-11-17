@@ -13,11 +13,15 @@ import (
 // password reset. Existing setup tokens last ten minutes; initialized stores
 // and quarantined/fenced/maintenance authorities cannot issue one.
 func PrepareLocalBootstrap(ctx context.Context, database string) (string, error) {
+	return PrepareLocalBootstrapConfig(ctx, storage.Config{Path: database})
+}
+func PrepareLocalBootstrapConfig(ctx context.Context, cfg storage.Config) (string, error) {
+	database := cfg.Path
 	gate, e := recovery.RuntimeGuard(ctx, database, nil)
 	if e != nil || gate(ctx) != nil {
 		return "", recovery.ErrQuarantined
 	}
-	db, e := storage.Open(ctx, storage.Config{Path: database})
+	db, e := storage.Open(ctx, cfg)
 	if e != nil {
 		return "", e
 	}

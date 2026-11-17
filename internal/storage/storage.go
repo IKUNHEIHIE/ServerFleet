@@ -13,11 +13,13 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"database/sql"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -97,8 +99,10 @@ type DB struct {
 	path    string
 	dialect dialect
 
-	writer chan struct{}
-	once   sync.Once
+	dsn              string
+	snapshotMigrator atomic.Pointer[Migrator]
+	writer           chan struct{}
+	once             sync.Once
 }
 
 // Open prepares the database file (creating parent directories), applies the
@@ -116,13 +120,17 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 		return nil, err
 	}
 	if cfg.Driver == "postgres" {
-		pool, err := sql.Open("pgx", cfg.DSN)
+		pgConfig, err := pgx.ParseConfig(cfg.DSN)
 		if err != nil {
-			return nil, fmt.Errorf("storage: open postgres: %w", err)
+			return nil, errors.New("storage: invalid PostgreSQL connection configuration")
 		}
+		if cfg.ReadOnly {
+			pgConfig.RuntimeParams["default_transaction_read_only"] = "on"
+		}
+		pool := stdlib.OpenDB(*pgConfig)
 		pool.SetMaxOpenConns(cfg.MaxOpenConns)
 		pool.SetMaxIdleConns(cfg.MaxOpenConns)
-		handle := &DB{db: pool, path: cfg.Path, dialect: dialectPostgres, writer: make(chan struct{}, 1)}
+		handle := &DB{db: pool, path: cfg.Path, dsn: cfg.DSN, dialect: dialectPostgres, writer: make(chan struct{}, 1)}
 		if err := handle.verify(ctx, cfg); err != nil {
 			_ = pool.Close()
 			return nil, err
@@ -157,6 +165,9 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 
 func (db *DB) verify(ctx context.Context, cfg Config) error {
 	if err := db.db.PingContext(ctx); err != nil {
+		if db.dialect == dialectPostgres {
+			return errors.New("storage: PostgreSQL connection unavailable")
+		}
 		return fmt.Errorf("storage: ping: %w", err)
 	}
 	if db.dialect == dialectPostgres {
@@ -203,6 +214,27 @@ func buildDSN(abs string, cfg Config) string {
 
 // Path returns the absolute database file path.
 func (db *DB) Path() string { return db.path }
+
+// Driver identifies the storage engine without exposing connection secrets.
+func (db *DB) Driver() string { return string(db.dialect) }
+
+// MatchesConfig verifies supervisor/child storage identity without revealing a DSN.
+func (db *DB) MatchesConfig(cfg Config) bool {
+	if db == nil {
+		return false
+	}
+	if cfg.Driver == "" {
+		cfg.Driver = "sqlite"
+	}
+	if db.Driver() != cfg.Driver {
+		return false
+	}
+	if cfg.Driver == "postgres" {
+		return db.path == cfg.Path && db.dsn == cfg.DSN
+	}
+	path, err := filepath.Abs(cfg.Path)
+	return err == nil && db.path == path
+}
 
 // Ping checks that the handle can still reach the file.
 func (db *DB) Ping(ctx context.Context) error {

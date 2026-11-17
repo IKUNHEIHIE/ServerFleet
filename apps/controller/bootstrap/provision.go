@@ -144,6 +144,9 @@ func RunProvisionCommand(ctx context.Context, args []string, stdout, stderr io.W
 		if e != nil || options.ShowVersion || options.DBPath != "" || options.ResidentSupervisor != "" || options.UpdateDeployment != "" || options.ReleaseSource != "" || options.AgentPKIMode != "provisioned" || options.WebDirectory == "" || options.CredentialKeyDir != "" {
 			return errProvision
 		}
+		if options.DBDriver == "postgres" && options.DBDSNFile == "" {
+			return errProvision
+		}
 		options.DBPath = filepath.Join(d.Directory, "controller.db")
 		options.CredentialKeyDir = filepath.Join(d.Directory, "credential-keys")
 		if options.FileDeployment == "" {
@@ -265,6 +268,11 @@ func RunProvisionCommand(ctx context.Context, args []string, stdout, stderr io.W
 	}
 	configFile := filepath.Join(d.Directory, "supervisor.json")
 	if d.Component == "controller" {
+		if options.DBDriver == "postgres" {
+			c.DatabaseDriver = "postgres"
+			c.DatabaseDSNFile = options.DBDSNFile
+			c.DatabaseDSNSHA256 = recoveryDigest([]byte(options.DBDSN))
+		}
 		options.BuildVersion = initial.Version
 		composed, _, e := Compose(ctx, options)
 		if e != nil {
@@ -280,11 +288,11 @@ func RunProvisionCommand(ctx context.Context, args []string, stdout, stderr io.W
 		if tokenErr != nil {
 			return tokenErr
 		}
-		db, e := storage.Open(ctx, storage.Config{Path: options.DBPath, ReadOnly: true})
+		db, e := storage.Open(ctx, storage.Config{Path: options.DBPath, Driver: options.DBDriver, DSN: options.DBDSN, ReadOnly: true})
 		if e != nil {
 			return e
 		}
-		c.SchemaSHA256, e = updates.SQLiteSchemaFingerprint(ctx, db)
+		c.SchemaSHA256, e = updates.SchemaFingerprint(ctx, db)
 		ce := db.Close()
 		if e != nil {
 			return e
