@@ -15,9 +15,18 @@ import (
 // counters or rows are returned. The caller pins the reviewed value.
 const schemaFingerprintMaxEntries = 1024
 
+// SQLiteSchemaFingerprint is retained for existing callers. New code should use
+// SchemaFingerprint, which binds the observed storage engine as well as DDL.
 func SQLiteSchemaFingerprint(ctx context.Context, db *storage.DB) (string, error) {
+	return SchemaFingerprint(ctx, db)
+}
+
+func SchemaFingerprint(ctx context.Context, db *storage.DB) (string, error) {
 	if ctx == nil || db == nil {
 		return "", ErrArtifactRejected
+	}
+	if db.Driver() == "postgres" {
+		return postgresSchemaFingerprint(ctx, db)
 	}
 	var version int
 	if err := db.QueryRow(ctx, `PRAGMA user_version`).Scan(&version); err != nil {

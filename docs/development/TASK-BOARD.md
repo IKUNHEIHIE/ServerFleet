@@ -1,5 +1,21 @@
 # 任务登记板
 
+## 当前：PostgreSQL 维护兼容与基线核对（2026-11-17）
+
+PG-MAINTENANCE-20261117 / codex-pg-maintenance-20261117-01，单会话；
+awskr /home/admin/sf-pg-maintenance-20261117，分支 fix/postgres-maintenance-20261117，
+基线 main 3b32b1f51b1d9f9f862fcbc9b896153f5eaebbc7。
+范围：远程基线只读核对；storage 快照/恢复、updates 指纹及监督器数据库连接、
+Controller 离线恢复与配置、迁移工具、专项测试及现行文档。
+保留旧工作树、不改历史迁移/生成代码/依赖，不安装本机软件、不执行整套核心流程验收。
+验证条件：隔离 PostgreSQL 的一致性快照、空库事务恢复/拒绝覆盖/失败回滚、
+更新 DDL 指纹/私有 DSN 绑定，以及受影响检查与 CI。
+停止条件：代码、文档、精确提交验证与正常 PR 交付；不更改线上部署。
+进度：代码与文档已实现；隔离 PostgreSQL 集成、整个 bootstrap 包竞态检查通过；
+Web 类型/481 用例/生产构建及安全扫描通过，旧目录摘要复核无变化。
+完整接收及精确 head CI 结果补 PR 评论；本任务不部署线上。
+
+
 ## AI 运维闭环、PostgreSQL 与网关修复（2026-11-17）
 
 AI-LOOP-PG-20261117 / 分支 `feature/ai-dns-certs-ui-20261117`，[PR #54](https://github.com/IKUNHEIHIE/ServerFleet/pull/54)。范围：AI Agent 执行内嵌对话、模型/思考深度/上下文统计与压缩、三档审批单一闸门与任务层去重、`tasks.exec.v1` 授权回退、审批模式切换的 stale 运行收口、会话读取性能、PostgreSQL 方言与离线 COPY 迁移工具、网关空列表/首超管授权修复及现行文档。验证：`check:web` 53 文件 / 481 用例与生产构建通过；`internal/ai`、`internal/auth`、`internal/gateway`、`internal/tasks`、`internal/transport`、Controller server 测试通过；awskr 测试站完成三档切换、上下文压缩、模型/高思考深度 Agent 运行、xray-core 真实安装（VLESS 10086 / SOCKS 1080）、aliyun-hk-1b 实机检查、网关接口 200。限制：目录内部分模型不支持工具调用；上下文压缩为本地抽取式摘要；PG 的备份/恢复、更新指纹和文件级快照仍为 SQLite 文件语义；Xray 为测试配置非生产代理。结果以本分支精确 head CI 与 PR 记录为准。

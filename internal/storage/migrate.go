@@ -145,6 +145,7 @@ func (m *Migrator) Apply(ctx context.Context, db *DB) (MigrationReport, error) {
 		}
 		report.Skipped = append(report.Skipped, migration.Version)
 	}
+	db.snapshotMigrator.Store(m)
 	return report, nil
 }
 
@@ -252,6 +253,9 @@ func (m *Migrator) VerifyApplied(ctx context.Context, db *DB, requireComplete bo
 	}
 	if requireComplete && len(applied) != len(m.byVersion) {
 		return ErrUnknownMigration
+	}
+	if requireComplete {
+		db.snapshotMigrator.Store(m)
 	}
 	return nil
 }

@@ -8,9 +8,18 @@
 4. [工具链](TOOLCHAIN.md)、[集成清单](INTEGRATION-CHECKLIST.md)；安装任务读 [deployment](../../deployment/README.md)。
 5. 涉及架构决策时读 [批准 ADR 来源与替代关系](../architecture/README.md)。
 
+## PostgreSQL 维护增量
+
+任务分支 fix/postgres-maintenance-20261117 基于 main 3b32b1f；
+原 awskr 未提交现场保留。先核对 [维护基线与验证](POSTGRES-MAINTENANCE-20261117.md)，
+不要将旧目录的 HEAD 或线上二进制直接等同于 GitHub main。
+备份为可移植应用快照，PostgreSQL 导入只允许空目标；
+Supervisor/恢复激活使用受策略约束的私有 DSN 文件，持续 fence 与审批仍有效。
+
 ## 开工与判断依据
 
-从远程当前 main 建独立分支/工作目录，先检查 head 和本地变更。当前工作分支为 `feature/ai-dns-certs-ui-20261117`（PR #54），其 head 与验证记录见 CURRENT-STATE 与 TASK-BOARD；历史基线 `71dbca3c9d4a69890468d2f574362eaf6ea15c48` 只用于定位证据，不要求后续回退到它。main 前进后核对差异并刷新 CURRENT-STATE。
+从远程当前 main 建独立分支/工作目录，先检查 head 和本地变更。当前维护分支为 fix/postgres-maintenance-20261117，基于 main 3b32b1f51b1d9f9f862fcbc9b896153f5eaebbc7。
+PR #54 已合并；其改动是本任务起点。历史基线 71dbca3 仅用于追溯，不要求后续回退到它。main 前进后核对差异并刷新 CURRENT-STATE。
 
 当前用户请求决定任务。任务板用于记录，旧 OPEN/READY/IN PROGRESS 不自动授权新会话执行；历史生产主机和凭据授权不继承。记录任务 ID、唯一会话、目录、验证与停止条件，只有明确要求并行才启动其他 Agent。同一 GitHub 账号不构成独立 APPROVE。
 

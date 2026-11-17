@@ -93,7 +93,7 @@ func (p *productDeployment) schema(ctx context.Context) error {
 	}
 	// user_version alone does not detect a changed DDL. The trusted installer
 	// pins the reviewed sqlite_master fingerprint; a mismatch is UNKNOWN here.
-	got, e := SQLiteSchemaFingerprint(ctx, p.o.DB)
+	got, e := SchemaFingerprint(ctx, p.o.DB)
 	if e != nil || got != p.o.SchemaFingerprint {
 		return ErrApplyUnknown
 	}

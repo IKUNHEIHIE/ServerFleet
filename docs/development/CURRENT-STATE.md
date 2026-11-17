@@ -2,6 +2,19 @@
 
 核对日期：**2026-11-17**。这是当前状态汇总入口；历史进度与任务单不替代本文。后续代码合并须重新核对更新。
 
+## 2026-11-17 PostgreSQL 维护兼容（任务分支，未部署）
+
+从 main 3b32b1f 建立 fix/postgres-maintenance-20261117，
+只读核对旧远程现场后开发；旧目录保留，无线上程序/配置修改。
+新增 PostgreSQL 一致性可移植备份、空库原子恢复、私有 DSN 监督器连接、
+完整 DDL 更新指纹及恢复激活兼容；修复审计回执 ID 的 SQLite 专用查询。
+本节取代下方历史记录中“仍按 SQLite 文件语义、待适配”的源码缺口描述，
+不表示历史部署已更新，也不表示已完成整套产品验收。
+详见 [基线与实现记录](POSTGRES-MAINTENANCE-20261117.md)、
+[维护与恢复说明](../../deployment/POSTGRES-MAINTENANCE.md)。
+专项与竞态验证、Web 构建/测试及漏洞检查通过；完整接收与精确 head CI 以本任务 PR 最终回执为准。
+
+
 ## 2026-11-17 AI 运维闭环、审批收敛与 PostgreSQL（分支 `feature/ai-dns-certs-ui-20261117`，PR #54）
 
 - AI 运维：Agent 规划、工具调用、审批、结果和最终答复直接内嵌对话时间线并按运行去重；输入区提供模型切换、思考深度、上下文统计与本地压缩；侧栏标题使用运行目标。详见 [AI 运维循环](AI-AGENT-LOOP.md)。
@@ -76,9 +89,9 @@ awskr 的 fix/node-management-20261115 从 8f46c938ee4c7a9edb8ec9a2d34f3fc5c1fb0
 | 项目 | 已核对事实 |
 |---|---|
 | 仓库 | 公有 `IKUNHEIHIE/ServerFleet` |
-| 代码基线 | main `71dbca3c9d4a69890468d2f574362eaf6ea15c48`（2026-11-16，PR #52 合并后） |
+| 代码基线 | main `3b32b1f51b1d9f9f862fcbc9b896153f5eaebbc7`（2026-11-17，PR #54 合并后，本任务起点） |
 | 最新发布 | [v0.9.2](https://github.com/IKUNHEIHIE/ServerFleet/releases/tag/v0.9.2)，Linux amd64/arm64 |
-| 迁移 | 53 项（含 ds/0089_node_archives、ds/0090_node_live_metrics、工作区待提交的 ds/0091_dns_credential_revision）；历史 SQL/checksum 不变 |
+| 迁移 | 53 项（含 ds/0089_node_archives、ds/0090_node_live_metrics、已合并的 ds/0091_dns_credential_revision）；历史 SQL/checksum 不变 |
 | 工具 | Go 1.27.4、Node 24.22.1、npm 11.x；版本源见 [工具链](TOOLCHAIN.md) |
 | 产品验收 | 核心代码已交付；完整 G2 冻结/原始需求全量验收未记录完成；实机验收开放 |
 

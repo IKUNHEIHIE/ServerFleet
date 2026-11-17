@@ -228,6 +228,10 @@ func (s *Server) setupResidentController(c *updates.ResidentSupervisorConfig, au
 	if c.Component != "controller" || c.NodeID != authority || !filepath.IsAbs(c.Database) || c.Database != s.dbPath {
 		return nil, updates.ErrArtifactRejected
 	}
+	dbConfig, e := c.DatabaseConfig(false)
+	if e != nil || !s.DB.MatchesConfig(dbConfig) {
+		return nil, updates.ErrArtifactRejected
+	}
 	// Require the provisioned parent marker and exact configuration digest.
 	if os.Getenv("SF_RESIDENT_SUPERVISOR_POLICY") != updates.ResidentPolicySHA(*c) {
 		return nil, updates.ErrArtifactRejected

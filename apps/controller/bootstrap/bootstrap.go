@@ -18,6 +18,7 @@ import (
 	"serverfleet.local/serverfleet/apps/controller/localpki"
 	"serverfleet.local/serverfleet/apps/controller/server"
 	"serverfleet.local/serverfleet/internal/recovery"
+	"serverfleet.local/serverfleet/internal/storage"
 	"serverfleet.local/serverfleet/internal/updates"
 )
 
@@ -29,6 +30,7 @@ type Options struct {
 	Listen                string
 	DBPath                string
 	DBDriver              string
+	DBDSNFile             string
 	DBDSN                 string
 	Origin                string
 	TLSCert               string
@@ -60,6 +62,7 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	flags.StringVar(&options.Listen, "listen", "127.0.0.1:8080", "local listen address")
 	flags.StringVar(&options.DBPath, "db", "", "SQLite WAL database path or local state directory (enables management API)")
 	flags.StringVar(&options.DBDriver, "db-driver", "", "database driver: sqlite (default) or postgres")
+	flags.StringVar(&options.DBDSNFile, "db-dsn-file", "", "private PostgreSQL DSN file (keeps credentials out of argv)")
 	flags.StringVar(&options.DBDSN, "db-dsn", "", "PostgreSQL DSN when -db-driver=postgres")
 	flags.StringVar(&options.Origin, "origin", "", "trusted https:// browser Origin (required with -db)")
 	flags.StringVar(&options.TLSCert, "tls-cert", "", "TLS server certificate path (required with -db)")
@@ -86,6 +89,16 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	}
 	if flags.NArg() != 0 {
 		return Options{}, errors.New("controller: unexpected positional arguments")
+	}
+	if options.DBDSNFile != "" {
+		if options.DBDSN != "" || options.DBDriver != "postgres" {
+			return Options{}, errors.New("controller: db-dsn-file requires postgres and excludes db-dsn")
+		}
+		dsn, e := storage.ReadDSNFile(options.DBDSNFile)
+		if e != nil {
+			return Options{}, e
+		}
+		options.DBDSN = dsn
 	}
 	return options, nil
 }

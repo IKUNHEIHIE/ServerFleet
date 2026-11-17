@@ -4,7 +4,6 @@ package storage_test
 
 import (
 	"context"
-	"os"
 	"testing"
 
 	"serverfleet.local/serverfleet/apps/controller/server"
@@ -12,16 +11,8 @@ import (
 )
 
 func TestPostgresMigrations(t *testing.T) {
-	dsn := os.Getenv("SERVERFLEET_TEST_POSTGRES_DSN")
-	if dsn == "" {
-		t.Skip("SERVERFLEET_TEST_POSTGRES_DSN is not set")
-	}
 	ctx := context.Background()
-	db, err := storage.Open(ctx, storage.Config{Driver: "postgres", DSN: dsn, Path: t.TempDir()})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer db.Close()
+	db, _ := maintenanceDatabase(t)
 	migrator, err := storage.NewMigrator(server.Migrations()...)
 	if err != nil {
 		t.Fatal(err)
