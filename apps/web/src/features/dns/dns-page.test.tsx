@@ -48,7 +48,8 @@ describe("dns page", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "添加记录" }));
     const dialog = await screen.findByRole("dialog");
-    fireEvent.change(within(dialog).getByLabelText("名称"), { target: { value: "api" } });
+    expect(within(dialog).getByText(".example.com")).toBeVisible();
+    fireEvent.change(within(dialog).getByLabelText("记录名称"), { target: { value: "api" } });
     fireEvent.change(within(dialog).getByLabelText("内容"), { target: { value: "203.0.113.11" } });
     fireEvent.click(within(dialog).getByRole("button", { name: "添加记录" }));
     await waitFor(() => {

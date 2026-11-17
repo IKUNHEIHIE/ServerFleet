@@ -19,8 +19,18 @@ function recordFQDN(name: string, zone: DNSZone | null): string {
   const value = name.trim();
   if (!zone || !value) return value;
   if (value === "@") return zone.name;
-  if (value === zone.name || value.endsWith(`.${zone.name}`)) return value;
+  if (value.toLowerCase() === zone.name.toLowerCase() || value.toLowerCase().endsWith(`.${zone.name.toLowerCase()}`)) return value;
   return `${value}.${zone.name}`;
+}
+
+function recordPrefix(name: string, zone: DNSZone | null): string {
+  const value = name.trim().replace(/\.$/, "");
+  if (!zone || !value) return value;
+  if (value.toLowerCase() === zone.name.toLowerCase()) return "@";
+  if (value.toLowerCase().endsWith(`.${zone.name.toLowerCase()}`)) {
+    return value.slice(0, value.length - zone.name.length - 1);
+  }
+  return value;
 }
 
 function validateRecord(type: DNSRecordInput["type"], content: string, priority: string): string | null {
@@ -61,7 +71,7 @@ function RecordEditor({
   useEffect(() => {
     if (!open) return;
     setType(record?.type ?? "A");
-    setName(record?.name ?? "@");
+    setName(record ? recordPrefix(record.name, zone) : "@");
     setContent(record?.content ?? "");
     setTtl(record?.ttl === undefined || record.ttl <= 1 ? "auto" : String(record.ttl));
     setProxied(record?.proxied ?? false);
@@ -135,8 +145,26 @@ function RecordEditor({
             )}
           </Field>
         </div>
-        <Field label="名称" hint={`完整域名：${recordFQDN(name, zone) || "—"}；填 @ 表示根域名。`}>
-          {ids => <TextInput id={ids.inputId} value={name} onChange={event => setName(event.target.value)} placeholder="例如 www 或 @" required disabled={inputsLocked} autoComplete="off" />}
+        <Field label="记录名称" hint={`@ 表示当前域名本身，www 表示 www.${zone?.name ?? "当前域名"}；完整域名：${recordFQDN(name, zone) || "—"}`}>
+          {ids => (
+            <div className="mt-1 flex items-stretch overflow-hidden rounded-lg border border-input bg-card shadow-[0_1px_2px_rgba(28,32,48,0.03)] transition-all focus-within:border-[#6658E8] focus-within:ring-2 focus-within:ring-ring/25">
+              <input
+                id={ids.inputId}
+                value={name}
+                onChange={event => setName(event.target.value)}
+                placeholder="@ 或前缀，如 www、mail"
+                required
+                disabled={inputsLocked}
+                autoComplete="off"
+                className="min-w-0 flex-1 bg-transparent px-3 py-2 text-sm text-foreground outline-none placeholder:text-muted-foreground/75 disabled:cursor-not-allowed disabled:opacity-50"
+              />
+              {zone ? (
+                <span className="flex shrink-0 items-center border-l border-input bg-secondary/60 px-3 text-sm text-muted-foreground">
+                  .{zone.name}
+                </span>
+              ) : null}
+            </div>
+          )}
         </Field>
         <Field label="内容" hint={type === "A" ? "IPv4 地址，例如 203.0.113.10。" : type === "AAAA" ? "IPv6 地址。" : type === "CNAME" ? "目标域名，例如 example.com。" : type === "MX" ? "邮件服务器域名。" : "TXT 文本内容。"}>
           {ids => <TextInput id={ids.inputId} value={content} onChange={event => setContent(event.target.value)} required disabled={inputsLocked} autoComplete="off" />}
