@@ -44,13 +44,13 @@ func NewOpenAITextProvider(credentials *auth.CredentialService, resolve Credenti
 		Proxy:               nil,
 		DialContext:         (&net.Dialer{Timeout: 5 * time.Second}).DialContext,
 		TLSClientConfig:     &tls.Config{MinVersion: tls.VersionTLS13},
-		TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 15 * time.Second,
+		TLSHandshakeTimeout: 5 * time.Second, ResponseHeaderTimeout: 170 * time.Second,
 		MaxResponseHeaderBytes: 32 << 10, MaxConnsPerHost: 4, DisableKeepAlives: true,
 		// One fresh HTTP/1 connection per operation prevents transport replay of
 		// a POST on a pooled connection. No SDK retry policy is involved.
 		TLSNextProto: map[string]func(string, *tls.Conn) http.RoundTripper{},
 	}
-	return &OpenAITextProvider{credentials: credentials, resolve: resolve, client: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, endpoint: "https://api.openai.com/v1/responses"}, nil
+	return &OpenAITextProvider{credentials: credentials, resolve: resolve, client: &http.Client{Transport: transport, Timeout: 180 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, endpoint: "https://api.openai.com/v1/responses"}, nil
 }
 
 // NewOpenAIStreamingTextProvider consumes actual upstream SSE. Deltas remain
@@ -192,7 +192,7 @@ func decodeProviderText(raw []byte, model string) (string, error) {
 			}
 		}
 	}
-	if json.Unmarshal(raw, &result) != nil || result.ID == "" || len(result.ID) > 256 || result.Object != "response" || result.Status != "completed" || result.Model != model || result.Store == nil || *result.Store || len(result.Output) == 0 || len(result.Output) > 64 {
+	if json.Unmarshal(raw, &result) != nil || result.ID == "" || len(result.ID) > 256 || result.Object != "response" || result.Status != "" && result.Status != "completed" || result.Model != model || result.Store != nil && *result.Store || len(result.Output) == 0 || len(result.Output) > 64 {
 		return "", ErrGenerationUnknown
 	}
 	for _, key := range []string{"error", "incomplete_details"} {
@@ -240,7 +240,7 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 	if err != nil {
 		return err
 	}
-	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	resolverRequest := r
 	resolverRequest.Messages = append([]Message{}, r.Messages...)
@@ -263,7 +263,7 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 	stream := p.stream && r.Agent == nil
 	payload := map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": ProviderMaxOutputTokens}
 	if r.ReasoningEffort != "" {
-		payload["reasoning"] = map[string]any{"effort": r.ReasoningEffort}
+		payload["reasoning"] = map[string]any{"effort": r.ReasoningEffort, "summary": "auto"}
 	}
 	if r.Agent != nil {
 		if err := agentProviderPayload(payload, r.Agent); err != nil {
@@ -322,11 +322,46 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 			return ErrGenerationUnknown
 		}
 		media, _, err := mime.ParseMediaType(response.Header.Get("Content-Type"))
-		if err != nil || (!stream && media != "application/json") || (stream && media != "text/event-stream") || response.ContentLength > 1<<20 {
+		if err != nil || (!stream && media != "application/json") || (stream && media != "text/event-stream" && media != "application/json") || response.ContentLength > 1<<20 {
 			return ErrGenerationUnknown
 		}
-		if stream {
-			text, err = decodeProviderStream(ctx, response.Body, r.Profile.Model)
+		if stream && media == "text/event-stream" {
+			lastPreview := map[string]int{}
+			text, err = decodeProviderStreamObserved(ctx, response.Body, r.Profile.Model, func(kind, value string) error {
+				observe := generationPreviewFrom(ctx)
+				if observe == nil {
+					return nil
+				}
+				// Withhold a full credential-length suffix so a secret split across provider
+				// chunks cannot leak in an earlier preview. Exact echoes are replaced.
+				final := kind == "summary_completed"
+				if final {
+					kind = "summary"
+				}
+				value = strings.ReplaceAll(value, string(secret), "[REDACTED]")
+				if !final && len(value) <= len(secret) {
+					return nil
+				}
+				safe := value
+				if !final {
+					safe = value[:len(value)-len(secret)]
+				}
+				for !utf8.ValidString(safe) && len(safe) > 0 {
+					safe = safe[:len(safe)-1]
+				}
+				threshold := 1024
+				if kind == "summary" {
+					threshold = 256
+				}
+				if !final && lastPreview[kind] > 0 && len(safe)-lastPreview[kind] < threshold {
+					return nil
+				}
+				if strings.TrimSpace(safe) == "" {
+					return nil
+				}
+				lastPreview[kind] = len(safe)
+				return observe(kind, safe)
+			})
 		} else {
 			raw, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 			defer clear(raw)

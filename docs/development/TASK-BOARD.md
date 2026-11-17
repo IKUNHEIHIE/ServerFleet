@@ -1,5 +1,14 @@
 # 任务登记板
 
+## 当前：AI 记忆、长任务与对话过程（2026-11-17）
+
+AI-CONTINUITY-20261117 / codex-ai-continuity-20261117-01。
+awskr /home/admin/sf-ai-memory-20261117，fix/ai-memory-continuity-20261117，
+基线 b5f2f98。按用户顺序处理记忆→压缩→续接→模型/等待体验→折叠工具与思考摘要。
+[完整范围、后续不足与验证边界](AI-IMPROVEMENTS-20261117.md)。
+状态：代码/文档已实现，记忆/权限/续接/预览专项与界面检查已通过；最终 head 验证及 CI 结果补 PR 回执。保留原工作现场，不部署线上、不执行截图中的安装示例。
+
+
 ## 当前：PostgreSQL 维护兼容与基线核对（2026-11-17）
 
 PG-MAINTENANCE-20261117 / codex-pg-maintenance-20261117-01，单会话；

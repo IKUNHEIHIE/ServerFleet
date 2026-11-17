@@ -137,3 +137,36 @@ describe("ApiClient", () => {
     await expect(client(rateLimited).request("/x")).rejects.toMatchObject({ kind: "rate-limited", retryAfterSeconds: 7 });
   });
 });
+
+describe("AI streamed responses", () => {
+  it("keeps previews separate from the committed final message", async () => {
+    const frames = 'event: preview\ndata: {"kind":"text","text":"pending"}\n\nevent: completed\ndata: {"messageId":"final","redactedContent":"confirmed"}\n\n';
+    const fetchImpl = vi.fn(async () => new Response(frames, { headers: { "Content-Type": "text/event-stream" } })) as unknown as typeof fetch;
+    const preview = vi.fn();
+    const result = await client(fetchImpl).request<{ messageId: string }>("/generate", { onPreview: preview, accept: "text/event-stream" });
+    expect(preview).toHaveBeenCalledWith("text", "pending");
+    expect(result.data.messageId).toBe("final");
+  });
+
+  it("rejects an interrupted stream instead of accepting preview text", async () => {
+    const fetchImpl = vi.fn(async () => new Response('event: preview\ndata: {"kind":"text","text":"unfinished"}\n\n', { headers: { "Content-Type": "text/event-stream" } })) as unknown as typeof fetch;
+    await expect(client(fetchImpl).request("/generate", { onPreview: vi.fn() })).rejects.toMatchObject({ code: "GENERATION_OUTCOME_UNKNOWN" });
+  });
+
+  it("cancels an ongoing body after the caller aborts", async () => {
+    const controller = new AbortController();
+    const cancelled = vi.fn();
+    const stream = new ReadableStream<Uint8Array>({
+      start(output) {
+        output.enqueue(new TextEncoder().encode('event: preview\ndata: {"kind":"text","text":"pending"}\n\n'));
+      },
+      cancel: cancelled,
+    });
+    const fetchImpl = vi.fn(async () => new Response(stream, { headers: { "Content-Type": "text/event-stream" } })) as unknown as typeof fetch;
+    const pending = client(fetchImpl).request("/generate", {
+      signal: controller.signal, onPreview: () => controller.abort(),
+    });
+    await expect(pending).rejects.toMatchObject({ code: "GENERATION_OUTCOME_UNKNOWN" });
+    expect(cancelled).toHaveBeenCalledTimes(1);
+  });
+});

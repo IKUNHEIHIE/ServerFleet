@@ -472,6 +472,10 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const appSession = useSession();
   const [tab, setTab] = useState<"chat" | "agent" | "approval">("chat");
   const [events, setEvents] = useState<readonly AIStreamEvent[]>([]);
+  const [livePreview, setLivePreview] = useState("");
+  const [liveSummary, setLiveSummary] = useState("");
+  const [runSteps, setRunSteps] = useState(16);
+  const [runSeconds, setRunSeconds] = useState(1800);
   const [streamError, setStreamError] = useState<unknown>(null);
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -504,6 +508,8 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const updatePolicy = useAction((body: { mode: AIApprovalMode }) => aiApi.updateApprovalPolicy(sessionId, body));
   const updatePreferences = useAction((body: { model: string; reasoningEffort: "low" | "medium" | "high" | "" }) => aiApi.updatePreferences(sessionId, body));
   const catalog = useAction(() => modelSettingsApi.catalog());
+  const probeModel = useAction((model: string) => aiApi.probeModel(model));
+  const [capability, setCapability] = useState<{ forModel: string; toolCalls: boolean; reasoning: boolean } | null>(null);
   const compactContext = useAction((body: { keep: number }) => aiApi.compactContext(sessionId, body));
   const send = useAction((body: { content: string; clientMessageId: string; scopeRevision: number }) => aiApi.sendMessage(sessionId, body));
   const runAgent = useAction((body: AgentRunInput) => aiAgentApi.create(sessionId, body));
@@ -511,67 +517,28 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const [generatingMessageId, setGeneratingMessageId] = useState<string | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
-  const [streamReply, setStreamReply] = useState<{ message: AIMessage; visible: string; done: boolean } | null>(null);
-  const streamTimer = useRef<ReturnType<typeof setInterval> | null>(null);
-  const streamResolve = useRef<(() => void) | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
-
-  function stopStreamAnimation() {
-    if (streamTimer.current) clearInterval(streamTimer.current);
-    streamTimer.current = null;
-    streamResolve.current?.();
-    streamResolve.current = null;
-  }
-
-  /** 已验证回复逐字呈现，保持与常见 AI 对话一致的流式观感。 */
-  function revealReply(message: AIMessage): Promise<void> {
-    stopStreamAnimation();
-    const chars = Array.from(message.redactedContent ?? "");
-    setStreamReply({ message, visible: "", done: false });
-    if (chars.length === 0) {
-      setStreamReply({ message, visible: "", done: true });
-      return Promise.resolve();
-    }
-    const frames = Math.min(180, Math.max(8, Math.ceil(chars.length / 3)));
-    const step = Math.max(1, Math.ceil(chars.length / frames));
-    return new Promise<void>(resolve => {
-      streamResolve.current = () => {
-        if (streamTimer.current) clearInterval(streamTimer.current);
-        streamTimer.current = null;
-        streamResolve.current = null;
-        resolve();
-      };
-      let index = 0;
-      streamTimer.current = setInterval(() => {
-        index = Math.min(chars.length, index + step);
-        setStreamReply({ message, visible: chars.slice(0, index).join(""), done: index >= chars.length });
-        if (index >= chars.length) {
-          if (streamTimer.current) clearInterval(streamTimer.current);
-          streamTimer.current = null;
-          streamResolve.current = null;
-          resolve();
-        }
-      }, 16);
-    });
-  }
 
   /** 显式生成：成功后服务端返回完整助手消息并持久化，刷新消息列表即可见；
    * 失败时按服务端错误码诚实显示，不在本地编造回复。 */
   async function runGenerate(messageId: string) {
-    stopStreamAnimation();
-    setStreamReply(null);
+    setLivePreview("");
+    setLiveSummary("");
     setGeneratingMessageId(messageId);
     setGenerateError(null);
     try {
-      const result = await aiApi.generate(sessionId, messageId);
+      const result = await aiApi.generate(sessionId, messageId, (kind, text) => {
+        if (kind === "text") setLivePreview(text);
+        if (kind === "summary") setLiveSummary(text);
+      });
       if (!messageItems.some(message => message.messageId === result.data.messageId)) {
-        await revealReply(result.data);
+        setLivePreview(result.data.redactedContent ?? "");
       }
       messages.refreshSilent();
     } catch (error) {
       const code = (error as { code?: string })?.code ?? "";
       const known: Record<string, string> = {
-        AI_SOURCE_UNAVAILABLE: "模型或配额不可用（503 AI_SOURCE_UNAVAILABLE）：未配置模型设置或供应商未接线。",
+        AI_SOURCE_UNAVAILABLE: "模型不可用（503 AI_SOURCE_UNAVAILABLE）：检查模型设置、端点以及工具调用兼容性。",
         NOT_AUTHORIZED: "服务端拒绝本次生成（403 NOT_AUTHORIZED）：当前身份/会话/审批策略不满足。",
         GENERATION_OUTCOME_UNKNOWN: "生成结果未知（503 GENERATION_OUTCOME_UNKNOWN）：服务端不会自动重试，请核对消息状态。",
         MODEL_REVISION_CONFLICT: "模型配置在生成期间被修改（409）：请重新检查模型设置。",
@@ -579,6 +546,8 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
       setGenerateError(known[code] ?? describeApiError(error));
     } finally {
       setGeneratingMessageId(null);
+      setLivePreview("");
+      setLiveSummary("");
     }
   }
 
@@ -599,8 +568,6 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   useEffect(() => {
     return () => {
       if (refreshTimer.current) clearTimeout(refreshTimer.current);
-      if (streamTimer.current) clearInterval(streamTimer.current);
-      streamResolve.current?.();
     };
   }, [sessionId]);
 
@@ -608,7 +575,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   const canApprove = appSession.can("ai.approve") || appSession.can("ai.manage");
   const writesLocked = appSession.writesLocked;
   const messageItems: readonly AIMessage[] = messages.state.status === "ready" ? messages.state.data.items : [];
-  const visibleMessages = messageItems.filter(message => message.messageId !== streamReply?.message.messageId);
+  const visibleMessages = messageItems;
   const runItems = runs.state.status === "ready" ? runs.state.data : [];
   const runById = new Map(runItems.map(run => [run.id, run]));
   const renderedRunIds = new Set<string>();
@@ -627,7 +594,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   useEffect(() => {
     const list = listRef.current;
     if (list) list.scrollTop = list.scrollHeight;
-  }, [visibleMessages.length, streamReply?.visible, generatingMessageId]);
+  }, [visibleMessages.length, livePreview, generatingMessageId]);
 
   async function addGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -681,7 +648,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
     const content = messageText.trim();
     if (composerMode === "agent") {
       const goalKey = globalThis.crypto?.randomUUID?.() ?? `run-${Date.now()}`;
-      const result = await runAgent.run({ goal: content, clientRunId: goalKey, scopeRevision: current.scopeRevision, maxSteps: 8, timeoutSeconds: 900 });
+      const result = await runAgent.run({ goal: content, clientRunId: goalKey, scopeRevision: current.scopeRevision, maxSteps: runSteps, timeoutSeconds: runSeconds });
       if (result.ok && result.data) {
         setMessageText("");
         setActiveRunId(result.data.data.id);
@@ -726,6 +693,22 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
       />}
       {!canUse ? <Notice tone="warning" title="AI 使用入口已锁定">当前身份未返回 AI 使用权限（`ai.use`/`ai.manage`）。</Notice> : null}
       {writesLocked ? <Notice tone="warning" title="写入已锁定">重新登录后才能授权/审批/发送消息。</Notice> : null}
+      <div className="flex flex-wrap items-center gap-2 px-4 text-xs text-muted-foreground">
+        <Button type="button" size="sm" loading={probeModel.pending} disabled={writesLocked || !appSession.can("ai.manage")} onClick={async () => {
+          const forModel = current?.model ?? "";
+          const result = await probeModel.run(forModel);
+          if (result.ok && result.data) setCapability({ forModel, ...result.data.data });
+        }}>检测模型能力</Button>
+        <span>发送小型检测请求，不执行节点操作</span>
+        {capability && capability.forModel === (current?.model ?? "") ? <span>工具调用：{capability.toolCalls ? "已验证" : "未通过"} · 思考摘要：{capability.reasoning ? "已验证" : "未验证"}</span> : null}
+        {probeModel.error ? <span role="alert">{describeApiError(probeModel.error)}</span> : null}
+      </div>
+      {composerMode === "agent" ? (
+        <div className="flex flex-wrap items-center gap-3 px-4 text-xs text-muted-foreground">
+          <label>每段步数 <select aria-label="每段步数" value={runSteps} onChange={event => setRunSteps(Number(event.target.value))}>{[8, 16, 24].map(n => <option key={n} value={n}>{n} 步</option>)}</select></label>
+          <label>运行期限 <select aria-label="运行期限" value={runSeconds} onChange={event => setRunSeconds(Number(event.target.value))}>{[900, 1800, 3600].map(n => <option key={n} value={n}>{n / 60} 分钟</option>)}</select></label>
+        </div>
+      ) : null}
       {streamError ? <Notice tone="error" title="AI 事件流终止">{describeApiError(streamError)} 不会自动循环重连。</Notice> : null}
 
       <AsyncPanel state={session.state} onRetry={session.reload} errorTitle="AI 会话加载失败" empty={<EmptyState title="会话不存在" description="服务端未返回该会话，或当前身份无权查看。" />} isEmpty={() => false}>
@@ -820,7 +803,13 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                                   {isUser ? "你" : "AI"} · {formatDateTime(message.createdAt) ?? "—"}
                                 </span>
                               </div>
-                              <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{message.redactedContent ?? "服务端未返回内容"}</p>
+                              {message.reasoningSummary ? (
+                                <details className="mt-2">
+                                  <summary className="cursor-pointer text-sm text-muted-foreground">思考过程 · 简要摘要</summary>
+                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-6">{message.reasoningSummary}</p>
+                                </details>
+                              ) : null}
+ <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">{message.redactedContent ?? "服务端未返回内容"}</p>
                               {message.taskIds?.length ? <p className="mt-1.5 text-xs text-muted-foreground">任务：{message.taskIds.join("、")}</p> : null}
                               {message.role === "user" && !message.agentRunId && generateError && generatingMessageId === null ? (
                                 <div className="mt-3">
@@ -830,24 +819,22 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                             </div>
                           );
                         })}
-                        {generatingMessageId !== null && streamReply === null ? (
+                        {generatingMessageId !== null && (livePreview || liveSummary) ? (
+                          <div className="px-4 py-3" aria-live="polite">
+                            {liveSummary ? (
+                              <details>
+                                <summary className="cursor-pointer text-sm text-muted-foreground">思考过程 · 简要摘要</summary>
+                                <p className="whitespace-pre-wrap text-sm">{liveSummary}</p>
+                              </details>
+                            ) : null}
+                            <p className="whitespace-pre-wrap text-sm leading-7">{livePreview}</p>
+                            <span className="text-xs text-muted-foreground">正在生成，尚未确认完成</span>
+                          </div>
+                        ) : null}
+                        {generatingMessageId !== null && !livePreview ? (
                           <div className="mr-6 inline-flex items-center gap-2 rounded-2xl border border-border/80 bg-card px-4 py-3 text-sm text-muted-foreground">
                             <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" />
                             AI 正在思考并生成回复…
-                          </div>
-                        ) : null}
-                        {streamReply ? (
-                          <div className="mr-6 rounded-2xl border border-border/80 bg-card p-4 text-sm shadow-2xs">
-                            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-                              <Bot aria-hidden="true" className="size-3.5 text-emerald-600" />
-                              AI · {streamReply.done ? formatDateTime(streamReply.message.createdAt) ?? "—" : "正在输出"}
-                            </span>
-                            <p className="mt-2 whitespace-pre-wrap leading-6 text-foreground">
-                              {streamReply.visible}
-                              {streamReply.done ? null : (
-                                <span aria-hidden="true" className="ml-0.5 inline-block h-4 w-[2px] animate-pulse rounded-sm bg-primary align-text-bottom" />
-                              )}
-                            </p>
                           </div>
                         ) : null}
                         {activeRunId && !renderedRunIds.has(activeRunId) ? (

@@ -13,10 +13,13 @@ import (
 // reject the entire result. Event, total-byte, output and sequence bounds apply
 // independently. A disconnected stream without response.completed is UNKNOWN.
 func decodeProviderStream(ctx context.Context, reader io.Reader, model string) (string, error) {
+	return decodeProviderStreamObserved(ctx, reader, model, nil)
+}
+func decodeProviderStreamObserved(ctx context.Context, reader io.Reader, model string, observe generationPreview) (string, error) {
 	limited := &io.LimitedReader{R: reader, N: (1 << 20) + 1}
 	scanner := bufio.NewScanner(limited)
 	scanner.Buffer(make([]byte, 4096), 256<<10)
-	var data, delta strings.Builder
+	var data, delta, summary strings.Builder
 	eventName, completed, answer := "", false, ""
 	sequence, events := int64(-1), 0
 	process := func() error {
@@ -54,11 +57,21 @@ func decodeProviderStream(ctx context.Context, reader io.Reader, model string) (
 		sequence = *e.Sequence
 		switch e.Type {
 		case "response.created", "response.in_progress", "response.content_part.added", "response.content_part.done", "response.output_text.done":
+		case "response.reasoning_summary_text.delta":
+			if summary.Len()+len(e.Delta) > 8192 {
+				return ErrGenerationUnknown
+			}
+			summary.WriteString(e.Delta)
+			if observe != nil {
+				if err := observe("summary", summary.String()); err != nil {
+					return err
+				}
+			}
 		case "response.reasoning_text.delta", "response.reasoning_text.done",
-			"response.reasoning_summary_text.delta", "response.reasoning_summary_text.done",
+			"response.reasoning_summary_text.done",
 			"response.reasoning_summary_part.added", "response.reasoning_summary_part.done":
-			// Chain-of-thought and summaries stay private; only final output text
-			// is accumulated. Sequence continuity is still enforced above.
+			// Raw reasoning text stays private. Only separately typed public summary
+			// events may reach an authorized preview observer.
 		case "response.output_item.added", "response.output_item.done":
 			if e.Item.Type != "message" && e.Item.Type != "reasoning" {
 				return ErrGenerationUnknown
@@ -68,11 +81,21 @@ func decodeProviderStream(ctx context.Context, reader io.Reader, model string) (
 				return ErrGenerationUnknown
 			}
 			delta.WriteString(e.Delta)
+			if observe != nil {
+				if err := observe("text", delta.String()); err != nil {
+					return err
+				}
+			}
 		case "response.completed":
 			var err error
 			answer, err = decodeProviderText(e.Response, model)
 			if err != nil || answer != delta.String() {
 				return ErrGenerationUnknown
+			}
+			if observe != nil && summary.Len() > 0 {
+				if e := observe("summary_completed", summary.String()); e != nil {
+					return e
+				}
 			}
 			completed = true
 		default:

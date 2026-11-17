@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
 )
@@ -22,6 +23,7 @@ func NewModelCatalogHTTP(models *ModelSettingsService, runtime *BYOKRuntime, aut
 	}
 	h := &ModelCatalogHTTP{models, runtime, authenticate, http.NewServeMux()}
 	h.mux.HandleFunc("POST /api/v1/ai/model-settings/models", h.list)
+	h.mux.HandleFunc("POST /api/v1/ai/model-settings/probe", h.probe)
 	return h, nil
 }
 
@@ -68,4 +70,48 @@ func (h *ModelCatalogHTTP) list(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeAIJSON(w, 200, map[string]any{"items": items, "endpoint": cfg.Endpoint})
+}
+
+func (h *ModelCatalogHTTP) probe(w http.ResponseWriter, r *http.Request) {
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(50 * time.Second))
+	if r.TLS == nil || r.URL.RawQuery != "" {
+		writeAIProblem(w, 400, "INVALID_REQUEST")
+		return
+	}
+	principal, err := h.auth(r)
+	if err != nil || !principal.Administrator || principal.Recheck == nil {
+		writeAIProblem(w, 403, "NOT_AUTHORIZED")
+		return
+	}
+	var input struct {
+		Model string `json:"model"`
+	}
+	if !decodeAgentBody(w, r, &input, 1024) {
+		return
+	}
+	ctx := WithActor(r.Context(), SessionActor{SubjectID: principal.SubjectID, HumanWeb: true, Administrator: true, CanFullAccess: true}, principal.Recheck)
+	cfg, err := h.models.CatalogSettings(ctx)
+	if err != nil {
+		writeAIError(w, err)
+		return
+	}
+	if input.Model == "" {
+		input.Model = cfg.Model
+	}
+	id, err := sessionID()
+	if err != nil {
+		writeAIError(w, err)
+		return
+	}
+	op := auth.CredentialOperation{SubjectID: principal.SubjectID, CredentialID: cfg.CredentialRef, Module: "ai", Source: "ai", OperationID: "ai-models-probe-" + id, PlanDigest: modelsPlanDigest(cfg.Endpoint), Action: "use", ExpectedRevision: cfg.CredentialRevision}
+	result, err := h.runtime.ProbeModel(ctx, op, cfg.Endpoint, input.Model)
+	if err != nil {
+		writeAIError(w, err)
+		return
+	}
+	if _, err = h.models.CatalogSettings(ctx); err != nil {
+		writeAIError(w, err)
+		return
+	}
+	writeAIJSON(w, 200, result)
 }
