@@ -4,6 +4,7 @@ import { motion } from "motion/react";
 import { matchPath, useLocation } from "@/app/router";
 import { ROUTE_META } from "@/app/navigation";
 import { useSession } from "@/app/session";
+import { MobileApp } from "@/features/mobile/mobile-app";
 import { Shell } from "@/app/shell";
 import { SessionChecking, SessionUnavailable } from "@/app/session-screens";
 import { BootstrapPage, LoginPage } from "@/features/auth/auth-pages";
@@ -128,6 +129,7 @@ export function AppFrame() {
   }
   if (location.path === "/login") return <LoginPage next={null} />;
   if (location.path === "/setup") return <SessionChecking />;
+  if (location.path === "/app" || location.path.startsWith("/app/")) return <MobileApp />;
   return (
     <Shell>
       <RouterContent />

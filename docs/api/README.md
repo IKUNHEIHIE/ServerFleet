@@ -1,5 +1,17 @@
 # 当前接口说明
 
+## 2026-11-18 移动 App 客户端
+
+新增 Android 预览客户端与 /#/app 移动界面；无新增 Controller API、数据库迁移或 Agent 通道。
+App 以 JSON username/password 调用既有 POST /api/v1/auth/login，读取顶层 identity 与 Set-Cookie；
+CookieManager 写入完成后加载同源 WebView，GET /api/v1/auth/me 恢复身份与 CSRF。
+节点沿用 GET /nodes、/nodes/{id}、/nodes/{id}/capabilities（均带 /api/v1 前缀）；
+AI 沿用现有 /ai/sessions 消息/生成/事件流、授权、审批与运行接口。
+首页 meta serverfleet-client=mobile-app-v1 用于原生端进入前识别支持，不是授权凭证。
+可选静态 GET/HEAD /assets/serverfleet-mobile-*.apk 为公开安装包下载，Content-Type 为 application/vnd.android.package-archive，Content-Disposition 为 attachment；沿用 console 只读工件快照与大小上限。
+[客户端说明](../../apps/android/README.md)。
+
+
 ## 2026-11-18 AI 交互与模型协议增量
 
 修改：模型设置 provider 接受 openai-responses（原有）与 openai-chat-completions（新增），

@@ -103,6 +103,10 @@ func LoadConsole(directory string) (http.Handler, error) {
 				kind = "image/webp"
 			case ".ico":
 				kind = "image/x-icon"
+			case ".apk":
+				if strings.HasPrefix(relative, "assets/serverfleet-mobile-") {
+					kind = "application/vnd.android.package-archive"
+				}
 			case ".woff":
 				kind = "font/woff"
 			case ".woff2":
@@ -167,6 +171,9 @@ func (h *consoleHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", asset.contentType)
+	if asset.contentType == "application/vnd.android.package-archive" {
+		w.Header().Set("Content-Disposition", "attachment; filename="+path.Base(r.URL.Path))
+	}
 	w.Header().Set("Content-Security-Policy", consolePolicy)
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.Header().Set("Referrer-Policy", "no-referrer")
