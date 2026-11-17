@@ -1,6 +1,6 @@
 # 后续 Agent 开发交接
 
-更新日期：2026-11-16。接手现有项目，先按以下顺序阅读：
+更新日期：2026-11-17。接手现有项目，先按以下顺序阅读：
 
 1. 根 [AGENTS](../../AGENTS.md) 与 [当前状态](CURRENT-STATE.md)：任务范围、代码缺口、发布和未验收范围。
 2. [功能说明](../product/FEATURES.md)、[API](../api/README.md)：现有行为和应保留的界面语义。
@@ -10,7 +10,7 @@
 
 ## 开工与判断依据
 
-从远程当前 main 建独立分支/工作目录，先检查 head 和本地变更。本次核对的代码基线是 `71dbca3c9d4a69890468d2f574362eaf6ea15c48`（2026-11-16），**只用于定位证据，不要求后续回退到它**。main 前进后核对差异并刷新 CURRENT-STATE。
+从远程当前 main 建独立分支/工作目录，先检查 head 和本地变更。当前工作分支为 `feature/ai-dns-certs-ui-20261117`（PR #54），其 head 与验证记录见 CURRENT-STATE 与 TASK-BOARD；历史基线 `71dbca3c9d4a69890468d2f574362eaf6ea15c48` 只用于定位证据，不要求后续回退到它。main 前进后核对差异并刷新 CURRENT-STATE。
 
 当前用户请求决定任务。任务板用于记录，旧 OPEN/READY/IN PROGRESS 不自动授权新会话执行；历史生产主机和凭据授权不继承。记录任务 ID、唯一会话、目录、验证与停止条件，只有明确要求并行才启动其他 Agent。同一 GitHub 账号不构成独立 APPROVE。
 

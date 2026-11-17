@@ -1,6 +1,6 @@
 # 当前接口说明
 
-核对：2026-11-14 / v0.9.2。先读 [开发交接](../development/HANDOFF.md)、[当前状态](../development/CURRENT-STATE.md)。本文及增量修订用于定位实际接口，未宣称统一 OpenAPI 已全字段核验/冻结。
+核对：2026-11-17 / v0.9.2 增量。先读 [开发交接](../development/HANDOFF.md)、[当前状态](../development/CURRENT-STATE.md)。本文及增量修订用于定位实际接口，未宣称统一 OpenAPI 已全字段核验/冻结。
 
 v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完整证书链及有效旧回执的公开 PEM 响应，不新增业务路由或字段；撤销/过期/代次校验不变。安装 catalog 的既有 url/sha256 默认用于固定版本 raw 安装入口，新版命令增加公开 bootstrap CA，令牌仍不进入命令。
 
@@ -49,6 +49,12 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 | 监控/通知/流量 | `/availability-monitors`、`/traffic-risks`、`/notifications`、节点traffic相关路径 | 源节点权限、当前owner、通知凭据、真实计数覆盖；旧`/monitoring/`前缀兼容 |
 | 更新/备份/恢复/处置 | `/system`、`/backups`、`/disaster-recovery`、`/operations/incidents` | 可信supervisor、加密/存储凭据、恢复隔离、独立审批和新鲜证据 |
 | 插件 | `/plugins`、`/plugins/xray-manager` | 目录/包/声明式元数据可存在；变更/执行需已准入Runtime和Host，当前存在明确501/503拒绝式入口 |
+
+## AI 运维增量（2026-11-17）
+
+AI 侧审批收敛为会话范围的三档：`per_action`（每次询问）、`automatic`（只读/低风险自动）、`full_access`（当前授权内不再逐项确认，root Shell 仍需管理员确认）。`PATCH /api/v1/ai/sessions/{sessionId}/approval-policy` 只接受 `{"mode": ...}`；审批模式变更不迁移资源授权，但会把排队中的 Agent 运行带入新范围，在途步骤无法安全继续时显式标记 unknown。
+
+`PATCH /api/v1/ai/sessions/{sessionId}/preferences` 接受 `model` 与 `reasoningEffort`（`low|medium|high|""`），仅改变本会话模型与 Responses `reasoning.effort`，不扩大资源范围。`GET /api/v1/ai/sessions/{sessionId}/context` 返回消息数、估算 tokens、摘要状态与当前模型；`POST /api/v1/ai/sessions/{sessionId}/context/compact` 接受 `{"keep": 2..20}`，生成并持久化本地抽取式摘要，不调用模型或凭据。`GET /messages` 对 Agent 运行消息保留 `agentRunId`，客户端按运行内嵌展示，不再把占位文本当作执行结果。`POST /api/v1/ai/sessions/{sessionId}/runs` 的 AI 任务不再要求任务层二次审批；`tasks.exec.v1` 与 `tasks.command` 一样使用任务提交权限回退，具体任务仍走统一授权、审批、审计与 UNKNOWN 语义。
 
 ## 节点管理补丁（2026-11-15，工作区待提交）
 

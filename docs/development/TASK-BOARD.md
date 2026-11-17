@@ -1,5 +1,9 @@
 # 任务登记板
 
+## AI 运维闭环、PostgreSQL 与网关修复（2026-11-17）
+
+AI-LOOP-PG-20261117 / 分支 `feature/ai-dns-certs-ui-20261117`，[PR #54](https://github.com/IKUNHEIHIE/ServerFleet/pull/54)。范围：AI Agent 执行内嵌对话、模型/思考深度/上下文统计与压缩、三档审批单一闸门与任务层去重、`tasks.exec.v1` 授权回退、审批模式切换的 stale 运行收口、会话读取性能、PostgreSQL 方言与离线 COPY 迁移工具、网关空列表/首超管授权修复及现行文档。验证：`check:web` 53 文件 / 481 用例与生产构建通过；`internal/ai`、`internal/auth`、`internal/gateway`、`internal/tasks`、`internal/transport`、Controller server 测试通过；awskr 测试站完成三档切换、上下文压缩、模型/高思考深度 Agent 运行、xray-core 真实安装（VLESS 10086 / SOCKS 1080）、aliyun-hk-1b 实机检查、网关接口 200。限制：目录内部分模型不支持工具调用；上下文压缩为本地抽取式摘要；PG 的备份/恢复、更新指纹和文件级快照仍为 SQLite 文件语义；Xray 为测试配置非生产代理。结果以本分支精确 head CI 与 PR 记录为准。
+
 ## 控制台缺陷修复与 AI 执行模式（2026-11-17）
 
 CONSOLE-FIX-20261117 / 分支 `feature/ai-dns-certs-ui-20261117`，[PR #54](https://github.com/IKUNHEIHIE/ServerFleet/pull/54)。用户要求先上传现有改动，再修复页面 403/权限、动态渐变与配色、证书签发配置、DNS 记录添加、AI Key 配置及 AI Agent 实控。已完成：权限键别名覆盖、统计卡片鼠标跟随渐变与多彩色调、DNS 记录增删改走 DNS 账号模块并补类型校验、测试站生成 ACME 账户密钥与部署文件并挂载 `-acme-deployment`、证书面板内联 CSR 登记、系统设置内新增 AI API Key、对话输入区“对话/执行任务”切换并创建自动推进的 Agent 运行。验证：awskr `check:web` 53 文件 / 480 用例 0 失败、生产构建成功、`/readyz` 五项 ready，首页资源 `index-r3fgJqMC.js`；`go test -count=1` 的 `internal/ai`、`internal/dns`、`apps/controller/server` 通过（迁移计数测试更新为 53）。真实管理员会话复验：登录、节点、任务、凭据、DNS、监控、内部证书、续签列表与 AI 会话接口均 200，未复现页面 403；公共证书配置 `configured=true`；真实 Cloudflare TXT 记录新增（201）→读回→删除（204）→确认不存在；AI 执行模式在人工批准 `nodes.read` 后读取真实节点状态并完成运行。DNS 遗留测试记录已清理，临时 AI 调试环境变量已移除。GitHub 直连 443 间歇不可用，追加提交经 Git Data API 推送。
