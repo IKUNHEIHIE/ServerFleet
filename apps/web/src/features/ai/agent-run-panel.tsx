@@ -65,7 +65,7 @@ export function AgentRunPanel({ session, focusRunId }: { readonly session: AISes
             {ids => <TextArea id={ids.inputId} aria-describedby={ids.hintId} value={goal} onChange={event => setGoal(event.target.value)} maxLength={8000} required disabled={locked || create.pending || uncertain} placeholder="例如：检查已授权节点的运行状态，对异常节点执行自检，然后汇总结果。" />}
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="最多规划步数">{ids => <Select id={ids.inputId} value={maxSteps} disabled={locked || create.pending || uncertain} onChange={event => setMaxSteps(Number(event.target.value))}>{[4, 8, 12].map(value => <option key={value} value={value}>{value} 步</option>)}</Select>}</Field>
+            <Field label="最多规划步数">{ids => <Select id={ids.inputId} value={maxSteps} disabled={locked || create.pending || uncertain} onChange={event => setMaxSteps(Number(event.target.value))}>{[8, 16, 24].map(value => <option key={value} value={value}>{value} 步</option>)}</Select>}</Field>
             <Field label="运行期限（含等待审批）">{ids => <Select id={ids.inputId} value={timeoutSeconds} disabled={locked || create.pending || uncertain} onChange={event => setTimeoutSeconds(Number(event.target.value))}>{[300, 900, 1800, 3600].map(value => <option key={value} value={value}>{value / 60} 分钟</option>)}</Select>}</Field>
           </div>
           <p className="text-sm text-muted-foreground">授权节点：{session.allowedNodeIds?.length ?? 0} 台。资源变更会使旧运行失效。</p>
@@ -230,6 +230,7 @@ export function InlineAgentRun({
   });
   const decide = useAction((approvalId: string, decision: "approve" | "deny") => aiApi.decideApproval(sessionId, approvalId, { decision }));
   const advance = useAction((revision: number) => aiAgentApi.advance(sessionId, runId, revision));
+  const continueRun = useAction((revision: number) => aiAgentApi.continueRun(sessionId, runId, revision));
   const data = run.state.status === "ready" ? run.state.data : null;
   const last = data?.steps.at(-1);
 
@@ -239,7 +240,7 @@ export function InlineAgentRun({
   }
 
   return (
-    <div className={`${compact ? "mx-0" : "mx-3 mb-3"} rounded-xl border border-primary/20 bg-primary/[0.03] p-3`}>
+    <div className={`${compact ? "mx-0" : "mx-3 mb-3"} rounded-xl bg-transparent p-3`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {data && !TERMINAL.has(data.state) ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /> : <Bot aria-hidden="true" className="size-4 text-emerald-600" />}
         <strong className="text-foreground">Agent {data ? STATE_LABEL[data.state] : "读取中"}</strong>
@@ -253,26 +254,26 @@ export function InlineAgentRun({
       {data ? (
         <ol className="mt-2 space-y-2">
           {data.steps.map(step => (
-            <li key={step.number} className="rounded-lg border border-border/70 bg-card px-3 py-2 text-xs">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-semibold text-foreground">第 {step.number} 步 · {step.toolName ?? "模型规划"}</span>
-                <span className="text-muted-foreground">{STATE_LABEL[step.state]}</span>
-                {step.nodeIds.length ? <span className="text-muted-foreground">· {step.nodeIds.length} 个节点</span> : null}
-              </div>
-              {step.plan ? (
-                <p className="mt-1 whitespace-pre-wrap text-muted-foreground">规划：{step.plan}</p>
-              ) : (
-                <p className="mt-1 text-muted-foreground">
-                  {step.toolName ? `规划：调用 ${step.toolName}${step.nodeIds.length ? ` 处理 ${step.nodeIds.length} 个节点` : ""}` : step.state === "thinking" ? "模型正在规划下一步…" : ""}
+            <li key={step.number} className="py-2 text-sm">
+              <details className="mb-3">
+                <summary className="cursor-pointer text-muted-foreground">思考过程{step.state === "thinking" ? " · 正在规划" : ""}</summary>
+                <p className="mt-2 whitespace-pre-wrap leading-7">
+                  {step.plan || (step.toolName ? "计划调用 " + step.toolName + "，目标节点：" + step.nodeIds.join("、") : "模型未提供简要思考摘要。")}
                 </p>
-              )}
-              {step.result ? (
-                <details className="mt-1">
-                  <summary className="cursor-pointer font-medium text-emerald-700">执行结果</summary>
-                  <pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-all rounded bg-[#141724] p-2 font-mono text-[11px] text-emerald-200">{step.result}</pre>
+              </details>
+              {step.toolName ? (
+                <details>
+                  <summary className="cursor-pointer text-muted-foreground">
+                    <Sparkles aria-hidden="true" className="mr-2 inline size-4" />第 {step.number} 步 · {STATE_LABEL[step.state]} · {step.toolName}
+                  </summary>
+                  <dl className="mt-3 space-y-2 text-xs">
+                    <dt>目标节点</dt><dd>{step.nodeIds.join("、")}</dd>
+                    <dt>调用参数</dt><dd><pre className="max-h-60 overflow-auto whitespace-pre-wrap">{JSON.stringify(step.parameters ?? {}, null, 2)}</pre></dd>
+                    <dt>实际结果</dt><dd><pre className="max-h-80 overflow-auto whitespace-pre-wrap">{step.result ?? "等待执行回执"}</pre></dd>
+                  </dl>
+                  {step.taskId ? <a className="mt-2 inline-block text-xs text-primary underline" href={"#/tasks/" + encodeURIComponent(step.taskId)}>查看任务 · {step.taskState ?? "等待状态"}</a> : null}
                 </details>
               ) : null}
-              {step.taskId ? <a className="mt-1 inline-block font-medium text-primary underline" href={`#/tasks/${encodeURIComponent(step.taskId)}`}>查看任务 · {step.taskState ?? "等待状态"}</a> : null}
             </li>
           ))}
         </ol>
@@ -288,6 +289,15 @@ export function InlineAgentRun({
       {data && !TERMINAL.has(data.state) && !data.driverActive ? (
         <div className="mt-2">
           <Button type="button" size="sm" loading={advance.pending} onClick={async () => { await advance.run(data.revision); run.refreshSilent(); }}>继续运行</Button>
+        </div>
+      ) : null}
+      {data?.state === "limit_reached" && data.stopReason === "maximum_model_steps_reached" && data.maxSteps <= 56 ? (
+        <div className="mt-3">
+          <Button type="button" size="sm" loading={continueRun.pending} onClick={async () => {
+            await continueRun.run(data.revision);
+            run.refreshSilent();
+          }}>续接下一段（增加 8 步 / 15 分钟）</Button>
+          {continueRun.error ? <Notice tone="error" title="续接未完成">{describeApiError(continueRun.error)}</Notice> : null}
         </div>
       ) : null}
       {data?.finalText ? (

@@ -47,6 +47,7 @@ func NewAgentHTTP(loop *AgentLoop, authenticate func(*http.Request) (context.Con
 	h.mux.HandleFunc("GET /api/v1/ai/sessions/{sessionId}/runs/{runId}", h.get)
 	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/runs/{runId}/advance", h.advance)
 	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/runs/{runId}/cancel", h.cancel)
+	h.mux.HandleFunc("POST /api/v1/ai/sessions/{sessionId}/runs/{runId}/continue", h.continueRun)
 	return h, nil
 }
 func (h *AgentHTTP) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -151,4 +152,24 @@ func (h *AgentHTTP) cancel(w http.ResponseWriter, r *http.Request) {
 	}
 	v, e := h.loop.Cancel(ctx, r.PathValue("sessionId"), r.PathValue("runId"), in.Expected)
 	h.respond(w, ctx, 200, v, e)
+}
+
+func (h *AgentHTTP) continueRun(w http.ResponseWriter, r *http.Request) {
+	ctx, ok := h.request(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		Expected uint64 `json:"expectedRevision"`
+		Steps    int    `json:"additionalSteps"`
+		Seconds  int    `json:"timeoutSeconds"`
+	}
+	if !decodeAgentBody(w, r, &input, 1024) {
+		return
+	}
+	run, err := h.loop.Continue(ctx, r.PathValue("sessionId"), r.PathValue("runId"), input.Expected, input.Steps, input.Seconds)
+	if err == nil {
+		run, err = h.loop.Drive(ctx, run.SessionID, run.ID, run.Revision)
+	}
+	h.respond(w, ctx, 202, run, err)
 }

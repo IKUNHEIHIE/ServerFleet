@@ -64,10 +64,15 @@ export const aiAgentApi = {
   create: (sessionId: string, body: AgentRunInput) => apiClient.request<AgentRun>(runsPath(sessionId), { method: "POST", body }),
   get: (sessionId: string, runId: string, signal?: AbortSignal) => apiClient.request<AgentRun>(`${runsPath(sessionId)}/${encodeURIComponent(runId)}`, { signal }),
   advance: (sessionId: string, runId: string, expectedRevision: number) => apiClient.request<AgentRun>(`${runsPath(sessionId)}/${encodeURIComponent(runId)}/advance`, { method: "POST", body: { expectedRevision } }),
+  continueRun:(sessionId:string,runId:string,expectedRevision:number)=>apiClient.request<AgentRun>(runsPath(sessionId)+"/"+encodeURIComponent(runId)+"/continue",{method:"POST",body:{expectedRevision,additionalSteps:8,timeoutSeconds:900}}),
   cancel: (sessionId: string, runId: string, expectedRevision: number) => apiClient.request<AgentRun>(`${runsPath(sessionId)}/${encodeURIComponent(runId)}/cancel`, { method: "POST", body: { expectedRevision } }),
 };
 
 export const aiApi = {
+  probeModel: (model: string) =>
+    apiClient.request<{ model: string; toolCalls: boolean; reasoning: boolean; checkedAt: string }>(
+      "/api/v1/ai/model-settings/probe", { method: "POST", body: { model }, timeoutMs: 50000 },
+    ),
   createSession: () => apiClient.request<AISession>("/api/v1/ai/sessions", { method: "POST", body: {} }),
   sessions: (signal?: AbortSignal) => apiClient.request<{ items: readonly AISessionSummary[] }>("/api/v1/ai/sessions", { signal }),
   getSession: (sessionId: string, signal?: AbortSignal) =>
@@ -132,12 +137,12 @@ export const aiApi = {
       // 真实 Controller 要求 Idempotency-Key；用客户端消息 ID 让重试保持同一意图。
       idempotencyKey: body.clientMessageId,
     }),
-  // 显式生成：无请求体/查询参数；响应是服务端缓冲上游 SSE 至终态后的完整脱敏消息，
-  // 不是浏览器逐 token 流。排队/回显用户文本不算生成成功。
-  generate: (sessionId: string, messageId: string) =>
+  // 显式生成支持可选 SSE 预览；仅 completed 事件中的消息作为最终结果。
+  // 中断、错误或缺少 completed 均拒绝，排队和预览文字不算生成成功。
+  generate: (sessionId: string, messageId: string, onPreview?: (kind: string, text: string) => void) =>
     apiClient.request<AIMessage>(
       `/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/messages/${encodeURIComponent(messageId)}/generate`,
-      { method: "POST" },
+      { method: "POST", timeoutMs: 190000, accept: onPreview ? "text/event-stream" : "application/json", onPreview },
     ),
   eventsUrl: (sessionId: string) => `/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/events`,
 };

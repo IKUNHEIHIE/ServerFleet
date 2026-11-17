@@ -2,7 +2,10 @@ package ai
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -39,19 +42,54 @@ func (h *GenerationHTTP) generate(w http.ResponseWriter, r *http.Request) {
 		writeAIProblem(w, 403, "NOT_AUTHORIZED")
 		return
 	}
-	bounded, cancel := context.WithTimeout(ctx, 35*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, 185*time.Second)
 	defer cancel()
 	if h.commit(bounded) != nil {
 		writeAIProblem(w, 403, "NOT_AUTHORIZED")
 		return
 	}
+	streaming := strings.Contains(r.Header.Get("Accept"), "text/event-stream")
+	started := false
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(190 * time.Second))
+	send := func(kind string, value any) error {
+		if h.commit(bounded) != nil {
+			return ErrToolDenied
+		}
+		if !started {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.Header().Set("X-Accel-Buffering", "no")
+			w.WriteHeader(200)
+			started = true
+		}
+		raw, e := json.Marshal(value)
+		if e != nil {
+			return e
+		}
+		if _, e = fmt.Fprintf(w, "event: %s\ndata: %s\n\n", kind, raw); e != nil {
+			return e
+		}
+		return http.NewResponseController(w).Flush()
+	}
+	if streaming {
+		bounded = withGenerationPreview(bounded, func(kind, value string) error { return send("preview", map[string]string{"kind": kind, "text": value}) })
+	}
 	result, err := h.conversation.Generate(bounded, r.PathValue("sessionId"), r.PathValue("messageId"))
 	if err != nil {
+		if started {
+			_ = send("error", map[string]string{"code": "GENERATION_OUTCOME_UNKNOWN"})
+			return
+		}
 		writeAIError(w, err)
 		return
 	}
 	if h.commit(bounded) != nil {
-		writeAIProblem(w, 403, "NOT_AUTHORIZED")
+		if !started {
+			writeAIProblem(w, 403, "NOT_AUTHORIZED")
+		}
+		return
+	}
+	if streaming {
+		_ = send("completed", result)
 		return
 	}
 	writeAIJSON(w, 200, result)

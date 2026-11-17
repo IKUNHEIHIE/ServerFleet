@@ -3162,6 +3162,22 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/ai/model-settings/probe",
+      "declarations": [
+        {
+          "source": "apps/controller/server/composition_routes.go",
+          "owner": "registerAIRoutes"
+        },
+        {
+          "source": "internal/ai/model_catalog_http.go",
+          "owner": "NewModelCatalogHTTP"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/ai/sessions",
       "declarations": [
         {
@@ -3400,6 +3416,18 @@
           "operationId": "cancelAIAgentRunR28"
         }
       ]
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/ai/sessions/{sessionId}/runs/{runId}/continue",
+      "declarations": [
+        {
+          "source": "internal/ai/agent_http.go",
+          "owner": "NewAgentHTTP"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
     },
     {
       "method": "POST",

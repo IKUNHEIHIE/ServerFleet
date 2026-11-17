@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **285** 个不同的 method/path 声明，其中 **10** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **287** 个不同的 method/path 声明，其中 **12** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -33,6 +33,7 @@
 | PATCH | `/api/v1/ai/sessions/{sessionId}/approval-policy` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [updateAISessionApprovalPolicy](../../api/openapi/g2-merged-candidate.yaml) |
 | PATCH | `/api/v1/ai/sessions/{sessionId}/preferences` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
 | POST | `/api/v1/ai/model-settings/models` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
+| POST | `/api/v1/ai/model-settings/probe` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | 未覆盖；以源码和领域说明为准 |
 | POST | `/api/v1/ai/sessions` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [createAISession](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/approvals` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [createAIToolApproval](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/approvals/{approvalId}/decision` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [decideAIToolApproval](../../api/openapi/g2-merged-candidate.yaml) |
@@ -44,6 +45,7 @@
 | POST | `/api/v1/ai/sessions/{sessionId}/runs` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [createAIAgentRunR28](../../api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/runs/{runId}/advance` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [continueAIAgentRunR28](../../api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml) |
 | POST | `/api/v1/ai/sessions/{sessionId}/runs/{runId}/cancel` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [cancelAIAgentRunR28](../../api/openapi/revisions/v09-r28/ai-agent-loop-candidate.yaml) |
+| POST | `/api/v1/ai/sessions/{sessionId}/runs/{runId}/continue` | [agent_http.go](../../internal/ai/agent_http.go) · NewAgentHTTP | 未覆盖；以源码和领域说明为准 |
 | POST | `/api/v1/ai/tools/execute` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [executeAIScopedTool](../../api/openapi/g2-merged-candidate.yaml) |
 | PUT | `/api/v1/ai/model-settings` | [composition_routes.go](../../apps/controller/server/composition_routes.go) · registerAIRoutes | [putAIModelSettingsR6](../../api/openapi/revisions/v09-r6/ai-candidate.yaml) |
 | PUT | `/api/v1/ai/model-settings/{profileId}/budget` | [ai_budget_http.go](../../apps/controller/server/ai_budget_http.go) · RegisterAIBudgetRoutes | [configureOwnerAIBudgetR7](../../api/openapi/revisions/v09-r7/ai-budget-candidate.yaml) |

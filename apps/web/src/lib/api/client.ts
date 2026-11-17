@@ -13,6 +13,7 @@ export interface RequestOptions {
   readonly signal?: AbortSignal;
   readonly timeoutMs?: number;
   readonly accept?: string;
+ readonly onPreview?: (kind: string,text: string) => void;
   /** 登录失败是凭据错误，不应触发全局“会话失效”处理。 */
   readonly authEvent?: boolean;
   readonly acceptedStatuses?: readonly number[];
@@ -242,7 +243,7 @@ export class ApiClient {
     method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
     headers: Headers,
     body: BodyInit | undefined,
-    options: { readonly query?: RequestOptions["query"]; readonly signal?: AbortSignal; readonly timeoutMs?: number; readonly authEvent?: boolean; readonly acceptedStatuses?: readonly number[] },
+    options: { readonly query?: RequestOptions["query"]; readonly signal?: AbortSignal; readonly timeoutMs?: number; readonly authEvent?: boolean; readonly acceptedStatuses?: readonly number[];readonly onPreview?: (kind: string, text: string) => void },
   ): Promise<ApiResponse<T>> {
     const timeout = mergeSignals(options.signal, options.timeoutMs ?? this.defaultTimeoutMs);
     let response: Response;
@@ -286,6 +287,56 @@ export class ApiClient {
       return { data: undefined as T, status: response.status };
     }
 
+    if (contentType.startsWith("text/event-stream") && options.onPreview) {
+      if (!response.body) throw new ApiError({ kind: "invalid", status: response.status });
+      const reader = response.body.getReader();
+      const cancelReader = () => { void reader.cancel().catch(() => undefined); };
+      const timer = setTimeout(cancelReader, options.timeoutMs ?? 190000);
+      options.signal?.addEventListener("abort", cancelReader, { once: true });
+      if (options.signal?.aborted) cancelReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      let total = 0;
+      let result: T | undefined;
+      let completed = false;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          total += value.byteLength;
+          if (total > 16 * 1024 * 1024) throw new ApiError({ kind: "invalid", status: response.status });
+          buffer += decoder.decode(value, { stream: true });
+          let boundary: number;
+          while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+            const frame = buffer.slice(0, boundary);
+            buffer = buffer.slice(boundary + 2);
+            const lines = frame.split("\n");
+            const kind = lines.find(line => line.startsWith("event: "))?.slice(7);
+            const data = lines.filter(line => line.startsWith("data: ")).map(line => line.slice(6)).join("\n");
+            const parsed = JSON.parse(data) as Record<string, unknown>;
+            if (completed) throw new ApiError({ kind: "invalid", status: response.status });
+            if (kind === "preview" && typeof parsed.kind === "string" && typeof parsed.text === "string") {
+              options.onPreview(parsed.kind, parsed.text);
+            } else if (kind === "completed") {
+              result = parsed as T;
+              completed = true;
+            } else {
+              throw new ApiError({ kind: "unavailable", status: 503, code: "GENERATION_OUTCOME_UNKNOWN" });
+            }
+          }
+          if (buffer.length > 256000) throw new ApiError({ kind: "invalid", status: response.status });
+        }
+        if (!completed || buffer.trim() || options.signal?.aborted) {
+          throw new ApiError({ kind: "unavailable", status: 503, code: "GENERATION_OUTCOME_UNKNOWN" });
+        }
+        return { data: result as T, status: response.status };
+      } finally {
+        clearTimeout(timer);
+        options.signal?.removeEventListener("abort", cancelReader);
+        cancelReader();
+        reader.releaseLock();
+      }
+    }
     if (!isJson) {
       throw new ApiError({ kind: "invalid", status: response.status });
     }

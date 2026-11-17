@@ -57,14 +57,18 @@ type AgentCall struct {
 	CallID     string          `json:"callId"`
 }
 type agentDecision struct {
-	Text  string            `json:"text"`
-	Call  *AgentCall        `json:"call,omitempty"`
-	Items []json.RawMessage `json:"items"`
+	Text    string            `json:"text"`
+	Summary string            `json:"summary,omitempty"`
+	Call    *AgentCall        `json:"call,omitempty"`
+	Items   []json.RawMessage `json:"items"`
 }
 type agentRunRecord struct {
 	View                             AgentRun
 	ClientID, InputHash, PlanningSHA string
 	Profile                          ModelProfile
+	Memory                           string
+	MemoryNodeIDs                    []string
+	MemoryScopeHash                  string
 	History                          []json.RawMessage
 	Call                             *AgentCall
 }
@@ -82,6 +86,7 @@ type agentPrompt struct {
 	Tools        []AgentTool
 	History      []json.RawMessage
 	Instructions string
+	Memory       string
 }
 type agentPromptKey struct{}
 type agentInvocationKey struct{}
@@ -130,16 +135,16 @@ func decodeAgentJSON(raw []byte, v any) error {
 	return nil
 }
 func validateAgentRuns(id string, record sessionRecord) error {
-	if len(record.AgentRuns) > 16 {
+	if len(record.AgentRuns) > 64 {
 		return ErrSessionUnavailable
 	}
 	for key, r := range record.AgentRuns {
 		v := r.View
-		if !exactID(key) || v.ID != key || v.SessionID != id || v.ScopeRevision == 0 || v.ScopeRevision > record.Scope.Revision || !exactID(r.ClientID) || !validApprovalDigest(r.InputHash) || !validModelProfile(r.Profile) || !agentState(v.State) || v.Revision == 0 || v.MaxSteps < 1 || v.MaxSteps > 12 || len(v.Steps) > v.MaxSteps || !validMessageContent(v.Goal) || v.CreatedAt.IsZero() || !v.ExpiresAt.After(v.CreatedAt) || v.ExpiresAt.Sub(v.CreatedAt) > time.Hour || len(v.FinalText) > 128000 || len(v.StopReason) > 256 {
+		if !exactID(key) || v.ID != key || v.SessionID != id || v.ScopeRevision == 0 || v.ScopeRevision > record.Scope.Revision || !exactID(r.ClientID) || !validApprovalDigest(r.InputHash) || !validModelProfile(r.Profile) || !agentState(v.State) || v.Revision == 0 || v.MaxSteps < 1 || v.MaxSteps > 64 || len(v.Steps) > v.MaxSteps || !validMessageContent(v.Goal) || v.CreatedAt.IsZero() || !v.ExpiresAt.After(v.CreatedAt) || v.ExpiresAt.Sub(v.CreatedAt) > 24*time.Hour || len(v.FinalText) > 128000 || len(v.StopReason) > 256 {
 			return ErrSessionUnavailable
 		}
 		b, e := json.Marshal(r.History)
-		if e != nil || len(b) > 128<<10 {
+		if e != nil || len(b) > 128<<10 || len(r.Memory) > 96<<10 || len(r.MemoryNodeIDs) > 1000 || r.MemoryScopeHash != "" && !validApprovalDigest(r.MemoryScopeHash) || !validIDs(r.MemoryNodeIDs) {
 			return ErrSessionUnavailable
 		}
 		for i, s := range v.Steps {
@@ -154,7 +159,7 @@ func validateAgentRuns(id string, record sessionRecord) error {
 	return nil
 }
 func validateAgentPrompt(p *agentPrompt) error {
-	if p == nil || !exactID(p.RunID) || p.Step < 1 || p.Step > 12 || !validMessageContent(p.Goal) || p.Instructions != agentInstructions || len(p.Tools) > 4 || len(p.History) > 48 {
+	if p == nil || !exactID(p.RunID) || p.Step < 1 || p.Step > 64 || !validMessageContent(p.Goal) || p.Instructions != agentInstructions || len(p.Tools) > 4 || len(p.History) > 192 {
 		return ErrToolDenied
 	}
 	seen := map[string]bool{}

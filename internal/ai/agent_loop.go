@@ -85,6 +85,12 @@ func (l *AgentLoop) Get(ctx context.Context, session, id string) (AgentRun, erro
 		return AgentRun{}, ErrScopeConflict
 	}
 	for i := range v.Steps {
+		if v.Steps[i].Plan != "" {
+			v.Steps[i].Plan, e = l.conversation.filter(ctx, view, "assistant", v.Steps[i].Plan)
+			if e != nil {
+				return AgentRun{}, e
+			}
+		}
 		if v.Steps[i].Result != "" {
 			text, e := l.conversation.filter(ctx, view, "assistant", v.Steps[i].Result)
 			if e != nil {
@@ -164,6 +170,12 @@ func (l *AgentLoop) List(ctx context.Context, session string) ([]AgentRun, error
 			return nil, e
 		}
 		for j := range out[i].Steps {
+			if out[i].Steps[j].Plan != "" {
+				out[i].Steps[j].Plan, e = l.conversation.filter(ctx, v, "assistant", out[i].Steps[j].Plan)
+				if e != nil {
+					return nil, e
+				}
+			}
 			if out[i].Steps[j].Result == "" {
 				continue
 			}
@@ -188,7 +200,7 @@ func (l *AgentLoop) Create(ctx context.Context, session string, in AgentRunInput
 	if in.TimeoutSeconds == 0 {
 		in.TimeoutSeconds = 900
 	}
-	if !validMessageContent(in.Goal) || len(in.Goal) > 24000 || !exactID(in.ClientRunID) || in.ScopeRevision == 0 || in.MaxSteps < 1 || in.MaxSteps > 12 || in.TimeoutSeconds < 60 || in.TimeoutSeconds > 3600 {
+	if !validMessageContent(in.Goal) || len(in.Goal) > 24000 || !exactID(in.ClientRunID) || in.ScopeRevision == 0 || in.MaxSteps < 1 || in.MaxSteps > 64 || in.TimeoutSeconds < 60 || in.TimeoutSeconds > 3600 {
 		return AgentRun{}, ErrToolDenied
 	}
 	actor, e := l.sessions.actor(ctx, "ai.runs.create", session, true)
@@ -243,7 +255,7 @@ func (l *AgentLoop) Create(ctx context.Context, session string, in AgentRunInput
 				r.AgentRuns[key] = a
 			}
 		}
-		if len(r.AgentRuns) >= 16 {
+		if len(r.AgentRuns) >= 64 {
 			return ErrSessionUnavailable
 		}
 		id, e := sessionID()
@@ -254,7 +266,11 @@ func (l *AgentLoop) Create(ctx context.Context, session string, in AgentRunInput
 		if r.AgentRuns == nil {
 			r.AgentRuns = map[string]agentRunRecord{}
 		}
-		r.AgentRuns[id] = agentRunRecord{View: out, ClientID: in.ClientRunID, InputHash: hash, Profile: profile, History: []json.RawMessage{}}
+		memory := executionMemory(r, view)
+		if len(memory) > 96<<10 {
+			return ErrSessionUnavailable
+		}
+		r.AgentRuns[id] = agentRunRecord{View: out, ClientID: in.ClientRunID, InputHash: hash, Profile: profile, History: []json.RawMessage{}, Memory: memory, MemoryNodeIDs: slices.Clone(view.AllowedNodeIDs), MemoryScopeHash: agentHash(view.actionNodes)}
 		st.Sessions[session] = r
 		return l.sessions.audit(st, r, "ai.runs.create", now)
 	})
@@ -449,11 +465,28 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 	if e != nil {
 		return AgentRun{}, e
 	}
+	if a.MemoryScopeHash != "" && a.MemoryScopeHash != agentHash(view.actionNodes) {
+		return l.stop(ctx, a, "failed", "memory_permissions_changed")
+	}
+	for _, id := range a.MemoryNodeIDs {
+		if !slices.Contains(view.AllowedNodeIDs, id) {
+			return l.stop(ctx, a, "failed", "memory_resources_changed")
+		}
+	}
 	tools, e := l.catalog(ctx, view)
 	if e != nil {
 		return AgentRun{}, e
 	}
-	p := &agentPrompt{RunID: a.View.ID, Step: len(a.View.Steps) + 1, Goal: a.View.Goal, Tools: tools, History: a.History, Instructions: agentInstructions}
+	p := &agentPrompt{RunID: a.View.ID, Step: len(a.View.Steps) + 1, Goal: a.View.Goal, Tools: tools, History: a.History, Instructions: agentInstructions, Memory: a.Memory}
+	if len(p.Memory) > 96<<10 {
+		return l.stop(ctx, a, "limit_reached", "memory_size_limit")
+	}
+	if p.Memory != "" {
+		p.Memory, e = l.conversation.filter(ctx, view, "user", p.Memory)
+	}
+	if e != nil {
+		return AgentRun{}, e
+	}
 	if validateAgentPrompt(p) != nil {
 		return l.stop(ctx, a, "limit_reached", "context_size_limit")
 	}
@@ -506,7 +539,11 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 		}
 		r.Call = decision.Call
 		s := &r.View.Steps[p.Step-1]
-		if plan := strings.TrimSpace(decision.Text); plan != "" {
+		planText := decision.Summary
+		if planText == "" {
+			planText = decision.Text
+		}
+		if plan := strings.TrimSpace(planText); plan != "" {
 			runes := []rune(plan)
 			if len(runes) > 3000 {
 				runes = runes[:3000]

@@ -23,13 +23,14 @@ type MessageInput struct {
 	ScopeRevision   uint64 `json:"scopeRevision"`
 }
 type Message struct {
-	AgentRunID      string    `json:"agentRunId,omitempty"`
-	MessageID       string    `json:"messageId"`
-	SessionID       string    `json:"sessionId"`
-	Role            string    `json:"role"`
-	RedactedContent string    `json:"redactedContent"`
-	CreatedAt       time.Time `json:"createdAt"`
-	TaskIDs         []string  `json:"taskIds"`
+	AgentRunID       string    `json:"agentRunId,omitempty"`
+	MessageID        string    `json:"messageId"`
+	SessionID        string    `json:"sessionId"`
+	Role             string    `json:"role"`
+	RedactedContent  string    `json:"redactedContent"`
+	ReasoningSummary string    `json:"reasoningSummary,omitempty"`
+	CreatedAt        time.Time `json:"createdAt"`
+	TaskIDs          []string  `json:"taskIds"`
 }
 type MessageEvent struct {
 	SessionID string    `json:"sessionId"`
@@ -103,7 +104,7 @@ func validateConversation(id string, c *conversationRecord) error {
 	}
 	messages := map[string]Message{}
 	for _, m := range c.Messages {
-		if !exactID(m.MessageID) || m.SessionID != id || m.AgentRunID != "" && !exactID(m.AgentRunID) || !validMessageContent(m.RedactedContent) || m.CreatedAt.IsZero() || len(m.TaskIDs) != 0 || m.Role != "user" && m.Role != "assistant" || messages[m.MessageID].MessageID != "" {
+		if !exactID(m.MessageID) || m.SessionID != id || m.AgentRunID != "" && !exactID(m.AgentRunID) || !validMessageContent(m.RedactedContent) || len(m.ReasoningSummary) > 8192 || m.CreatedAt.IsZero() || len(m.TaskIDs) != 0 || m.Role != "user" && m.Role != "assistant" || messages[m.MessageID].MessageID != "" {
 			return ErrSessionUnavailable
 		}
 		messages[m.MessageID] = m
@@ -387,6 +388,12 @@ func (c *ConversationService) MessagesPage(ctx context.Context, id string, after
 			out[i].RedactedContent = "Agent 运行 " + m.AgentRunID + "：请在 Agent 运行页签查看步骤和结果。"
 			continue
 		}
+		if m.ReasoningSummary != "" {
+			out[i].ReasoningSummary, err = c.filter(ctx, view, "assistant", m.ReasoningSummary)
+			if err != nil {
+				return nil, SessionView{}, err
+			}
+		}
 		out[i].RedactedContent, err = c.filter(ctx, view, m.Role, m.RedactedContent)
 		out[i].TaskIDs = []string{}
 		if err != nil {
@@ -478,6 +485,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if r.ContextSummary != "" {
 			summaryPrefix = "【较早对话摘要】" + r.ContextSummary + "\n\n"
 		}
+		if request.Agent == nil {
+			summaryPrefix += executionEvidence(r, view)
+		}
 		for i, message := range r.Conversation.Messages {
 			if message.MessageID == messageID {
 				if summaryPrefix != "" && len(request.Messages) == 0 {
@@ -534,7 +544,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		return Message{}, err
 	}
 	reserved = true
-	bounded, cancel := context.WithTimeout(ctx, 30*time.Second)
+	bounded, cancel := context.WithTimeout(ctx, 180*time.Second)
 	defer cancel()
 	for i, message := range request.Messages {
 		request.Messages[i].RedactedContent, err = c.filter(bounded, view, message.Role, message.RedactedContent)
@@ -544,6 +554,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		}
 	}
 	var output bytes.Buffer
+	var publicSummary string
 	check := func() error {
 		if request.Agent != nil && c.checkAgentGeneration(bounded, request) != nil {
 			return ErrToolDenied
@@ -552,7 +563,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 			return err
 		}
 		fresh, err := c.sessions.Get(bounded, id)
-		if err != nil || fresh.ScopeRevision != view.ScopeRevision || fresh.Status != "active" || !slices.Equal(fresh.AllowedNodeIDs, view.AllowedNodeIDs) {
+		if err != nil || fresh.ScopeRevision != view.ScopeRevision || fresh.Status != "active" || !slices.Equal(fresh.AllowedNodeIDs, view.AllowedNodeIDs) || agentHash(fresh.actionNodes) != agentHash(view.actionNodes) {
 			return ErrToolDenied
 		}
 		p, err := c.profileFor(bounded, view, actor.SubjectID)
@@ -572,6 +583,28 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	var emitMu sync.Mutex
 	finished, emitFailed, chunks := false, false, 0
 	defer func() { emitMu.Lock(); finished = true; emitMu.Unlock() }()
+	clientPreview := generationPreviewFrom(ctx)
+	providerContext = withGenerationPreview(providerContext, func(kind, value string) error {
+		emitMu.Lock()
+		defer emitMu.Unlock()
+		if finished || emitFailed {
+			return ErrToolDenied
+		}
+		if check() != nil {
+			return ErrToolDenied
+		}
+		filtered, err := c.filter(bounded, view, "assistant", value)
+		if err != nil {
+			return err
+		}
+		if kind == "summary" {
+			publicSummary = filtered
+		}
+		if clientPreview != nil {
+			return clientPreview(kind, filtered)
+		}
+		return nil
+	})
 	providerErr := c.config.Generate(providerContext, request, func(chunk string) error {
 		emitMu.Lock()
 		defer emitMu.Unlock()
@@ -590,6 +623,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	emitMu.Lock()
 	finished = true
 	outputText := output.String()
+	summaryText := publicSummary
 	outputRejected := emitFailed
 	emitMu.Unlock()
 	if providerErr != nil || outputRejected || bounded.Err() != nil || check() != nil {
@@ -622,7 +656,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if request.Agent != nil && agentGenerationCurrent(r, request, now) != nil {
 			return ErrToolDenied
 		}
-		out = Message{AgentRunID: run.AgentRunID, MessageID: responseID, SessionID: id, Role: "assistant", RedactedContent: text, CreatedAt: now, TaskIDs: []string{}}
+		out = Message{AgentRunID: run.AgentRunID, MessageID: responseID, SessionID: id, Role: "assistant", RedactedContent: text, ReasoningSummary: summaryText, CreatedAt: now, TaskIDs: []string{}}
 		r.Conversation.Messages = append(r.Conversation.Messages, out)
 		run.State, run.ResponseID = "succeeded", responseID
 		r.Conversation.Runs[messageID] = run
@@ -730,11 +764,18 @@ func (c *ConversationService) Compact(ctx context.Context, id string, keep int) 
 		return ContextStats{}, ErrToolDenied
 	}
 	var digest []string
+	var sourceHash string
 	cutoff := 0
 	err = c.sessions.inspect(ctx, func(st *sessionState, _ time.Time) error {
 		record, ok := st.Sessions[id]
 		if !ok || record.Scope.SubjectID != actor.SubjectID || record.Closed || record.Conversation == nil {
 			return ErrToolDenied
+		}
+		sourceHash = agentHash([]any{record.ContextSummary, record.ContextMemoryVersion, record.ContextCutoff, record.Conversation})
+		for _, run := range record.Conversation.Runs {
+			if run.AgentRunID == "" && (run.State == "queued" || run.State == "generating") {
+				return ErrScopeConflict
+			}
 		}
 		type candidate struct {
 			index int
@@ -743,7 +784,7 @@ func (c *ConversationService) Compact(ctx context.Context, id string, keep int) 
 		}
 		items := []candidate{}
 		for i, message := range record.Conversation.Messages {
-			if i < record.ContextCutoff || !compactableMessage(message, record.Conversation.Runs[message.MessageID]) {
+			if message.AgentRunID != "" || message.Role != "user" && !compactableMessage(message, record.Conversation.Runs[message.MessageID]) {
 				continue
 			}
 			items = append(items, candidate{i, message.Role, message.RedactedContent})
@@ -755,16 +796,10 @@ func (c *ConversationService) Compact(ctx context.Context, id string, keep int) 
 			keep = len(items) / 2
 		}
 		for _, item := range items[:len(items)-keep] {
-			text := []rune(strings.TrimSpace(item.text))
-			if len(text) > 240 {
-				text = append(text[:240], '…')
-			}
-			digest = append(digest, item.role+"："+string(text))
+			digest = append(digest, compactRecord(item.role, item.text))
 			cutoff = item.index + 1
 		}
-		if record.ContextSummary != "" {
-			digest = append([]string{"此前摘要：" + record.ContextSummary}, digest...)
-		}
+
 		return nil
 	})
 	if err != nil {
@@ -777,9 +812,8 @@ func (c *ConversationService) Compact(ctx context.Context, id string, keep int) 
 	if err != nil {
 		return ContextStats{}, err
 	}
-	runes := []rune(summary)
-	if len(runes) > 4000 {
-		summary = string(runes[:4000])
+	if len(summary) > 64<<10 {
+		return ContextStats{}, ErrSessionUnavailable
 	}
 	var out ContextStats
 	err = c.sessions.change(ctx, func(st *sessionState, now time.Time) error {
@@ -790,7 +824,11 @@ func (c *ConversationService) Compact(ctx context.Context, id string, keep int) 
 		if !ok || record.Closed || record.Scope.SubjectID != actor.SubjectID || record.Scope.Revision != view.ScopeRevision {
 			return ErrScopeConflict
 		}
+		if agentHash([]any{record.ContextSummary, record.ContextMemoryVersion, record.ContextCutoff, record.Conversation}) != sourceHash {
+			return ErrScopeConflict
+		}
 		record.ContextSummary, record.ContextCutoff = summary, cutoff
+		record.ContextMemoryVersion = 2
 		st.Sessions[id] = record
 		out = contextStats(record, ModelProfile{Model: view.Model})
 		return c.audit(st, record, "ai.context.compact", "", now)

@@ -231,6 +231,7 @@ func (s *Server) registerAIRoutes() {
 	}
 	if s.AIModelCatalogHTTP != nil {
 		s.mux.Handle("POST /api/v1/ai/model-settings/models", s.AIModelCatalogHTTP)
+		s.mux.Handle("POST /api/v1/ai/model-settings/probe", s.AIModelCatalogHTTP)
 	}
 	if s.AIGenerationHTTP != nil {
 		s.mux.Handle("POST /api/v1/ai/sessions/{sessionId}/messages/{messageId}/generate", s.AIGenerationHTTP)

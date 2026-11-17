@@ -913,6 +913,7 @@ export interface AIMessage {
   readonly sessionId: string;
   readonly role: "user" | "assistant" | "tool";
   readonly redactedContent?: string;
+ readonly reasoningSummary?: string;
   readonly createdAt: string;
   readonly taskIds?: readonly string[];
 }

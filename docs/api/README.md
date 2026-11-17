@@ -11,6 +11,28 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 
 供前端/脚本/联调定位实际接口；先读安全和状态语义，再从[路由索引](ROUTES.md)进入实际处理器及对应候选。可机读索引：[route-inventory.json](route-inventory.json)，数量以生成结果为准，不沿用 R34 旧计数。
 
+## AI 连续上下文与过程显示增量（2026-11-17）
+
+- POST /ai/sessions/{sessionId}/runs/{runId}/continue：正文 expectedRevision、
+  additionalSteps（1—24）、timeoutSeconds（60—3600）；202 返回 AgentRun。
+  仅当前范围、当前 revision、maximum_model_steps_reached 的 limit_reached 可续接；
+  累计最多 64 步/24 小时，UNKNOWN 等拒绝，不重放已确认步骤。
+- POST /ai/model-settings/probe：管理员会话与原 Origin/CSRF；正文 model（可空，使用已保存默认）。
+  响应 model/toolCalls/reasoning/checkedAt，表示本次合成函数/公开摘要探测结果；
+  不返回密钥，不执行节点操作，不是任意供应商 URL 代理。
+- 原 POST /ai/sessions/{sessionId}/messages/{messageId}/generate 保持 JSON 响应兼容。
+  Accept: text/event-stream 时发送 preview（kind/text 的累计暂存预览）、
+  completed（已保存 Message）或 error（固定 code）。只接受 completed 为成功；
+  预览经当前权限与内容过滤，原始供应商错误、凭据和隐藏推理不返回。
+- Message 新增可选 reasoningSummary，含已过滤的公开简要摘要；
+  AgentRun/AgentStep 路径不变，步骤 plan 可包含公开摘要或计划说明。
+- 新建运行 maxSteps 上限 64，timeoutSeconds 上限仍 3600。
+  /context/compact 不再截断关键原文，64 KiB 以上拒绝而非丢失信息；
+  并发源对话变化返回冲突，原摘要与历史消息保持。
+
+所有路径以 /api/v1 为前缀。[完整边界](../development/AI-AGENT-LOOP.md)。
+
+
 ## PostgreSQL 维护兼容增量
 
 本次保持 HTTP 路径、DTO、加密包 format=1 与文件命名不变；

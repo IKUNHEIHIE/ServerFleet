@@ -124,7 +124,7 @@ describe("AI session page", () => {
     await waitFor(() => {
       const call = calls.find(item => item.method === "POST" && item.url === "/api/v1/ai/sessions/s-1/runs");
       expect(call).toBeDefined();
-      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ goal: "检查节点磁盘", scopeRevision: 2, maxSteps: 8 });
+      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ goal: "检查节点磁盘", scopeRevision: 2, maxSteps: 16 });
     });
     expect((await screen.findAllByText("节点运行正常")).length).toBeGreaterThan(0);
   });
@@ -289,7 +289,7 @@ describe("AI explicit generation (GM-W6-R1)", () => {
 
     fireEvent.change(await screen.findByLabelText("消息内容"), { target: { value: "请总结节点" } });
     fireEvent.click(screen.getByRole("button", { name: "发送" }));
-    expect(await screen.findByText(/模型或配额不可用（503 AI_SOURCE_UNAVAILABLE）/)).toBeVisible();
+    expect(await screen.findByText(/模型不可用（503 AI_SOURCE_UNAVAILABLE）/)).toBeVisible();
     expect(screen.queryByText("节点运行时间为 3 小时")).toBeNull();
   });
 

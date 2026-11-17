@@ -8,6 +8,15 @@
 4. [工具链](TOOLCHAIN.md)、[集成清单](INTEGRATION-CHECKLIST.md)；安装任务读 [deployment](../../deployment/README.md)。
 5. 涉及架构决策时读 [批准 ADR 来源与替代关系](../architecture/README.md)。
 
+## AI 体验增量
+
+当前任务目录 awskr /home/admin/sf-ai-memory-20261117，
+分支 fix/ai-memory-continuity-20261117，基于已合并 PR #55 的 main b5f2f98。
+先核对 [AI 改进记录](AI-IMPROVEMENTS-20261117.md) 与最终 PR 回执；
+旧 PostgreSQL 任务及原未提交目录保留，不自动部署线上。
+公开思考摘要与工具回执可展示；原始推理、供应商秘密与旧范围资源授权不可继承。
+
+
 ## PostgreSQL 维护增量
 
 任务分支 fix/postgres-maintenance-20261117 基于 main 3b32b1f；

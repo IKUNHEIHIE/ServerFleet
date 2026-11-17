@@ -54,6 +54,7 @@ type ApprovalPolicy struct {
 	EnforcedRestrictions []string   `json:"enforcedRestrictions"`
 }
 type SessionView struct {
+	actionNodes     map[string][]string
 	ID              string          `json:"id"`
 	ScopeRevision   uint64          `json:"scopeRevision"`
 	ResourceGrants  []ResourceGrant `json:"resourceGrants"`
@@ -66,17 +67,18 @@ type SessionView struct {
 	ApprovalPolicy  ApprovalPolicy  `json:"approvalPolicy"`
 }
 type sessionRecord struct {
-	AgentRuns       map[string]agentRunRecord `json:",omitempty"`
-	Scope           Scope
-	Grants          map[string]ResourceGrant
-	Approvals       map[string]approvalRecord `json:",omitempty"`
-	Created         time.Time
-	Closed          bool
-	ModelOverride   string              `json:",omitempty"`
-	ReasoningEffort string              `json:",omitempty"`
-	ContextSummary  string              `json:",omitempty"`
-	ContextCutoff   int                 `json:",omitempty"`
-	Conversation    *conversationRecord `json:",omitempty"`
+	AgentRuns            map[string]agentRunRecord `json:",omitempty"`
+	Scope                Scope
+	Grants               map[string]ResourceGrant
+	Approvals            map[string]approvalRecord `json:",omitempty"`
+	Created              time.Time
+	Closed               bool
+	ModelOverride        string              `json:",omitempty"`
+	ReasoningEffort      string              `json:",omitempty"`
+	ContextMemoryVersion int                 `json:",omitempty"`
+	ContextSummary       string              `json:",omitempty"`
+	ContextCutoff        int                 `json:",omitempty"`
+	Conversation         *conversationRecord `json:",omitempty"`
 }
 type sessionAudit struct {
 	SubjectID, Action, SessionID string
@@ -166,7 +168,7 @@ func decodeSessions(raw []byte) (*sessionState, error) {
 		}
 		if record.ModelOverride != "" && (!exactID(record.ModelOverride) || len(record.ModelOverride) > 128) ||
 			record.ReasoningEffort != "" && record.ReasoningEffort != "low" && record.ReasoningEffort != "medium" && record.ReasoningEffort != "high" ||
-			len(record.ContextSummary) > 16000 || record.ContextCutoff < 0 || record.ContextCutoff > 512 {
+			record.ContextMemoryVersion != 0 && record.ContextMemoryVersion != 2 || len(record.ContextSummary) > 64<<10 || record.ContextCutoff < 0 || record.ContextCutoff > 512 {
 			return nil, ErrSessionUnavailable
 		}
 		if validateConversation(id, record.Conversation) != nil {
@@ -366,7 +368,7 @@ func recordScope(record sessionRecord) Scope {
 func (s *SessionService) view(ctx context.Context, record sessionRecord, now time.Time) (SessionView, error) {
 	scope := recordScope(record)
 	mode := map[ApprovalMode]string{EveryCall: "per_action", LowRisk: "automatic", FullAccess: "full_access"}[scope.Mode]
-	view := SessionView{ID: scope.SessionID, ScopeRevision: scope.Revision, ResourceGrants: []ResourceGrant{}, AllowedNodeIDs: []string{}, Status: "active", CreatedBy: scope.SubjectID, CreatedAt: record.Created, Model: record.ModelOverride, ReasoningEffort: record.ReasoningEffort, ApprovalPolicy: ApprovalPolicy{SessionID: scope.SessionID, Mode: mode, EffectiveMode: mode, ScopeRevision: scope.Revision, MaxFullAccessSeconds: 3600, EnforcedRestrictions: []string{"RESOURCE_AND_ACTION_INTERSECTION", "AI_ROOT_SHELL_HUMAN_ADMIN", "NO_PLATFORM_SECRET_EXPORT", "PLUGIN_ENABLEMENT_REQUIRED"}}}
+	view := SessionView{actionNodes: map[string][]string{}, ID: scope.SessionID, ScopeRevision: scope.Revision, ResourceGrants: []ResourceGrant{}, AllowedNodeIDs: []string{}, Status: "active", CreatedBy: scope.SubjectID, CreatedAt: record.Created, Model: record.ModelOverride, ReasoningEffort: record.ReasoningEffort, ApprovalPolicy: ApprovalPolicy{SessionID: scope.SessionID, Mode: mode, EffectiveMode: mode, ScopeRevision: scope.Revision, MaxFullAccessSeconds: 3600, EnforcedRestrictions: []string{"RESOURCE_AND_ACTION_INTERSECTION", "AI_ROOT_SHELL_HUMAN_ADMIN", "NO_PLATFORM_SECRET_EXPORT", "PLUGIN_ENABLEMENT_REQUIRED"}}}
 	if record.Closed {
 		view.Status = "closed"
 		view.ApprovalPolicy.Mode = "per_action"
@@ -404,12 +406,18 @@ func (s *SessionService) view(ctx context.Context, record sessionRecord, now tim
 			for _, n := range nodes {
 				if slices.Contains(current.AllowedNodes, n) {
 					allowed[n] = true
+					if !slices.Contains(view.actionNodes[action], n) {
+						view.actionNodes[action] = append(view.actionNodes[action], n)
+					}
 				}
 			}
 		}
 	}
 	for n := range allowed {
 		view.AllowedNodeIDs = append(view.AllowedNodeIDs, n)
+	}
+	for action := range view.actionNodes {
+		sort.Strings(view.actionNodes[action])
 	}
 	sort.Strings(view.AllowedNodeIDs)
 	sort.Slice(view.ResourceGrants, func(i, j int) bool { return view.ResourceGrants[i].GrantID < view.ResourceGrants[j].GrantID })
