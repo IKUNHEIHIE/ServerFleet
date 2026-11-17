@@ -444,6 +444,13 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 		}
 		r.Call = decision.Call
 		s := &r.View.Steps[p.Step-1]
+		if plan := strings.TrimSpace(decision.Text); plan != "" {
+			runes := []rune(plan)
+			if len(runes) > 3000 {
+				runes = runes[:3000]
+			}
+			s.Plan = string(runes)
+		}
 		s.ToolName = decision.Call.ToolName
 		s.NodeIDs = slices.Clone(decision.Call.NodeIDs)
 		s.Parameters = bytes.Clone(decision.Call.Parameters)

@@ -166,6 +166,7 @@ type Server struct {
 	AIConversation   *ai.ConversationService
 	AIRuntime        *ai.BYOKRuntime
 	AIModelsHTTP     *ai.ModelSettingsHTTP
+	AIModelCatalogHTTP *ai.ModelCatalogHTTP
 	AIGenerationHTTP *ai.GenerationHTTP
 	AIManagement     *ai.ManagementHTTP
 	AIMessagesHTTP   *ai.MessagesHTTP
@@ -422,6 +423,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return ids, nil
 	})
 	var aiConversation *ai.ConversationService
+	var aiModels *ai.ModelSettingsService
 	var publicCertificates *publicCertificateExecution
 	keyDir := cfg.CredentialKeyDir
 	if keyDir == "" {
@@ -452,7 +454,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			if aiConversation == nil || op.Module != "ai" || op.Source != "ai" {
 				return auth.ErrDenied
 			}
-			return aiConversation.CheckCredentialOperation(ctx, op)
+			if aiConversation.CheckCredentialOperation(ctx, op) == nil {
+				return nil
+			}
+			if aiModels != nil {
+				return aiModels.CheckModelsOperation(ctx, op)
+			}
+			return auth.ErrDenied
 		},
 		nil, // No registered reference reader: report unavailable, never a false empty list.
 	)
@@ -729,6 +737,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return cleanup(err)
 	}
 	aiConversation = s.AIConversation
+	aiModels = s.AIRuntime.Models
 	if err := s.setupOperatorIncidents(); err != nil {
 		return cleanup(err)
 	}

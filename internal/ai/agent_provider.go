@@ -96,7 +96,7 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 				out.Items = append(out.Items, b)
 			}
 		case "function_call":
-			if out.Call != nil || !exactID(v.CallID) || v.Status != "completed" || len(v.Arguments) > 8<<10 {
+			if out.Call != nil || !exactID(v.CallID) || v.Status != "" && v.Status != "completed" || len(v.Arguments) > 8<<10 {
 				return "", ErrGenerationUnknown
 			}
 			var tool *AgentTool
@@ -137,7 +137,7 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 			b, _ = json.Marshal(map[string]string{"type": "function_call", "id": v.ID, "name": v.Name, "call_id": v.CallID, "arguments": v.Arguments, "status": "completed"})
 			out.Items = append(out.Items, b)
 		case "message":
-			if v.Role != "assistant" || v.Status != "completed" {
+			if v.Role != "assistant" || v.Status != "" && v.Status != "completed" {
 				return "", ErrGenerationUnknown
 			}
 			for _, part := range v.Content {

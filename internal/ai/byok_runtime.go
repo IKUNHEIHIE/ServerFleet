@@ -33,6 +33,7 @@ func newBYOKRuntime(sessions *SessionService, credentials *auth.CredentialServic
 	if err != nil {
 		return nil, err
 	}
+	provider.endpointFor = models.EndpointFor
 	conversation, err := NewConversationService(sessions, ConversationConfig{Profile: models.Profile, Filter: filter, Generate: func(ctx context.Context, r GenerationRequest, emit func(string) error) error {
 		if quota(ctx, r) != nil || ctx.Err() != nil {
 			return ErrToolDenied
@@ -45,6 +46,13 @@ func newBYOKRuntime(sessions *SessionService, credentials *auth.CredentialServic
 	}
 	return &BYOKRuntime{Models: models, Conversation: conversation, provider: provider}, nil
 }
+func (r *BYOKRuntime) ListModels(ctx context.Context, op auth.CredentialOperation, endpoint string) ([]string, error) {
+	if r == nil || r.provider == nil {
+		return nil, ErrModelUnavailable
+	}
+	return r.provider.ListModels(ctx, op, endpoint)
+}
+
 func (r *BYOKRuntime) Close() {
 	if r != nil {
 		r.provider.Close()

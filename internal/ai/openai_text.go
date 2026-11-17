@@ -13,6 +13,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -31,6 +32,7 @@ type OpenAITextProvider struct {
 	resolve     CredentialResolver
 	client      *http.Client
 	endpoint    string
+	endpointFor func(context.Context, GenerationRequest) (string, error)
 	stream      bool
 }
 
@@ -279,7 +281,20 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 				return ErrGenerationUnknown
 			}
 		}
-		request, err := http.NewRequestWithContext(ctx, http.MethodPost, p.endpoint, bytes.NewReader(body))
+		endpoint := p.endpoint
+		if p.endpointFor != nil {
+			base, resolveErr := p.endpointFor(ctx, r)
+			if resolveErr != nil {
+				return ErrGenerationUnknown
+			}
+			if base != "" {
+				endpoint, resolveErr = ModelResponsesURL(base)
+				if resolveErr != nil {
+					return ErrGenerationUnknown
+				}
+			}
+		}
+		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return ErrGenerationUnknown
 		}
@@ -334,4 +349,95 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		return ErrGenerationUnknown
 	}
 	return nil
+}
+
+// ListModels performs one GET against an OpenAI-compatible /models endpoint and
+// returns bounded model identifiers. The API key is borrowed through the normal
+// credential fence and never returned.
+func (p *OpenAITextProvider) ListModels(ctx context.Context, op auth.CredentialOperation, endpoint string) ([]string, error) {
+	if p == nil || p.credentials == nil || p.client == nil || ctx == nil || op.Module != "ai" || op.Source != "ai" || op.Action != "use" || !strings.HasPrefix(op.OperationID, "ai-models-") {
+		return nil, ErrToolDenied
+	}
+	catalogURL, err := ModelCatalogURL(endpoint)
+	if err != nil {
+		return nil, ErrToolDenied
+	}
+	bounded, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	out := []string{}
+	err = p.credentials.UseForService(bounded, op, func(borrowCtx context.Context, secret []byte) error {
+		if len(secret) < 8 || len(secret) > 4096 || bytes.ContainsAny(secret, " \t\r\n\x00") {
+			return ErrGenerationUnknown
+		}
+		request, err := http.NewRequestWithContext(borrowCtx, http.MethodGet, catalogURL, nil)
+		if err != nil {
+			return ErrGenerationUnknown
+		}
+		request.Header.Set("Authorization", "Bearer "+string(secret))
+		defer request.Header.Del("Authorization")
+		request.Header.Set("Accept", "application/json")
+		response, err := p.client.Do(request)
+		if err != nil {
+			return ErrGenerationUnknown
+		}
+		defer response.Body.Close()
+		if response.StatusCode != http.StatusOK || response.ContentLength > 1<<20 {
+			return ErrGenerationUnknown
+		}
+		raw, err := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
+		defer clear(raw)
+		if err != nil || len(raw) > 1<<20 {
+			return ErrGenerationUnknown
+		}
+		var payload struct {
+			Data   []struct{ ID string `json:"id"` } `json:"data"`
+			Models []json.RawMessage `json:"models"`
+		}
+		if json.Unmarshal(raw, &payload) != nil {
+			return ErrGenerationUnknown
+		}
+		ids := []string{}
+		for _, item := range payload.Data {
+			ids = append(ids, item.ID)
+		}
+		for _, item := range payload.Models {
+			var id string
+			if json.Unmarshal(item, &id) == nil {
+				ids = append(ids, id)
+				continue
+			}
+			var object struct{ ID string `json:"id"` }
+			if json.Unmarshal(item, &object) != nil {
+				return ErrGenerationUnknown
+			}
+			ids = append(ids, object.ID)
+		}
+		seen := map[string]bool{}
+		for _, id := range ids {
+			id = strings.TrimSpace(id)
+			if id == "" || len(id) > 128 || seen[id] || strings.Contains(id, string(secret)) {
+				continue
+			}
+			valid := true
+			for _, char := range id {
+				if char < 33 || char > 126 {
+					valid = false
+					break
+				}
+			}
+			if valid {
+				seen[id] = true
+				out = append(out, id)
+			}
+		}
+		sort.Strings(out)
+		if len(out) > 500 {
+			out = out[:500]
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, ErrModelUnavailable
+	}
+	return out, nil
 }

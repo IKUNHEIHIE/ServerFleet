@@ -59,12 +59,17 @@ func (s *Server) setupAI(cfg Config) error {
 		backend.Close()
 		return err
 	}
+	catalogHTTP, err := ai.NewModelCatalogHTTP(backend.Models, backend, s.aiAuthenticate)
+	if err != nil {
+		backend.Close()
+		return err
+	}
 	generationHTTP, err := ai.NewGenerationHTTP(conversation, s.aiActorContext, s.aiCommitGate)
 	if err != nil {
 		backend.Close()
 		return err
 	}
-	s.AIRuntime, s.AIModelsHTTP, s.AIGenerationHTTP = backend, modelsHTTP, generationHTTP
+	s.AIRuntime, s.AIModelsHTTP, s.AIModelCatalogHTTP, s.AIGenerationHTTP = backend, modelsHTTP, catalogHTTP, generationHTTP
 	budgetStore, err := newAIBudgetStore(s.DB, s.Audit)
 	if err != nil {
 		return err

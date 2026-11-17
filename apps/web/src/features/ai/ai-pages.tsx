@@ -25,7 +25,7 @@ import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 import { useEventStream } from "@/lib/sse/use-event-stream";
 import type { SSEEvent } from "@/lib/sse/event-stream";
-import { AgentRunPanel } from "./agent-run-panel";
+import { AgentRunPanel, InlineAgentRun } from "./agent-run-panel";
 
 const MODE_LABEL: Record<AIApprovalMode, string> = {
   per_action: "每次审批",
@@ -587,7 +587,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
       if (result.ok && result.data) {
         setMessageText("");
         setActiveRunId(result.data.data.id);
-        setTab("agent");
+        messages.refreshSilent();
       }
       return;
     }
@@ -747,6 +747,14 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                     )}
                   </AsyncPanel>
                   </div>
+                  {activeRunId ? (
+                    <InlineAgentRun
+                      sessionId={sessionId}
+                      runId={activeRunId}
+                      canApprove={canApprove}
+                      onOpen={() => setTab("agent")}
+                    />
+                  ) : null}
                   {generateError ? (
                     <div className="shrink-0 border-t border-border/70 px-3 py-2">
                       <Notice tone="error" title="生成失败（未产生助手回复）">{generateError}</Notice>

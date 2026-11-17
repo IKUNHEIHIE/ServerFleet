@@ -912,6 +912,7 @@ export interface AIModelSettings {
   readonly updatedAt?: string;
   readonly enabled: boolean;
   readonly provider: string;
+  readonly endpoint?: string;
   readonly model: string;
   readonly credentialRef: string;
   readonly credentialRevision: number;

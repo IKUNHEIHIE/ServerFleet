@@ -118,18 +118,28 @@ function ModelSettingsForm({
   readonly onConflict: () => void;
 }) {
   const [enabled, setEnabled] = useState(data.enabled);
+  const [endpoint, setEndpoint] = useState(data.endpoint ?? "");
   const [model, setModel] = useState(data.model);
   const [credentialRef, setCredentialRef] = useState(data.credentialRef);
+  const [catalog, setCatalog] = useState<readonly string[] | null>(null);
   const selected = aiKeys.find(credential => credential.id === credentialRef) ?? null;
 
   const save = useAction((body: {
     expectedRevision: number;
     enabled: boolean;
     provider: string;
+    endpoint?: string;
     model: string;
     credentialRef: string;
     credentialRevision: number;
   }) => modelSettingsApi.set(body));
+  const listModels = useAction(() => modelSettingsApi.catalog());
+
+  async function fetchModels() {
+    setCatalog(null);
+    const result = await listModels.run();
+    if (result.ok && result.data) setCatalog(result.data.data.items);
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -138,6 +148,7 @@ function ModelSettingsForm({
       expectedRevision: data.revision,
       enabled,
       provider: "openai-responses",
+      ...(endpoint.trim() || data.endpoint ? { endpoint: endpoint.trim() } : {}),
       model: model.trim(),
       credentialRef,
       credentialRevision: selected?.revision ?? 0,
@@ -170,8 +181,11 @@ function ModelSettingsForm({
           <p>配置修订：{data.revision}</p>
         </div>
       </details>
+      <Field label="模型端点" hint="OpenAI 兼容基础地址，例如 https://api.stepfun.com/step_plan/v1；留空使用部署默认。">
+        {ids => <TextInput id={ids.inputId} type="url" value={endpoint} onChange={event => setEndpoint(event.target.value)} placeholder="https://api.example.com/v1" maxLength={512} disabled={!isAdmin || writesLocked} autoComplete="off" />}
+      </Field>
       <div className="grid gap-4 sm:grid-cols-2">
-        <Field label="模型 ID" hint="填写服务商提供的模型 ID。">
+        <Field label="模型 ID" hint="可手动填写，或保存后点击“获取模型”选择。">
           {ids => <TextInput id={ids.inputId} value={model} onChange={event => setModel(event.target.value)} maxLength={128} disabled={!isAdmin || writesLocked} />}
         </Field>
         <Field label="模型密钥" hint="密钥只在「安全凭据」录入一次，此处仅选择。">
@@ -186,6 +200,34 @@ function ModelSettingsForm({
             </Select>
           )}
         </Field>
+      </div>
+      <div className="rounded-xl border border-border/70 bg-[#FAFBFD] p-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" size="sm" variant="secondary" loading={listModels.pending} disabled={!isAdmin || writesLocked || !credentialRef || !(endpoint.trim() || data.endpoint)} onClick={() => void fetchModels()}>
+            获取模型
+          </Button>
+          <span className="text-xs text-muted-foreground">先保存端点与密钥，再获取模型列表；选择后会填入上方模型 ID。</span>
+        </div>
+        {listModels.error ? <Notice tone="error" title="获取模型失败">{describeApiError(listModels.error)}</Notice> : null}
+        {catalog ? (
+          catalog.length === 0 ? (
+            <p className="mt-2 text-xs text-muted-foreground">服务商没有返回可用模型。</p>
+          ) : (
+            <div className="mt-2 flex max-h-32 flex-wrap gap-1.5 overflow-y-auto">
+              {catalog.map(item => (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={model === item}
+                  onClick={() => setModel(item)}
+                  className={"rounded-full border px-2.5 py-1 text-xs transition-colors " + (model === item ? "border-primary bg-primary/10 font-semibold text-primary" : "border-border bg-card text-foreground hover:border-primary/40")}
+                >
+                  {item}
+                </button>
+              ))}
+            </div>
+          )
+        ) : null}
       </div>
       <label className="flex items-center gap-2 text-sm">
         <Checkbox checked={enabled} onChange={event => setEnabled(event.target.checked)} disabled={!isAdmin || writesLocked} />

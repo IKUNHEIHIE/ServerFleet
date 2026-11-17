@@ -30,6 +30,7 @@ export interface AgentStep {
   readonly approvalId?: string;
   readonly taskId?: string;
   readonly taskState?: string;
+  readonly plan?: string;
   readonly result?: string;
   readonly messageId?: string;
   readonly startedAt: string;
@@ -141,10 +142,12 @@ export const modelSettingsApi = {
     expectedRevision: number;
     enabled: boolean;
     provider: string;
+    endpoint?: string;
     model: string;
     credentialRef: string;
     credentialRevision: number;
   }) => apiClient.request<AIModelSettings>("/api/v1/ai/model-settings", { method: "PUT", body }),
+  catalog: () => apiClient.request<{ items: readonly string[]; endpoint: string }>("/api/v1/ai/model-settings/models", { method: "POST" }),
 };
 
 /**
