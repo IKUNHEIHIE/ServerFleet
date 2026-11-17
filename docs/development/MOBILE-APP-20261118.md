@@ -9,7 +9,7 @@
 允许 apps/android、Web 移动入口/共享 AI 响应式布局、Controller 静态 APK 下载类型、相关测试/构建说明与产品文档。
 全部开发构建在 awskr；本机不安装工具。复用 Controller REST/SSE 与身份、授权、任务执行底座。
 验证与停止条件：可安装 APK、常规登录/会话共享逻辑、移动节点与 AI 功能验证及 Web 构建通过；
-不把合成测试等同真实手机/真实供应商全量验收。实施与已运行验证见下；部署随后记录。
+不把合成测试等同真实手机/真实供应商全量验收。实施与已运行验证见下；现已合并/部署，见 [交付回执](DEPLOY-MOBILE-20261118.md)。
 
 ## 已实现
 
@@ -29,10 +29,10 @@ Controller 仅扩展可选 assets/serverfleet-mobile-*.apk 静态类型及下载
   节点详情、AI 历史/Markdown/推理、点击授权与带当前 CSRF 的执行提交。TypeScript 与生产构建通过。
 - PASS：远程 Chromium 390x844 / 360x640 无页面错误与横向溢出；节点详情、点击授权、
   普通对话发送并获取格式化回复，均使用可控接口样例。不是生产账号/真实模型验收。
-- PASS：Controller 静态 console/下载专项 -race；完整 Controller 回归、contracts、policy 最终结果补 PR 回执。
+- PASS：Controller 静态 console/下载专项 -race；完整 Controller -race/vet、contracts、policy 均通过；精确 head CI 功能/维护 PASS，依赖告警 FAIL，见交付回执。
 - UNTESTED：真实 Android 手机上的键盘/系统 WebView Cookie 交接与安装后操作；远程主机没有 KVM，
   本次没有把浏览器模拟视口或 JVM 单元测试声称为 Android 实机验收。
 - SKIP：完整核心流程验收；本次用户不要求。未新增备份；安装包使用开发预览签名，不发正式 Release。
 
-源代码与构建产物分开：APK/SDK/缓存与私钥不入 Git；APK 将与测试站 Web 工件一起分发。
+源代码与构建产物分开：APK/SDK/缓存与私钥不入 Git；APK 已与测试站 Web 工件一起分发；PR #60 合并为 288c9d4。
 现有构建依赖通告与上一轮一致，不以本轮局部测试声称完整依赖检查通过；CI 保持原配置。
