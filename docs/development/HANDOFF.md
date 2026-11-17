@@ -1,12 +1,20 @@
 # 后续 Agent 开发交接
 
-更新日期：2026-11-17。接手现有项目，先按以下顺序阅读：
+更新日期：2026-11-18。接手现有项目，先按以下顺序阅读：
 
 1. 根 [AGENTS](../../AGENTS.md) 与 [当前状态](CURRENT-STATE.md)：任务范围、代码缺口、发布和未验收范围。
 2. [功能说明](../product/FEATURES.md)、[API](../api/README.md)：现有行为和应保留的界面语义。
 3. [项目结构](PROJECT-STRUCTURE.md)、[模块归属](MODULE-OWNERSHIP.md)、[依赖规则](DEPENDENCY-RULES.md)。
 4. [工具链](TOOLCHAIN.md)、[集成清单](INTEGRATION-CHECKLIST.md)；安装任务读 [deployment](../../deployment/README.md)。
 5. 涉及架构决策时读 [批准 ADR 来源与替代关系](../architecture/README.md)。
+
+## 最新测试站部署
+
+2026-11-18 北京时间 00:35 已按本次用户授权部署 main fc0416ae4410f1858a494b78a8d29487a155a712，
+手工版本 0.9.3-ai-continuity-20261118，包含 PR #55/#56。
+先读 [部署回执](DEPLOY-AI-20261118.md)；下方 AI/PG 原任务“未部署”是历史状态。
+用户本次明确不做备份；没有更新 Agent、签名安装分发或正式 Release。
+后续部署仍按后续用户任务决定，不自动继承本次操作授权。
 
 ## AI 体验增量
 
