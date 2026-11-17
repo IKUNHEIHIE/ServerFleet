@@ -10,9 +10,9 @@ import (
 )
 
 // A schema fingerprint is an observed compatibility input for a trusted
-// installer, not a claim that migrations are reversible. Only sqlite_master
-// definitions and PRAGMA user_version are hashed; no application data, secrets,
-// counters or rows are returned. The caller pins the reviewed value.
+// installer, not a claim that migrations are reversible. SQLite definitions and
+// user_version or PostgreSQL DDL are hashed; no application rows or secrets are
+// returned. The caller pins the reviewed engine-specific value.
 const schemaFingerprintMaxEntries = 1024
 
 // SQLiteSchemaFingerprint is retained for existing callers. New code should use

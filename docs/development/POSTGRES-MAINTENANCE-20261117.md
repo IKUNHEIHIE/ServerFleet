@@ -60,3 +60,14 @@ Web 类型检查、53 文件/481 用例与生产构建通过；npm audit 与 gov
 Go 1.27.3，policy/contracts/go 未运行成功；已选用服务器缓存的 1.27.4，分别重新检查。
 保留首次失败日志与后续结果；不因 Web/专项通过声明 G2 或全产品验收完成。
 本次未部署、未运行真实站点的供应商/用户流程、未验证整集群灾备。
+
+## 接收检查补充
+
+提交 efc7ba3665a2e313f0c585eb4d291c9b7f6a72e5 的 Foundation CI 44065480658
+中 foundation、postgres-maintenance、dependencies 三项全部通过，含全仓 race、
+安装回归及双架构构建。后续发行包文档收录补丁按新 head 再检查，结果写 PR #55 评论。
+
+awskr 全仓 Go 检查保留 FAIL：监督子进程就绪超过 15 秒；
+platform 包构建报 /tmp 空间不足，导致共享构建结果的 7 个用例失败。
+这不挪作通过；本次 PostgreSQL 集成与 bootstrap 包 race 均通过。
+源码核对、文档 79 处相对链接、diff 空白检查通过；现场旧文件摘要未改变。

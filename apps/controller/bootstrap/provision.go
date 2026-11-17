@@ -269,9 +269,6 @@ func RunProvisionCommand(ctx context.Context, args []string, stdout, stderr io.W
 	configFile := filepath.Join(d.Directory, "supervisor.json")
 	if d.Component == "controller" {
 		if options.DBDriver == "postgres" {
-			if options.DBDSNFile == "" {
-				return errProvision
-			}
 			c.DatabaseDriver = "postgres"
 			c.DatabaseDSNFile = options.DBDSNFile
 			c.DatabaseDSNSHA256 = recoveryDigest([]byte(options.DBDSN))
