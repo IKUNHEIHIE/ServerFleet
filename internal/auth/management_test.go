@@ -17,6 +17,8 @@ func TestBootstrapAdminGetsCurrentNodeScopeWhileOtherAdminsStayExplicit(t *testi
 		{"nodes.write", "Modify nodes", "node", false, false},
 		{"nodes.suspend", "Suspend nodes", "node", false, false},
 		{"nodes.revoke", "Archive nodes", "node", false, true},
+		{"gateway.read", "Read gateways", "node", true, false},
+		{"gateway.write", "Manage gateways", "node", false, false},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -30,7 +32,7 @@ func TestBootstrapAdminGetsCurrentNodeScopeWhileOtherAdminsStayExplicit(t *testi
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, action := range []string{NodeReadAction, "nodes.write", "nodes.suspend", "nodes.revoke"} {
+	for _, action := range []string{NodeReadAction, "nodes.write", "nodes.suspend", "nodes.revoke", "gateway.read", "gateway.write"} {
 		if err := managed.Authorize(ctx, Check{SubjectID: admin.Identity.SubjectID, Action: action, NodeIDs: []string{"node-a", "node-b"}}); err != nil {
 			t.Fatalf("bootstrap administrator denied %s: %v", action, err)
 		}
