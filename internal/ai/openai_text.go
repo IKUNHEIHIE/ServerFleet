@@ -33,6 +33,7 @@ type OpenAITextProvider struct {
 	client      *http.Client
 	endpoint    string
 	endpointFor func(context.Context, GenerationRequest) (string, error)
+	protocolFor func(context.Context, GenerationRequest) (string, error)
 	stream      bool
 }
 
@@ -53,9 +54,8 @@ func NewOpenAITextProvider(credentials *auth.CredentialService, resolve Credenti
 	return &OpenAITextProvider{credentials: credentials, resolve: resolve, client: &http.Client{Transport: transport, Timeout: 180 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}, endpoint: "https://api.openai.com/v1/responses"}, nil
 }
 
-// NewOpenAIStreamingTextProvider consumes actual upstream SSE. Deltas remain
-// private until terminal-response, secret and post-borrow checks succeed; partial
-// upstream text is never disclosed on a revoked/failed/unknown operation.
+// NewOpenAIStreamingTextProvider consumes actual upstream SSE. Authorized
+// provisional previews are separate from the verified durable completion.
 func NewOpenAIStreamingTextProvider(credentials *auth.CredentialService, resolve CredentialResolver) (*OpenAITextProvider, error) {
 	p, err := NewOpenAITextProvider(credentials, resolve)
 	if err == nil {
@@ -204,8 +204,8 @@ func decodeProviderText(raw []byte, model string) (string, error) {
 	for _, item := range result.Output {
 		if item.Type == "reasoning" {
 			continue
-		} // Never disclose chain-of-thought.
-		if item.Type != "message" || item.Role != "assistant" || item.Status != "completed" || item.Phase != "" && item.Phase != "final_answer" || len(item.Content) == 0 || len(item.Content) > 64 {
+		} // Reasoning is delivered separately from answer text.
+		if item.Type != "message" || item.Role != "assistant" || item.Status != "" && item.Status != "completed" || item.Phase != "" && item.Phase != "final_answer" || len(item.Content) == 0 || len(item.Content) > 64 {
 			return "", ErrGenerationUnknown
 		}
 		for _, part := range item.Content {
@@ -260,13 +260,26 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		}
 		input = append(input, item)
 	}
-	stream := p.stream && r.Agent == nil
+	protocol := "openai-responses"
+	if p.protocolFor != nil {
+		protocol, err = p.protocolFor(ctx, r)
+		if err != nil {
+			return err
+		}
+	}
+	stream := p.stream
 	payload := map[string]any{"model": r.Profile.Model, "input": input, "store": false, "stream": stream, "background": false, "truncation": "disabled", "tools": []any{}, "tool_choice": "none", "parallel_tool_calls": false, "max_output_tokens": ProviderMaxOutputTokens}
 	if r.ReasoningEffort != "" {
 		payload["reasoning"] = map[string]any{"effort": r.ReasoningEffort, "summary": "auto"}
 	}
 	if r.Agent != nil {
 		if err := agentProviderPayload(payload, r.Agent); err != nil {
+			return err
+		}
+	}
+	if protocol == "openai-chat-completions" {
+		payload, err = chatCompletionPayload(r, stream)
+		if err != nil {
 			return err
 		}
 	}
@@ -298,6 +311,12 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 				}
 			}
 		}
+		if protocol == "openai-chat-completions" {
+			endpoint, err = ModelChatCompletionsURL(strings.TrimSuffix(endpoint, "/responses"))
+			if err != nil {
+				return err
+			}
+		}
 		request, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 		if err != nil {
 			return ErrGenerationUnknown
@@ -327,16 +346,16 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 		}
 		if stream && media == "text/event-stream" {
 			lastPreview := map[string]int{}
-			text, err = decodeProviderStreamObserved(ctx, response.Body, r.Profile.Model, func(kind, value string) error {
+			observe := func(kind, value string) error {
 				observe := generationPreviewFrom(ctx)
 				if observe == nil {
 					return nil
 				}
 				// Withhold a full credential-length suffix so a secret split across provider
 				// chunks cannot leak in an earlier preview. Exact echoes are replaced.
-				final := kind == "summary_completed"
+				final := strings.HasSuffix(kind, "_completed")
 				if final {
-					kind = "summary"
+					kind = strings.TrimSuffix(kind, "_completed")
 				}
 				value = strings.ReplaceAll(value, string(secret), "[REDACTED]")
 				if !final && len(value) <= len(secret) {
@@ -349,9 +368,9 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 				for !utf8.ValidString(safe) && len(safe) > 0 {
 					safe = safe[:len(safe)-1]
 				}
-				threshold := 1024
-				if kind == "summary" {
-					threshold = 256
+				threshold := 256
+				if kind == "summary" || kind == "reasoning" {
+					threshold = 128
 				}
 				if !final && lastPreview[kind] > 0 && len(safe)-lastPreview[kind] < threshold {
 					return nil
@@ -361,12 +380,37 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 				}
 				lastPreview[kind] = len(safe)
 				return observe(kind, safe)
-			})
+			}
+			if protocol == "openai-chat-completions" {
+				text, err = decodeChatStream(ctx, response.Body, r.Profile.Model, r.Agent, observe)
+			} else {
+				text, err = decodeResponseStreamObserved(ctx, response.Body, r.Profile.Model, r.Agent, observe)
+			}
 		} else {
 			raw, readErr := io.ReadAll(io.LimitReader(response.Body, (1<<20)+1))
 			defer clear(raw)
 			if readErr != nil {
 				return ErrGenerationUnknown
+			}
+			if protocol == "openai-chat-completions" {
+				converted, convertErr := chatCompletionResponse(raw, r.Profile.Model)
+				if convertErr != nil {
+					return convertErr
+				}
+				raw = converted
+			}
+			if observe := generationPreviewFrom(ctx); observe != nil {
+				publicReasoning, publicSummary := responseReasoning(raw)
+				if publicReasoning != "" {
+					if e := observe("reasoning", strings.ReplaceAll(publicReasoning, string(secret), "[REDACTED]")); e != nil {
+						return e
+					}
+				}
+				if publicSummary != "" {
+					if e := observe("summary", strings.ReplaceAll(publicSummary, string(secret), "[REDACTED]")); e != nil {
+						return e
+					}
+				}
 			}
 			if r.Agent != nil {
 				text, err = decodeAgentDecision(raw, r.Profile.Model, r.Agent)
@@ -408,6 +452,7 @@ func (p *OpenAITextProvider) ListModels(ctx context.Context, op auth.CredentialO
 		if len(secret) < 8 || len(secret) > 4096 || bytes.ContainsAny(secret, " \t\r\n\x00") {
 			return ErrGenerationUnknown
 		}
+
 		request, err := http.NewRequestWithContext(borrowCtx, http.MethodGet, catalogURL, nil)
 		if err != nil {
 			return ErrGenerationUnknown

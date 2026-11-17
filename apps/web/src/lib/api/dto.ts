@@ -914,6 +914,7 @@ export interface AIMessage {
   readonly role: "user" | "assistant" | "tool";
   readonly redactedContent?: string;
  readonly reasoningSummary?: string;
+  readonly reasoningContent?: string;
   readonly createdAt: string;
   readonly taskIds?: readonly string[];
 }

@@ -1,5 +1,14 @@
 # v0.9 现行功能说明
 
+## 2026-11-18 AI 交互增量（源码接入，未部署）
+
+新增 Markdown 标题/粗体/列表/表格/代码块渲染；
+模型接口返回的推理文本实时展示，思考摘要、执行计划分别显示。
+模型设置可选择 Responses 或 Chat Completions，Agent 接入 Eino ADK；
+标准函数调用支持分片与单轮多调用，任务结果沿持久运行回传。
+[功能与边界](../development/AI-AGENT-SDK-20261118.md)。
+此项替代此前“概要等同思考过程、仅 Responses 单函数”的界面/协议范围描述。
+
 状态核对：2026-11-14，代码基线 v0.9.2 / main `c6204762c7fb285c475b619886474351c26dca31`。交付证据与统一开放清单见 [CURRENT-STATE](../development/CURRENT-STATE.md)，接手见 [HANDOFF](../development/HANDOFF.md)。本文区分实现、条件装配和实机验收，不按测试数折算完成率，不声明 G2 全量验收。
 
 > v0.9.2 / R39：修复正式 provisioned 入网/续期的重复 Intermediate 与缺 Root；历史有效回执保留同一叶证书修复公开链。新增 [raw 主控/Agent 安装入口](../../deployment/RAW-INSTALL.md)、发行材料下载/校验及既有分发升级；离线密钥、权限/审批与 UNKNOWN 约束不变，无新迁移。真实 Agent CLI 入网回归不替代真实 VPS/root 验收。

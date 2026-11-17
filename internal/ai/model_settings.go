@@ -53,7 +53,7 @@ func validModelSettingsInput(input ModelSettingsInput) bool {
 		return true
 	}
 	_, endpointErr := NormalizeModelEndpoint(input.Endpoint)
-	return endpointErr == nil && input.Provider == "openai-responses" && exactID(input.Model) && len(input.Model) <= 128 && !strings.HasPrefix(input.Model, "sk-") && exactID(input.CredentialRef) && input.CredentialRevision > 0
+	return endpointErr == nil && (input.Provider == "openai-responses" || input.Provider == "openai-chat-completions") && exactID(input.Model) && len(input.Model) <= 128 && !strings.HasPrefix(input.Model, "sk-") && exactID(input.CredentialRef) && input.CredentialRevision > 0
 }
 
 // NormalizeModelEndpoint stores one base URL without the /responses suffix. The
@@ -69,6 +69,7 @@ func NormalizeModelEndpoint(raw string) (string, error) {
 	}
 	path := strings.TrimSuffix(u.Path, "/")
 	path = strings.TrimSuffix(path, "/responses")
+	path = strings.TrimSuffix(path, "/chat/completions")
 	return "https://" + u.Host + path, nil
 }
 
@@ -313,4 +314,19 @@ func (m *ModelSettingsService) ResolveCredential(ctx context.Context, r Generati
 		return auth.CredentialOperation{}, ErrToolDenied
 	}
 	return auth.CredentialOperation{SubjectID: r.SubjectID, CredentialID: cfg.CredentialRef, Module: "ai", Source: "ai", OperationID: r.OperationID, PlanDigest: digest, Action: "use", ExpectedRevision: cfg.CredentialRevision}, nil
+}
+
+func ModelChatCompletionsURL(base string) (string, error) {
+	normalized, err := NormalizeModelEndpoint(base)
+	if err != nil || normalized == "" {
+		return "", ErrModelUnavailable
+	}
+	return normalized + "/chat/completions", nil
+}
+func (m *ModelSettingsService) ProtocolFor(ctx context.Context, r GenerationRequest) (string, error) {
+	cfg, err := m.current(ctx, r.SubjectID)
+	if err != nil {
+		return "", err
+	}
+	return cfg.Provider, nil
 }

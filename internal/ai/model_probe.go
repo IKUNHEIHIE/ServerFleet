@@ -18,7 +18,7 @@ type ModelCapabilities struct {
 	CheckedAt time.Time `json:"checkedAt"`
 }
 
-func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperation, endpoint, model string) (ModelCapabilities, error) {
+func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperation, endpoint, model string, protocols ...string) (ModelCapabilities, error) {
 	result := ModelCapabilities{Model: model, CheckedAt: time.Now().UTC()}
 	if !exactID(model) || len(model) > 128 || strings.HasPrefix(model, "sk-") || r == nil || r.provider == nil {
 		return result, ErrModelUnavailable
@@ -30,6 +30,13 @@ func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperatio
 	}
 	if err != nil {
 		return result, err
+	}
+	chat := len(protocols) > 0 && protocols[0] == "openai-chat-completions"
+	if chat {
+		url, err = ModelChatCompletionsURL(strings.TrimSuffix(url, "/responses"))
+		if err != nil {
+			return result, err
+		}
 	}
 	bounded, cancel := context.WithTimeout(ctx, 45*time.Second)
 	defer cancel()
@@ -43,6 +50,24 @@ func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperatio
 			} else {
 				body["tools"] = []any{map[string]any{"type": "function", "name": "serverfleet_capability_probe", "description": "Protocol check, no external action", "parameters": map[string]any{"type": "object", "properties": map[string]any{"ok": map[string]string{"type": "boolean"}}, "required": []string{"ok"}, "additionalProperties": false}, "strict": true}}
 				body["tool_choice"] = map[string]string{"type": "function", "name": "serverfleet_capability_probe"}
+			}
+			if chat {
+				converted := map[string]any{"model": model, "store": false, "stream": false, "messages": []any{map[string]any{"role": "user", "content": body["input"]}}, "max_completion_tokens": 256}
+				if reasoning {
+					converted["reasoning_effort"] = "low"
+				} else {
+					def := body["tools"].([]any)[0].(map[string]any)
+					function := map[string]any{}
+					for key, value := range def {
+						if key != "type" {
+							function[key] = value
+						}
+					}
+					converted["tools"] = []any{map[string]any{"type": "function", "function": function}}
+					converted["tool_choice"] = map[string]any{"type": "function", "function": map[string]string{"name": "serverfleet_capability_probe"}}
+					converted["parallel_tool_calls"] = false
+				}
+				body = converted
 			}
 			raw, _ := json.Marshal(body)
 			defer clear(raw)
@@ -65,6 +90,13 @@ func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperatio
 			if e != nil || len(data) > 1<<20 || bytes.Contains(data, secret) {
 				return false
 			}
+			if chat {
+				converted, err := chatCompletionResponse(data, model)
+				if err != nil {
+					return false
+				}
+				data = converted
+			}
 			var value struct {
 				ID, Object, Status, Model string
 				Store                     *bool
@@ -73,6 +105,7 @@ func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperatio
 					Type, Name, Arguments string
 					CallID                string `json:"call_id"`
 					Summary               []struct{ Type, Text string }
+					Content               []struct{ Type, Text string }
 				}
 			}
 			if json.Unmarshal(data, &value) != nil || value.ID == "" || value.Object != "response" || value.Model != model || value.Status != "" && value.Status != "completed" || value.Store != nil && *value.Store || len(value.Output) > 32 || len(value.Error) > 0 && string(value.Error) != "null" {
@@ -81,6 +114,11 @@ func (r *BYOKRuntime) ProbeModel(ctx context.Context, op auth.CredentialOperatio
 			functionCalls, validFunction := 0, false
 			for _, item := range value.Output {
 				if reasoning && item.Type == "reasoning" {
+					for _, part := range item.Content {
+						if part.Type == "reasoning_text" && strings.TrimSpace(part.Text) != "" {
+							return true
+						}
+					}
 					for _, part := range item.Summary {
 						if part.Type == "summary_text" && strings.TrimSpace(part.Text) != "" {
 							return true

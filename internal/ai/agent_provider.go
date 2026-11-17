@@ -33,12 +33,19 @@ func agentProviderPayload(body map[string]any, p *agentPrompt) error {
 		required := []string{"nodeIds"}
 		if t.Profile {
 			for _, key := range []string{"profileId", "policySha256", "arguments", "timeoutSeconds"} {
-				properties[key] = map[string]string{"type": "string"}
+				properties[key] = map[string]any{"type": "string"}
+				if key == "arguments" {
+					properties[key] = map[string]any{"anyOf": []any{map[string]any{"type": "array", "items": map[string]string{"type": "string"}}, map[string]string{"type": "string"}}}
+				}
+				if key == "timeoutSeconds" {
+					properties[key] = map[string]any{"anyOf": []any{map[string]string{"type": "integer"}, map[string]string{"type": "string"}}}
+				}
 				required = append(required, key)
 			}
 		}
 		tools = append(tools, map[string]any{"type": "function", "name": t.Name, "description": t.Description, "strict": true, "parameters": map[string]any{"type": "object", "properties": properties, "required": required, "additionalProperties": false}})
 	}
+	body["parallel_tool_calls"] = true
 	body["input"], body["instructions"], body["tools"], body["include"] = input, agentInstructions, tools, []string{"reasoning.encrypted_content"}
 	if len(tools) > 0 {
 		body["tool_choice"] = "auto"
@@ -92,7 +99,10 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 		_ = json.Unmarshal(f["encrypted_content"], &v.EncryptedContent)
 		switch v.Type {
 		case "reasoning":
-			var public struct{ Summary []struct{ Type, Text string } }
+			var public struct {
+				Summary []struct{ Type, Text string }
+				Content []struct{ Type, Text string }
+			}
 			if json.Unmarshal(item, &public) != nil {
 				return "", ErrGenerationUnknown
 			}
@@ -102,6 +112,17 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 				}
 			}
 
+			for _, part := range public.Content {
+				if part.Type == "reasoning_text" {
+					if len(out.Reasoning)+len(part.Text) > 64<<10 {
+						return "", ErrGenerationUnknown
+					}
+					out.Reasoning += part.Text
+				}
+			}
+			if v.EncryptedContent == "" && len(public.Content) > 0 {
+				out.Items = append(out.Items, bytes.Clone(item))
+			}
 			if v.EncryptedContent != "" {
 				if len(v.EncryptedContent) > 64<<10 {
 					return "", ErrGenerationUnknown
@@ -110,7 +131,7 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 				out.Items = append(out.Items, b)
 			}
 		case "function_call":
-			if out.Call != nil || !exactID(v.CallID) || v.Status != "" && v.Status != "completed" || len(v.Arguments) > 8<<10 {
+			if len(out.Calls) >= 8 || !exactID(v.CallID) || v.Status != "" && v.Status != "completed" || len(v.Arguments) > 8<<10 {
 				return "", ErrGenerationUnknown
 			}
 			var tool *AgentTool
@@ -123,11 +144,11 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 				return "", ErrToolDenied
 			}
 			var a struct {
-				NodeIDs   []string `json:"nodeIds"`
-				ProfileID string   `json:"profileId"`
-				PolicySHA string   `json:"policySha256"`
-				Arguments string   `json:"arguments"`
-				Timeout   string   `json:"timeoutSeconds"`
+				NodeIDs   []string        `json:"nodeIds"`
+				ProfileID string          `json:"profileId"`
+				PolicySHA string          `json:"policySha256"`
+				Arguments json.RawMessage `json:"arguments"`
+				Timeout   json.RawMessage `json:"timeoutSeconds"`
 			}
 			if decodeAgentJSON([]byte(v.Arguments), &a) != nil || len(a.NodeIDs) == 0 || len(a.NodeIDs) > 200 || !validIDs(a.NodeIDs) {
 				return "", ErrToolDenied
@@ -140,14 +161,28 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 					return "", ErrToolDenied
 				}
 			}
+			arguments, argumentErr := agentArgumentString(a.Arguments, true)
+			timeout, timeoutErr := agentArgumentString(a.Timeout, false)
+			if argumentErr != nil || timeoutErr != nil {
+				return "", ErrToolDenied
+			}
 			params := map[string]string{}
 			if tool.Profile {
-				params = map[string]string{"profileId": a.ProfileID, "policySha256": a.PolicySHA, "arguments": a.Arguments, "timeoutSeconds": a.Timeout}
-			} else if a.ProfileID != "" || a.PolicySHA != "" || a.Arguments != "" || a.Timeout != "" {
+				params = map[string]string{"profileId": a.ProfileID, "policySha256": a.PolicySHA, "arguments": arguments, "timeoutSeconds": timeout}
+			} else if a.ProfileID != "" || a.PolicySHA != "" || len(a.Arguments) != 0 || len(a.Timeout) != 0 {
 				return "", ErrToolDenied
 			}
 			b, _ := json.Marshal(params)
-			out.Call = &AgentCall{tool.Action, slices.Clone(a.NodeIDs), b, v.CallID}
+			call := &AgentCall{tool.Action, slices.Clone(a.NodeIDs), b, v.CallID}
+			for _, old := range out.Calls {
+				if old.CallID == call.CallID {
+					return "", ErrGenerationUnknown
+				}
+			}
+			out.Calls = append(out.Calls, call)
+			if out.Call == nil {
+				out.Call = call
+			}
 			b, _ = json.Marshal(map[string]string{"type": "function_call", "id": v.ID, "name": v.Name, "call_id": v.CallID, "arguments": v.Arguments, "status": "completed"})
 			out.Items = append(out.Items, b)
 		case "message":
@@ -172,4 +207,28 @@ func decodeAgentDecision(raw []byte, model string, p *agentPrompt) (string, erro
 		return "", ErrGenerationUnknown
 	}
 	return string(b), nil
+}
+
+func agentArgumentString(raw json.RawMessage, array bool) (string, error) {
+	if len(raw) == 0 {
+		return "", nil
+	}
+	var text string
+	if json.Unmarshal(raw, &text) == nil {
+		return text, nil
+	}
+	if array {
+		var values []string
+		if json.Unmarshal(raw, &values) != nil || values == nil {
+			return "", ErrToolDenied
+		}
+		encoded, _ := json.Marshal(values)
+		return string(encoded), nil
+	}
+	var value int
+	if json.Unmarshal(raw, &value) != nil {
+		return "", ErrToolDenied
+	}
+	encoded, _ := json.Marshal(value)
+	return string(encoded), nil
 }

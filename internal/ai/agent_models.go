@@ -22,18 +22,20 @@ type AgentRunInput struct {
 	TimeoutSeconds int    `json:"timeoutSeconds"`
 }
 type AgentStep struct {
-	Number     int             `json:"number"`
-	State      string          `json:"state"`
-	ToolName   string          `json:"toolName,omitempty"`
-	NodeIDs    []string        `json:"nodeIds"`
-	Parameters json.RawMessage `json:"parameters,omitempty"`
-	ApprovalID string          `json:"approvalId,omitempty"`
-	TaskID     string          `json:"taskId,omitempty"`
-	TaskState  string          `json:"taskState,omitempty"`
-	Plan       string          `json:"plan,omitempty"`
-	Result     string          `json:"result,omitempty"`
-	MessageID  string          `json:"messageId,omitempty"`
-	StartedAt  time.Time       `json:"startedAt"`
+	Number           int             `json:"number"`
+	State            string          `json:"state"`
+	ToolName         string          `json:"toolName,omitempty"`
+	NodeIDs          []string        `json:"nodeIds"`
+	Parameters       json.RawMessage `json:"parameters,omitempty"`
+	ApprovalID       string          `json:"approvalId,omitempty"`
+	TaskID           string          `json:"taskId,omitempty"`
+	TaskState        string          `json:"taskState,omitempty"`
+	ReasoningContent string          `json:"reasoningContent,omitempty"`
+	ReasoningSummary string          `json:"reasoningSummary,omitempty"`
+	Plan             string          `json:"plan,omitempty"`
+	Result           string          `json:"result,omitempty"`
+	MessageID        string          `json:"messageId,omitempty"`
+	StartedAt        time.Time       `json:"startedAt"`
 }
 type AgentRun struct {
 	DriverActive  bool        `json:"driverActive"`
@@ -57,10 +59,12 @@ type AgentCall struct {
 	CallID     string          `json:"callId"`
 }
 type agentDecision struct {
-	Text    string            `json:"text"`
-	Summary string            `json:"summary,omitempty"`
-	Call    *AgentCall        `json:"call,omitempty"`
-	Items   []json.RawMessage `json:"items"`
+	Text      string            `json:"text"`
+	Reasoning string            `json:"reasoning,omitempty"`
+	Summary   string            `json:"summary,omitempty"`
+	Call      *AgentCall        `json:"call,omitempty"`
+	Items     []json.RawMessage `json:"items"`
+	Calls     []*AgentCall      `json:"calls,omitempty"`
 }
 type agentRunRecord struct {
 	View                             AgentRun
@@ -71,6 +75,7 @@ type agentRunRecord struct {
 	MemoryScopeHash                  string
 	History                          []json.RawMessage
 	Call                             *AgentCall
+	PendingCalls                     []*AgentCall
 }
 type AgentTool struct {
 	Name        string   `json:"name"`
@@ -148,13 +153,27 @@ func validateAgentRuns(id string, record sessionRecord) error {
 			return ErrSessionUnavailable
 		}
 		for i, s := range v.Steps {
-			if s.Number != i+1 || !agentState(s.State) || s.StartedAt.IsZero() || len(s.NodeIDs) > 200 || !validIDs(s.NodeIDs) || len(s.Parameters) > 8<<10 || len(s.Plan) > 8<<10 || len(s.Result) > 32<<10 {
+			if s.Number != i+1 || !agentState(s.State) || s.StartedAt.IsZero() || len(s.NodeIDs) > 200 || !validIDs(s.NodeIDs) || len(s.Parameters) > 8<<10 || len(s.Plan) > 24<<10 || len(s.ReasoningContent) > 64<<10 || len(s.ReasoningSummary) > 8192 || len(s.Result) > 32<<10 {
 				return ErrSessionUnavailable
 			}
 		}
 		if r.Call != nil && (!exactID(r.Call.ToolName) || !exactID(r.Call.CallID) || len(r.Call.NodeIDs) == 0 || !validIDs(r.Call.NodeIDs) || len(r.Call.Parameters) > 8<<10 || !json.Valid(r.Call.Parameters)) {
 			return ErrSessionUnavailable
 		}
+		if len(r.PendingCalls) > 7 || len(r.PendingCalls) > 0 && r.Call == nil {
+			return ErrSessionUnavailable
+		}
+		callIDs := map[string]bool{}
+		if r.Call != nil {
+			callIDs[r.Call.CallID] = true
+		}
+		for _, call := range r.PendingCalls {
+			if call == nil || !exactID(call.ToolName) || !exactID(call.CallID) || callIDs[call.CallID] || len(call.NodeIDs) == 0 || !validIDs(call.NodeIDs) || len(call.Parameters) > 8<<10 || !json.Valid(call.Parameters) {
+				return ErrSessionUnavailable
+			}
+			callIDs[call.CallID] = true
+		}
+
 	}
 	return nil
 }

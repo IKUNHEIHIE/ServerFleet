@@ -1,5 +1,12 @@
 # 当前架构与来源
 
+## 当前 AI 框架增量
+
+本轮按用户需求在 Go Controller 内接入 Eino ADK v0.9.23 的模型/函数派发回合，
+复用原持久任务运行器；具体范围与功能证据见
+[接入决定](AI-AGENT-ADK-20261118.md)。
+归档 PoC 与插件 Runtime 的旧准入结论不因此被改写，也不据其扩大当前实机验收。
+
 后续开发先读 [交接](../development/HANDOFF.md)和[当前状态](../development/CURRENT-STATE.md)。下面的“现行文件集”指批准架构/需求的来源，不是最新源码完成清单；归档里的任务/AGENTS 不给当前源码分配工作。
 
 原始资料保存在 `../reference/ServerFleet-ALL-v0.9-G2/`，不参与源码依赖。包根 `00-请先阅读.md` 和 SHA256 清单是来源说明。

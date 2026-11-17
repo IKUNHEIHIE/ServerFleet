@@ -1,5 +1,15 @@
 # 后续 Agent 开发交接
 
+## 2026-11-18 AI 推理流与现成 Agent（任务分支，未部署）
+
+AI-AGENT-SDK-20261118；feature/ai-agent-sdk-20261118，基于 main d71a2f0。
+新增模型 Markdown 渲染、公开完整推理字段与摘要/计划分离、
+Responses/Chat Completions 函数调用兼容及 Eino ADK v0.9.23 装配。
+按用户要求侧重功能样例验证，复用现有执行底座；
+[实现、验证与边界](AI-AGENT-SDK-20261118.md)、
+[框架接入范围](../architecture/AI-AGENT-ADK-20261118.md)。
+此前测试站仍运行 fc0416a，本轮未自动部署；最终提交与验证以 PR 回执为准。
+
 更新日期：2026-11-18。接手现有项目，先按以下顺序阅读：
 
 1. 根 [AGENTS](../../AGENTS.md) 与 [当前状态](CURRENT-STATE.md)：任务范围、代码缺口、发布和未验收范围。

@@ -28,6 +28,7 @@ type Message struct {
 	SessionID        string    `json:"sessionId"`
 	Role             string    `json:"role"`
 	RedactedContent  string    `json:"redactedContent"`
+	ReasoningContent string    `json:"reasoningContent,omitempty"`
 	ReasoningSummary string    `json:"reasoningSummary,omitempty"`
 	CreatedAt        time.Time `json:"createdAt"`
 	TaskIDs          []string  `json:"taskIds"`
@@ -104,7 +105,7 @@ func validateConversation(id string, c *conversationRecord) error {
 	}
 	messages := map[string]Message{}
 	for _, m := range c.Messages {
-		if !exactID(m.MessageID) || m.SessionID != id || m.AgentRunID != "" && !exactID(m.AgentRunID) || !validMessageContent(m.RedactedContent) || len(m.ReasoningSummary) > 8192 || m.CreatedAt.IsZero() || len(m.TaskIDs) != 0 || m.Role != "user" && m.Role != "assistant" || messages[m.MessageID].MessageID != "" {
+		if !exactID(m.MessageID) || m.SessionID != id || m.AgentRunID != "" && !exactID(m.AgentRunID) || !validMessageContent(m.RedactedContent) || len(m.ReasoningSummary) > 8192 || len(m.ReasoningContent) > 64<<10 || m.CreatedAt.IsZero() || len(m.TaskIDs) != 0 || m.Role != "user" && m.Role != "assistant" || messages[m.MessageID].MessageID != "" {
 			return ErrSessionUnavailable
 		}
 		messages[m.MessageID] = m
@@ -386,8 +387,15 @@ func (c *ConversationService) MessagesPage(ctx context.Context, id string, after
 		// reference, not native planning JSON or encrypted reasoning blobs.
 		if m.AgentRunID != "" {
 			out[i].ReasoningSummary = ""
+			out[i].ReasoningContent = ""
 			out[i].RedactedContent = "Agent 运行 " + m.AgentRunID + "：请在 Agent 运行页签查看步骤和结果。"
 			continue
+		}
+		if m.ReasoningContent != "" {
+			out[i].ReasoningContent, err = c.filter(ctx, view, "assistant", m.ReasoningContent)
+			if err != nil {
+				return nil, SessionView{}, err
+			}
 		}
 		if m.ReasoningSummary != "" {
 			out[i].ReasoningSummary, err = c.filter(ctx, view, "assistant", m.ReasoningSummary)
@@ -555,7 +563,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		}
 	}
 	var output bytes.Buffer
-	var publicSummary string
+	var publicSummary, publicReasoning string
 	check := func() error {
 		if request.Agent != nil && c.checkAgentGeneration(bounded, request) != nil {
 			return ErrToolDenied
@@ -601,6 +609,9 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if kind == "summary" {
 			publicSummary = filtered
 		}
+		if kind == "reasoning" {
+			publicReasoning = filtered
+		}
 		if clientPreview != nil {
 			return clientPreview(kind, filtered)
 		}
@@ -625,6 +636,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 	finished = true
 	outputText := output.String()
 	summaryText := publicSummary
+	reasoningText := publicReasoning
 	outputRejected := emitFailed
 	emitMu.Unlock()
 	if providerErr != nil || outputRejected || bounded.Err() != nil || check() != nil {
@@ -657,7 +669,7 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if request.Agent != nil && agentGenerationCurrent(r, request, now) != nil {
 			return ErrToolDenied
 		}
-		out = Message{AgentRunID: run.AgentRunID, MessageID: responseID, SessionID: id, Role: "assistant", RedactedContent: text, ReasoningSummary: summaryText, CreatedAt: now, TaskIDs: []string{}}
+		out = Message{AgentRunID: run.AgentRunID, MessageID: responseID, SessionID: id, Role: "assistant", RedactedContent: text, ReasoningSummary: summaryText, ReasoningContent: reasoningText, CreatedAt: now, TaskIDs: []string{}}
 		r.Conversation.Messages = append(r.Conversation.Messages, out)
 		run.State, run.ResponseID = "succeeded", responseID
 		r.Conversation.Runs[messageID] = run
