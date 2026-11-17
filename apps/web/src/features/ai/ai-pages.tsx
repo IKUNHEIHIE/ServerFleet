@@ -72,7 +72,7 @@ function parseAIEvent(event: SSEEvent): AIStreamEvent {
   };
 }
 
-export function AIPage() {
+export function AIPage({ mobile = false }: { readonly mobile?: boolean } = {}) {
   const session = useSession();
   const canUse = session.can("ai.use") || session.can("ai.manage");
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -99,6 +99,17 @@ export function AIPage() {
     void startConversation();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeId, items, canUse, session.writesLocked, sessions.state.status]);
+
+  if (mobile) return <div className="mobile-ai-page">
+    <div className="mobile-ai-picker"><select aria-label="选择对话" value={activeId ?? ""} onChange={event => setActiveId(event.target.value)}>
+      {!activeId ? <option value="">请选择对话</option> : null}
+      {items.map(item => <option key={item.id} value={item.id}>{item.title}</option>)}
+    </select><Button aria-label="新建对话" loading={create.pending} disabled={!canUse || session.writesLocked} onClick={() => void startConversation()}><Sparkles size={16} />新对话</Button></div>
+    {create.error ? <Notice tone="error" title="无法开始对话">{describeApiError(create.error)}</Notice> : null}
+    {sessions.state.status === "error" ? <Notice tone="error" title="对话加载失败">{describeApiError(sessions.state.error)} <Button onClick={sessions.reload}>重试</Button></Notice> : null}
+    {!canUse ? <Notice tone="warning" title="当前账号没有 AI 使用权限" /> : null}
+    <div className="mobile-ai-session">{activeId ? <AISessionPage key={activeId} sessionId={activeId} embedded mobile /> : <EmptyState title="正在准备对话" description="读取会话后即可开始。" />}</div>
+  </div>;
 
   return (
     <div className="space-y-3">
@@ -469,7 +480,7 @@ function ApprovalsPanel({
   );
 }
 
-export function AISessionPage({ sessionId, embedded = false }: { readonly sessionId: string; readonly embedded?: boolean }) {
+export function AISessionPage({ sessionId, embedded = false, mobile = false }: { readonly sessionId: string; readonly embedded?: boolean; readonly mobile?: boolean }) {
   const appSession = useSession();
   const [tab, setTab] = useState<"chat" | "agent" | "approval">("chat");
   const [events, setEvents] = useState<readonly AIStreamEvent[]>([]);
@@ -685,7 +696,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
   }
 
   return (
-    <div className={embedded ? "flex h-full min-h-0 flex-col" : "space-y-5"}>
+    <div className={(embedded ? "flex h-full min-h-0 flex-col" : "space-y-5") + (mobile ? " mobile-ai" : "")}>
       {embedded ? null : <PageHeader
         title={current ? `AI 会话 ${current.id}` : "AI 会话"}
         description="默认无资源授权、每次操作需审批；授权变化后，旧计划与旧审批失效。"
@@ -704,7 +715,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
           const result = await probeModel.run(forModel);
           if (result.ok && result.data) setCapability({ forModel, ...result.data.data });
         }}>检测模型能力</Button>
-        <span>发送小型检测请求，不执行节点操作</span>
+        {mobile ? null : <span>发送小型检测请求，不执行节点操作</span>}
         {capability && capability.forModel === (current?.model ?? "") ? <span>工具调用：{capability.toolCalls ? "已验证" : "未通过"} · 推理输出：{capability.reasoning ? "已验证" : "未验证"}</span> : null}
         {probeModel.error ? <span role="alert">{describeApiError(probeModel.error)}</span> : null}
       </div>
@@ -724,7 +735,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                 <span className="font-semibold">对话</span>
                 <Badge tone={data.status === "active" ? "success" : "neutral"}>{data.status === "active" ? "进行中" : "已结束"}</Badge>
                 <span className="text-xs text-muted-foreground">授权 {data.resourceGrants.length} · 范围版本 {data.scopeRevision}</span>
-                <span className="truncate text-xs text-muted-foreground">{`有效节点：${data.allowedNodeIds?.join("、") || "空（默认无资源）"}`}</span>
+                <span className={(mobile ? "hidden " : "") + "truncate text-xs text-muted-foreground"}>{`有效节点：${data.allowedNodeIds?.join("、") || "空（默认无资源）"}`}</span>
               </div>
               <div className="flex flex-wrap items-center gap-1 text-xs">
                 {([
@@ -758,10 +769,10 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
             ) : null}
 
             {tab === "chat" ? (
-              <div className="grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_17rem]">
-                <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/90 bg-card shadow-[var(--shadow-card)]">
+              <div className="mobile-ai-grid grid min-h-0 flex-1 gap-3 md:grid-cols-[minmax(0,1fr)_17rem]">
+                <div className="mobile-ai-chat flex min-h-0 flex-col overflow-hidden rounded-2xl border border-border/90 bg-card shadow-[var(--shadow-card)]">
                   <div className="flex min-h-0 flex-1 flex-col">
-                  <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="开始对话" description="输入消息，或把右侧节点拖进输入框授权 AI 使用。" />} isEmpty={page => page.items.length === 0}>
+                  <AsyncPanel state={messages.state} onRetry={messages.reload} errorTitle="消息加载失败" empty={<EmptyState title="开始对话" description={mobile ? "输入消息开始对话，展开上方资源授权后可执行任务。" : "输入消息，或把右侧节点拖进输入框授权 AI 使用。"} />} isEmpty={page => page.items.length === 0}>
                     {() => (
                       <div ref={listRef} className="min-h-0 flex-1 space-y-3 overflow-y-auto bg-[#FAFBFD] px-4 py-4">
                         {visibleMessages.map(message => {
@@ -973,7 +984,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                         value={messageText}
                         onChange={event => setMessageText(event.target.value)}
                         maxLength={32000}
-                        placeholder={composerMode === "agent" ? "描述要 AI 完成的运维目标，例如：检查已授权节点的磁盘占用并处理异常…" : "输入消息，或把右侧节点拖进这里授权 AI 使用…"}
+                        placeholder={composerMode === "agent" ? "描述要 AI 完成的运维目标，例如：检查已授权节点的磁盘占用并处理异常…" : mobile ? "输入消息…" : "输入消息，或把右侧节点拖进这里授权 AI 使用…"}
                         className="min-h-[88px] max-h-44 resize-none pr-14"
                         onKeyDown={event => {
                           if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
@@ -1002,12 +1013,13 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                     </p>
                   </form>
                 </div>
-                <div className="min-h-0 space-y-3 overflow-y-auto">
-                  <Panel title="可用资源" description="把节点拖进左侧输入框即授权 AI 读取；也可点击添加。">
+                <details className={mobile ? "mobile-ai-resources" : "min-h-0 space-y-3 overflow-y-auto"} open={mobile ? undefined : true}>
+                  <summary className={mobile ? "" : "hidden"}>节点与资源授权（{data.resourceGrants.length}）</summary>
+                  <Panel title="可用资源" description={mobile ? "点击节点添加授权，展开后可撤回。" : "把节点拖进左侧输入框即授权 AI 读取；也可点击添加。"}>
                     <div className="space-y-3 px-5 py-4">
                       <div className="flex flex-wrap gap-1.5">
                         {nodeItems.map(node => (
-                          <span
+                          <button type="button" disabled={writesLocked || !canUse || grant.pending}
                             key={`pick-node-${node.id}`}
                             draggable
                             onDragStart={event => {
@@ -1019,10 +1031,10 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                           >
                             <Server aria-hidden="true" className="size-3 text-primary" />
                             {node.name || node.id}
-                          </span>
+                          </button>
                         ))}
                         {groupItems.map(group => (
-                          <span
+                          <button type="button" disabled={writesLocked || !canUse || grant.pending}
                             key={`pick-sg-${group.id}`}
                             draggable
                             onDragStart={event => {
@@ -1034,7 +1046,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                           >
                             <Layers aria-hidden="true" className="size-3 text-blue-600" />
                             {group.name || group.id}
-                          </span>
+                          </button>
                         ))}
                       </div>
                       <div>
@@ -1084,7 +1096,7 @@ export function AISessionPage({ sessionId, embedded = false }: { readonly sessio
                       </form>
                     </div>
                   </Panel>
-                </div>
+                </details>
               </div>
             ) : null}
           </div>

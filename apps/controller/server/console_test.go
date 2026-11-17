@@ -140,3 +140,28 @@ func TestFormalConsolePreservesAPIAndLiveQuarantineGate(t *testing.T) {
 		t.Fatal("console bypassed restored runtime gate", denied.Code)
 	}
 }
+
+// Optional mobile artifacts use the same frozen asset snapshot as the console.
+func TestConsoleMobileAPKDownload(t *testing.T) {
+	dir := consoleDirectory(t)
+	apk := []byte("PK mobile preview fixture")
+	name := "assets/serverfleet-mobile-0.1.0-preview.apk"
+	if err := os.WriteFile(filepath.Join(dir, name), apk, 0600); err != nil {
+		t.Fatal(err)
+	}
+	handler, err := LoadConsole(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, httptest.NewRequest("GET", "/"+name, nil))
+	if w.Code != 200 || !bytes.Equal(w.Body.Bytes(), apk) || w.Header().Get("Content-Type") != "application/vnd.android.package-archive" ||
+		w.Header().Get("Content-Disposition") != "attachment; filename=serverfleet-mobile-0.1.0-preview.apk" {
+		t.Fatalf("mobile artifact response: %d %v", w.Code, w.Header())
+	}
+	head := httptest.NewRecorder()
+	handler.ServeHTTP(head, httptest.NewRequest("HEAD", "/"+name, nil))
+	if head.Code != 200 || head.Body.Len() != 0 || head.Header().Get("Content-Length") != w.Header().Get("Content-Length") {
+		t.Fatal("mobile artifact HEAD differs from GET", head.Code)
+	}
+}

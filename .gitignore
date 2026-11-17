@@ -13,3 +13,11 @@ __pycache__/
 *.db
 *.db-shm
 *.db-wal
+
+# Android local build outputs and signing material
+apps/android/.gradle/
+apps/android/.android/
+apps/android/**/build/
+apps/android/local.properties
+*.jks
+*.keystore
