@@ -385,6 +385,7 @@ func (c *ConversationService) MessagesPage(ctx context.Context, id string, after
 		// Opaque provider continuation items stay private. A reader sees the run
 		// reference, not native planning JSON or encrypted reasoning blobs.
 		if m.AgentRunID != "" {
+			out[i].ReasoningSummary = ""
 			out[i].RedactedContent = "Agent 运行 " + m.AgentRunID + "：请在 Agent 运行页签查看步骤和结果。"
 			continue
 		}

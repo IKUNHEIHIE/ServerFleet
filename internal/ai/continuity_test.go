@@ -278,3 +278,34 @@ func TestCompactionRejectsConcurrentNewMessage(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestInternalAgentMessageSummaryUsesRunBoundary(t *testing.T) {
+	ctx := context.Background()
+	loop, view, _, _ := agentLoopFixture(t, false, false)
+	loop.conversation.config.Generate = func(ctx context.Context, _ GenerationRequest, emit func(string) error) error {
+		if err := generationPreviewFrom(ctx)("summary", "internal step summary"); err != nil {
+			return err
+		}
+		return emit(`{"text":"finished","items":[]}`)
+	}
+	run, err := loop.Create(ctx, view.ID, AgentRunInput{Goal: "inspect", ClientRunID: "internal-summary", ScopeRevision: view.ScopeRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err = loop.Advance(ctx, view.ID, run.ID, run.Revision)
+	if err != nil || run.State != "completed" {
+		t.Fatal(run, err)
+	}
+	messages, _, err := loop.conversation.MessagesPage(ctx, view.ID, 0, 100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(messages) == 0 {
+		t.Fatal("missing run references")
+	}
+	for _, message := range messages {
+		if message.AgentRunID != "" && message.ReasoningSummary != "" {
+			t.Fatal("internal message bypassed run filtering", message)
+		}
+	}
+}
