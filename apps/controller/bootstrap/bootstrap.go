@@ -28,6 +28,8 @@ type Options struct {
 	WebDirectory          string
 	Listen                string
 	DBPath                string
+	DBDriver              string
+	DBDSN                 string
 	Origin                string
 	TLSCert               string
 	TLSKey                string
@@ -56,7 +58,9 @@ func ParseOptions(args []string, output io.Writer) (Options, error) {
 	var options Options
 	flags.BoolVar(&options.ShowVersion, "version", false, "print the build version and exit")
 	flags.StringVar(&options.Listen, "listen", "127.0.0.1:8080", "local listen address")
-	flags.StringVar(&options.DBPath, "db", "", "SQLite WAL database path (enables management API)")
+	flags.StringVar(&options.DBPath, "db", "", "SQLite WAL database path or local state directory (enables management API)")
+	flags.StringVar(&options.DBDriver, "db-driver", "", "database driver: sqlite (default) or postgres")
+	flags.StringVar(&options.DBDSN, "db-dsn", "", "PostgreSQL DSN when -db-driver=postgres")
 	flags.StringVar(&options.Origin, "origin", "", "trusted https:// browser Origin (required with -db)")
 	flags.StringVar(&options.TLSCert, "tls-cert", "", "TLS server certificate path (required with -db)")
 	flags.StringVar(&options.TLSKey, "tls-key", "", "TLS server private key path (required with -db)")
@@ -328,6 +332,8 @@ func Compose(ctx context.Context, options Options) (*server.Server, *localpki.Ma
 		UpdateProduct:         updateDeployment,
 		DisableCleanupRetries: options.DisableCleanupRetries,
 		DBPath:                options.DBPath,
+		DBDriver:              options.DBDriver,
+		DBDSN:                 options.DBDSN,
 		CredentialKeyDir:      options.CredentialKeyDir,
 		AITextEndpoint:        options.AITextEndpoint,
 		Origin:                options.Origin,

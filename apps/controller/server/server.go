@@ -45,6 +45,8 @@ type Config struct {
 	InstallationCatalog       *InstallationCatalog
 	WebDirectory              string
 	DBPath                    string
+	DBDriver                  string
+	DBDSN                     string
 	CredentialKeyDir          string
 	AIGenerationQuota         ai.GenerationQuota
 	LocalAIProvider           *ai.LocalTLSProviderConfig
@@ -235,7 +237,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("controller: create staging directory: %w", err)
 	}
 
-	db, err := storage.Open(ctx, storage.Config{Path: cfg.DBPath})
+	db, err := storage.Open(ctx, storage.Config{Path: cfg.DBPath, Driver: cfg.DBDriver, DSN: cfg.DBDSN})
 	if err != nil {
 		return nil, err
 	}

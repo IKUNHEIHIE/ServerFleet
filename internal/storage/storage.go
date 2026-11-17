@@ -17,6 +17,7 @@ import (
 
 	"database/sql"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
 	_ "modernc.org/sqlite"
 )
 
@@ -34,6 +35,10 @@ var (
 // busy timeout 5s, four pooled connections and an integrity check at startup.
 type Config struct {
 	Path string
+	// Driver selects sqlite (default) or postgres. PostgreSQL requires DSN and
+	// keeps Path as the local state directory used by non-database artifacts.
+	Driver string
+	DSN    string
 
 	// BusyTimeout bounds how long SQLite waits for another process' write lock.
 	BusyTimeout time.Duration
@@ -53,6 +58,19 @@ type Config struct {
 }
 
 func (c Config) normalized() (Config, error) {
+	c.Driver = strings.ToLower(strings.TrimSpace(c.Driver))
+	if c.Driver == "" {
+		c.Driver = "sqlite"
+	}
+	if c.Driver != "sqlite" && c.Driver != "postgres" {
+		return Config{}, fmt.Errorf("%w: unsupported driver %q", ErrInvalidConfig, c.Driver)
+	}
+	if c.Driver == "postgres" {
+		if strings.TrimSpace(c.DSN) == "" {
+			return Config{}, fmt.Errorf("%w: postgres DSN is required", ErrInvalidConfig)
+		}
+		return c, nil
+	}
 	if strings.TrimSpace(c.Path) == "" {
 		return Config{}, fmt.Errorf("%w: path is required", ErrInvalidConfig)
 	}
@@ -75,8 +93,9 @@ func (c Config) normalized() (Config, error) {
 // process are serialized through InTx so callers observe queueing rather than
 // SQLITE_BUSY; reads use the connection pool.
 type DB struct {
-	db   *sql.DB
-	path string
+	db      *sql.DB
+	path    string
+	dialect dialect
 
 	writer chan struct{}
 	once   sync.Once
@@ -96,6 +115,20 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if cfg.Driver == "postgres" {
+		pool, err := sql.Open("pgx", cfg.DSN)
+		if err != nil {
+			return nil, fmt.Errorf("storage: open postgres: %w", err)
+		}
+		pool.SetMaxOpenConns(cfg.MaxOpenConns)
+		pool.SetMaxIdleConns(cfg.MaxOpenConns)
+		handle := &DB{db: pool, path: cfg.Path, dialect: dialectPostgres, writer: make(chan struct{}, 1)}
+		if err := handle.verify(ctx, cfg); err != nil {
+			_ = pool.Close()
+			return nil, err
+		}
+		return handle, nil
+	}
 	abs, err := filepath.Abs(cfg.Path)
 	if err != nil {
 		return nil, fmt.Errorf("storage: resolve path: %w", err)
@@ -114,7 +147,7 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 	pool.SetMaxIdleConns(cfg.MaxOpenConns)
 	pool.SetConnMaxLifetime(0)
 
-	handle := &DB{db: pool, path: abs, writer: make(chan struct{}, 1)}
+	handle := &DB{db: pool, path: abs, dialect: dialectSQLite, writer: make(chan struct{}, 1)}
 	if err := handle.verify(ctx, cfg); err != nil {
 		_ = pool.Close()
 		return nil, err
@@ -125,6 +158,9 @@ func Open(ctx context.Context, cfg Config) (*DB, error) {
 func (db *DB) verify(ctx context.Context, cfg Config) error {
 	if err := db.db.PingContext(ctx); err != nil {
 		return fmt.Errorf("storage: ping: %w", err)
+	}
+	if db.dialect == dialectPostgres {
+		return nil
 	}
 	if !cfg.ReadOnly {
 		var mode string
@@ -192,14 +228,14 @@ func (db *DB) Exec(ctx context.Context, query string, args ...any) (Result, erro
 	if db == nil || db.db == nil {
 		return nil, ErrClosed
 	}
-	return db.db.ExecContext(ctx, query, args...)
+	return db.db.ExecContext(ctx, db.dialect.prepare(query), args...)
 }
 
 func (db *DB) Query(ctx context.Context, query string, args ...any) (Rows, error) {
 	if db == nil || db.db == nil {
 		return nil, ErrClosed
 	}
-	rows, err := db.db.QueryContext(ctx, query, args...)
+	rows, err := db.db.QueryContext(ctx, db.dialect.prepare(query), args...)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +246,7 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...any) Row {
 	if db == nil || db.db == nil {
 		return errorRow{ErrClosed}
 	}
-	return db.db.QueryRowContext(ctx, query, args...)
+	return db.db.QueryRowContext(ctx, db.dialect.prepare(query), args...)
 }
 
 // Queryer is the read/write surface repositories implement against. Both *DB and
