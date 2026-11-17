@@ -70,8 +70,8 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AppliedVersions: %v", err)
 	}
-	if len(versions) != 52 {
-		t.Fatalf("applied migrations = %d (%v), want 52", len(versions), versions)
+	if len(versions) != 53 {
+		t.Fatalf("applied migrations = %d (%v), want 53", len(versions), versions)
 	}
 
 	setupToken, err := composed.Identity.PrepareSetup(ctx)
@@ -424,39 +424,14 @@ func TestWave2ControllerEndToEndHTTPSComposition(t *testing.T) {
 	}
 	planDigest := taskPage.Items[0].PlanDigest
 
-	// Self-approval by admin must be rejected with 409 Conflict
-	resp, _ = doReq(adminClient, "POST", "/api/v1/tasks/"+createdJob.JobID+"/approve", map[string]any{
+	// The submitting administrator may confirm the same task once.
+	resp, data = doReq(adminClient, "POST", "/api/v1/tasks/"+createdJob.JobID+"/approve", map[string]any{
 		"planDigest": planDigest,
 		"decision":   "approve",
-		"reason":     "self approve attempt",
+		"reason":     "single human confirmation",
 	}, adminLogin.CSRF, "")
-	if resp.StatusCode != http.StatusConflict {
-		t.Fatalf("self-approval status = %d, want 409", resp.StatusCode)
-	}
-
-	// Second user logs in and approves
-	approverClient := newClient()
-	resp, data = doReq(approverClient, "POST", "/api/v1/auth/login", map[string]string{
-		"username": "approver",
-		"password": "wave2-approver-strong-password",
-	}, "", "")
 	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("approver login = %d: %s", resp.StatusCode, data)
-	}
-	var approverLogin struct {
-		CSRF string `json:"csrfToken"`
-	}
-	if err := json.Unmarshal(data, &approverLogin); err != nil {
-		t.Fatal(err)
-	}
-
-	resp, data = doReq(approverClient, "POST", "/api/v1/tasks/"+createdJob.JobID+"/approve", map[string]any{
-		"planDigest": planDigest,
-		"decision":   "approve",
-		"reason":     "peer reviewed",
-	}, approverLogin.CSRF, "")
-	if resp.StatusCode != http.StatusOK {
-		t.Fatalf("peer approve = %d: %s", resp.StatusCode, data)
+		t.Fatalf("self-approval status = %d: %s", resp.StatusCode, data)
 	}
 
 	if err := composed.Tasks.RunOnce(ctx); err != nil {
