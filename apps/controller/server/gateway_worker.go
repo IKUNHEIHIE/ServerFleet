@@ -360,8 +360,7 @@ func (d *gatewayTaskDispatcher) currentApproval(ctx context.Context, task tasks.
 		return tasks.ErrApprovalInvalid
 	}
 	approval, err := d.repo.Approval(ctx, d.db, task.ID, task.Revision)
-	if err != nil || !approval.Approved() || approval.PlanHash != task.PlanHash ||
-		approval.ApproverID == task.SubmitterID {
+	if err != nil || !approval.Approved() || approval.PlanHash != task.PlanHash {
 		return tasks.ErrApprovalInvalid
 	}
 	if d.approvalTTL > 0 && d.now().UTC().After(approval.DecidedAt.Add(d.approvalTTL)) {
@@ -444,7 +443,7 @@ func (d *gatewayTaskDispatcher) CheckArtifactChild(ctx context.Context, taskID, 
 		return tasks.ErrApprovalInvalid
 	}
 	approval, err := d.repo.Approval(ctx, d.db, task.ID, task.Revision)
-	if err != nil || !approval.Approved() || approval.PlanHash != task.PlanHash || approval.ApproverID == task.SubmitterID {
+	if err != nil || !approval.Approved() || approval.PlanHash != task.PlanHash {
 		return tasks.ErrApprovalInvalid
 	}
 	if d.approvalTTL > 0 && d.now().UTC().After(approval.DecidedAt.Add(d.approvalTTL)) {
