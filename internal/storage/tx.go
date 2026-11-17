@@ -104,14 +104,14 @@ func (tx *sqlTx) Exec(ctx context.Context, query string, args ...any) (Result, e
 	if tx == nil || tx.finished {
 		return nil, ErrClosed
 	}
-	return tx.conn.ExecContext(ctx, tx.dialect.prepare(query), args...)
+	return tx.conn.ExecContext(ctx, tx.dialect.prepare(query), tx.dialect.args(args)...)
 }
 
 func (tx *sqlTx) Query(ctx context.Context, query string, args ...any) (Rows, error) {
 	if tx == nil || tx.finished {
 		return nil, ErrClosed
 	}
-	rows, err := tx.conn.QueryContext(ctx, tx.dialect.prepare(query), args...)
+	rows, err := tx.conn.QueryContext(ctx, tx.dialect.prepare(query), tx.dialect.args(args)...)
 	if err != nil {
 		return nil, err
 	}
@@ -122,7 +122,7 @@ func (tx *sqlTx) QueryRow(ctx context.Context, query string, args ...any) Row {
 	if tx == nil || tx.finished {
 		return errorRow{ErrClosed}
 	}
-	return tx.conn.QueryRowContext(ctx, tx.dialect.prepare(query), args...)
+	return tx.conn.QueryRowContext(ctx, tx.dialect.prepare(query), tx.dialect.args(args)...)
 }
 
 func (tx *sqlTx) Commit(ctx context.Context) error {

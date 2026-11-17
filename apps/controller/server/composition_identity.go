@@ -18,9 +18,9 @@ func newIdentityStore(db *storage.DB, recorder *audit.SQLRecorder) (*auth.SQLIde
 		return auth.IdentitySQLStatements{
 			Read: func(ctx context.Context, query string, args ...any) ([]byte, bool, error) {
 				var payload []byte
-				var initialized bool
+				var initialized int64
 				err := q.QueryRow(ctx, query, args...).Scan(&payload, &initialized)
-				return payload, initialized, err
+				return payload, initialized != 0, err
 			},
 			Exec: func(ctx context.Context, query string, args ...any) (int64, error) {
 				result, err := q.Exec(ctx, query, args...)

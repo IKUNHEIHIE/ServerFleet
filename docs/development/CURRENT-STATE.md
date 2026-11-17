@@ -37,7 +37,7 @@
 - 2026-11-17 权限兼容：补充 UI 权限键到后端权限键的别名（证书、监控、配额、备份、更新、插件、文件、节点接入等），避免管理员界面误显示“无权限”。
 - 2026-11-17 Agent 可观测与模型目录：Agent 步骤增加规划说明字段，聊天区直接内嵌实时状态、工具调用、审批按钮、执行结果和最终答复，不再要求切到独立页签；兼容省略 `status` 的兼容网关决策响应。AI 模型可保存独立端点，新增“获取模型”调用 OpenAI 兼容 `/models`，实测 StepFun 返回 9 个模型；Agent 在自定义端点下完成 nodes.read 并返回最终答复。
 - 2026-11-17 系统设置重排：页签改为分组侧栏（账号与密钥 / 业务集成 / 维护），每个分区显示用途说明；凭据页增加直达 DNS 账号与 AI 模型的专用入口，避免“安全凭据”和业务密钥入口混淆。
-- PostgreSQL 第一阶段已完成：存储层新增 `-db-driver postgres -db-dsn`，集中处理 `?` 占位符、AUTOINCREMENT/BLOB/COLLATE、sqlite_master、json_extract、追加写触发器等方言差异；在测试站 PostgreSQL 17 上全量 53 项迁移通过，独立 Controller 实例 `/readyz` 与 `/healthz` 正常。SQLite 仍为默认，生产未切换。备份/恢复、更新指纹与文件级快照仍依赖 SQLite 文件语义，切生产前必须逐项适配并做数据迁移演练。
+- PostgreSQL 第一阶段已完成：存储层新增 `-db-driver postgres -db-dsn`，集中处理 `?` 占位符、AUTOINCREMENT/BLOB/COLLATE、sqlite_master、json_extract、追加写触发器等方言差异；在测试站 PostgreSQL 17 上全量 53 项迁移通过，独立 Controller 实例 `/readyz`、`/healthz` 与身份 `bootstrap-status`（真实读写事务）正常。SQLite 仍为默认，生产未切换。备份/恢复、更新指纹与文件级快照仍依赖 SQLite 文件语义，切生产前必须逐项适配并做数据迁移演练。
 - Xray Agent 部署仍阻塞：Xray 插件未安装，核心明确不含 Runtime/业务代码，Agent 工具目录只有节点巡检、自检和已安装命令配置；不能用现有代码宣称 Agent 已能独立搭建 xray 节点。
 - 2026-11-17 实机验收补充：真实管理员会话下登录、节点、任务、凭据、DNS、监控、证书读取与 AI 会话接口均返回 200（此前页面 403 未复现）；DNS 与 ACME 改为各自独立 Provider，网页 DNS 写入不再落入 ACME 任务作用域；DNS 记录名统一为 FQDN、TXT 内容去除供应商引号，真实 Cloudflare TXT 新增→读回→删除通过；`-acme-deployment` 因 drop-in 字母序被覆盖的问题已改为最后加载，证书公共配置返回 configured=true；AI 执行模式在人工批准后完成 `nodes.read` 并读取真实节点状态，运行 completed。临时测试记录已清理。
 

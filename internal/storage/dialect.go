@@ -124,3 +124,21 @@ func itoa(value int) string {
 	}
 	return string(buf[i:])
 }
+func (d dialect) args(args []any) []any {
+	if d != dialectPostgres || len(args) == 0 {
+		return args
+	}
+	out := make([]any, len(args))
+	for i, arg := range args {
+		if value, ok := arg.(bool); ok {
+			if value {
+				out[i] = int64(1)
+			} else {
+				out[i] = int64(0)
+			}
+			continue
+		}
+		out[i] = arg
+	}
+	return out
+}

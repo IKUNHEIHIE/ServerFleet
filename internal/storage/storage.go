@@ -228,14 +228,14 @@ func (db *DB) Exec(ctx context.Context, query string, args ...any) (Result, erro
 	if db == nil || db.db == nil {
 		return nil, ErrClosed
 	}
-	return db.db.ExecContext(ctx, db.dialect.prepare(query), args...)
+	return db.db.ExecContext(ctx, db.dialect.prepare(query), db.dialect.args(args)...)
 }
 
 func (db *DB) Query(ctx context.Context, query string, args ...any) (Rows, error) {
 	if db == nil || db.db == nil {
 		return nil, ErrClosed
 	}
-	rows, err := db.db.QueryContext(ctx, db.dialect.prepare(query), args...)
+	rows, err := db.db.QueryContext(ctx, db.dialect.prepare(query), db.dialect.args(args)...)
 	if err != nil {
 		return nil, err
 	}
@@ -246,7 +246,7 @@ func (db *DB) QueryRow(ctx context.Context, query string, args ...any) Row {
 	if db == nil || db.db == nil {
 		return errorRow{ErrClosed}
 	}
-	return db.db.QueryRowContext(ctx, db.dialect.prepare(query), args...)
+	return db.db.QueryRowContext(ctx, db.dialect.prepare(query), db.dialect.args(args)...)
 }
 
 // Queryer is the read/write surface repositories implement against. Both *DB and
