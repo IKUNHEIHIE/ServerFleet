@@ -57,6 +57,10 @@ func (l *AgentLoop) read(ctx context.Context, session, id string) (agentRunRecor
 	if e != nil {
 		return out, e
 	}
+	return l.authorizeRunSteps(ctx, view, out)
+}
+
+func (l *AgentLoop) authorizeRunSteps(ctx context.Context, view SessionView, out agentRunRecord) (agentRunRecord, error) {
 	if out.View.ScopeRevision != view.ScopeRevision {
 		// A terminal run from an older resource scope stays readable as history;
 		// a live run is stopped by Advance instead of being replayed.
@@ -69,7 +73,7 @@ func (l *AgentLoop) read(ctx context.Context, session, id string) (agentRunRecor
 		if len(step.NodeIDs) == 0 {
 			continue
 		}
-		if _, e = l.sessions.AssessTool(ctx, session, ToolCall{ToolID: step.ToolName, NodeIDs: step.NodeIDs, Parameters: step.Parameters, ScopeRevision: view.ScopeRevision}); e != nil {
+		if _, e := l.sessions.AssessTool(ctx, view.ID, ToolCall{ToolID: step.ToolName, NodeIDs: step.NodeIDs, Parameters: step.Parameters, ScopeRevision: view.ScopeRevision}); e != nil {
 			return agentRunRecord{}, e
 		}
 	}
@@ -408,7 +412,7 @@ func (l *AgentLoop) Advance(ctx context.Context, session, id string, expected ui
 	}
 	a := raw
 	if a.View.ScopeRevision == current.ScopeRevision {
-		a, e = l.read(ctx, session, id)
+		a, e = l.authorizeRunSteps(ctx, current, raw)
 		if e != nil {
 			return AgentRun{}, e
 		}
@@ -587,6 +591,10 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 				r.View.State = "completed"
 				r.View.FinalText = decision.Text
 				r.View.Steps[p.Step-1].State = "completed"
+				if !slices.ContainsFunc(r.View.Steps, successfulAgentReceipt) {
+					r.View.State = "failed"
+					r.View.StopReason = "no_successful_tool_receipt"
+				}
 			} else {
 				r.View.State = "queued"
 				r.View.Steps[p.Step-1].State = "completed"
@@ -613,6 +621,11 @@ func (l *AgentLoop) think(ctx context.Context, a agentRunRecord) (AgentRun, erro
 		return a.View, nil
 	}
 	return l.prepareTool(ctx, a)
+}
+
+func successfulAgentReceipt(step AgentStep) bool {
+	return step.ToolName != "" && step.Result != "" &&
+		(step.TaskID == "" || step.TaskState == "completed")
 }
 
 func (l *AgentLoop) prepareTool(ctx context.Context, a agentRunRecord) (AgentRun, error) {

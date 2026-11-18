@@ -1,5 +1,12 @@
 # 当前接口说明
 
+## AI Key 删除与执行回执
+
+当前管理员通过带 CSRF 的 DELETE /api/v1/credentials/{credentialId} 和 JSON expectedRevision 删除控制台托管的 AI Key。
+成功返回 204，其他凭据类型拒绝，未撤销记录的修订冲突返回 412。删除后的记录保留 revoked 元数据，服务商端密钥由服务商管理。
+运行 API 保留 maxSteps 与 steps 字段。模型返回最终文字却没有成功工具回执时，state=failed，stopReason=no_successful_tool_receipt，finalText 仍可查阅。
+
+
 ## 2026-11-18 移动 App 客户端
 
 新增 Android 预览客户端与 /#/app 移动界面；无新增 Controller API、数据库迁移或 Agent 通道。

@@ -228,3 +228,59 @@ func TestApprovalExpiryIsRecheckedBeforeLaterBatch(t *testing.T) {
 		t.Fatalf("second batch dispatched after approval expiry: %d", got)
 	}
 }
+
+func TestAIQueuedTaskWakesSchedulerAndCommittedResultWakesObserver(t *testing.T) {
+	f := newFixture(t, "n1")
+	svc, err := tasks.NewService(tasks.Options{
+		DB: f.db, Repo: f.repo, Audit: f.audit, Authorizer: f.authorizer,
+		Dispatcher: f.dispatcher, Nodes: f.nodes, Now: f.clock.Now,
+		Interval: time.Hour,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.service = svc
+	prior := f.submit(t, tasks.SubmitRequest{TargetNodeIDs: []string{"n1"}})
+	ctx, cancel := context.WithCancel(context.Background())
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		_ = svc.Run(ctx)
+	}()
+	defer func() { cancel(); <-stopped }()
+	// Wait until the initial pass finishes so this submission must wake the
+	// scheduler instead of being picked up by startup.
+	until := time.Now().Add(time.Second)
+	for len(f.dispatcher.commands()) == 0 && time.Now().Before(until) {
+		time.Sleep(time.Millisecond)
+	}
+	if len(f.dispatcher.commands()) != 1 {
+		t.Fatal("initial scheduler pass did not dispatch fixture")
+	}
+	if _, err := svc.RecordResult(ctx, prior.ID, "n1", tasks.NodeResultSucceeded, "fixture ready"); err != nil {
+		t.Fatal(err)
+	}
+	task := f.submit(t, tasks.SubmitRequest{
+		TargetNodeIDs: []string{"n1"}, Source: audit.SourceAI, ScopeRevision: 1,
+	})
+	until = time.Now().Add(time.Second)
+	for len(f.dispatcher.commands()) < 2 && time.Now().Before(until) {
+		time.Sleep(time.Millisecond)
+	}
+	if commands := f.dispatcher.commands(); len(commands) != 2 || commands[1].TaskID != task.ID {
+		t.Fatalf("AI submission did not wake scheduler: %v", commands)
+	}
+	changed, unsubscribe := svc.WatchTaskChange(task.ID)
+	defer unsubscribe()
+	if _, err := svc.RecordResult(ctx, task.ID, "n1", tasks.NodeResultSucceeded, "node replied"); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-changed:
+		if got := f.get(t, task.ID); got.Status != tasks.StatusCompleted {
+			t.Fatalf("observer woke before commit: %v", got.Status)
+		}
+	default:
+		t.Fatal("committed result did not wake observer")
+	}
+}

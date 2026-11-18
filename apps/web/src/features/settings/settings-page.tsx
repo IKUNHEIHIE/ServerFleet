@@ -204,7 +204,9 @@ export function SettingsPage() {
     authApi.sessions({ limit: 100 }, signal).then(result => result.data),
     { enabled: tab === "security" },
   );
-  const revokeAction = useAction((id: string) => credentialsApi.revoke(id));
+  const revokeAction = useAction((credential: CredentialMetadata) => credential.kind === "ai_api_key"
+    ? credentialsApi.removeAIKey(credential.id, credential.revision)
+    : credentialsApi.revoke(credential.id));
   const referencesAction = useAction((id: string) => credentialsApi.references(id));
   const revokeSessionAction = useAction((id: string) => authApi.revokeSession(id));
 
@@ -213,10 +215,12 @@ export function SettingsPage() {
 
   async function submitRevoke() {
     if (!revoking) return;
-    const result = await revokeAction.run(revoking.id);
+    const result = await revokeAction.run(revoking);
     if (result.ok) {
       setRevoking(null);
-      setOutcome("撤销请求已被服务端接受（后台异步执行）；引用该凭据的操作将被阻止或需要修复。");
+      setOutcome(revoking.kind === "ai_api_key"
+        ? "AI API Key 已删除。引用此密钥的模型需要重新绑定。"
+        : "撤销请求已被服务端接受（后台异步执行）；引用该凭据的操作将被阻止或需要修复。");
       credentials.reload();
     }
   }
@@ -349,7 +353,7 @@ export function SettingsPage() {
                           >
                             轮换
                           </Button>
-                          <Button size="sm" variant="danger" disabled={!canManage || session.writesLocked} onClick={() => setRevoking(credential)}>
+                          <Button size="sm" variant="danger" disabled={!canManage || session.writesLocked || credential.status === "revoked"} onClick={() => setRevoking(credential)}>
                             撤销
                           </Button>
                         </div>

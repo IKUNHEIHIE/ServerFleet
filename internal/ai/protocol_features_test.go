@@ -208,7 +208,7 @@ func TestEinoRunPublishesReasoningBeforeFinalDecision(t *testing.T) {
 		t.Fatal(err)
 	}
 	current, err = loop.Get(ctx, view.ID, run.ID)
-	if err != nil || current.State != "completed" || current.Steps[0].ReasoningContent != "Visible provider reasoning in progress" {
+	if err != nil || current.StopReason != "no_successful_tool_receipt" || current.Steps[0].ReasoningContent != "Visible provider reasoning in progress" {
 		t.Fatal(current, err)
 	}
 }

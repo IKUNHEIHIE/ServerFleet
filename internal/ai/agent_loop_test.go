@@ -212,3 +212,70 @@ func TestAgentNativeFunctionCallsRejectUnscopedAndMultiple(t *testing.T) {
 		t.Fatal("multiple parallel calls admitted")
 	}
 }
+
+func TestAgentTaskReceiptWakesDriver(t *testing.T) {
+	ctx := context.Background()
+	l, v, _, _ := agentLoopFixture(t, false, false)
+	l.sessions.now = time.Now
+	defer l.Close()
+	wake := make(chan struct{})
+	observed := make(chan struct{}, 1)
+	l.config.WatchTaskChange = func(id string) (<-chan struct{}, func()) {
+		if id != "actual-task" {
+			t.Errorf("watching unrelated task %q", id)
+		}
+		return wake, func() {}
+	}
+	read := l.config.ReadTask
+	l.config.ReadTask = func(ctx context.Context, session string, binding AgentTaskBinding) (AgentTaskSnapshot, error) {
+		select {
+		case <-wake:
+			return read(ctx, session, binding)
+		default:
+			select {
+			case observed <- struct{}{}:
+			default:
+			}
+			return AgentTaskSnapshot{State: "running"}, nil
+		}
+	}
+	r, err := l.Create(ctx, v.ID, AgentRunInput{Goal: "check the node", ClientRunID: "receipt-wake", ScopeRevision: v.ScopeRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := l.Drive(ctx, v.ID, r.ID, r.Revision); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-observed:
+	case <-time.After(5 * time.Second):
+		t.Fatal("task was not observed")
+	}
+	close(wake)
+	until := time.Now().Add(1500 * time.Millisecond)
+	for time.Now().Before(until) {
+		record, err := l.readRecord(ctx, v.ID, r.ID)
+		if err == nil && record.View.State == "completed" && len(record.View.Steps) == 2 {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("driver did not continue before its two-second fallback poll")
+}
+
+func TestAgentTextWithoutToolReceiptDoesNotVerifyExecution(t *testing.T) {
+	ctx := context.Background()
+	l, v, _, _ := agentLoopFixture(t, false, false)
+	conversation, _ := conversationFixture(t, l.sessions, func(_ context.Context, _ GenerationRequest, emit func(string) error) error {
+		return emit(`{"text":"The disk is healthy.","items":[]}`)
+	})
+	l.conversation = conversation
+	r, err := l.Create(ctx, v.ID, AgentRunInput{Goal: "check disk usage", ClientRunID: "unverified-run", ScopeRevision: v.ScopeRevision})
+	if err != nil {
+		t.Fatal(err)
+	}
+	r, err = l.Advance(ctx, v.ID, r.ID, r.Revision)
+	if err != nil || r.State == "completed" || r.StopReason != "no_successful_tool_receipt" || r.FinalText == "" {
+		t.Fatalf("text-only run presented as verified: %+v, %v", r, err)
+	}
+}

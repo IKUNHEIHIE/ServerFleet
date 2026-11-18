@@ -312,7 +312,6 @@ function CompactMenu({
               type="button"
               role="menuitemradio"
               aria-checked={option.value === value}
-              disabled={loading}
               onClick={() => {
                 setOpen(false);
                 if (option.value !== value) onSelect(option.value);
@@ -521,6 +520,9 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
   const updatePolicy = useAction((body: { mode: AIApprovalMode }) => aiApi.updateApprovalPolicy(sessionId, body));
   const updatePreferences = useAction((body: { model: string; reasoningEffort: "low" | "medium" | "high" | "" }) => aiApi.updatePreferences(sessionId, body));
   const catalog = useAction(() => modelSettingsApi.catalog());
+  const modelSettings = useResource("ai:configured-model:" + appSession.viewEpoch, signal =>
+    modelSettingsApi.get(signal).then(result => result.data),
+  );
   const probeModel = useAction((model: string) => aiApi.probeModel(model));
   const [capability, setCapability] = useState<{ forModel: string; toolCalls: boolean; reasoning: boolean } | null>(null);
   const compactContext = useAction((body: { keep: number }) => aiApi.compactContext(sessionId, body));
@@ -598,13 +600,14 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
   const contextData: AIContextStats | null = context.state.status === "ready" ? context.state.data : null;
   const currentEffort = current?.reasoningEffort ?? "";
   const currentModel = current?.model ?? "";
+  const configuredModel = modelSettings.state.status === "ready" ? modelSettings.state.data.model : "";
+  const selectableModels = new Set(models ?? []);
+  if (currentModel) selectableModels.add(currentModel);
+  if (configuredModel && currentModel !== configuredModel) selectableModels.delete(configuredModel);
   const modelOptions = [
-    { value: "", label: "默认模型" },
-    ...(models ?? []).map(model => ({ value: model, label: model })),
+    { value: "", label: configuredModel ? configuredModel + "（系统默认）" : "默认模型" },
+    ...Array.from(selectableModels, model => ({ value: model, label: model })),
   ];
-  if (currentModel && !modelOptions.some(option => option.value === currentModel)) {
-    modelOptions.push({ value: currentModel, label: currentModel });
-  }
   const effortOptions = (["", "low", "medium", "high"] as const).map(value => ({ value, label: EFFORT_LABEL[value] }));
 
   useEffect(() => {
@@ -721,7 +724,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
       </div>
       {composerMode === "agent" ? (
         <div className="flex flex-wrap items-center gap-3 px-4 text-xs text-muted-foreground">
-          <label>每段步数 <select aria-label="每段步数" value={runSteps} onChange={event => setRunSteps(Number(event.target.value))}>{[8, 16, 24].map(n => <option key={n} value={n}>{n} 步</option>)}</select></label>
+          <label>步数上限 <select aria-label="步数上限" value={runSteps} onChange={event => setRunSteps(Number(event.target.value))}>{[8, 16, 24].map(n => <option key={n} value={n}>{n} 步</option>)}</select></label>
           <label>运行期限 <select aria-label="运行期限" value={runSeconds} onChange={event => setRunSeconds(Number(event.target.value))}>{[900, 1800, 3600].map(n => <option key={n} value={n}>{n / 60} 分钟</option>)}</select></label>
         </div>
       ) : null}
@@ -971,12 +974,15 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                         压缩上下文
                       </Button>
                     </div>
-                    {updatePreferences.error || compactContext.error || catalog.error ? (
+                    {updatePreferences.error || compactContext.error ? (
                       <div className="mb-2">
                         <Notice tone="error" title="AI 设置未完成">
-                          {describeApiError(updatePreferences.error ?? compactContext.error ?? catalog.error)}
+                          {describeApiError(updatePreferences.error ?? compactContext.error)}
                         </Notice>
                       </div>
+                    ) : null}
+                    {catalog.error ? (
+                      <p className="mb-2 text-xs text-muted-foreground">无法获取服务商模型列表，仍可选用已保存的模型。</p>
                     ) : null}
                     <div className="relative">
                       <TextArea

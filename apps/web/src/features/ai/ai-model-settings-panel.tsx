@@ -3,6 +3,7 @@ import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { Notice } from "@/components/ui/feedback";
 import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Panel } from "@/components/ui/panel";
@@ -29,7 +30,11 @@ export function AiModelSettingsPanel() {
   );
   const isAdmin = session.identity?.roles.includes("administrator") ?? false;
   const credentialsLoaded = credentials.state.status === "ready" ? credentials.state.data : [];
-  const aiKeys = credentialsLoaded.filter(credential => credential.kind === "ai_api_key" && credential.usageScope.includes("ai"));
+  const [removedKeys, setRemovedKeys] = useState<readonly string[]>([]);
+  const aiKeys = credentialsLoaded.filter(credential =>
+    credential.kind === "ai_api_key" && credential.status !== "revoked" &&
+    credential.usageScope.includes("ai") && !removedKeys.includes(credential.id),
+  );
   const [keyName, setKeyName] = useState("");
   const [keySecret, setKeySecret] = useState("");
   const [keyRequest, setKeyRequest] = useState<string | null>(null);
@@ -38,6 +43,20 @@ export function AiModelSettingsPanel() {
     credentialsApi.create(body, requestKey),
   );
   const canCreateKey = session.can("credential.manage") || session.can("settings.manage") || session.can("user.manage");
+  const [removing, setRemoving] = useState<CredentialMetadata | null>(null);
+  const remove = useAction((credential: CredentialMetadata) => credentialsApi.removeAIKey(credential.id, credential.revision));
+  const savedSettings = settings.state.status === "ready" ? settings.state.data : null;
+
+  async function removeKey() {
+    if (!removing) return;
+    const result = await remove.run(removing);
+    if (result.ok) {
+      setRemovedKeys(ids => [...ids, removing.id]);
+      setRemoving(null);
+      setKeyNotice("AI API Key 已删除。");
+      credentials.refreshSilent();
+    }
+  }
 
   async function addKey(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -68,6 +87,7 @@ export function AiModelSettingsPanel() {
             key={data.revision}
             data={data}
             aiKeys={aiKeys}
+            credentialsReady={credentials.state.status === "ready"}
             isAdmin={isAdmin}
             writesLocked={session.writesLocked}
             onSaved={() => { setConflict(false); settings.reload(); }}
@@ -76,6 +96,20 @@ export function AiModelSettingsPanel() {
         )}
       </AsyncPanel>
       <div className="border-t border-border/80 px-5 py-4">
+        <AsyncPanel state={credentials.state} onRetry={credentials.reload} errorTitle="AI 密钥列表加载失败">
+          {() => aiKeys.length > 0 ? (
+            <ul aria-label="已保存的 AI API Key" className="mb-3 space-y-2">
+              {aiKeys.map(key => (
+                <li key={key.id} className="flex items-center justify-between gap-2 rounded-lg border border-border px-3 py-2">
+                  <span className="min-w-0 break-all text-sm">{key.name}{savedSettings?.credentialRef === key.id ? " · 当前绑定" : ""}</span>
+                  <Button type="button" size="sm" variant="danger" aria-label={"删除 " + key.name}
+                    disabled={!canCreateKey || session.writesLocked || remove.pending} onClick={() => setRemoving(key)}>删除</Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </AsyncPanel>
+        {keyNotice ? <Notice tone="success" title="操作完成">{keyNotice}</Notice> : null}
         <details open={aiKeys.length === 0}>
           <summary className="cursor-pointer text-sm font-semibold">新增 AI API Key</summary>
           <form onSubmit={addKey} className="mt-3 space-y-3">
@@ -88,7 +122,6 @@ export function AiModelSettingsPanel() {
                 {ids => <TextInput id={ids.inputId} type="password" value={keySecret} onChange={event => setKeySecret(event.target.value)} placeholder="粘贴服务商密钥" maxLength={4096} disabled={!canCreateKey || session.writesLocked || createKey.pending} autoComplete="new-password" />}
               </Field>
             </div>
-            {keyNotice ? <Notice tone="success" title="已保存">{keyNotice}</Notice> : null}
             {createKey.error ? <Notice tone="error" title="保存失败">{describeApiError(createKey.error)}</Notice> : null}
             {keyRequest ? <Notice tone="warning" title="提交结果待核对">再次提交会复用同一请求编号，避免重复创建密钥。</Notice> : null}
             {!canCreateKey ? <p className="text-xs text-muted-foreground">当前身份不能新增安全凭据。</p> : null}
@@ -98,6 +131,15 @@ export function AiModelSettingsPanel() {
           </form>
         </details>
       </div>
+      <Modal open={removing !== null} title="删除 AI API Key"
+        description={removing ? "将从 Server Fleet 删除“" + removing.name + "”。绑定该密钥的模型需要换绑才能继续生成。" : undefined}
+        onClose={() => { if (!remove.pending) setRemoving(null); }}
+        footer={<>
+          <Button type="button" onClick={() => setRemoving(null)} disabled={remove.pending}>取消</Button>
+          <Button type="button" variant="danger" onClick={() => void removeKey()} loading={remove.pending}>确认删除</Button>
+        </>}>
+        {remove.error ? <Notice tone="error" title="删除失败">{describeApiError(remove.error)}</Notice> : null}
+      </Modal>
     </Panel>
   );
 }
@@ -105,6 +147,7 @@ export function AiModelSettingsPanel() {
 function ModelSettingsForm({
   data,
   aiKeys,
+  credentialsReady,
   isAdmin,
   writesLocked,
   onSaved,
@@ -112,6 +155,7 @@ function ModelSettingsForm({
 }: {
   readonly data: AIModelSettings;
   readonly aiKeys: readonly CredentialMetadata[];
+  readonly credentialsReady: boolean;
   readonly isAdmin: boolean;
   readonly writesLocked: boolean;
   readonly onSaved: () => void;
@@ -144,14 +188,14 @@ function ModelSettingsForm({
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (enabled && (!model.trim() || !credentialRef)) return;
+    if (enabled && (!model.trim() || !selected)) return;
     const result = await save.run({
       expectedRevision: data.revision,
       enabled,
       provider,
       ...(endpoint.trim() || data.endpoint ? { endpoint: endpoint.trim() } : {}),
       model: model.trim(),
-      credentialRef,
+      credentialRef: selected?.id ?? "",
       credentialRevision: selected?.revision ?? 0,
     });
     if (result.ok) {
@@ -174,6 +218,9 @@ function ModelSettingsForm({
           {data.updatedAt ? ` · 更新于 ${formatDateTime(data.updatedAt) ?? "—"}` : ""}
         </span>
       </div>
+      {credentialsReady && data.enabled && data.credentialRef && !selected && (
+        <Notice tone="warning" title="需要选择可用的 AI 密钥">换绑并保存后，模型才能继续生成。</Notice>
+      )}
       <details className="text-xs text-muted-foreground">
         <summary className="cursor-pointer">连接信息</summary>
         <div className="mt-2 grid gap-1 sm:grid-cols-2">
@@ -199,7 +246,7 @@ function ModelSettingsForm({
         </Field>
         <Field label="模型密钥" hint="密钥只在「安全凭据」录入一次，此处仅选择。">
           {ids => (
-            <Select id={ids.inputId} value={credentialRef} onChange={event => setCredentialRef(event.target.value)} disabled={!isAdmin || writesLocked}>
+            <Select id={ids.inputId} value={selected?.id ?? ""} onChange={event => setCredentialRef(event.target.value)} disabled={!isAdmin || writesLocked}>
               <option value="">未绑定</option>
               {aiKeys.map(credential => (
                 <option key={credential.id} value={credential.id}>
@@ -246,7 +293,7 @@ function ModelSettingsForm({
         <Notice tone="error" title="保存失败">{describeApiError(saveError)}</Notice>
       ) : null}
       {!isAdmin ? <p className="text-xs text-muted-foreground">当前身份不是管理员：只能查看，不能修改。</p> : null}
-      <Button type="submit" variant="primary" loading={save.pending} disabled={!isAdmin || writesLocked || (enabled && (!model.trim() || !credentialRef))}>
+      <Button type="submit" variant="primary" loading={save.pending} disabled={!isAdmin || writesLocked || (enabled && (!model.trim() || !selected))}>
         保存模型设置
       </Button>
     </form>
