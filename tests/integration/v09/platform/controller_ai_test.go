@@ -403,8 +403,8 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 		} `json:"resourceGrants"`
 	}
 	decode(t, data, &current)
-	if len(current.ResourceGrants) != 2 {
-		t.Fatalf("expected two grants: %s", data)
+	if len(current.ResourceGrants) != 1 {
+		t.Fatalf("expected a single grant for the node's combined actions: %s", data)
 	}
 	status, data = doReq(admin, "DELETE", "/api/v1/ai/sessions/"+session.ID+"/grants/"+current.ResourceGrants[0].GrantID, nil, csrf)
 	if status != http.StatusOK {
@@ -415,7 +415,7 @@ func TestWave3AIManagementScopeApprovalsAndRootShellGate(t *testing.T) {
 		AllowedNodeIDs []string `json:"allowedNodeIds"`
 	}
 	decode(t, data, &afterRevoke)
-	if afterRevoke.ScopeRevision != current.ScopeRevision+1 || len(afterRevoke.AllowedNodeIDs) != 1 {
+	if afterRevoke.ScopeRevision != current.ScopeRevision+1 || len(afterRevoke.AllowedNodeIDs) != 0 {
 		t.Fatalf("revocation snapshot mismatch: %s", data)
 	}
 }
