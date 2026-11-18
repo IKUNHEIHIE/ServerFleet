@@ -3,10 +3,19 @@
 任务 DEMO-READINESS-20261118，会话 codex-demo-readiness-20261118-01。开发、构建和排练在 awskr 的独立工作树 /home/admin/sf-demo-readiness-20261118 完成，起点 38c01d1。
 范围为测试站的登录、节点监控、AI 对话、四节点批量自检、明确授权的节点维护。验收以浏览器、节点最新心跳和实际逐节点回执为准。
 
-## 测试站
+## 2026-11-19 00:44 主控时钟容差修复
+
+测试站 Controller 已更新到 0.9.3-demo-20261119，源码提交 e567729016a117bab9f8cbb1044c0b03c4fdd57b，二进制 SHA256 3c549bc589c279d15a541dcf20e945e47634570b32a047882dd814edc359da10。五项就绪通过。
+标准任务和网关文件子任务的下发有效期改为 9 分钟，在 Agent 现有 10 分钟验证上限内留出 1 分钟时钟余量。执行超时保持独立。
+用慢 30 秒的接收时钟复现旧代码拒收，修复后的真实 WSS 回归通过。Controller、任务、传输包测试、真实 Agent CLI 和网关发布/回退用例均通过。
+
+北京时间 00:45 从已登录浏览器新建任务 tsk_9da3785b9c72c524e92712bb，预演 4 台均可执行且无需审批，实际用时 3.39 秒，aliyun-hk-1b、azure-20-215、node-129、wentian-host-01 全部成功。原任务的三条成功回执保留，重启时 Azure 的原结果记录为 UNKNOWN。
+[四节点复测结果](https://agent.wentian.org:8443/#/tasks/tsk_9da3785b9c72c524e92712bb)。未上传 GitHub。
+
+## 2026-11-18 前端部署
 
 2026-11-18 22:53:16（北京时间）部署 React 前端，入口 https://agent.wentian.org:8443。
-当前 Controller 仍为 0.9.3-ai-fleet-20261118，运行参数及数据库未变，就绪检查全部通过。
+当时的 Controller 为 0.9.3-ai-fleet-20261118，运行参数及数据库未变，就绪检查全部通过。
 部署的 Web 源码提交 d57fec6，工件 index-Cn7-KIap.js，SHA256 4dc4504ae6e68c4019508c638e5e03be6d51deaaa650f5de390debef5893b9de。
 浏览器确认公网新工件和登录表单。隔离浏览器确认「开」「开始」逐步显示和最终答复。已有 Android APK 通过原摘要检查。
 没有创建数据库备份。源码只在 awskr 的任务分支维护，未上传 GitHub。
@@ -29,4 +38,4 @@ root 能力使用节点已配置的 root helper、固定命令配置与管理员
 - 隔离排练的四个真实 Agent CLI 通过 mTLS 入网、上报指标、收到同一批次自检并返回 4/4 成功。首次排练发现 parallel 被现有接口拒绝，改用服务端标准分批模式后通过。测试材料在 reports/demo-four-agent-harness.go.txt 和 reports/demo-four-agent-sequential.log。
 - 演示账号在公网测试站确认真实模型正常逐步回复。
 - 北京时间 2026-11-18 23:26，演示账号从测试站 Web 提交固定节点自检 tsk_ff5a7ba2acdf89b9ce3cb8ae。预演确认 4 个目标可执行，审批要求为否。aliyun-hk-1b、node-129、wentian-host-01 均在下发后一秒左右返回成功，azure-20-215 尚无回执。主控保持原任务记录。
-- Azure 在下发后一秒内断线并重连。Azure 节点无此次执行的本地预留记录，时钟比主控慢约 7.6 秒，未安装常规时间同步服务。Controller 发出的到期时间恰好使用 Agent 允许的十分钟上限，慢时钟会触发超限拒收。实机批量自检当前为 3/4。
+- Azure 在下发后一秒内断线并重连。Azure 节点无此次执行的本地预留记录，时钟比主控慢约 7.6 秒，未安装常规时间同步服务。Controller 发出的到期时间恰好使用 Agent 允许的十分钟上限，慢时钟会触发超限拒收。首轮实机批量自检为 3/4。
