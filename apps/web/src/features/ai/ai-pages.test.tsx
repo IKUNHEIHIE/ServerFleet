@@ -197,6 +197,21 @@ describe("AI model settings (GM-W6-R1)", () => {
     });
   });
 
+  it("removes an AI key from the settings list and model selector after confirmation", async () => {
+    const { calls } = await renderAiSettings({
+      ...entryRoutes(SETTINGS_EMPTY),
+      "DELETE /api/v1/credentials/cred-ai-1": () => new Response(null, { status: 204 }),
+    });
+    fireEvent.click(await screen.findByRole("button", { name: "删除 本地模型 Key" }));
+    expect(calls.some(call => call.method === "DELETE")).toBe(false);
+    fireEvent.click(screen.getByRole("button", { name: "确认删除" }));
+    expect(await screen.findByText("AI API Key 已删除。")).toBeVisible();
+    expect(screen.queryByRole("option", { name: /本地模型 Key/ })).toBeNull();
+    const request = calls.find(call => call.method === "DELETE");
+    expect(request?.url).toBe("/api/v1/credentials/cred-ai-1");
+    expect(JSON.parse(String(request?.init?.body))).toEqual({ expectedRevision: 3 });
+  });
+
   it("surfaces a revision conflict honestly and refetches instead of overwriting", async () => {
     const { calls } = await renderAiSettings({
       ...entryRoutes(SETTINGS_EMPTY),
@@ -256,6 +271,17 @@ describe("AI explicit generation (GM-W6-R1)", () => {
       ...extra,
     };
   }
+
+  it("shows the saved model ID even when the provider does not serve a model catalogue", async () => {
+    await renderAuthenticated("/ai/s-1", sessionRoutes({
+      "GET /api/v1/ai/model-settings": () => jsonResponse({ ownerId: "u-admin", enabled: true, model: "custom-gateway/model-v2" }),
+      "POST /api/v1/ai/model-settings/models": () => jsonResponse({ code: "AI_SOURCE_UNAVAILABLE" }, 503),
+    }), ADMIN_IDENTITY);
+    expect(await screen.findByText("custom-gateway/model-v2（系统默认）")).toBeVisible();
+    fireEvent.click(screen.getByRole("button", { name: "模型" }));
+    expect(await screen.findByRole("menuitemradio", { name: "custom-gateway/model-v2（系统默认）" })).not.toBeDisabled();
+    expect(await screen.findByText("无法获取服务商模型列表，仍可选用已保存的模型。")).toBeVisible();
+  });
 
   it("sends a message and generates the assistant reply automatically", async () => {
     const { calls } = await renderAuthenticated("/ai/s-1", sessionRoutes({
@@ -321,6 +347,9 @@ describe("AI explicit generation (GM-W6-R1)", () => {
     expect(await screen.findByText("读取节点并报告状态")).toBeVisible();
     expect(await screen.findByText(/第 1 步/)).toBeVisible();
     expect(await screen.findByText("节点状态正常")).toBeVisible();
+    expect(screen.getByText("共 1 步")).toBeVisible();
+    expect(screen.getByText("工具回执 1 条")).toBeVisible();
+    expect(screen.queryByText("1 / 8 步")).toBeNull();
     expect(screen.queryByText(/请在 Agent 运行页签/)).toBeNull();
     expect(screen.getByRole("button", { name: "压缩上下文" })).toBeVisible();
   });

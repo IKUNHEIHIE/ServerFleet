@@ -25,6 +25,7 @@ func (s *Service) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
+		case <-s.schedulerWake:
 		}
 	}
 }
@@ -336,6 +337,9 @@ func (s *Service) advance(ctx context.Context, taskID string) error {
 				"from": task.BatchIndex, "to": task.BatchIndex + 1,
 			}, now)
 		})
+		if err == nil && task.Source == "ai" {
+			s.wakeScheduler()
+		}
 		return err
 	case BatchOutcomeComplete, BatchOutcomeBlocked:
 		_, err := s.finalize(ctx, task, "", "")
@@ -384,6 +388,7 @@ func (s *Service) finalize(ctx context.Context, task Task, forced TaskStatus, re
 	if err != nil {
 		return Task{}, err
 	}
+	s.notifyTaskChanged(current.ID)
 	return s.repo.Get(ctx, current.ID)
 }
 

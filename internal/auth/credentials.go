@@ -424,13 +424,40 @@ func (v *CredentialService) Revoke(ctx context.Context, op CredentialOperation) 
 		if !ok || actor.Disabled || !actor.Administrator {
 			return ErrDenied
 		}
-		record.Revoked = true
-		record.Meta.Revision++
-		record.Sealed.Ciphertext = nil
-		st.Credentials[op.CredentialID] = record
-		st.PolicyRevision++
-		return appendIdentityAudit(st, actor.ID, "credentials.revoke", "succeeded", now)
+		return revokeCredential(st, op.CredentialID, record, actor.ID, now)
 	})
+}
+
+func (v *CredentialService) removeAIKey(ctx context.Context, secret, csrf, id string, expected uint64) error {
+	if !validPolicyID(id) || expected == 0 {
+		return ErrInvalidCheck
+	}
+	return v.identity.update(ctx, func(st *identityState, now time.Time) error {
+		actor, err := managementActor(st, secret, csrf, true, now)
+		if err != nil {
+			return err
+		}
+		record, ok := st.Credentials[id]
+		if !ok || record.Meta.Kind != "ai_api_key" {
+			return ErrDenied
+		}
+		if record.Revoked {
+			return nil
+		}
+		if record.Meta.Revision != expected {
+			return ErrRevisionConflict
+		}
+		return revokeCredential(st, id, record, actor.ID, now)
+	})
+}
+
+func revokeCredential(st *identityState, id string, record storedCredential, actorID string, now time.Time) error {
+	record.Revoked = true
+	record.Meta.Revision++
+	record.Sealed.Ciphertext = nil
+	st.Credentials[id] = record
+	st.PolicyRevision++
+	return appendIdentityAudit(st, actorID, "credentials.revoke", "succeeded", now)
 }
 
 // UseForService only lends plaintext to a program-registered service callback.

@@ -482,6 +482,10 @@ export const credentialsApi = {
     apiClient.request<unknown>(`/api/v1/credentials/${encodeURIComponent(credentialId)}/rotate`, { method: "POST", body }),
   revoke: (credentialId: string) =>
     apiClient.request<unknown>(`/api/v1/credentials/${encodeURIComponent(credentialId)}/revoke`, { method: "POST" }),
+  removeAIKey: (credentialId: string, expectedRevision: number) =>
+    apiClient.request<void>(`/api/v1/credentials/${encodeURIComponent(credentialId)}`, {
+      method: "DELETE", body: { expectedRevision },
+    }),
 };
 
 export const trafficApi = {

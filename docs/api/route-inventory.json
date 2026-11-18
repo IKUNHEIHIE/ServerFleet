@@ -96,6 +96,18 @@
     },
     {
       "method": "DELETE",
+      "path": "/api/v1/credentials/{credentialId}",
+      "declarations": [
+        {
+          "source": "internal/auth/http.go",
+          "owner": "NewIdentityHTTP"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
+    },
+    {
+      "method": "DELETE",
       "path": "/api/v1/dns/zones/{zoneId}/records/{recordId}",
       "declarations": [
         {

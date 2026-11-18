@@ -127,6 +127,10 @@ type Service struct {
 	requireApproval func(OperationClass) bool
 	onError         func(error)
 
+	schedulerWake chan struct{}
+	changeMu      sync.Mutex
+	taskChanges   map[string]*taskChange
+
 	runMu      sync.Mutex
 	taskLocks  sync.Map
 	workers    map[string]Worker
@@ -194,6 +198,7 @@ func NewService(options Options) (*Service, error) {
 		approvalTTL: approvalTTL, unstartedTTL: unstartedTTL, interval: interval,
 		concurrency: concurrency, requireApproval: require, onError: onError,
 		workers: workers, workerRuns: map[string]*workerRun{},
+		schedulerWake: make(chan struct{}, 1), taskChanges: make(map[string]*taskChange),
 	}, nil
 }
 
@@ -400,6 +405,9 @@ func (s *Service) Submit(ctx context.Context, request SubmitRequest) (Task, erro
 		return Task{}, err
 	}
 	task.Targets = targets
+	if task.Source == "ai" && task.Status == StatusQueued {
+		s.wakeScheduler()
+	}
 	return task, nil
 }
 
@@ -485,6 +493,10 @@ func (s *Service) Decide(ctx context.Context, taskID string, expectedRevision ui
 	})
 	if err != nil {
 		return Task{}, err
+	}
+	s.notifyTaskChanged(taskID)
+	if outcomeStatus == StatusQueued && task.Source == "ai" {
+		s.wakeScheduler()
 	}
 	return s.repo.Get(ctx, taskID)
 }

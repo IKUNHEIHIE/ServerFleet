@@ -23,6 +23,44 @@ const STATE_LABEL: Record<AgentRunState, string> = {
   canceled: "已取消", unknown: "结果未知，已停止", limit_reached: "达到步数或上下文上限",
 };
 
+function toolReceipts(run: AgentRun) {
+  return run.steps.filter(step => step.toolName && step.result);
+}
+
+function runStatus(run: AgentRun) {
+  const taskState = run.steps.at(-1)?.taskState;
+  if (run.state === "waiting_task") {
+    if (taskState === "queued") return "等待任务调度";
+    if (taskState === "awaiting_approval") return "等待任务审批";
+    return "等待节点回执";
+  }
+  if (run.state === "completed") {
+    const receipts = toolReceipts(run);
+    if (!receipts.some(step => !step.taskId || step.taskState === "completed")) return "已答复 · 结果未验证";
+    if (receipts.some(step => step.taskId && step.taskState !== "completed")) return "已答复 · 有失败回执";
+  }
+  if (run.stopReason === "no_successful_tool_receipt") return "已结束 · 结果未验证";
+  return STATE_LABEL[run.state];
+}
+
+function RunProgress({ run }: { readonly run: AgentRun }) {
+  const receipts = toolReceipts(run).length;
+  return <>
+    {run.steps.length > 0 && (
+      <Badge variant="info">{TERMINAL.has(run.state) ? "共 " : "第 "}{run.steps.length} 步</Badge>
+    )}
+    {receipts > 0 && <Badge variant="info">工具回执 {receipts} 条</Badge>}
+  </>;
+}
+
+function RunStopReason({ reason }: { readonly reason?: string }) {
+  if (reason === "no_successful_tool_receipt") return (
+    <Notice tone="warning" title="未收到成功的工具回执">请查看下方答复或工具结果，确认节点授权、工具和运行结果。</Notice>
+  );
+  if (!reason) return null;
+  return <p className="break-all text-xs text-muted-foreground">停止原因：{reason}</p>;
+}
+
 export function AgentRunPanel({ session, focusRunId }: { readonly session: AISession; readonly focusRunId?: string | null }) {
   const appSession = useSession();
   const [selected, setSelected] = useState("");
@@ -66,7 +104,7 @@ export function AgentRunPanel({ session, focusRunId }: { readonly session: AISes
             {ids => <TextArea id={ids.inputId} aria-describedby={ids.hintId} value={goal} onChange={event => setGoal(event.target.value)} maxLength={8000} required disabled={locked || create.pending || uncertain} placeholder="例如：检查已授权节点的运行状态，对异常节点执行自检，然后汇总结果。" />}
           </Field>
           <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="最多规划步数">{ids => <Select id={ids.inputId} value={maxSteps} disabled={locked || create.pending || uncertain} onChange={event => setMaxSteps(Number(event.target.value))}>{[8, 16, 24].map(value => <option key={value} value={value}>{value} 步</option>)}</Select>}</Field>
+            <Field label="步数上限">{ids => <Select id={ids.inputId} value={maxSteps} disabled={locked || create.pending || uncertain} onChange={event => setMaxSteps(Number(event.target.value))}>{[8, 16, 24].map(value => <option key={value} value={value}>{value} 步</option>)}</Select>}</Field>
             <Field label="运行期限（含等待审批）">{ids => <Select id={ids.inputId} value={timeoutSeconds} disabled={locked || create.pending || uncertain} onChange={event => setTimeoutSeconds(Number(event.target.value))}>{[300, 900, 1800, 3600].map(value => <option key={value} value={value}>{value / 60} 分钟</option>)}</Select>}</Field>
           </div>
           <p className="text-sm text-muted-foreground">授权节点：{session.allowedNodeIds?.length ?? 0} 台。资源变更会使旧运行失效。</p>
@@ -76,7 +114,7 @@ export function AgentRunPanel({ session, focusRunId }: { readonly session: AISes
       </Panel>
       <Panel title="运行记录" description="仅显示当前资源修订下仍有权查看的运行。未知副作用不会自动重试。" actions={<Button type="button" onClick={runs.reload}>刷新记录</Button>}>
         <AsyncPanel state={runs.state} onRetry={runs.reload} errorTitle="运行记录读取失败" isEmpty={items => items.length === 0} empty={<EmptyState title="暂无运行" description="先在资源授权页签分配节点与动作，再发起运维目标。" />}>
-          {items => <div className="flex flex-wrap gap-2 px-5 py-4">{items.map(run => <Button type="button" key={run.id} aria-pressed={selected === run.id} onClick={() => setSelected(run.id)}>{run.goal.slice(0, 32)} · {STATE_LABEL[run.state]}</Button>)}</div>}
+          {items => <div className="flex flex-wrap gap-2 px-5 py-4">{items.map(run => <Button type="button" key={run.id} aria-pressed={selected === run.id} onClick={() => setSelected(run.id)}>{run.goal.slice(0, 32)} · {runStatus(run)}</Button>)}</div>}
         </AsyncPanel>
       </Panel>
       {selected ? <AgentRunDetail key={`${selected}:${appSession.viewEpoch}`} sessionId={session.id} runId={selected} locked={locked} canApprove={appSession.identity?.roles.includes("administrator") ?? false} onChanged={runs.refreshSilent} /> : null}
@@ -114,8 +152,8 @@ function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { r
               </div>
               <div role="status" aria-live="polite" className="flex flex-wrap items-center gap-3 rounded-xl border border-border/70 bg-card px-4 py-3 text-sm shadow-2xs">
                 {!terminal ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /> : <Bot aria-hidden="true" className="size-4 text-emerald-600" />}
-                <strong className="text-foreground">{STATE_LABEL[data.state]}</strong>
-                <Badge variant="info">{data.steps.length} / {data.maxSteps} 步</Badge>
+                <strong className="text-foreground">{runStatus(data)}</strong>
+                <RunProgress run={data} />
                 <span className="text-xs text-muted-foreground">截至 {formatDateTime(data.expiresAt) ?? "—"}</span>
               </div>
               {!terminal && !data.driverActive ? <Notice tone="warning" title="运行已暂停">主控重启或当前授权上下文结束后，需要点击继续。正在规划或提交时中断的步骤会停止并标记结果未知。</Notice> : null}
@@ -139,6 +177,7 @@ function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { r
               <TracingBeam className="pl-6">
                 <ol className="space-y-3" aria-label="Agent 执行步骤">{data.steps.map(step => <StepCard key={step.number} step={step} />)}</ol>
               </TracingBeam>
+              <RunStopReason reason={data.stopReason} />
               {data.finalText ? (
                 <GlowingEffect glowColor="rgba(22, 155, 104, 0.14)" className="rounded-xl border border-emerald-500/25 bg-gradient-to-br from-emerald-500/[0.06] via-card to-primary/[0.03] p-4 shadow-[var(--shadow-card)]">
                   <h3 className="flex items-center gap-2 font-semibold text-foreground">
@@ -148,7 +187,6 @@ function AgentRunDetail({ sessionId, runId, locked, canApprove, onChanged }: { r
                   <AIMarkdown className="mt-2">{data.finalText}</AIMarkdown>
                 </GlowingEffect>
               ) : null}
-              {data.stopReason ? <p className="break-all text-sm text-muted-foreground">停止原因：{data.stopReason}</p> : null}
             </div>
           );
         }}
@@ -237,8 +275,8 @@ export function InlineAgentRun({
     <div className={`${compact ? "mx-0" : "mx-3 mb-3"} rounded-xl bg-transparent p-3`}>
       <div className="flex flex-wrap items-center gap-2 text-sm">
         {data && !TERMINAL.has(data.state) ? <Loader2 aria-hidden="true" className="size-4 animate-spin text-primary" /> : <Bot aria-hidden="true" className="size-4 text-emerald-600" />}
-        <strong className="text-foreground">Agent {data ? STATE_LABEL[data.state] : "读取中"}</strong>
-        {data ? <Badge variant="info">{data.steps.length} / {data.maxSteps} 步</Badge> : null}
+        <strong className="text-foreground">Agent {data ? runStatus(data) : "读取中"}</strong>
+        {data ? <RunProgress run={data} /> : null}
         <Button type="button" size="sm" variant="ghost" className="ml-auto" onClick={onOpen}>查看完整过程</Button>
       </div>
       {showGoal && data?.goal ? <p className="mt-1.5 text-xs text-muted-foreground">目标：{data.goal}</p> : null}
@@ -289,13 +327,13 @@ export function InlineAgentRun({
           {continueRun.error ? <Notice tone="error" title="续接未完成">{describeApiError(continueRun.error)}</Notice> : null}
         </div>
       ) : null}
+      <RunStopReason reason={data?.stopReason} />
       {data?.finalText ? (
         <div className="mt-2 rounded-lg border border-emerald-500/25 bg-card px-3 py-2">
           <p className="text-xs font-semibold text-emerald-700">AI 最终答复</p>
           <AIMarkdown className="mt-1">{data.finalText}</AIMarkdown>
         </div>
       ) : null}
-      {data?.stopReason ? <p className="mt-1 break-all text-xs text-muted-foreground">停止原因：{data.stopReason}</p> : null}
     </div>
   );
 }

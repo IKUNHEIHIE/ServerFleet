@@ -53,3 +53,25 @@ func (h *IdentityHTTP) credentialReferences(w http.ResponseWriter, r *http.Reque
 	}
 	h.send(w, r, 200, map[string]any{"items": items}, &id, secret)
 }
+
+// Removes the managed copy of an AI API key. Historical references remain
+// resolvable to revoked metadata; provider-side keys are managed separately.
+func (h *IdentityHTTP) removeAIKey(w http.ResponseWriter, r *http.Request) {
+	_, secret, ok := h.authenticated(w, r)
+	if !ok {
+		return
+	}
+	var input struct {
+		ExpectedRevision uint64 `json:"expectedRevision"`
+	}
+	if err := decodeIdentityBody(w, r, &input); err != nil {
+		h.problem(w, r, err)
+		return
+	}
+	err := h.credentials.removeAIKey(r.Context(), secret, r.Header.Get("X-CSRF-Token"), r.PathValue("credentialId"), input.ExpectedRevision)
+	if err != nil {
+		h.problem(w, r, err)
+		return
+	}
+	h.send(w, r, http.StatusNoContent, nil, nil, "")
+}

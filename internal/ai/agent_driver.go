@@ -70,11 +70,23 @@ func (l *AgentLoop) Drive(ctx context.Context, session, id string, expected uint
 			}
 		}()
 		for bounded.Err() == nil {
-			current, e := l.Get(bounded, session, id)
-			if e != nil || agentTerminal(current.State) {
+			record, e := l.readRecord(bounded, session, id)
+			if e != nil || agentTerminal(record.View.State) {
 				return
 			}
+			current := record.View
+			watchedTask := waitingAgentTask(current)
+			var changed <-chan struct{}
+			var unsubscribe func()
+			if watchedTask != "" && l.config.WatchTaskChange != nil {
+				changed, unsubscribe = l.config.WatchTaskChange(watchedTask)
+			}
 			next, e := l.Advance(bounded, session, id, current.Revision)
+			if e != nil || agentTerminal(next.State) {
+				if unsubscribe != nil {
+					unsubscribe()
+				}
+			}
 			if e != nil {
 				if errors.Is(e, ErrScopeConflict) {
 					t := time.NewTimer(100 * time.Millisecond)
@@ -91,22 +103,41 @@ func (l *AgentLoop) Drive(ctx context.Context, session, id string, expected uint
 			if agentTerminal(next.State) {
 				return
 			}
+			// Read a just-bound task immediately. Its result may have been
+			// committed before the run entered waiting_task.
+			nextTask := waitingAgentTask(next)
+			if nextTask != "" && nextTask != watchedTask {
+				if unsubscribe != nil {
+					unsubscribe()
+				}
+				continue
+			}
 			delay := 100 * time.Millisecond
-			if next.State == "waiting_approval" || next.State == "waiting_task" || next.State == "canceling" {
+			if next.State == "waiting_approval" || nextTask != "" {
 				delay = 2 * time.Second
 			}
 			t := time.NewTimer(delay)
 			select {
 			case <-bounded.Done():
-				t.Stop()
-				return
+			case <-changed:
 			case <-t.C:
+			}
+			t.Stop()
+			if unsubscribe != nil {
+				unsubscribe()
 			}
 		}
 	}()
 	r.DriverActive = true
 	return r, nil
 }
+func waitingAgentTask(run AgentRun) string {
+	if (run.State == "waiting_task" || run.State == "canceling") && len(run.Steps) > 0 {
+		return run.Steps[len(run.Steps)-1].TaskID
+	}
+	return ""
+}
+
 func (l *AgentLoop) Close() {
 	if l == nil {
 		return

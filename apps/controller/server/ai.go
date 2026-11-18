@@ -100,7 +100,10 @@ func (s *Server) setupAI(cfg Config) error {
 	s.AIMessagesHTTP = messages
 	s.AIEventsHTTP = events
 	s.AIManagement = management
-	loop, err := ai.NewAgentLoop(sessions, conversation, ai.AgentLoopConfig{Execute: s.aiExecuteTool, ReadTask: s.aiAgentReadTask, CancelTask: s.aiAgentCancelTask})
+	loop, err := ai.NewAgentLoop(sessions, conversation, ai.AgentLoopConfig{
+		Execute: s.aiExecuteTool, ReadTask: s.aiAgentReadTask, CancelTask: s.aiAgentCancelTask,
+		WatchTaskChange: s.Tasks.WatchTaskChange,
+	})
 	if err != nil {
 		return err
 	}

@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **287** 个不同的 method/path 声明，其中 **12** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **288** 个不同的 method/path 声明，其中 **13** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -136,6 +136,7 @@
 
 | 方法 | 路径 | 源码声明位置 | 最近候选参考 |
 |---|---|---|---|
+| DELETE | `/api/v1/credentials/{credentialId}` | [http.go](../../internal/auth/http.go) · NewIdentityHTTP | 未覆盖；以源码和领域说明为准 |
 | GET | `/api/v1/credentials` | [http.go](../../internal/auth/http.go) · NewIdentityHTTP | [listCredentialMetadata08](../../api/openapi/g2-merged-candidate.yaml) |
 | GET | `/api/v1/credentials/{credentialId}/references` | [http.go](../../internal/auth/http.go) · NewIdentityHTTP | [getCredentialReferences08](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/credentials` | [http.go](../../internal/auth/http.go) · NewIdentityHTTP | [createCredential08](../../api/openapi/g2-merged-candidate.yaml) |

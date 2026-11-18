@@ -293,7 +293,7 @@ func TestInternalAgentMessageSummaryUsesRunBoundary(t *testing.T) {
 		t.Fatal(err)
 	}
 	run, err = loop.Advance(ctx, view.ID, run.ID, run.Revision)
-	if err != nil || run.State != "completed" {
+	if err != nil || run.StopReason != "no_successful_tool_receipt" {
 		t.Fatal(run, err)
 	}
 	messages, _, err := loop.conversation.MessagesPage(ctx, view.ID, 0, 100)

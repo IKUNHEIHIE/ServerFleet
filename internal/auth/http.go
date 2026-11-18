@@ -68,6 +68,7 @@ func NewIdentityHTTP(service *IdentityService, cfg IdentityHTTPConfig) (*Identit
 		h.mux.HandleFunc("GET /api/v1/credentials", h.credentialMetadata)
 		h.mux.HandleFunc("POST /api/v1/credentials", h.createCredential)
 		h.mux.HandleFunc("GET /api/v1/credentials/{credentialId}/references", h.credentialReferences)
+		h.mux.HandleFunc("DELETE /api/v1/credentials/{credentialId}", h.removeAIKey)
 	}
 	return h, nil
 }
