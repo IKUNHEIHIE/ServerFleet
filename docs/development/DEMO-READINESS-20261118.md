@@ -7,7 +7,7 @@
 
 2026-11-18 22:53:16（北京时间）部署 React 前端，入口 https://agent.wentian.org:8443。
 当前 Controller 仍为 0.9.3-ai-fleet-20261118，运行参数及数据库未变，就绪检查全部通过。
-Web 工件 index-Cn7-KIap.js，SHA256 4dc4504ae6e68c4019508c638e5e03be6d51deaaa650f5de390debef5893b9de。
+部署的 Web 源码提交 d57fec6，工件 index-Cn7-KIap.js，SHA256 4dc4504ae6e68c4019508c638e5e03be6d51deaaa650f5de390debef5893b9de。
 浏览器确认公网新工件和登录表单。隔离浏览器确认「开」「开始」逐步显示和最终答复。已有 Android APK 通过原摘要检查。
 没有创建数据库备份。源码只在 awskr 的任务分支维护，未上传 GitHub。
 
@@ -23,8 +23,8 @@ root 能力使用节点已配置的 root helper、固定命令配置与管理员
 
 - azure-20-215、wentian-host-01 已由现有管理连接换成 0.9.3-ai-fleet-20261118，原节点身份重新上线并上报指标。Linux amd64 工件摘要见 [上轮部署回执](DEPLOY-AI-FLEET-20261118.md)。
 - aliyun-hk-1b 在线，仍为 0.9.1-dev。从 awskr 连接该主机 SSH 端口被拒，未更换此节点 Agent。node-142 在线，仍为 0.9.2-main.8771fee，按用户指示暂缓维护。
-- 该服务器 已安装同一新版 Agent，独立身份 node-129 已提交常规入网申请，原有已撤销身份保持原状。等待测试站管理员批准。
-- Web 构建、56 个测试文件及 494 项测试通过。范围包括授权修订、预演与实际提交。
+- 该服务器 已安装同一新版 Agent，独立身份 node-129 已提交常规入网申请，原有已撤销身份保持原状。站内管理员已批准，独立 systemd 服务已启用并稳定运行，Controller 已确认新节点在线、版本正确及指标新鲜。
+- Web 构建、56 个测试文件及 494 项测试通过，范围包括授权修订、预演与实际提交。接口契约、项目策略与模块边界检查通过。
 - Go 相关包通过。平台级登录/AI 授权与 root 审批、Controller 与 Agent CLI、兼容模型调用、签名安装和回退用例通过。
 - 隔离排练的四个真实 Agent CLI 通过 mTLS 入网、上报指标、收到同一批次自检并返回 4/4 成功。首次排练发现 parallel 被现有接口拒绝，改用服务端标准分批模式后通过。测试材料在 reports/demo-four-agent-harness.go.txt 和 reports/demo-four-agent-sequential.log。
 - 公网测试站真实配置的模型回复和真实四节点的本轮批量回执尚未通过已登录的演示账号验证。隔离结果单独记录。
