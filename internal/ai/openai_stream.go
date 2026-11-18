@@ -151,6 +151,11 @@ func decodeResponseStreamObserved(ctx context.Context, reader io.Reader, model s
 				summary.WriteString(finalSummary)
 			}
 			if observe != nil {
+				if visible != "" {
+					if err := observe("text_completed", visible); err != nil {
+						return err
+					}
+				}
 				if summary.Len() > 0 {
 					if err := observe("summary_completed", summary.String()); err != nil {
 						return err

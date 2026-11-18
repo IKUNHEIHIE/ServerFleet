@@ -399,6 +399,11 @@ func decodeChatStream(ctx context.Context, reader io.Reader, model string, agent
 		return "", err
 	}
 	if observe != nil {
+		if text != "" {
+			if e := observe("text_completed", text); e != nil {
+				return "", e
+			}
+		}
 		if reasoning != "" {
 			if e := observe("reasoning_completed", reasoning); e != nil {
 				return "", e

@@ -1,5 +1,13 @@
 # 当前接口说明
 
+## AI 授权默认动作与聊天上下文
+
+POST /api/v1/ai/sessions/{sessionId}/grants 可省略 allowedActions。服务端按注册工具、当前资源权限选择动作。
+省略动作且同一资源已授权时返回现有视图，修订保持不变。完全访问在已有资源内按当前权限计算有效动作。
+GET /api/v1/ai/sessions/{sessionId}/context 返回实际可续接的聊天历史条数与输入估算，包含保留摘要及授权内执行回执。
+普通生成 SSE 的 preview 仍携带累积文本，适配小增量频繁刷新。
+
+
 ## AI Key 删除与执行回执
 
 当前管理员通过带 CSRF 的 DELETE /api/v1/credentials/{credentialId} 和 JSON expectedRevision 删除控制台托管的 AI Key。

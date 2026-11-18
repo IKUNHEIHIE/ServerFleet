@@ -345,41 +345,27 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 			return ErrGenerationUnknown
 		}
 		if stream && media == "text/event-stream" {
-			lastPreview := map[string]int{}
+			lastPreview := make(map[string]string)
+			lastFrame := make(map[string]time.Time)
 			observe := func(kind, value string) error {
-				observe := generationPreviewFrom(ctx)
-				if observe == nil {
+				preview := generationPreviewFrom(ctx)
+				if preview == nil {
 					return nil
 				}
-				// Withhold a full credential-length suffix so a secret split across provider
-				// chunks cannot leak in an earlier preview. Exact echoes are replaced.
 				final := strings.HasSuffix(kind, "_completed")
-				if final {
-					kind = strings.TrimSuffix(kind, "_completed")
-				}
-				value = strings.ReplaceAll(value, string(secret), "[REDACTED]")
-				if !final && len(value) <= len(secret) {
+				kind = strings.TrimSuffix(kind, "_completed")
+				now := time.Now()
+				// Limit equivalent browser frames, independent of delta size. The
+				// first token and the completed snapshot are always eligible.
+				if !final && now.Sub(lastFrame[kind]) < 25*time.Millisecond {
 					return nil
 				}
-				safe := value
-				if !final {
-					safe = value[:len(value)-len(secret)]
-				}
-				for !utf8.ValidString(safe) && len(safe) > 0 {
-					safe = safe[:len(safe)-1]
-				}
-				threshold := 256
-				if kind == "summary" || kind == "reasoning" {
-					threshold = 128
-				}
-				if !final && lastPreview[kind] > 0 && len(safe)-lastPreview[kind] < threshold {
+				value = safeStreamPreview(value, string(secret), final)
+				if value == lastPreview[kind] || strings.TrimSpace(value) == "" {
 					return nil
 				}
-				if strings.TrimSpace(safe) == "" {
-					return nil
-				}
-				lastPreview[kind] = len(safe)
-				return observe(kind, safe)
+				lastPreview[kind], lastFrame[kind] = value, now
+				return preview(kind, value)
 			}
 			if protocol == "openai-chat-completions" {
 				text, err = decodeChatStream(ctx, response.Body, r.Profile.Model, r.Agent, observe)
@@ -437,6 +423,31 @@ func (p *OpenAITextProvider) Generate(ctx context.Context, r GenerationRequest, 
 // ListModels performs one GET against an OpenAI-compatible /models endpoint and
 // returns bounded model identifiers. The API key is borrowed through the normal
 // credential fence and never returned.
+// safeStreamPreview holds only a suffix that could still complete the current
+// credential. Holding the entire key length delayed every ordinary delta.
+func safeStreamPreview(value, secret string, final bool) string {
+	if secret == "" {
+		return value
+	}
+	value = strings.ReplaceAll(value, secret, "[REDACTED]")
+	if !final {
+		tail := value[len(value)-min(len(value), len(secret)-1):]
+		for i := 0; i < len(tail); {
+			offset := strings.IndexByte(tail[i:], secret[0])
+			if offset < 0 {
+				break
+			}
+			i += offset
+			if strings.HasPrefix(secret, tail[i:]) {
+				value = value[:len(value)-len(tail)+i]
+				break
+			}
+			i++
+		}
+	}
+	return value
+}
+
 func (p *OpenAITextProvider) ListModels(ctx context.Context, op auth.CredentialOperation, endpoint string) ([]string, error) {
 	if p == nil || p.credentials == nil || p.client == nil || ctx == nil || op.Module != "ai" || op.Source != "ai" || op.Action != "use" || !strings.HasPrefix(op.OperationID, "ai-models-") {
 		return nil, ErrToolDenied

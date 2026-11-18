@@ -309,3 +309,32 @@ func TestInternalAgentMessageSummaryUsesRunBoundary(t *testing.T) {
 		}
 	}
 }
+
+func TestContextEstimateExcludesUnsentHistory(t *testing.T) {
+	ctx := context.Background()
+	loop, view, _, _ := agentLoopFixture(t, false, false)
+	loop.conversation.config.Generate = func(_ context.Context, _ GenerationRequest, emit func(string) error) error {
+		return emit("这是模型答复")
+	}
+	submit := func(key, text string) Message {
+		t.Helper()
+		m, err := loop.conversation.Submit(ctx, view.ID, key, MessageInput{Content: text, ClientMessageID: key, ScopeRevision: view.ScopeRevision})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return m
+	}
+	first := submit("context-sent", "读取节点 metrics")
+	if _, err := loop.conversation.Generate(ctx, view.ID, first.MessageID); err != nil {
+		t.Fatal(err)
+	}
+	before, err := loop.conversation.ContextStats(ctx, view.ID)
+	if err != nil || before.MessageCount != 2 || before.EstimatedTokens == 0 {
+		t.Fatal(before, err)
+	}
+	submit("context-draft", strings.Repeat("awaiting generation ", 150))
+	after, err := loop.conversation.ContextStats(ctx, view.ID)
+	if err != nil || after != before {
+		t.Fatalf("queued input inflated reusable chat history: %+v -> %+v (%v)", before, after, err)
+	}
+}

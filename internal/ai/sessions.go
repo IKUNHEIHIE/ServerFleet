@@ -365,6 +365,55 @@ func recordScope(record sessionRecord) Scope {
 	sort.Strings(scope.Nodes)
 	return scope
 }
+
+// Older sessions can contain several direct grants for a single node. Keep one
+// representative row while preserving the union of the stored action/scope data.
+func uniqueResourceGrants(grants map[string]ResourceGrant) []ResourceGrant {
+	rows := make(map[[2]string]ResourceGrant)
+	for _, grant := range grants {
+		key := [2]string{grant.ResourceType, grant.ResourceID}
+		if other, exists := rows[key]; exists {
+			actions := unionGrantValues(grant.AllowedActions, other.AllowedActions)
+			members := unionGrantValues(grant.MemberNodeIDs, other.MemberNodeIDs)
+			if other.GrantID < grant.GrantID {
+				grant = other
+			}
+			grant.AllowedActions, grant.MemberNodeIDs = actions, members
+		} else {
+			grant.AllowedActions = slices.Clone(grant.AllowedActions)
+			grant.MemberNodeIDs = slices.Clone(grant.MemberNodeIDs)
+		}
+		rows[key] = grant
+	}
+	out := make([]ResourceGrant, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, row)
+	}
+	return out
+}
+
+func unionGrantValues(left, right []string) []string {
+	values := slices.Clone(left)
+	for _, value := range right {
+		if !slices.Contains(values, value) {
+			values = append(values, value)
+		}
+	}
+	slices.Sort(values)
+	return values
+}
+
+func (s *SessionService) resourceToolActions() []string {
+	actions := make([]string, 0, len(s.tools))
+	for id, tool := range s.tools {
+		if !tool.Definition.SecretExport {
+			actions = append(actions, id)
+		}
+	}
+	slices.Sort(actions)
+	return actions
+}
+
 func (s *SessionService) view(ctx context.Context, record sessionRecord, now time.Time) (SessionView, error) {
 	scope := recordScope(record)
 	mode := map[ApprovalMode]string{EveryCall: "per_action", LowRisk: "automatic", FullAccess: "full_access"}[scope.Mode]
@@ -375,17 +424,25 @@ func (s *SessionService) view(ctx context.Context, record sessionRecord, now tim
 		view.ApprovalPolicy.EffectiveMode = "per_action"
 	}
 	allowed := map[string]bool{}
-	for _, grant := range record.Grants {
-		grant.AllowedActions = slices.Clone(grant.AllowedActions)
-		grant.MemberNodeIDs = slices.Clone(grant.MemberNodeIDs)
+	authorities := make(map[string]CurrentAuthority)
+	for _, grant := range uniqueResourceGrants(record.Grants) {
 		view.ResourceGrants = append(view.ResourceGrants, grant)
 		if record.Closed {
 			continue
 		}
-		for _, action := range grant.AllowedActions {
-			current, err := s.authority(ctx, scope.SubjectID, action)
-			if err != nil || current.SubjectID != scope.SubjectID || !validIDs(current.AllowedNodes) || !validIDs(current.AllowedTools) {
-				return SessionView{}, ErrSessionUnavailable
+		actions := grant.AllowedActions
+		if scope.Mode == FullAccess {
+			actions = s.resourceToolActions()
+		}
+		for _, action := range actions {
+			current, exists := authorities[action]
+			if !exists {
+				var err error
+				current, err = s.authority(ctx, scope.SubjectID, action)
+				if err != nil || current.SubjectID != scope.SubjectID || !validIDs(current.AllowedNodes) || !validIDs(current.AllowedTools) {
+					return SessionView{}, ErrSessionUnavailable
+				}
+				authorities[action] = current
 			}
 			if !slices.Contains(current.AllowedTools, action) {
 				continue
@@ -560,7 +617,7 @@ func (s *SessionService) AddGrant(ctx context.Context, id string, expected uint6
 		return SessionView{}, err
 	}
 	input.AllowedActions = slices.Clone(input.AllowedActions)
-	if expected == 0 || !exactID(input.ResourceID) || input.ResourceType != "node" && input.ResourceType != "service_group" || len(input.AllowedActions) == 0 || len(input.AllowedActions) > 64 || !validIDs(input.AllowedActions) {
+	if expected == 0 || !exactID(input.ResourceID) || input.ResourceType != "node" && input.ResourceType != "service_group" || len(input.AllowedActions) > 64 || !validIDs(input.AllowedActions) {
 		return SessionView{}, ErrToolDenied
 	}
 	var result SessionView
@@ -575,18 +632,30 @@ func (s *SessionService) AddGrant(ctx context.Context, id string, expected uint6
 		if record.Scope.Revision != expected {
 			return ErrScopeConflict
 		}
-		if len(record.Grants) >= 1000 {
-			return ErrSessionUnavailable
-		}
-		if input.ResourceType == "service_group" {
-			for _, g := range record.Grants {
-				if g.ResourceType == "service_group" && g.ResourceID == input.ResourceID {
-					return ErrScopeConflict
-				}
+		var existing *ResourceGrant
+		for _, grant := range uniqueResourceGrants(record.Grants) {
+			if grant.ResourceType == input.ResourceType && grant.ResourceID == input.ResourceID {
+				existing = &grant
+				break
 			}
 		}
-		snapshot := []string{}
-		for i, action := range input.AllowedActions {
+		defaultActions := len(input.AllowedActions) == 0
+		if existing != nil && defaultActions {
+			result, err = s.view(ctx, record, now)
+			return err
+		}
+		if existing != nil && input.ResourceType == "service_group" {
+			return ErrScopeConflict
+		}
+		if existing == nil && len(record.Grants) >= 1000 {
+			return ErrSessionUnavailable
+		}
+		candidates := input.AllowedActions
+		if defaultActions {
+			candidates = s.resourceToolActions()
+		}
+		var actions, snapshot []string
+		for _, action := range candidates {
 			tool, ok := s.tools[action]
 			if !ok || tool.Definition.SecretExport {
 				return ErrToolDenied
@@ -596,6 +665,9 @@ func (s *SessionService) AddGrant(ctx context.Context, id string, expected uint6
 				return ErrSessionUnavailable
 			}
 			if !slices.Contains(current.AllowedTools, action) {
+				if defaultActions {
+					continue
+				}
 				return ErrToolDenied
 			}
 			nodes := []string{input.ResourceID}
@@ -605,29 +677,48 @@ func (s *SessionService) AddGrant(ctx context.Context, id string, expected uint6
 				if !exists || len(nodes) > 1000 || !validIDs(nodes) {
 					return ErrToolDenied
 				}
-				if i == 0 {
-					snapshot = slices.Clone(nodes)
-				} else {
-					a, b := slices.Clone(snapshot), slices.Clone(nodes)
-					sort.Strings(a)
-					sort.Strings(b)
-					if !slices.Equal(a, b) {
-						return ErrSessionUnavailable
-					}
+			}
+			if slices.ContainsFunc(nodes, func(node string) bool { return !slices.Contains(current.AllowedNodes, node) }) {
+				if defaultActions {
+					continue
+				}
+				return ErrToolDenied
+			}
+			if input.ResourceType == "service_group" {
+				nodes = slices.Clone(nodes)
+				slices.Sort(nodes)
+				if len(actions) == 0 {
+					snapshot = nodes
+				} else if !slices.Equal(snapshot, nodes) {
+					return ErrSessionUnavailable
 				}
 			}
-			for _, node := range nodes {
-				if !slices.Contains(current.AllowedNodes, node) {
-					return ErrToolDenied
+			actions = append(actions, action)
+		}
+		if len(actions) == 0 {
+			return ErrToolDenied
+		}
+		var grant ResourceGrant
+		if existing != nil {
+			grant = *existing
+			if !slices.ContainsFunc(actions, func(a string) bool { return !slices.Contains(grant.AllowedActions, a) }) {
+				result, err = s.view(ctx, record, now)
+				return err
+			}
+			grant.AllowedActions = unionGrantValues(grant.AllowedActions, actions)
+			for key, old := range record.Grants {
+				if old.ResourceType == grant.ResourceType && old.ResourceID == grant.ResourceID {
+					delete(record.Grants, key)
 				}
 			}
+		} else {
+			grantID, err := sessionID()
+			if err != nil {
+				return err
+			}
+			grant = ResourceGrant{grantID, input.ResourceType, input.ResourceID, snapshot, actions, now, actor.SubjectID}
 		}
-		grantID, err := sessionID()
-		if err != nil {
-			return err
-		}
-		grant := ResourceGrant{grantID, input.ResourceType, input.ResourceID, snapshot, input.AllowedActions, now, actor.SubjectID}
-		record.Grants[grantID] = grant
+		record.Grants[grant.GrantID] = grant
 		record.Scope.Revision++
 		if record.Scope.Revision == 0 {
 			return ErrSessionUnavailable
@@ -646,10 +737,15 @@ func (s *SessionService) AddGrant(ctx context.Context, id string, expected uint6
 }
 func (s *SessionService) RevokeGrant(ctx context.Context, id, grantID string, expected uint64) (SessionView, error) {
 	return s.mutate(ctx, id, expected, "ai.sessions.revoke", func(record *sessionRecord, _ SessionActor, _ time.Time) error {
-		if _, ok := record.Grants[grantID]; !ok {
+		grant, ok := record.Grants[grantID]
+		if !ok {
 			return ErrToolDenied
 		}
-		delete(record.Grants, grantID)
+		for id, other := range record.Grants {
+			if other.ResourceType == grant.ResourceType && other.ResourceID == grant.ResourceID {
+				delete(record.Grants, id)
+			}
+		}
 		return nil
 	})
 }

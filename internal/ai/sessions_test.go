@@ -175,3 +175,35 @@ func TestAIScopePolicyExpiryRevisionFailureAndRootApproval(t *testing.T) {
 		t.Fatal("closed session reopened", err)
 	}
 }
+
+func TestDefaultResourceGrantIsIdempotentAndFullAccessUsesCurrentAuthority(t *testing.T) {
+	ctx := context.Background()
+	s, _, actor, authority, _ := sessionFixture(t)
+	actor.CanFullAccess = true
+	authority.AllowedTools = []string{"nodes.read", "host.modify"}
+	view, err := s.Create(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	view, err = s.AddGrant(ctx, view.ID, view.ScopeRevision, ResourceGrantInput{"node", "node-a", []string{"nodes.read"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	duplicate, err := s.AddGrant(ctx, view.ID, view.ScopeRevision, ResourceGrantInput{ResourceType: "node", ResourceID: "node-a"})
+	if err != nil || len(duplicate.ResourceGrants) != 1 || duplicate.ScopeRevision != view.ScopeRevision {
+		t.Fatalf("duplicate grant changed scope: %+v %v", duplicate, err)
+	}
+	view, err = s.SetPolicy(ctx, view.ID, view.ScopeRevision, FullAccess, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	call := ToolCall{ToolID: "host.modify", NodeIDs: []string{"node-a"}, Parameters: []byte("{}"), ScopeRevision: view.ScopeRevision}
+	result, err := s.AssessTool(ctx, view.ID, call)
+	if err != nil || result.RequiresApproval {
+		t.Fatalf("full-access action failed: %+v %v", result, err)
+	}
+	authority.AllowedTools = []string{"nodes.read"}
+	if _, err := s.AssessTool(ctx, view.ID, call); err == nil {
+		t.Fatal("full access bypassed current action permissions")
+	}
+}

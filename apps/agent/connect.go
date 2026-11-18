@@ -213,14 +213,16 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		executor.actions[transport.RootCommandCapability] = action
 		semantic.AllowedActions[transport.RootCommandCapability] = "1"
 	}
-	executor.actions[transport.ProbeCapability] = guardedCommandAction(publicProbeAction(), facts.NodeID, endpoint, tlsConfig)
+	admissionClient := newCommandAdmissionClient(endpoint, tlsConfig)
+	defer admissionClient.CloseIdleConnections()
+	executor.actions[transport.ProbeCapability] = guardedCommandAction(publicProbeAction(), facts.NodeID, endpoint, admissionClient)
 	semantic.AllowedActions[transport.ProbeCapability] = "1"
 	if request.CommandProfiles != "" {
 		action, e := registeredCommands(request.CommandProfiles, facts.NodeID)
 		if e != nil {
 			return e
 		}
-		executor.actions[transport.CommandCapability] = guardedCommandAction(action, facts.NodeID, endpoint, tlsConfig)
+		executor.actions[transport.CommandCapability] = guardedCommandAction(action, facts.NodeID, endpoint, admissionClient)
 		semantic.AllowedActions[transport.CommandCapability] = "1"
 	}
 	if fileRoot != "" {

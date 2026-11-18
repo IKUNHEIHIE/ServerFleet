@@ -63,7 +63,7 @@ describe("AI session page", () => {
     await waitFor(() => {
       const call = calls.find(call => call.method === "POST" && call.url === "/api/v1/ai/sessions/s-1/grants");
       expect(call).toBeDefined();
-      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ resourceType: "node", resourceId: "n-2", allowedActions: ["nodes.read", "tasks.command", "tasks.exec.v1", "host.root"] });
+      expect(JSON.parse(String(call?.init?.body))).toEqual({ resourceType: "node", resourceId: "n-2" });
     });
 
     // switch policy from the composer

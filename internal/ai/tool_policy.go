@@ -143,7 +143,7 @@ func EvaluateTool(scope Scope, call ToolCall, tool ToolDefinition, current Curre
 		if !validIDs(scope.NodeActions[id]) {
 			return ErrToolDenied
 		}
-		if slices.Contains(scope.NodeActions[id], tool.ID) {
+		if scope.Mode == FullAccess || slices.Contains(scope.NodeActions[id], tool.ID) {
 			effective[id] = true
 		}
 	}
@@ -155,7 +155,7 @@ func EvaluateTool(scope Scope, call ToolCall, tool ToolDefinition, current Curre
 		if !validIDs(scope.GroupActions[group]) {
 			return ErrToolDenied
 		}
-		if !slices.Contains(scope.GroupActions[group], tool.ID) {
+		if scope.Mode != FullAccess && !slices.Contains(scope.GroupActions[group], tool.ID) {
 			continue
 		}
 		for _, id := range snapshot {
@@ -176,7 +176,7 @@ func EvaluateTool(scope Scope, call ToolCall, tool ToolDefinition, current Curre
 		needsApproval = !(tool.ReadOnly && tool.AutoAllowed)
 	case FullAccess:
 		// Full access is one of the three explicit user-selected gates. It never
-		// widens the authorization intersection; root Shell still needs a human.
+		// widens the set of granted resources or the current account permissions.
 		needsApproval = false
 	default:
 		return ErrToolDenied

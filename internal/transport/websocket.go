@@ -416,23 +416,17 @@ func (c *WebSocketConn) armDeadline(ctx context.Context, write bool) (func(), er
 	if err := createDeadline(deadline); err != nil {
 		return nil, err
 	}
-	stop := make(chan struct{})
+	// Cancellation is exceptional. Avoid starting and joining a goroutine
+	// for every healthy heartbeat, offer, acknowledgement and result frame.
 	done := make(chan struct{})
-	if ctx.Done() == nil {
-		close(done)
-	} else {
-		go func() {
-			defer close(done)
-			select {
-			case <-ctx.Done():
-				_ = createDeadline(time.Now())
-			case <-stop:
-			}
-		}()
-	}
+	stop := context.AfterFunc(ctx, func() {
+		defer close(done)
+		_ = createDeadline(time.Now())
+	})
 	return func() {
-		close(stop)
-		<-done
+		if !stop() {
+			<-done
+		}
 		_ = createDeadline(time.Time{})
 	}, nil
 }

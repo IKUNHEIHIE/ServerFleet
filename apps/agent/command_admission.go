@@ -16,7 +16,30 @@ import (
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 )
 
-func guardedCommandAction(action agentAction, node string, endpoint agentLinkEndpoint, config *tls.Config) agentAction {
+// A link has one pinned TLS identity and controller endpoint. Reusing its
+// transport avoids a TCP/mTLS handshake for each start/current admission.
+func newCommandAdmissionClient(endpoint agentLinkEndpoint, config *tls.Config) *http.Client {
+	transport := &http.Transport{
+		DisableCompression:     true,
+		MaxIdleConnsPerHost:    2,
+		IdleConnTimeout:        20 * time.Second,
+		MaxResponseHeaderBytes: 8 << 10,
+		TLSHandshakeTimeout:    3 * time.Second,
+		ResponseHeaderTimeout:  3 * time.Second,
+		TLSClientConfig:        config.Clone(),
+		DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
+			if network != "tcp" || address != endpoint.authority {
+				return nil, errAgentConnect
+			}
+			return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, network, endpoint.address)
+		},
+	}
+	return &http.Client{Transport: transport, Timeout: 4 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error {
+		return errExecutionRejected
+	}}
+}
+
+func guardedCommandAction(action agentAction, node string, endpoint agentLinkEndpoint, client *http.Client) agentAction {
 	run := action.Run
 	action.Run = func(ctx context.Context, raw []byte) executionResult {
 		unknown := executionResult{Result: agentv1.ExecutionResult_EXECUTION_RESULT_UNKNOWN}
@@ -24,14 +47,6 @@ func guardedCommandAction(action agentAction, node string, endpoint agentLinkEnd
 		if !ok {
 			return unknown
 		}
-		transport := &http.Transport{Proxy: nil, DisableCompression: true, DisableKeepAlives: true, MaxResponseHeaderBytes: 8 << 10, TLSHandshakeTimeout: 3 * time.Second, ResponseHeaderTimeout: 3 * time.Second, TLSClientConfig: config.Clone(), DialContext: func(ctx context.Context, network, address string) (net.Conn, error) {
-			if network != "tcp" || address != endpoint.authority {
-				return nil, errAgentConnect
-			}
-			return (&net.Dialer{Timeout: 3 * time.Second}).DialContext(ctx, network, endpoint.address)
-		}}
-		defer transport.CloseIdleConnections()
-		client := &http.Client{Transport: transport, Timeout: 4 * time.Second, CheckRedirect: func(*http.Request, []*http.Request) error { return errExecutionRejected }}
 		var nonce [16]byte
 		if _, err := rand.Read(nonce[:]); err != nil {
 			return unknown
@@ -54,8 +69,9 @@ func guardedCommandAction(action agentAction, node string, endpoint agentLinkEnd
 				return err
 			}
 			defer response.Body.Close()
+			body, readErr := io.ReadAll(io.LimitReader(response.Body, 4097))
 			var receipt map[string]string
-			if response.StatusCode != 200 || json.NewDecoder(io.LimitReader(response.Body, 4096)).Decode(&receipt) != nil || len(receipt) != 6 || receipt["taskId"] != offer.TaskId || receipt["executionId"] != offer.ExecutionId || receipt["planHash"] != offer.PlanDigestSha256 || receipt["nonce"] != text || receipt["phase"] != phase || receipt["timeoutSeconds"] != strconv.Itoa(int(offer.TimeoutSeconds)) {
+			if response.StatusCode != 200 || readErr != nil || len(body) > 4096 || json.Unmarshal(body, &receipt) != nil || len(receipt) != 6 || receipt["taskId"] != offer.TaskId || receipt["executionId"] != offer.ExecutionId || receipt["planHash"] != offer.PlanDigestSha256 || receipt["nonce"] != text || receipt["phase"] != phase || receipt["timeoutSeconds"] != strconv.Itoa(int(offer.TimeoutSeconds)) {
 				return errExecutionRejected
 			}
 			return nil

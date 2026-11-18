@@ -39,7 +39,7 @@ const EFFORT_LABEL: Record<string, string> = { "": "默认", low: "低", medium:
 const MODE_DESCRIPTION: Record<AIApprovalMode, string> = {
   per_action: "执行命令、修改文件或访问网络前，始终询问",
   automatic: "仅在检测到潜在风险时询问",
-  full_access: "不再询问，可自由操作已授权节点的文件和网络",
+  full_access: "已授权节点上的可用动作默认放行，Root 操作仍需管理员确认",
 };
 
 interface AIStreamEvent {
@@ -506,14 +506,13 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
 
   const [resourceType, setResourceType] = useState<"node" | "service_group">("node");
   const [resourceId, setResourceId] = useState("");
-  const [actions, setActions] = useState("nodes.read,tasks.command,tasks.exec.v1,host.root");
   const [messageText, setMessageText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
   const [policyOverride, setPolicyOverride] = useState<AIApprovalPolicy | null>(null);
   const [models, setModels] = useState<readonly string[] | null>(null);
   const policyData = policyOverride ?? current?.approvalPolicy ?? null;
 
-  const grant = useAction((body: { resourceType: "node" | "service_group"; resourceId: string; allowedActions: readonly string[] }) =>
+  const grant = useAction((body: { resourceType: "node" | "service_group"; resourceId: string }) =>
     aiApi.grant(sessionId, body),
   );
   const revokeGrant = useAction((grantId: string) => aiApi.revokeGrant(sessionId, grantId));
@@ -618,10 +617,9 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
   async function addGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!resourceId) return setLocalError("必须选择资源。");
-    const allowedActions = actions.split(",").map(value => value.trim()).filter(Boolean);
-    if (allowedActions.length === 0) return setLocalError("至少填写一个允许动作。");
+    if (hasGrant(resourceType, resourceId)) return;
     setLocalError(null);
-    const result = await grant.run({ resourceType, resourceId, allowedActions });
+    const result = await grant.run({ resourceType, resourceId });
     if (result.ok) {
       setResourceId("");
       session.refreshSilent();
@@ -689,11 +687,17 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
     return groupItems.find(group => group.id === id)?.name ?? id;
   }
 
+  function hasGrant(kind: "node" | "service_group", id: string): boolean {
+    return current?.resourceGrants.some(item => item.resourceType === kind && item.resourceId === id) ?? false;
+  }
+
   async function attachResource(kind: "node" | "service_group", id: string) {
-    if (writesLocked || !canUse) return;
-    const result = await grant.run({ resourceType: kind, resourceId: id, allowedActions: ["nodes.read", "tasks.command", "tasks.exec.v1", "host.root"] });
-    if (!result.ok) return;
-    session.refreshSilent();
+    if (writesLocked || !canUse || grant.pending) return;
+    if (!hasGrant(kind, id)) {
+      const result = await grant.run({ resourceType: kind, resourceId: id });
+      if (!result.ok) return;
+      session.refreshSilent();
+    }
     const token = `@${resourceDisplayName(kind, id)}`;
     setMessageText(prev => (prev ? `${prev} ${token} ` : `${token} `));
   }
@@ -956,10 +960,11 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                         onOpen={() => undefined}
                         onSelect={value => void changePreferences(currentModel, value as "low" | "medium" | "high" | "")}
                       />
-                      <span className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-card px-2 py-1 text-muted-foreground">
+                      <span title="依据实际会发送的历史、摘要和执行回执估算，未计入正在输入的消息" className="inline-flex items-center gap-1 rounded-lg border border-border/80 bg-card px-2 py-1 text-muted-foreground">
                         <Gauge aria-hidden="true" className="size-3.5 text-muted-foreground" />
-                        约 {formatTokens(contextData?.estimatedTokens ?? 0)} tokens · {contextData?.messageCount ?? 0} 条
-                        {contextData?.summaryPresent ? " · 已压缩" : ""}
+                        {contextData
+                          ? "聊天上下文约 " + formatTokens(contextData.estimatedTokens) + " tokens · " + contextData.messageCount + " 条历史" + (contextData.summaryPresent ? " · 已压缩" : "")
+                          : context.state.status === "error" ? "上下文统计不可用" : "正在估算上下文"}
                       </span>
                       <Button
                         type="button"
@@ -1021,7 +1026,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                 </div>
                 <details className={mobile ? "mobile-ai-resources" : "min-h-0 space-y-3 overflow-y-auto"} open={mobile ? undefined : true}>
                   <summary className={mobile ? "" : "hidden"}>节点与资源授权（{data.resourceGrants.length}）</summary>
-                  <Panel title="可用资源" description={mobile ? "点击节点添加授权，展开后可撤回。" : "把节点拖进左侧输入框即授权 AI 读取；也可点击添加。"}>
+                  <Panel title="可用资源" description={mobile ? "点击节点添加授权，展开后可撤回。" : "把节点拖进左侧输入框即授权 AI 使用；也可点击添加。"}>
                     <div className="space-y-3 px-5 py-4">
                       <div className="flex flex-wrap gap-1.5">
                         {nodeItems.map(node => (
@@ -1076,7 +1081,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                         <div className="grid grid-cols-2 gap-2">
                           <Field label="资源类型">
                             {ids => (
-                              <Select id={ids.inputId} value={resourceType} onChange={event => setResourceType(event.target.value as "node" | "service_group")} disabled={writesLocked || !canUse}>
+                              <Select id={ids.inputId} value={resourceType} onChange={event => { setResourceType(event.target.value as "node" | "service_group"); setResourceId(""); }} disabled={writesLocked || !canUse}>
                                 <option value="node">节点</option>
                                 <option value="service_group">服务组</option>
                               </Select>
@@ -1087,18 +1092,15 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                               <Select id={ids.inputId} value={resourceId} onChange={event => setResourceId(event.target.value)} disabled={writesLocked || !canUse}>
                                 <option value="">请选择</option>
                                 {resourceType === "node"
-                                  ? nodeItems.map(node => <option key={node.id} value={node.id}>{node.name || node.id}</option>)
-                                  : groupItems.map(group => <option key={group.id} value={group.id}>{group.name || group.id}</option>)}
+                                  ? nodeItems.map(node => <option key={node.id} value={node.id} disabled={hasGrant("node", node.id)}>{node.name || node.id}{hasGrant("node", node.id) ? "（已授权）" : ""}</option>)
+                                  : groupItems.map(group => <option key={group.id} value={group.id} disabled={hasGrant("service_group", group.id)}>{group.name || group.id}{hasGrant("service_group", group.id) ? "（已授权）" : ""}</option>)}
                               </Select>
                             )}
                           </Field>
                         </div>
-                        <Field label="允许动作（逗号分隔）" hint="多个动作以逗号分隔。">
-                          {ids => <TextInput id={ids.inputId} value={actions} onChange={event => setActions(event.target.value)} disabled={writesLocked || !canUse} />}
-                        </Field>
                         {localError ? <Notice tone="error" title="无法授权">{localError}</Notice> : null}
                         {grant.error ? <Notice tone="error" title="授权失败">{describeApiError(grant.error)}</Notice> : null}
-                        <Button type="submit" size="sm" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse}>添加授权</Button>
+                        <Button type="submit" size="sm" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse || !resourceId || hasGrant(resourceType, resourceId)}>添加授权</Button>
                       </form>
                     </div>
                   </Panel>

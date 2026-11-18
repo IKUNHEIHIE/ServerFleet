@@ -11,6 +11,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf8"
 )
 
@@ -490,47 +491,23 @@ func (c *ConversationService) Generate(ctx context.Context, id, messageID string
 		if r.Scope.Revision != view.ScopeRevision || run.ScopeRevision != view.ScopeRevision || run.Profile != profile {
 			return ErrScopeConflict
 		}
-		summaryPrefix := ""
-		if r.ContextSummary != "" {
-			summaryPrefix = "【较早对话摘要】" + r.ContextSummary + "\n\n"
-		}
-		if request.Agent == nil {
-			summaryPrefix += executionEvidence(r, view)
-		}
-		for i, message := range r.Conversation.Messages {
-			if message.MessageID == messageID {
-				if summaryPrefix != "" && len(request.Messages) == 0 {
-					message.RedactedContent = summaryPrefix + message.RedactedContent
-				}
-				request.Messages = append(request.Messages, message)
-				break
-			}
-			if i < r.ContextCutoff {
-				continue
-			}
-			if message.Role != "user" {
-				continue
-			}
-			prior := r.Conversation.Runs[message.MessageID]
-			if request.Agent != nil || prior.AgentRunID != "" {
-				continue
-			}
-			if prior.State == "generating" || prior.State == "queued" {
-				return ErrScopeConflict
-			}
-			if prior.State == "succeeded" {
-				if summaryPrefix != "" && len(request.Messages) == 0 {
-					message.RedactedContent = summaryPrefix + message.RedactedContent
-				}
-				request.Messages = append(request.Messages, message)
-				for _, response := range r.Conversation.Messages {
-					if response.MessageID == prior.ResponseID {
-						request.Messages = append(request.Messages, response)
-						break
+		if request.Agent != nil {
+			for _, message := range r.Conversation.Messages {
+				if message.MessageID == messageID {
+					if r.ContextSummary != "" {
+						message.RedactedContent = "【较早对话摘要】" + r.ContextSummary + "\n\n" + message.RedactedContent
 					}
+					request.Messages = []Message{message}
+					break
 				}
 			}
+		} else {
+			request.Messages, err = chatContext(r, view, messageID)
+			if err != nil {
+				return err
+			}
 		}
+
 		historyBytes := 0
 		for _, message := range request.Messages {
 			historyBytes += len(message.RedactedContent)
@@ -698,34 +675,98 @@ type ContextStats struct {
 	ReasoningEffort   string `json:"reasoningEffort,omitempty"`
 }
 
+// chatContext is the accepted chat history supplied to the provider and
+// projected in the next-request estimate when targetID is empty.
+func chatContext(record sessionRecord, view SessionView, targetID string) ([]Message, error) {
+	if record.Conversation == nil {
+		return nil, nil
+	}
+	conversation := record.Conversation
+	byID := make(map[string]Message, len(conversation.Messages))
+	for _, message := range conversation.Messages {
+		byID[message.MessageID] = message
+	}
+	out := make([]Message, 0)
+	for i, message := range conversation.Messages {
+		if message.MessageID == targetID {
+			out = append(out, message)
+			break
+		}
+		if i < record.ContextCutoff || message.Role != "user" || message.AgentRunID != "" {
+			continue
+		}
+		prior := conversation.Runs[message.MessageID]
+		switch prior.State {
+		case "queued", "generating":
+			if targetID != "" {
+				return nil, ErrScopeConflict
+			}
+		case "succeeded":
+			if reply, ok := byID[prior.ResponseID]; ok {
+				out = append(out, message, reply)
+			}
+		}
+	}
+	prefix := chatContextPrefix(record, view)
+	if prefix != "" && len(out) != 0 {
+		out[0].RedactedContent = prefix + out[0].RedactedContent
+	}
+	return out, nil
+}
+
+func chatContextPrefix(record sessionRecord, view SessionView) string {
+	prefix := ""
+	if record.ContextSummary != "" {
+		prefix = "【较早对话摘要】" + record.ContextSummary + "\n\n"
+	}
+	return prefix + executionEvidence(record, view)
+}
+
 func estimateContextTokens(text string) int {
-	return (utf8.RuneCountInString(text) + 1) / 2
+	// This model-independent estimate accounts for mixed CJK/Latin text and
+	// dense punctuation in tool evidence. Provider tokenizers may differ.
+	tokens, asciiRun := 0, 0
+	for _, r := range text {
+		if r < 128 && (unicode.IsLetter(r) || unicode.IsDigit(r) || r == ' ') {
+			asciiRun++
+			continue
+		}
+		tokens += (asciiRun + 3) / 4
+		asciiRun = 0
+		if r > 127 || !unicode.IsSpace(r) {
+			tokens++
+		}
+	}
+	return tokens + (asciiRun+3)/4
 }
 
 func compactableMessage(message Message, run generationRecord) bool {
 	return message.AgentRunID == "" && run.ClientID != "" && run.State != "generating" && run.State != "queued" && run.State != "unknown"
 }
 
-func contextStats(record sessionRecord, profile ModelProfile) ContextStats {
-	stats := ContextStats{SummaryPresent: record.ContextSummary != "", SummaryTokens: estimateContextTokens(record.ContextSummary), CompactedMessages: record.ContextCutoff, Model: profile.Model, ReasoningEffort: record.ReasoningEffort}
+func contextStats(record sessionRecord, view SessionView, profile ModelProfile) ContextStats {
+	stats := ContextStats{
+		SummaryPresent: record.ContextSummary != "", SummaryTokens: estimateContextTokens(record.ContextSummary),
+		Model: profile.Model, ReasoningEffort: record.ReasoningEffort,
+	}
 	if record.ModelOverride != "" {
 		stats.Model = record.ModelOverride
 	}
-	if record.Conversation == nil {
-		return stats
+	history, _ := chatContext(record, view, "")
+	stats.MessageCount = len(history)
+	for _, message := range history {
+		stats.EstimatedTokens += 4 + estimateContextTokens(message.RedactedContent)
 	}
-	text := record.ContextSummary
-	for i, message := range record.Conversation.Messages {
-		if i < record.ContextCutoff || message.AgentRunID != "" {
-			continue
-		}
-		if stats.MessageCount == 0 && record.ContextSummary != "" {
-			text += "\n"
-		}
-		stats.MessageCount++
-		text += message.RedactedContent
+	if len(history) == 0 {
+		stats.EstimatedTokens = estimateContextTokens(chatContextPrefix(record, view))
 	}
-	stats.EstimatedTokens = estimateContextTokens(text)
+	if record.Conversation != nil {
+		for _, message := range record.Conversation.Messages[:record.ContextCutoff] {
+			if message.AgentRunID == "" {
+				stats.CompactedMessages++
+			}
+		}
+	}
 	return stats
 }
 
@@ -751,7 +792,7 @@ func (c *ConversationService) ContextStats(ctx context.Context, id string) (Cont
 		if err != nil {
 			profile = ModelProfile{Model: view.Model}
 		}
-		out = contextStats(record, profile)
+		out = contextStats(record, view, profile)
 		return nil
 	})
 	if err != nil {
@@ -843,7 +884,7 @@ func (c *ConversationService) Compact(ctx context.Context, id string, keep int) 
 		record.ContextSummary, record.ContextCutoff = summary, cutoff
 		record.ContextMemoryVersion = 2
 		st.Sessions[id] = record
-		out = contextStats(record, ModelProfile{Model: view.Model})
+		out = contextStats(record, view, ModelProfile{Model: view.Model})
 		return c.audit(st, record, "ai.context.compact", "", now)
 	})
 	if err != nil {

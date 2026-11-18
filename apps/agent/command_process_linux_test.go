@@ -167,6 +167,12 @@ func TestGuardedCommandMTLSRevocationKillsActualOwnedProcess(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"taskId": body.Offer.TaskId, "executionId": body.Offer.ExecutionId, "planHash": body.Offer.PlanDigestSha256, "nonce": body.Nonce, "phase": body.Phase, "timeoutSeconds": strconv.Itoa(int(body.Offer.TimeoutSeconds))})
 	}))
 	server.TLS = &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{serverCert}, ClientAuth: tls.RequireAndVerifyClientCert, ClientCAs: roots}
+	connections := new(atomic.Int32)
+	server.Config.ConnState = func(_ net.Conn, state http.ConnState) {
+		if state == http.StateNew {
+			connections.Add(1)
+		}
+	}
 	server.StartTLS()
 	defer server.Close()
 	address := strings.TrimPrefix(server.URL, "https://")
@@ -174,7 +180,10 @@ func TestGuardedCommandMTLSRevocationKillsActualOwnedProcess(t *testing.T) {
 	if e != nil {
 		t.Fatal(e)
 	}
-	guarded := guardedCommandAction(action, "node", agentLinkEndpoint{serverName: "fleet.test", address: address, authority: net.JoinHostPort("fleet.test", port)}, &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{clientCert}, RootCAs: roots, ServerName: "fleet.test"})
+	endpoint := agentLinkEndpoint{serverName: "fleet.test", address: address, authority: net.JoinHostPort("fleet.test", port)}
+	client := newCommandAdmissionClient(endpoint, &tls.Config{MinVersion: tls.VersionTLS13, Certificates: []tls.Certificate{clientCert}, RootCAs: roots, ServerName: "fleet.test"})
+	defer client.CloseIdleConnections()
+	guarded := guardedCommandAction(action, "node", endpoint, client)
 	offer := &agentv1.TaskOffer{TaskId: "command-task", ExecutionId: "command-execution", ActionId: transport.CommandCapability, PlanDigestSha256: strings.Repeat("a", 64), TimeoutSeconds: 10}
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -194,6 +203,9 @@ func TestGuardedCommandMTLSRevocationKillsActualOwnedProcess(t *testing.T) {
 			t.Fatal("actual command never started", ctx.Err())
 		case <-ticker.C:
 		}
+	}
+	if connections.Load() != 1 {
+		t.Fatalf("start admission did not reuse mTLS connection: %d connections", connections.Load())
 	}
 	allowed.Store(false)
 	select {

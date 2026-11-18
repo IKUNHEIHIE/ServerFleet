@@ -79,7 +79,7 @@ export const aiApi = {
   sessions: (signal?: AbortSignal) => apiClient.request<{ items: readonly AISessionSummary[] }>("/api/v1/ai/sessions", { signal }),
   getSession: (sessionId: string, signal?: AbortSignal) =>
     apiClient.request<AISession>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}`, { signal }),
-  grant: (sessionId: string, body: { resourceType: "node" | "service_group"; resourceId: string; allowedActions: readonly string[] }) =>
+  grant: (sessionId: string, body: { resourceType: "node" | "service_group"; resourceId: string; allowedActions?: readonly string[] }) =>
     apiClient.request<AISession>(`/api/v1/ai/sessions/${encodeURIComponent(sessionId)}/grants`, { method: "POST", body }),
   revokeGrant: (sessionId: string, grantId: string) =>
     apiClient.request<AISession>(
