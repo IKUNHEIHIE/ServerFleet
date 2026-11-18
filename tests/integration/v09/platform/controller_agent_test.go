@@ -553,6 +553,7 @@ func TestWave3ControllerAgentEnrollmentWSSAndTaskExecution(t *testing.T) {
 	if len(tasksPage.Items) != 1 || tasksPage.Items[0].PlanDigest == "" {
 		t.Fatalf("unexpected tasks page: %s", data)
 	}
+	agentNow := time.Now().Add(-30 * time.Second)
 	status, data = doReq(approver, "POST", "/api/v1/tasks/"+submitted.JobID+"/approve", map[string]any{
 		"planDigest": tasksPage.Items[0].PlanDigest, "decision": "approve", "reason": "peer reviewed",
 	}, approverLogin.CSRF)
@@ -570,6 +571,11 @@ func TestWave3ControllerAgentEnrollmentWSSAndTaskExecution(t *testing.T) {
 	}
 	if offer.GetPlanDigestSha256() != tasksPage.Items[0].PlanDigest {
 		t.Fatalf("offer plan digest mismatch: %s", offer.GetPlanDigestSha256())
+	}
+	// Agents strictly reject an offer more than ten minutes in the future.
+	expiry := time.UnixMilli(offer.GetExpiresAtUnixMs())
+	if !expiry.After(agentNow) || expiry.After(agentNow.Add(10*time.Minute)) {
+		t.Fatalf("offer expiry %s is outside the receive window of a slow Agent at %s", expiry, agentNow)
 	}
 	if err := writeEnvelope(&agentv1.Envelope{Message: &agentv1.Envelope_TaskAck{TaskAck: &agentv1.TaskAck{
 		TaskId: offer.GetTaskId(), ExecutionId: offer.GetExecutionId(), Accepted: true,

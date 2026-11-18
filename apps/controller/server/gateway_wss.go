@@ -113,7 +113,7 @@ func gatewayFileOffer(binding files.FileBinding, now time.Time) (*agentv1.TaskOf
 		ActionId:                transport.FileCapability,
 		CanonicalParametersJson: raw,
 		Privilege:               agentv1.Privilege_PRIVILEGE_NORMAL,
-		ExpiresAtUnixMs:         now.Add(10 * time.Minute).UnixMilli(),
+		ExpiresAtUnixMs:         now.Add(agentOfferLifetime).UnixMilli(),
 		TimeoutSeconds:          300,
 		ActionSchemaVersion:     "1",
 	}, nil

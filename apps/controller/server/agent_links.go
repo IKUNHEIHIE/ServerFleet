@@ -18,6 +18,9 @@ import (
 	"serverfleet.local/serverfleet/internal/transport"
 )
 
+// Leave one minute for clock skew beneath the Agent's ten-minute validation limit.
+const agentOfferLifetime = 9 * time.Minute
+
 // agentAllowedActions is the local structural allowlist. Task authorization and
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
@@ -655,7 +658,7 @@ func (b *agentLinkBridge) Dispatch(ctx context.Context, command tasks.Command) (
 		ActionId:                command.ActionID,
 		CanonicalParametersJson: append([]byte(nil), command.Params...),
 		Privilege:               dispatchPrivilege(task),
-		ExpiresAtUnixMs:         b.now().Add(10 * time.Minute).UnixMilli(),
+		ExpiresAtUnixMs:         b.now().Add(agentOfferLifetime).UnixMilli(),
 		TimeoutSeconds:          300,
 		ScopeRevision:           task.ScopeRevision,
 		PluginId:                task.PluginID,
