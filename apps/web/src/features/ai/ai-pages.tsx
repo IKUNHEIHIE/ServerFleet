@@ -508,9 +508,10 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
   const [resourceId, setResourceId] = useState("");
   const [messageText, setMessageText] = useState("");
   const [localError, setLocalError] = useState<string | null>(null);
-  const [policyOverride, setPolicyOverride] = useState<AIApprovalPolicy | null>(null);
+  const scopeKey = JSON.stringify([appSession.viewEpoch, sessionId]);
+  const [confirmedScope, setConfirmedScope] = useState<{ key: string; revision: number } | null>(null);
   const [models, setModels] = useState<readonly string[] | null>(null);
-  const policyData = policyOverride ?? current?.approvalPolicy ?? null;
+  const policyData = current?.approvalPolicy ?? null;
 
   const grant = useAction((body: { resourceType: "node" | "service_group"; resourceId: string }) =>
     aiApi.grant(sessionId, body),
@@ -591,6 +592,9 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
   const canUse = appSession.can("ai.use") || appSession.can("ai.manage");
   const canApprove = appSession.can("ai.approve") || appSession.can("ai.manage");
   const writesLocked = appSession.writesLocked;
+  const scopeChanging = grant.pending || revokeGrant.pending || updatePolicy.pending;
+  const scopeStale = confirmedScope?.key === scopeKey && (current?.scopeRevision ?? 0) < confirmedScope.revision;
+  const scopeLocked = scopeChanging || scopeStale;
   const messageItems: readonly AIMessage[] = messages.state.status === "ready" ? messages.state.data.items : [];
   const visibleMessages = messageItems;
   const runItems = runs.state.status === "ready" ? runs.state.data : [];
@@ -614,24 +618,31 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
     if (list) list.scrollTop = list.scrollHeight;
   }, [visibleMessages.length, livePreview, generatingMessageId]);
 
+  function refreshScope(revision: number) {
+    setConfirmedScope(previous => ({
+      key: scopeKey,
+      revision: previous?.key === scopeKey ? Math.max(revision, previous.revision) : revision,
+    }));
+    session.refreshSilent();
+  }
+
   async function addGrant(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (scopeLocked || writesLocked || !canUse) return;
     if (!resourceId) return setLocalError("必须选择资源。");
     if (hasGrant(resourceType, resourceId)) return;
     setLocalError(null);
     const result = await grant.run({ resourceType, resourceId });
-    if (result.ok) {
+    if (result.ok && result.data) {
       setResourceId("");
-      session.refreshSilent();
+      refreshScope(result.data.data.scopeRevision);
     }
   }
 
   async function changeMode(mode: AIApprovalMode) {
+    if (scopeLocked || writesLocked || !canUse) return;
     const result = await updatePolicy.run({ mode });
-    if (result.ok && result.data) {
-      setPolicyOverride(result.data.data);
-      session.refreshSilent();
-    }
+    if (result.ok && result.data) refreshScope(result.data.data.scopeRevision);
   }
 
   async function loadModels() {
@@ -661,7 +672,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
 
   async function sendMessage(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!messageText.trim() || !current) return;
+    if (!messageText.trim() || !current || scopeLocked || writesLocked || !canUse || send.pending || runAgent.pending || generatingMessageId !== null) return;
     const content = messageText.trim();
     if (composerMode === "agent") {
       const goalKey = globalThis.crypto?.randomUUID?.() ?? `run-${Date.now()}`;
@@ -673,10 +684,10 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
       }
       return;
     }
-    setMessageText("");
     const clientMessageId = globalThis.crypto?.randomUUID?.() ?? `msg-${Date.now()}`;
     const result = await send.run({ content, clientMessageId, scopeRevision: current.scopeRevision });
     if (result.ok && result.data) {
+      setMessageText(previous => previous.trim() === content ? "" : previous);
       messages.refreshSilent();
       await runGenerate(result.data.data.messageId);
     }
@@ -692,11 +703,11 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
   }
 
   async function attachResource(kind: "node" | "service_group", id: string) {
-    if (writesLocked || !canUse || grant.pending) return;
+    if (writesLocked || !canUse || scopeLocked) return;
     if (!hasGrant(kind, id)) {
       const result = await grant.run({ resourceType: kind, resourceId: id });
-      if (!result.ok) return;
-      session.refreshSilent();
+      if (!result.ok || !result.data) return;
+      refreshScope(result.data.data.scopeRevision);
     }
     const token = `@${resourceDisplayName(kind, id)}`;
     setMessageText(prev => (prev ? `${prev} ${token} ` : `${token} `));
@@ -730,6 +741,12 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
         <div className="flex flex-wrap items-center gap-3 px-4 text-xs text-muted-foreground">
           <label>步数上限 <select aria-label="步数上限" value={runSteps} onChange={event => setRunSteps(Number(event.target.value))}>{[8, 16, 24].map(n => <option key={n} value={n}>{n} 步</option>)}</select></label>
           <label>运行期限 <select aria-label="运行期限" value={runSeconds} onChange={event => setRunSeconds(Number(event.target.value))}>{[900, 1800, 3600].map(n => <option key={n} value={n}>{n / 60} 分钟</option>)}</select></label>
+        </div>
+      ) : null}
+      {scopeStale && !scopeChanging ? (
+        <div className="px-4 py-1 text-xs text-muted-foreground" role="status">
+          {session.state.status === "ready" && session.state.refreshError ? "授权读取失败，草稿已保留。" : "正在同步会话授权…"}
+          <Button type="button" size="sm" variant="ghost" onClick={session.refreshSilent}>刷新授权</Button>
         </div>
       ) : null}
       {streamError ? <Notice tone="error" title="AI 事件流终止">{describeApiError(streamError)} 不会自动循环重连。</Notice> : null}
@@ -767,10 +784,10 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
 
             {tab !== "chat" ? (
               <div className="min-h-0 flex-1 overflow-y-auto pr-1">
-            {tab === "agent" ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} focusRunId={activeRunId} /> : null}
+            {tab === "agent" && !scopeLocked ? <AgentRunPanel key={`${sessionId}:${data.scopeRevision}:${appSession.viewEpoch}`} session={data} focusRunId={activeRunId} /> : null}
 
             {tab === "approval" ? (
-              <ApprovalsPanel sessionId={sessionId} session={data} canApprove={canApprove} writesLocked={writesLocked} />
+              <ApprovalsPanel sessionId={sessionId} session={data} canApprove={canApprove} writesLocked={writesLocked || scopeLocked} />
             ) : null}
               </div>
             ) : null}
@@ -910,7 +927,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                     <div className="mb-2 flex flex-wrap items-center gap-1.5 text-xs">
                       <AccessModeMenu
                         policy={policyData}
-                        disabled={writesLocked || !canUse || updatePolicy.pending}
+                        disabled={writesLocked || !canUse || scopeLocked}
                         busy={updatePolicy.pending}
                         onChange={mode => void changeMode(mode)}
                       />
@@ -1010,7 +1027,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                         aria-label={composerMode === "agent" ? "执行" : "发送"}
                         title={composerMode === "agent" ? "执行任务" : "发送"}
                         className="absolute right-2.5 bottom-2.5 size-9 rounded-full p-0 shadow-md"
-                        disabled={writesLocked || !canUse || !messageText.trim() || generatingMessageId !== null || runAgent.pending}
+                        disabled={writesLocked || !canUse || scopeLocked || !messageText.trim() || generatingMessageId !== null || runAgent.pending || send.pending}
                       >
                         {generatingMessageId !== null || runAgent.pending ? (
                           <Loader2 aria-hidden="true" className="size-4 animate-spin" />
@@ -1071,7 +1088,10 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                                 <span className="min-w-0 truncate">
                                   {grantItem.resourceType === "service_group" ? "服务组" : "节点"} · {grantItem.resourceType === "service_group" ? groupItems.find(group => group.id === grantItem.resourceId)?.name ?? grantItem.resourceId : nodeItems.find(node => node.id === grantItem.resourceId)?.name ?? grantItem.resourceId}
                                 </span>
-                                <Button size="sm" variant="ghost" disabled={writesLocked || !canUse} onClick={async () => { const result = await revokeGrant.run(grantItem.grantId); if (result.ok) { session.refreshSilent(); } }}>撤回</Button>
+                                <Button size="sm" variant="ghost" disabled={writesLocked || !canUse || scopeLocked} onClick={async () => {
+                                  const result = await revokeGrant.run(grantItem.grantId);
+                                  if (result.ok && result.data) refreshScope(result.data.data.scopeRevision);
+                                }}>撤回</Button>
                               </li>
                             ))}
                           </ul>
@@ -1100,7 +1120,7 @@ export function AISessionPage({ sessionId, embedded = false, mobile = false }: {
                         </div>
                         {localError ? <Notice tone="error" title="无法授权">{localError}</Notice> : null}
                         {grant.error ? <Notice tone="error" title="授权失败">{describeApiError(grant.error)}</Notice> : null}
-                        <Button type="submit" size="sm" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse || !resourceId || hasGrant(resourceType, resourceId)}>添加授权</Button>
+                        <Button type="submit" size="sm" variant="primary" loading={grant.pending} disabled={writesLocked || !canUse || scopeLocked || !resourceId || hasGrant(resourceType, resourceId)}>添加授权</Button>
                       </form>
                     </div>
                   </Panel>

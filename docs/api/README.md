@@ -1,5 +1,10 @@
 # 当前接口说明
 
+## 批量任务预演与执行
+
+控制台用 POST /api/v1/tasks/preview 预览目标和审批要求。实际提交用 POST /api/v1/tasks，传入 dryRun=false 与 dispatchMode=sequential，202 回执中的 jobId 用于查询逐节点结果。标准任务由服务端分批，parallel 保留拒绝行为。
+授权变更成功后，AI 会话先读回 scopeRevision 再发送消息或创建运行。写入继续由服务端校验该修订。
+
 ## AI 授权默认动作与聊天上下文
 
 POST /api/v1/ai/sessions/{sessionId}/grants 可省略 allowedActions。服务端按注册工具、当前资源权限选择动作。

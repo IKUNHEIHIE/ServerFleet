@@ -37,8 +37,6 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
   const [selectedNodes, setSelectedNodes] = useState<ReadonlySet<string>>(new Set());
   const [targetGroupId, setTargetGroupId] = useState("");
   const [command, setCommand] = useState("");
-  const [dryRun, setDryRun] = useState(true);
-  const [dispatchMode, setDispatchMode] = useState<"sequential" | "batch" | "parallel">("sequential");
   const [preview, setPreview] = useState<BatchTaskPreview | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
 
@@ -64,8 +62,6 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
     setSelectedNodes(new Set());
     setTargetGroupId("");
     setCommand("");
-    setDryRun(true);
-    setDispatchMode("sequential");
     setPreview(null);
     setLocalError(null);
   }, [open]);
@@ -73,7 +69,7 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
   const nodeItems = nodes.state.status === "ready" ? nodes.state.data.items : [];
   const canSubmit = session.can("task.submit") || session.can("task.manage");
 
-  function buildBody(): Parameters<typeof tasksApi.create>[0] | null {
+  function buildBody(dryRun: boolean): Parameters<typeof tasksApi.create>[0] | null {
     if (!name.trim()) {
       setLocalError("任务名称不能为空。");
       return null;
@@ -105,13 +101,13 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
           : { type: targetType, groupId: targetGroupId },
       command: command.trim(),
       dryRun,
-      dispatchMode,
+      dispatchMode: "sequential",
     };
   }
 
   async function runPreview() {
     setLocalError(null);
-    const body = buildBody();
+    const body = buildBody(true);
     if (!body) return;
     setPreview(null);
     const result = await previewAction.run(body);
@@ -121,7 +117,7 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setLocalError(null);
-    const body = buildBody();
+    const body = buildBody(false);
     if (!body) return;
     const result = await createAction.run(body);
     if (result.ok && result.data) {
@@ -244,27 +240,22 @@ function CreateTaskModal({ open, onClose }: { readonly open: boolean; readonly o
           </AsyncPanel>
         )}
 
-        <Field label="命令或脚本" hint="高风险或 root 操作仍需审批。">
-          {ids => <TextArea id={ids.inputId} value={command} onChange={event => setCommand(event.target.value)} required className="font-mono" />}
+        <Button
+          type="button"
+          size="sm"
+          disabled={pending || !canSubmit}
+          onClick={() => {
+            setName(current => current.trim() ? current : "节点自检");
+            setCommand("tasks.command");
+            setPreview(null);
+            setLocalError(null);
+          }}
+        >
+          使用节点自检
+        </Button>
+        <Field label="命令或脚本" hint="节点自检只返回诊断结果。高风险或 root 操作需审批。">
+          {ids => <TextArea id={ids.inputId} value={command} onChange={event => { setCommand(event.target.value); setPreview(null); }} required className="font-mono" />}
         </Field>
-        <Notice tone="info" title="说明">
-          暂不支持分批或金丝雀发布参数。
-        </Notice>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="执行策略">
-            {ids => (
-              <Select id={ids.inputId} value={dispatchMode} onChange={event => setDispatchMode(event.target.value as typeof dispatchMode)}>
-                <option value="sequential">顺序/分批</option>
-                <option value="batch">分批</option>
-                <option value="parallel">并行（受服务端并发上限）</option>
-              </Select>
-            )}
-          </Field>
-          <label className="mt-6 flex items-center gap-2 text-sm">
-            <Checkbox checked={dryRun} onChange={event => setDryRun(event.target.checked)} />
-            预演（dryRun）
-          </label>
-        </div>
 
         {preview ? (
           <div className="rounded-lg border bg-secondary/30 px-4 py-3 text-sm">

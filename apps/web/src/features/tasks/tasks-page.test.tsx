@@ -86,10 +86,28 @@ describe("task center", () => {
         name: "patch",
         command: "host.patch",
         target: { type: "node_ids", nodeIds: ["n-1"] },
-        dryRun: true,
+        dryRun: false,
+        dispatchMode: "sequential",
       });
     });
     await waitFor(() => expect(window.location.hash).toBe("#/tasks/t-2"));
+  });
+
+  it("fills the fixed node self-check and previews it without creating a task", async () => {
+    const { calls } = await renderAuthenticated("/tasks", taskRoutes());
+    await screen.findByText("t-1");
+    fireEvent.click(screen.getByRole("button", { name: "创建任务" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(within(dialog).getByRole("button", { name: "使用节点自检" }));
+    expect(within(dialog).getByLabelText("任务名称")).toHaveValue("节点自检");
+    expect(within(dialog).getByLabelText("命令或脚本")).toHaveValue("tasks.command");
+    fireEvent.click(await within(dialog).findByRole("checkbox", { name: "Tokyo (n-1)" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "预演目标" }));
+    await waitFor(() => {
+      const preview = calls.find(call => call.method === "POST" && call.url === "/api/v1/tasks/preview");
+      expect(JSON.parse(String(preview?.init?.body))).toMatchObject({ command: "tasks.command", dryRun: true, dispatchMode: "sequential" });
+    });
+    expect(calls.some(call => call.method === "POST" && call.url === "/api/v1/tasks")).toBe(false);
   });
 
   it("shows only projected SSE fields, never raw output, and approves with the plan digest", async () => {

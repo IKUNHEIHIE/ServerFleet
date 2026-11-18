@@ -52,7 +52,28 @@ function aiRoutes(): FetchRoutes {
 
 describe("AI session page", () => {
   it("grants a resource, switches policy and approves a one-time tool action", async () => {
-    const { calls } = await renderAuthenticated("/ai/s-1", aiRoutes());
+    let scopeRevision = SESSION.scopeRevision;
+    let allowScopeRefresh = false;
+    const granted = {
+      ...SESSION,
+      allowedNodeIds: ["n-1", "n-2"],
+      resourceGrants: [...SESSION.resourceGrants, { grantId: "gr-2", resourceType: "node", resourceId: "n-2", allowedActions: ["nodes.read"] }],
+    };
+    const automaticPolicy = { ...POLICY, mode: "automatic", effectiveMode: "automatic", scopeRevision: 4 };
+    const { calls } = await renderAuthenticated("/ai/s-1", {
+      ...aiRoutes(),
+      "GET /api/v1/ai/sessions/s-1": () => jsonResponse(allowScopeRefresh && scopeRevision > 2
+        ? { ...granted, scopeRevision, approvalPolicy: scopeRevision === 4 ? automaticPolicy : POLICY }
+        : SESSION),
+      "POST /api/v1/ai/sessions/s-1/grants": () => {
+        scopeRevision = 3;
+        return jsonResponse({ ...granted, scopeRevision });
+      },
+      "PATCH /api/v1/ai/sessions/s-1/approval-policy": () => {
+        scopeRevision = 4;
+        return jsonResponse(automaticPolicy);
+      },
+    });
     expect(await screen.findByRole("heading", { level: 1, name: "AI 会话 s-1" })).toBeVisible();
     expect(await screen.findByText("有效节点：n-1")).toBeVisible();
 
@@ -66,12 +87,31 @@ describe("AI session page", () => {
       expect(JSON.parse(String(call?.init?.body))).toEqual({ resourceType: "node", resourceId: "n-2" });
     });
 
+    // A stale snapshot cannot be used to send immediately after a grant.
+    const draft = screen.getByLabelText("消息内容");
+    fireEvent.change(draft, { target: { value: "check" } });
+    const refresh = await screen.findByRole("button", { name: "刷新授权" });
+    expect(screen.getByRole("button", { name: "发送" })).toBeDisabled();
+    fireEvent.submit(draft.closest("form")!);
+    expect(calls.some(call => call.method === "POST" && call.url.endsWith("/messages"))).toBe(false);
+    expect(draft).toHaveValue("check");
+    allowScopeRefresh = true;
+    fireEvent.click(refresh);
+    await screen.findByText("有效节点：n-1、n-2");
+
     // switch policy from the composer
     fireEvent.click(screen.getByRole("button", { name: "权限模式" }));
     fireEvent.click(await screen.findByRole("menuitemradio", { name: /自动审批/ }));
     await waitFor(() => {
       const call = calls.find(call => call.method === "PATCH" && call.url === "/api/v1/ai/sessions/s-1/approval-policy");
       expect(JSON.parse(String(call?.init?.body))).toEqual({ mode: "automatic" });
+    });
+
+    await screen.findByText(/范围版本 4/);
+    fireEvent.click(screen.getByRole("button", { name: "发送" }));
+    await waitFor(() => {
+      const call = calls.find(call => call.method === "POST" && call.url.endsWith("/messages"));
+      expect(JSON.parse(String(call?.init?.body))).toMatchObject({ content: "check", scopeRevision: 4 });
     });
 
     // create and approve a tool request
