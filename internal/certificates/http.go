@@ -97,7 +97,9 @@ func (api *httpAPI) list(w http.ResponseWriter, r *http.Request) {
 		}
 		items = append(items, jobFromDetail(detail))
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"items": items, "configured": api.service.issuer != nil && api.service.tasks != nil && api.service.groupRevisions != nil,
+	})
 }
 
 type createBody struct {

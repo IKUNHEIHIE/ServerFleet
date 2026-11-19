@@ -1,14 +1,13 @@
+import { PublicCertificateGuide } from "./public-certificate-guide";
 import { PublicCertificatePanel } from "./public-certificate-panel";
 import { PublicRenewalPanel } from "./public-renewal-panel";
 import { NodeCertificatePanel } from "./node-certificate-panel";
 import { NodeCSRPanel } from "./node-csr-panel";
 import { CertificateCleanupPanel } from "./certificate-cleanup-panel";
 import { useEffect, useState, type FormEvent } from "react";
-import { ShieldCheck, KeyRound, Lock, RefreshCw, ArrowRight } from "lucide-react";
+import { RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
-import { GlowingEffect } from "@/components/aceternity/glowing-effect";
 import { AsyncPanel } from "@/components/ui/async-panel";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
@@ -48,7 +47,8 @@ export function CertificatesPage() {
   const session = useSession();
   const [tab, setTab] = useState<"internal" | "public">("internal");
   const [createOpen, setCreateOpen] = useState(false);
-  const [detail, setDetail] = useState<InternalCertificateJob | null>(null);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
+  const [detailId, setDetailId] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<InternalCertificateJob | null>(null);
   const [rotating, setRotating] = useState<InternalCertificateJob | null>(null);
   const [reason, setReason] = useState("");
@@ -56,14 +56,16 @@ export function CertificatesPage() {
 
   const [serviceGroupId, setServiceGroupId] = useState("");
   const [credentialType, setCredentialType] = useState<"trust_bundle" | "per_node_identity">("trust_bundle");
-  const [identityProfile, setIdentityProfile] = useState("");
   const [validityHours, setValidityHours] = useState("");
   const [confirmImpact, setConfirmImpact] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
-  const jobs = useResource(`certs:jobs:${session.viewEpoch}`, signal => certificatesApi.distributions(signal).then(result => result.data));
-  const groups = useResource(`certs:groups:${session.viewEpoch}`, signal => serviceGroupsApi.list(signal).then(result => result.data));
+  const jobs = useResource(`certs:jobs:${session.viewEpoch}`, signal => certificatesApi.distributions(signal).then(result => result.data), { enabled: tab === "internal", refreshIntervalMs: 4000, shouldPoll: data => (data as { items: readonly InternalCertificateJob[] }).items.some(job => job.state === "queued" || job.state === "running" || job.state === "revoking") });
+  const groups = useResource(`certs:groups:${session.viewEpoch}`, signal => serviceGroupsApi.list(signal).then(result => result.data), { enabled: tab === "internal" });
+  const internalAvailable = jobs.state.status === "ready" && jobs.state.data.configured !== false;
+  const needsIssuer = jobs.state.status === "ready" && jobs.state.data.configured === false;
   const jobItems = jobs.state.status === "ready" ? jobs.state.data.items : [];
+  const detail = jobItems.find(job => job.jobId === detailId) ?? null;
   const groupItems = groups.state.status === "ready" ? groups.state.data.items : [];
   const selectedGroup: ServiceGroup | undefined = groupItems.find(group => group.id === serviceGroupId);
   const canManage = session.can("certificate.manage") || session.can("certificates.manage");
@@ -80,7 +82,6 @@ export function CertificatesPage() {
     if (!createOpen) return;
     setServiceGroupId("");
     setCredentialType("trust_bundle");
-    setIdentityProfile("");
     setValidityHours("");
     setConfirmImpact(false);
     setLocalError(null);
@@ -88,7 +89,8 @@ export function CertificatesPage() {
 
   async function create(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!serviceGroupId || !selectedGroup) return setLocalError("必须选择一个服务组。");
+    if (!internalAvailable || session.writesLocked || !canManage) return;
+    if (!selectedGroup?.memberNodeIds.length) return setLocalError("请选择至少有一台节点的服务组。");
     if (!confirmImpact) return setLocalError("必须确认服务影响。");
     setLocalError(null);
     const key = globalThis.crypto?.randomUUID?.() ?? `cert-${Date.now()}`;
@@ -96,8 +98,7 @@ export function CertificatesPage() {
       {
         serviceGroupId,
         credentialType,
-        ...(identityProfile.trim() ? { identityProfile: identityProfile.trim() } : {}),
-        ...(validityHours ? { validityHours: Number(validityHours) } : {}),
+        ...(credentialType === "per_node_identity" && validityHours ? { validityHours: Number(validityHours) } : {}),
         confirmServiceImpact: true,
         expectedGroupRevision: selectedGroup.revision,
       },
@@ -138,59 +139,9 @@ export function CertificatesPage() {
     <div className="space-y-5">
       <PageHeader
         title="证书管理"
-        description="内部 TLS 下发与节点本地网站 CSR；执行结果以统一任务和实际证书回执为准。"
-        badge={<Badge tone="primary" dot>PKI · mTLS</Badge>}
-        actions={<Button type="button" onClick={() => jobs.reload()} loading={jobs.state.status === "loading"}><RefreshCw className="size-3.5" />刷新</Button>}
+        description="为服务组下发内部 TLS 凭据，或为网站签发、安装公网证书。"
+        actions={tab === "internal" ? <Button type="button" onClick={() => { jobs.reload(); groups.reload(); }} loading={jobs.state.status === "loading"}><RefreshCw className="size-3.5" />刷新</Button> : undefined}
       />
-
-      {/* PKI Trust Hierarchy Visual Architecture */}
-      <div className="grid gap-3 md:grid-cols-3">
-        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect tone="blue" />
-          <div className="relative z-10 flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
-                <Lock className="size-3.5 text-primary" />
-                Root Authority
-              </div>
-              <p className="mt-1 font-display text-sm font-bold text-foreground">离线自签 Root CA</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                私钥离线冷存储，仅签发在线 Intermediate CA，构成全网唯一信任锚点。
-              </p>
-            </div>
-            <ArrowRight className="mt-1 hidden size-4 shrink-0 text-muted-foreground/50 md:block" />
-          </div>
-        </div>
-        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect tone="green" />
-          <div className="relative z-10 flex items-start justify-between gap-2">
-            <div>
-              <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
-                <ShieldCheck className="size-3.5 text-emerald-600" />
-                Intermediate Authority
-              </div>
-              <p className="mt-1 font-display text-sm font-bold text-foreground">在线 Intermediate CA</p>
-              <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-                Controller 在线持有，按冻结服务组成员快照签发信任包与逐节点身份证书。
-              </p>
-            </div>
-            <ArrowRight className="mt-1 hidden size-4 shrink-0 text-muted-foreground/50 md:block" />
-          </div>
-        </div>
-        <div className="group relative overflow-hidden rounded-2xl border border-border/80 bg-card p-4 shadow-xs transition-all hover:-translate-y-0.5 hover:shadow-md">
-          <GlowingEffect tone="cyan" />
-          <div className="relative z-10">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold tracking-wider text-muted-foreground uppercase">
-              <KeyRound className="size-3.5 text-sky-600" />
-              Node Leaf Identity & CSR
-            </div>
-            <p className="mt-1 font-display text-sm font-bold text-foreground">逐节点独立私钥与本地 CSR</p>
-            <p className="mt-1 text-xs leading-relaxed text-muted-foreground">
-              节点本地生成私钥与 CSR，主控永不导出节点私钥；已完成 {jobItems.filter(j => j.state === "completed").length} / {jobItems.length} 项下发任务。
-            </p>
-          </div>
-        </div>
-      </div>
 
       {outcome ? <Notice tone="success" title="操作结果">{outcome}</Notice> : null}
       <TabBar
@@ -205,29 +156,34 @@ export function CertificatesPage() {
 
       {tab === "public" ? (
         <div className="space-y-5">
-          <Notice tone="info" title="网站证书签发与安装">
-            公开 CSR 可供受控签发流程使用；完整 ACME 申请、证书安装和实际 HTTPS 结果需要分别核验。
-          </Notice>
-          <div className="grid gap-5 xl:grid-cols-2 xl:items-start">
-            <NodeCSRPanel key={session.viewEpoch} />
-            <PublicCertificatePanel key={`public:${session.viewEpoch}`} />
-            <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
-            <PublicRenewalPanel key={`renewal:${session.viewEpoch}`} />
-          </div>
-          <SectionDivider label="ACME 验证记录清理队列" caption="Durable DNS Challenge Cleanup" />
-          <CertificateCleanupPanel key={`cleanup:${session.viewEpoch}`} />
+          <PublicCertificateGuide key={session.viewEpoch} />
+          <details className="rounded-xl border border-border bg-card p-4" open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
+            <summary className="cursor-pointer text-sm font-semibold">续签、批量发布与手动操作</summary>
+            {advancedOpen ? <>
+            <div className="mt-4 grid gap-5 xl:grid-cols-2 xl:items-start">
+              <PublicRenewalPanel key={`renewal:${session.viewEpoch}`} />
+              <NodeCSRPanel key={session.viewEpoch} />
+              <PublicCertificatePanel key={`public:${session.viewEpoch}`} />
+              <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
+            </div>
+            <div className="mt-4">
+              <SectionDivider label="DNS 验证记录清理" />
+              <CertificateCleanupPanel key={`cleanup:${session.viewEpoch}`} />
+            </div>
+            </> : null}
+          </details>
         </div>
       ) : null}
 
       {tab === "internal" ? (
         <div className="space-y-5">
-          <Notice tone="info" title="安全边界">
-            信任包与节点身份凭证分开；每个节点使用独立身份/私钥，主控不导出私钥。任务保留提交时成员快照，新增成员不会继承旧下发。
-          </Notice>
+          {needsIssuer ? (
+            <Notice tone="warning" title="内部 TLS 签发尚未配置">主控需要配置内部证书签发器后才能下发。网站公网证书可在另一页签申请。</Notice>
+          ) : null}
           <Panel
             title="内部证书下发任务"
-            description="离线节点显示等待，不计为成功。"
-            actions={<Button size="sm" variant="primary" disabled={!canManage || session.writesLocked} onClick={() => setCreateOpen(true)}>新建下发</Button>}
+            description="选择服务组与下发内容，提交后查看每台节点的结果。"
+            actions={<Button size="sm" variant="primary" disabled={!canManage || session.writesLocked || !internalAvailable} onClick={() => setCreateOpen(true)}>新建下发</Button>}
           >
             <AsyncPanel state={jobs.state} onRetry={jobs.reload} errorTitle="证书任务加载失败" empty={<EmptyState title="暂无内部证书任务" />} isEmpty={data => data.items.length === 0}>
               {() => (
@@ -248,7 +204,7 @@ export function CertificatesPage() {
                       header: "操作",
                       render: job => (
                         <div className="flex flex-wrap gap-1">
-                          <Button size="sm" onClick={() => setDetail(job)}>详情</Button>
+                          <Button size="sm" onClick={() => setDetailId(job.jobId)}>详情</Button>
                           <Button size="sm" onClick={() => { setRotating(job); setReason(""); }} disabled={!canManage || session.writesLocked}>轮换</Button>
                           <Button size="sm" variant="danger" onClick={() => { setRevoking(job); setReason(""); }} disabled={!canManage || session.writesLocked}>撤销</Button>
                         </div>
@@ -265,40 +221,46 @@ export function CertificatesPage() {
       <Modal
         open={createOpen}
         title="新建内部证书下发"
-        description="提交时冻结服务组成员快照；实际签发/下发是异步任务，不能在此声称 TLS 已建立。"
+        description="选择要下发的服务组和内容。系统按当前成员列表创建任务。"
         onClose={() => { if (!createAction.pending) setCreateOpen(false); }}
         footer={
           <>
             <Button type="button" onClick={() => setCreateOpen(false)} disabled={createAction.pending}>取消</Button>
-            <Button type="submit" form="cert-create" variant="primary" loading={createAction.pending}>提交下发</Button>
+            <Button type="submit" form="cert-create" variant="primary" loading={createAction.pending} disabled={!selectedGroup?.memberNodeIds.length || !confirmImpact}>提交下发</Button>
           </>
         }
       >
         <form id="cert-create" onSubmit={create} className="space-y-4">
           {localError ? <Notice tone="error" title="无法提交">{localError}</Notice> : null}
           {createAction.error ? <Notice tone="error" title="提交失败">{describeApiError(createAction.error)}</Notice> : null}
+          {groups.state.status === "error" ? <Notice tone="error" title="服务组加载失败">{describeApiError(groups.state.error)}</Notice> : null}
+          {groups.state.status === "ready" && groupItems.length === 0 ? <Notice tone="info" title="请先创建服务组">在服务组中添加节点，再返回这里提交下发。</Notice> : null}
           <Field label="服务组">
             {ids => (
               <Select id={ids.inputId} value={serviceGroupId} onChange={event => setServiceGroupId(event.target.value)} required>
-                <option value="">请选择</option>
-                {groupItems.map(group => <option key={group.id} value={group.id}>{group.name}（{group.memberNodeIds.length} 台，rev {group.revision}）</option>)}
+                <option value="">选择服务组</option>
+                {groupItems.map(group => <option key={group.id} value={group.id}>{group.name}（{group.memberNodeIds.length} 台）</option>)}
               </Select>
             )}
           </Field>
-          <Field label="凭据类型">
+          <Field label="下发内容">
             {ids => (
               <Select id={ids.inputId} value={credentialType} onChange={event => setCredentialType(event.target.value as typeof credentialType)}>
-                <option value="trust_bundle">CA 信任包</option>
-                <option value="per_node_identity">逐节点身份凭证</option>
+                <option value="trust_bundle">信任内部 CA</option>
+                <option value="per_node_identity">为每台节点签发身份证书</option>
               </Select>
             )}
           </Field>
-          <Field label="身份模板（可选）" hint="不同节点必须获得不同身份。">
-            {ids => <TextInput id={ids.inputId} value={identityProfile} onChange={event => setIdentityProfile(event.target.value)} />}
-          </Field>
-          <Field label="有效期小时（可选）">
-            {ids => <TextInput id={ids.inputId} type="number" min={1} max={8760} value={validityHours} onChange={event => setValidityHours(event.target.value)} />}
-          </Field>
+          {credentialType === "per_node_identity" ? (
+            <details className="rounded-lg border border-border p-3">
+              <summary className="cursor-pointer text-sm">调整有效期（默认 30 天）</summary>
+              <div className="mt-2">
+                <Field label="有效期（小时）">
+                  {ids => <TextInput id={ids.inputId} type="number" min={1} max={8760} value={validityHours} onChange={event => setValidityHours(event.target.value)} />}
+                </Field>
+              </div>
+            </details>
+          ) : null}
           <label className="flex items-start gap-2 text-sm">
             <Checkbox className="mt-1" checked={confirmImpact} onChange={event => setConfirmImpact(event.target.checked)} />
             我确认该操作会影响所选服务组成员，并由服务端逐节点执行。
@@ -309,9 +271,9 @@ export function CertificatesPage() {
       <Modal
         open={detail !== null}
         title={detail ? `证书任务 ${detail.jobId}` : "证书任务"}
-        onClose={() => setDetail(null)}
+        onClose={() => setDetailId(null)}
         wide
-        footer={<Button type="button" onClick={() => setDetail(null)}>关闭</Button>}
+        footer={<Button type="button" onClick={() => setDetailId(null)}>关闭</Button>}
       >
         {detail ? (
           <div className="space-y-3 text-sm">

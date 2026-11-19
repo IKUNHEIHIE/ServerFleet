@@ -188,7 +188,7 @@ export const gatewaysApi = {
 
 export const certificatesApi = {
   distributions: (signal?: AbortSignal) =>
-    apiClient.request<{ items: readonly InternalCertificateJob[] }>("/api/v1/certificates/internal/distributions", { signal }),
+    apiClient.request<{ items: readonly InternalCertificateJob[]; configured?: boolean }>("/api/v1/certificates/internal/distributions", { signal }),
   create: (
     body: {
       serviceGroupId: string;
@@ -292,8 +292,8 @@ export interface NodeCertificateReceipt {
 export const nodeCertificateApi = {
   install: (body: { csrTaskId: string; certificatePemBase64: string; idempotencyKey: string }) =>
     apiClient.request<NodeCSRTask>("/api/v1/certificates/chain-tasks", { method: "POST", body }),
-  get: (taskId: string) =>
-    apiClient.request<NodeCertificateReceipt>(`/api/v1/certificates/chain-tasks/${encodeURIComponent(taskId)}`),
+  get: (taskId: string, signal?: AbortSignal) =>
+    apiClient.request<NodeCertificateReceipt>(`/api/v1/certificates/chain-tasks/${encodeURIComponent(taskId)}`, { signal }),
 };
 
 export interface NodeCertificateSet {
@@ -329,10 +329,23 @@ export interface PublicCertificateOrder {
  readonly observedAt: string;
  readonly installed: false;
 }
+export interface PublicCertificateChoice {
+ readonly id: string;
+ readonly name: string;
+}
+export interface PublicCertificateProfile {
+ readonly profileSha256: string;
+ readonly configured: boolean;
+ readonly dnsCredentialId: string;
+ readonly dnsCredentialRevision: number;
+ readonly nodes?: readonly PublicCertificateChoice[];
+ readonly zones?: readonly PublicCertificateChoice[];
+ readonly choicesAvailable?: boolean;
+}
 export const publicCertificateApi = {
- profile: (signal?:AbortSignal)=>apiClient.request<{profileSha256:string; configured:boolean; dnsCredentialId:string; dnsCredentialRevision:number}>("/api/v1/certificates/public-profile",{signal}),
+ profile: (signal?:AbortSignal)=>apiClient.request<PublicCertificateProfile>("/api/v1/certificates/public-profile",{signal}),
  create: (body:{csrTaskId:string;zoneId:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/certificates/public-tasks",{method:"POST",body}),
- get: (taskId:string)=>apiClient.request<PublicCertificateOrder>(`/api/v1/certificates/public-tasks/${encodeURIComponent(taskId)}`),
+ get: (taskId:string, signal?:AbortSignal)=>apiClient.request<PublicCertificateOrder>(`/api/v1/certificates/public-tasks/${encodeURIComponent(taskId)}`,{signal}),
  inspectDNS: (body:{operation:"test"|"import-zone";accountId:string;zoneId?:string;providerZoneId?:string;idempotencyKey:string})=>apiClient.request<NodeCSRTask>("/api/v1/dns/provider-tasks",{method:"POST",body}),
 };
 

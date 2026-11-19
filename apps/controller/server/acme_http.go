@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"io"
@@ -9,7 +10,10 @@ import (
 
 	"serverfleet.local/serverfleet/internal/audit"
 	"serverfleet.local/serverfleet/internal/certificates"
+	"serverfleet.local/serverfleet/internal/dns"
+	"serverfleet.local/serverfleet/internal/nodes"
 	"serverfleet.local/serverfleet/internal/tasks"
+	"serverfleet.local/serverfleet/internal/transport"
 )
 
 func publicCertificateBody(w http.ResponseWriter, r *http.Request, max int64) (map[string]string, bool) {
@@ -39,6 +43,47 @@ func publicCertificateBody(w http.ResponseWriter, r *http.Request, max int64) (m
 	}
 	return fields, true
 }
+
+type publicCertificateChoice struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+func (s *Server) publicCertificateChoices(ctx context.Context, subject string) (eligibleNodes, eligibleZones []publicCertificateChoice, err error) {
+	eligibleNodes = []publicCertificateChoice{}
+	eligibleZones = []publicCertificateChoice{}
+	inventory, err := s.Nodes.ListVisible(ctx, subject)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, node := range inventory {
+		if node.Status == nodes.StatusOnline && s.Links.HasCurrentCapabilities(ctx, node.ID, transport.CertificateCSRAction, transport.CertificateInstallAction) {
+			eligibleNodes = append(eligibleNodes, publicCertificateChoice{ID: node.ID, Name: node.Name})
+		}
+	}
+	accounts, err := s.DNS.ListAccounts(ctx, subject)
+	if err != nil {
+		return nil, nil, err
+	}
+	for _, account := range accounts {
+		credential, err := s.DNS.AccountExecutionBinding(ctx, subject, account.ID)
+		if err != nil || credential != s.PublicCertificates.o.DNSCredentialID {
+			continue
+		}
+		zones, err := s.DNS.ListZones(ctx, subject, account.ID)
+		if err != nil {
+			return nil, nil, err
+		}
+		for _, zone := range zones {
+			if zone.Status == dns.ZoneActive &&
+				s.PublicCertificates.zone(ctx, tasks.Task{SubmitterID: subject}, zone.ID, zone.Name) == nil {
+				eligibleZones = append(eligibleZones, publicCertificateChoice{ID: zone.ID, Name: zone.Name})
+			}
+		}
+	}
+	return eligibleNodes, eligibleZones, nil
+}
+
 func (s *Server) registerPublicCertificateRoutes() {
 	s.registerPublicRenewalRoutes()
 	s.registerDNSProviderTaskRoutes()
@@ -52,7 +97,13 @@ func (s *Server) registerPublicCertificateRoutes() {
 			releaseSourceJSON(w, 503, map[string]string{"code": "ACME_DEPLOYMENT_UNAVAILABLE"})
 			return
 		}
-		releaseSourceJSON(w, 200, map[string]any{"profileSha256": s.PublicCertificates.profileSHA, "websitePrivateKeyOnController": false, "configured": true, "dnsCredentialId": s.PublicCertificates.o.DNSCredentialID, "dnsCredentialRevision": s.PublicCertificates.o.DNSCredentialRevision})
+		choices, zones, guideErr := s.publicCertificateChoices(r.Context(), id.SubjectID)
+		releaseSourceJSON(w, 200, map[string]any{
+			"profileSha256": s.PublicCertificates.profileSHA, "websitePrivateKeyOnController": false,
+			"configured": true, "dnsCredentialId": s.PublicCertificates.o.DNSCredentialID,
+			"dnsCredentialRevision": s.PublicCertificates.o.DNSCredentialRevision,
+			"nodes":                 choices, "zones": zones, "choicesAvailable": guideErr == nil,
+		})
 	})
 	s.mux.HandleFunc("POST /api/v1/certificates/public-tasks", func(w http.ResponseWriter, r *http.Request) {
 		id, requestID, err := s.authenticateIdentity(r)

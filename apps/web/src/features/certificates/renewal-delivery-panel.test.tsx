@@ -15,6 +15,7 @@ function routes(blocked = false): FetchRoutes {
 }
 async function open() {
  fireEvent.click(await screen.findByRole("tab", { name: "公网 HTTPS 证书" }));
+ fireEvent.click(await screen.findByText("续签、批量发布与手动操作"));
  fireEvent.click(await screen.findByRole("button", { name: "安装发布编排" }));
  await screen.findByLabelText("需要更新的现有发布计划 ID");
 }

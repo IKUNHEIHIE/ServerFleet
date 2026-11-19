@@ -195,6 +195,12 @@ AI 侧审批收敛为会话范围的三档：`per_action`（每次询问）、`a
 - 三条路由均需当前管理员身份，写操作需 CSRF 与同源。策略过期或清理仍在运行时返回 409 `LOG_CLEANUP_CONFLICT`。
 - `lastRun` 包含 `startedAt`、`cutoff`、`scheduled`、`auditEvents`、`taskLogs`。完成后提供 `finishedAt`。批量删除和进度原子保存，重启后恢复未完成工作。
 
+## 证书管理引导
+
+- `GET /api/v1/certificates/public-profile` 增加 `choicesAvailable`、`nodes` 和 `zones`。节点选项来自当前主体可读的在线节点及真实协商的网站 CSR、安装能力，DNS 选项来自签发配置绑定的已同步有效区域。原签发配置字段保留。
+- `GET /api/v1/certificates/internal/distributions` 增加 `configured`，说明当前内部签发器、任务和服务组读取组件是否已配置。
+- 公网引导用既有 CSR、签发和安装任务接口。页面读取当前任务及已核验回执，自动匹配 DNS，带入任务关联和公开证书链。审批继续走既有任务接口，发布 HTTPS 是独立操作。
+
 ## 维护索引
 
 ```sh
