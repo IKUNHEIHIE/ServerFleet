@@ -27,6 +27,44 @@ func credentialInput(secret string) CredentialInput {
 func credentialOp(session LoginSession, m CredentialMetadata, id, action string) CredentialOperation {
 	return CredentialOperation{SubjectID: session.Identity.SubjectID, CredentialID: m.ID, Module: "ai", Source: "web", OperationID: id, PlanDigest: strings.Repeat("c", 64), Action: action, ExpectedRevision: m.Revision}
 }
+func TestAIModelGenerationCredentialLoanUsesProviderBudget(t *testing.T) {
+	vault, _, _, session := credentialFixture(t)
+	ctx := context.Background()
+	meta, err := vault.Create(ctx, session.Secret, session.CSRF, credentialInput("synthetic-model-key"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, test := range []struct {
+		id         string
+		wantWithin time.Duration
+		parent     time.Duration
+	}{
+		{"ai-generation-one", 3 * time.Minute, 0},
+		{"ai-generation-two", time.Minute, time.Minute},
+		{"ai-models-one", 30 * time.Second, 0},
+	} {
+		t.Run(test.id, func(t *testing.T) {
+			ctx := context.Background()
+			if test.parent > 0 {
+				bounded, cancel := context.WithTimeout(ctx, test.parent)
+				defer cancel()
+				ctx = bounded
+			}
+			op := credentialOp(session, meta, test.id, "use")
+			op.Source = "ai"
+			if err := vault.UseForService(ctx, op, func(useCtx context.Context, _ []byte) error {
+				deadline, ok := useCtx.Deadline()
+				if remaining := time.Until(deadline); !ok || remaining > test.wantWithin || remaining < test.wantWithin-15*time.Second {
+					t.Errorf("remaining credential loan = %v, want close to %v", remaining, test.wantWithin)
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestCredentialEncryptedLifecycleAndIdempotence(t *testing.T) {
 	ctx := context.Background()
 	v, store, _, session := credentialFixture(t)

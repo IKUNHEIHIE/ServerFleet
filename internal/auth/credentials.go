@@ -536,11 +536,14 @@ func (v *CredentialService) UseForService(ctx context.Context, op CredentialOper
 		}
 	}()
 	loanTimeout := 30 * time.Second
-	// Backup transfer is bounded but may stream a full encrypted bundle. This
-	// exception applies only to the registered backup module, with current
-	// operation authorization before/after the loan and per-chunk service gates.
-	if op.Module == "backups" {
+	switch {
+	case op.Module == "backups":
+		// The backup service may stream a full encrypted bundle.
 		loanTimeout = 10 * time.Minute
+	case op.Module == "ai" && op.Source == "ai" && strings.HasPrefix(op.OperationID, "ai-generation-"):
+		// Give model streams the provider's three-minute budget. The caller
+		// deadline remains an upper bound, and completion still rechecks access.
+		loanTimeout = 3 * time.Minute
 	}
 	useCtx, cancel := context.WithTimeout(ctx, loanTimeout)
 	defer cancel()
