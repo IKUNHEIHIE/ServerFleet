@@ -4,6 +4,8 @@
 
 会话 codex-telemetry-batch-20261119-01。范围为 awskr 独立任务树 /home/admin/sf-telemetry-batch-20261119 和测试站 Controller。保留一秒握手周期和实时节点指标，验证流量批结算、重试、计费边界及五节点重连，记录部署前后同口径采样。
 
+已部署测试站；五节点重连、会话握手、任务回执、批结算及周期边界通过。见[版本与实测](TELEMETRY-BATCH-20261119.md)。
+
 ## MANAGED-WEBSITES-20261119
 
 会话 `codex-managed-websites-20261119-01`。工作范围为 awskr 独立工作树 `/home/admin/sf-managed-certificates-20261119` 和测试站组件。用户选择同域名使用同一张证书。验收目标为主控签发、自动续签、快捷选择和逐节点安装回执。隔离验证使用专用测试域名和供应商夹具。保留现有历史证书与任务。
