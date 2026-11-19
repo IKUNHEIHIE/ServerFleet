@@ -11,15 +11,7 @@ import (
 
 // These are host interface counters, not provider billing. Interface changes and
 // resets are reported to the Controller rather than presented as monthly usage.
-func networkMetricPoints(observed int64) []*agentv1.MetricPoint {
-	raw, e := readBoundedProcFile("/proc/net/dev")
-	if e != nil {
-		return nil
-	}
-	rx, tx, interfaces, e := parseProcNetDev(raw)
-	if e != nil {
-		return nil
-	}
+func networkMetricPoints(observed int64, rx, tx uint64, interfaces string) []*agentv1.MetricPoint {
 	return []*agentv1.MetricPoint{
 		{Name: "network.rx_bytes", Value: float64(rx), Unit: "bytes", ObservedAtUnixMs: observed},
 		{Name: "network.tx_bytes", Value: float64(tx), Unit: "bytes", ObservedAtUnixMs: observed},

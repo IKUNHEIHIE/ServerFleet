@@ -286,6 +286,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 	established := make(chan struct{})
 	executed := make(chan struct{}, 4)
 	var establishedOnce sync.Once
+	var metrics agentMetricsSampler
 	cfg := agentSessionConfig{
 		NodeID: facts.NodeID, BootID: bootID, Version: request.AgentVersion, ServerName: endpoint.serverName,
 		RootSPKISHA256: pin, ProtocolMajor: 1, ProtocolMinor: minor, MaxConcurrent: 1, Semantic: semantic, Frames: frames, Files: files,
@@ -295,7 +296,7 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 		},
 		Admit:         admit,
 		Probe:         socket.Ping,
-		InitialSample: sampleAgentMetrics,
+		InitialSample: metrics.Sample,
 		Established:   func() { establishedOnce.Do(func() { close(established) }) },
 		ExecutionFinished: func(string, string) {
 			select {

@@ -21,28 +21,55 @@ type cpuTimes struct {
 	total, idle uint64
 }
 
-// sampleAgentMetrics reads real local counters; it never fabricates a sample.
-// Only the Linux Agent profile is admitted by the controller, so other platforms
-// fail closed instead of reporting process memory as host usage.
-func sampleAgentMetrics(ctx context.Context) (*agentv1.MetricsBatch, error) {
+type agentCounterSample struct {
+	cpu        cpuTimes
+	at         time.Time
+	rx, tx     uint64
+	interfaces string
+}
+
+type agentMetricsSampler struct {
+	previous agentCounterSample
+}
+
+func readAgentCounters() (agentCounterSample, error) {
+	cpu, err := readProcCPU("/proc/stat")
+	if err != nil {
+		return agentCounterSample{}, err
+	}
+	sample := agentCounterSample{cpu: cpu, at: time.Now()}
+	if raw, err := readBoundedProcFile("/proc/net/dev"); err == nil {
+		rx, tx, interfaces, err := parseProcNetDev(raw)
+		if err == nil {
+			sample.rx, sample.tx, sample.interfaces = rx, tx, interfaces
+		}
+	}
+	return sample, nil
+}
+
+// Sample warms up the CPU measurement on connection. Subsequent ticks reuse the
+// previous real counter snapshot so sampling never blocks the reporting ticker.
+func (s *agentMetricsSampler) Sample(ctx context.Context) (*agentv1.MetricsBatch, error) {
 	if ctx == nil || ctx.Err() != nil || runtime.GOOS != "linux" {
 		return nil, errMetricsUnavailable
 	}
-	first, err := readProcCPU("/proc/stat")
-	if err != nil {
-		return nil, errMetricsUnavailable
+	previous := s.previous
+	if previous.at.IsZero() {
+		first, err := readAgentCounters()
+		if err != nil {
+			return nil, errMetricsUnavailable
+		}
+		previous = first
+		timer := time.NewTimer(900 * time.Millisecond)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+		case <-ctx.Done():
+			return nil, errMetricsUnavailable
+		}
 	}
-	networkBefore, networkErr := readBoundedProcFile("/proc/net/dev")
-	startedAt := time.Now()
-	timer := time.NewTimer(900 * time.Millisecond)
-	defer timer.Stop()
-	select {
-	case <-timer.C:
-	case <-ctx.Done():
-		return nil, errMetricsUnavailable
-	}
-	second, err := readProcCPU("/proc/stat")
-	if err != nil || second.total <= first.total {
+	current, err := readAgentCounters()
+	if err != nil || current.cpu.total <= previous.cpu.total {
 		return nil, errMetricsUnavailable
 	}
 	memoryPercent, err := readProcMemory("/proc/meminfo")
@@ -53,27 +80,24 @@ func sampleAgentMetrics(ctx context.Context) (*agentv1.MetricsBatch, error) {
 	if err != nil {
 		return nil, errMetricsUnavailable
 	}
-	now := time.Now().UnixMilli()
+	now := current.at.UnixMilli()
 	points := []*agentv1.MetricPoint{
-		{Name: "cpu", Value: cpuPercent(first, second), Unit: "percent", ObservedAtUnixMs: now},
+		{Name: "cpu", Value: cpuPercent(previous.cpu, current.cpu), Unit: "percent", ObservedAtUnixMs: now},
 		{Name: "memory", Value: memoryPercent, Unit: "percent", ObservedAtUnixMs: now},
 	}
-	points = append(points, networkMetricPoints(now)...)
-	if networkErr == nil {
-		if after, e := readBoundedProcFile("/proc/net/dev"); e == nil {
-			rx1, tx1, set1, e1 := parseProcNetDev(networkBefore)
-			rx2, tx2, set2, e2 := parseProcNetDev(after)
-			elapsed := time.Since(startedAt).Seconds()
-			if e1 == nil && e2 == nil && set1 == set2 && rx2 >= rx1 && tx2 >= tx1 && elapsed > 0 {
-				points = append(points,
-					&agentv1.MetricPoint{Name: "network.download_bps", Value: float64(rx2-rx1) / elapsed, Unit: "bytes/second", ObservedAtUnixMs: now},
-					&agentv1.MetricPoint{Name: "network.upload_bps", Value: float64(tx2-tx1) / elapsed, Unit: "bytes/second", ObservedAtUnixMs: now})
-			}
+	if current.interfaces != "" {
+		points = append(points, networkMetricPoints(now, current.rx, current.tx, current.interfaces)...)
+		elapsed := current.at.Sub(previous.at).Seconds()
+		if current.interfaces == previous.interfaces && current.rx >= previous.rx && current.tx >= previous.tx && elapsed > 0 {
+			points = append(points,
+				&agentv1.MetricPoint{Name: "network.download_bps", Value: float64(current.rx-previous.rx) / elapsed, Unit: "bytes/second", ObservedAtUnixMs: now},
+				&agentv1.MetricPoint{Name: "network.upload_bps", Value: float64(current.tx-previous.tx) / elapsed, Unit: "bytes/second", ObservedAtUnixMs: now})
 		}
 	}
 	if disk, ok := sampleDiskPercent(); ok {
 		points = append(points, &agentv1.MetricPoint{Name: "disk.used_percent", Value: disk, Unit: "percent", ObservedAtUnixMs: now})
 	}
+	s.previous = current
 	return &agentv1.MetricsBatch{Points: points, BatchId: batchID}, nil
 }
 

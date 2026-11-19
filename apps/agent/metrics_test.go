@@ -7,6 +7,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestParseProcCPUStatAggregateLine(t *testing.T) {
@@ -60,8 +61,9 @@ func TestParseProcMemInfo(t *testing.T) {
 }
 
 func TestSampleAgentMetricsFailsClosedOffLinux(t *testing.T) {
+	var sampler agentMetricsSampler
 	if runtime.GOOS == "linux" {
-		sample, err := sampleAgentMetrics(context.Background())
+		sample, err := sampler.Sample(context.Background())
 		if err != nil {
 			t.Fatalf("linux sample: %v", err)
 		}
@@ -89,7 +91,28 @@ func TestSampleAgentMetricsFailsClosedOffLinux(t *testing.T) {
 		}
 		return
 	}
-	if _, err := sampleAgentMetrics(context.Background()); err == nil {
+	if _, err := sampler.Sample(context.Background()); err == nil {
 		t.Fatal("non-Linux metrics sample succeeded")
+	}
+}
+
+func TestAgentMetricsSamplerReusesPreviousCounters(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("requires real Linux counters")
+	}
+	var sampler agentMetricsSampler
+	first, err := sampler.Sample(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(50 * time.Millisecond)
+	ctx, stop := context.WithTimeout(context.Background(), 750*time.Millisecond)
+	defer stop()
+	second, err := sampler.Sample(ctx)
+	if err != nil {
+		t.Fatalf("second sample must finish within the reporting interval: %v", err)
+	}
+	if second.GetBatchId() == first.GetBatchId() || second.GetPoints()[0].GetObservedAtUnixMs() <= first.GetPoints()[0].GetObservedAtUnixMs() {
+		t.Fatalf("sample did not advance: %v", second)
 	}
 }
