@@ -187,6 +187,14 @@ AI 侧审批收敛为会话范围的三档：`per_action`（每次询问）、`a
 5. v0.9.1 / R37 的身份续期、读取授权、就绪/诊断及升级接口见 [身份运维](../development/IDENTITY-OPERATIONS.md)、[R37 修订](../contracts/revisions/v09-r37-identity-operations.md)与[候选](../../api/openapi/revisions/v09-r37/identity-operations-candidate.json)；不能继续用旧候选推断“无续期/无 readyz”。
 6. [R39](../contracts/revisions/v09-r39-pki-raw.md)修复链与安装命令，不新增业务字段。前端重构按当前 DTO/处理器交叉核验候选，现有客户端只是消费方，不反向定义服务端契约。
 
+## 系统维护日志清理
+
+- `GET /api/v1/settings/log-cleanup` 返回 `revision`、`retentionDays`、`scheduled`，可选 `nextRunAt` 和 `lastRun`。初始保留 15 天，定时关闭。
+- `PUT /api/v1/settings/log-cleanup` 接受 `{expectedRevision, retentionDays, scheduled}`，保留天数为 1–3650 的整数。开启后 24 小时首次执行，随后每天执行一次。
+- `POST /api/v1/settings/log-cleanup/run` 接受 `{expectedRevision}`。返回 202 与清理状态，调用方通过 GET 查看进度。清理使用已保存的保留天数，删除范围为时间严格早于截止时间的审计事件和已结束任务的执行日志。
+- 三条路由均需当前管理员身份，写操作需 CSRF 与同源。策略过期或清理仍在运行时返回 409 `LOG_CLEANUP_CONFLICT`。
+- `lastRun` 包含 `startedAt`、`cutoff`、`scheduled`、`auditEvents`、`taskLogs`。完成后提供 `finishedAt`。批量删除和进度原子保存，重启后恢复未完成工作。
+
 ## 维护索引
 
 ```sh

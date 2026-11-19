@@ -201,6 +201,7 @@ type Server struct {
 
 	runCancel      context.CancelFunc
 	runDone        chan struct{}
+	logCleanupWake chan struct{}
 	schedulerReady atomic.Bool
 }
 
@@ -1014,6 +1015,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	s.Certificates = certificatesService
 	s.Publishing = publishingService
+	s.logCleanupWake = make(chan struct{}, 1)
 	s.mux = http.NewServeMux()
 	s.registerInstallationCatalogRoutes(cfg.InstallationCatalog)
 	s.registerInstallationScriptRoutes(cfg.InstallationCatalog)
@@ -1038,8 +1040,9 @@ func (s *Server) startTaskScheduler() {
 	go func() {
 		defer close(s.runDone)
 		var workers sync.WaitGroup
-		workers.Add(1)
+		workers.Add(2)
 		go func() { defer workers.Done(); defer s.schedulerReady.Store(false); _ = s.Tasks.Run(ctx) }()
+		go func() { defer workers.Done(); s.runLogCleanup(ctx) }()
 		if s.cleanupEnabled {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()

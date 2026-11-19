@@ -448,6 +448,22 @@ func (r *Repo) AppendLog(ctx context.Context, q storage.Queryer, entry LogEntry)
 	return err
 }
 
+// PurgeTerminalLogsBatchTx expires stored output for finished tasks. Task
+// entities, approval records, and lifecycle events stay available for review.
+func (r *Repo) PurgeTerminalLogsBatchTx(ctx context.Context, tx storage.Tx, cutoff time.Time, batch int) (int64, error) {
+	// Use a whole-second boundary for the RFC3339Nano text stored in at.
+	threshold := cutoff.UTC().Format("2006-01-02T15:04:05")
+	outcome, err := tx.Exec(ctx, `DELETE FROM task_logs WHERE id IN (
+		SELECT l.id FROM task_logs l JOIN tasks t ON t.id = l.task_id
+		WHERE l.at < ? AND t.status IN (?, ?, ?, ?, ?, ?)
+		ORDER BY l.at, l.id LIMIT ?)`,
+		threshold, StatusCompleted, StatusPartialFailure, StatusFailed, StatusCanceled, StatusExpired, StatusUnknown, batch)
+	if err != nil {
+		return 0, err
+	}
+	return outcome.RowsAffected()
+}
+
 func (r *Repo) Logs(ctx context.Context, taskID string, afterID int64, limit int) ([]LogEntry, error) {
 	if limit <= 0 {
 		limit = 200

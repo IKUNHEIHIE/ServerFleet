@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from "react";
-import { BellRing, Globe2, KeyRound, RefreshCw, Sparkles, UserRound, type LucideIcon } from "lucide-react";
+import { BellRing, Globe2, KeyRound, RefreshCw, Sparkles, Trash2, UserRound, type LucideIcon } from "lucide-react";
 import { useSession } from "@/app/session";
 import { AsyncPanel } from "@/components/ui/async-panel";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { authApi, credentialsApi } from "@/lib/api/endpoints";
+import { LogCleanupPanel } from "./log-cleanup-panel";
 import { NotificationsSettings } from "./notifications-settings";
 import { RestrictedTokensPanel } from "./restricted-tokens-panel";
 import { ControllerUpdatePanel } from "@/features/updates/updates-page";
@@ -20,7 +21,7 @@ import type { CredentialMetadata, Session } from "@/lib/api/dto";
 import { useAction, useResource } from "@/lib/data/use-resource";
 import { formatDateTime } from "@/lib/format";
 
-type Tab = "credentials" | "dns" | "ai" | "security" | "notifications" | "updates";
+type Tab = "credentials" | "dns" | "ai" | "security" | "notifications" | "updates" | "logCleanup";
 
 const KIND_LABEL: Record<CredentialMetadata["kind"], string> = {
   cloudflare_token: "Cloudflare API Token",
@@ -46,12 +47,13 @@ const SETTINGS_TABS: readonly { id: Tab; label: string; description: string; ico
   { id: "ai", label: "AI 模型", description: "选择模型和密钥，或直接新增 AI API Key。", icon: Sparkles },
   { id: "notifications", label: "通知渠道", description: "配置告警发送渠道和投递方式。", icon: BellRing },
   { id: "updates", label: "系统更新", description: "检查并安装 Controller 与 Agent 更新。", icon: RefreshCw },
+  { id: "logCleanup", label: "日志清理", description: "清理过期的审计事件和已结束任务的执行日志。", icon: Trash2 },
 ];
 
 const SETTINGS_GROUPS: readonly { label: string; ids: readonly Tab[] }[] = [
   { label: "账号与密钥", ids: ["credentials", "security"] },
   { label: "业务集成", ids: ["dns", "ai", "notifications"] },
-  { label: "维护", ids: ["updates"] },
+  { label: "维护", ids: ["updates", "logCleanup"] },
 ];
 
 function CredentialEditor({
@@ -375,6 +377,8 @@ export function SettingsPage() {
       {tab === "dns" ? <DnsAccountsPanel key={session.viewEpoch} /> : null}
 
       {tab === "ai" ? <AiModelSettingsPanel key={session.viewEpoch} /> : null}
+
+      {tab === "logCleanup" ? <LogCleanupPanel key={session.viewEpoch} /> : null}
 
       {tab === "updates" ? (
         <div className="space-y-4">

@@ -137,3 +137,42 @@ describe("settings credentials", () => {
     });
   });
 });
+
+describe("log cleanup settings", () => {
+  it("shows the default and submits the saved schedule and manual cleanup", async () => {
+    let policy = { revision: 1, retentionDays: 15, scheduled: false };
+    let finished = false;
+    const path = "/api/v1/settings/log-cleanup";
+    const { calls } = await loginAndOpen("/settings", {
+      "GET /api/v1/settings/log-cleanup": () => jsonResponse({
+        ...policy,
+        lastRun: finished ? { finishedAt: "2026-11-19T00:00:00Z", auditEvents: 12, taskLogs: 3 } : undefined,
+      }),
+      "PUT /api/v1/settings/log-cleanup": () => {
+        policy = { revision: 2, retentionDays: 30, scheduled: true };
+        return jsonResponse(policy);
+      },
+      "POST /api/v1/settings/log-cleanup/run": () => {
+        finished = true;
+        return jsonResponse(policy, 202);
+      },
+    });
+    fireEvent.click(screen.getByRole("tab", { name: "日志清理" }));
+    const input = await screen.findByLabelText("保留天数");
+    expect(input).toHaveValue(15);
+    expect(screen.getByRole("checkbox", { name: "每天自动清理" })).not.toBeChecked();
+    fireEvent.change(input, { target: { value: "30" } });
+    fireEvent.click(screen.getByRole("checkbox", { name: "每天自动清理" }));
+    fireEvent.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(await screen.findByText("保留最近 30 天的日志。")).toBeVisible();
+    expect(JSON.parse(String(calls.find(call => call.method === "PUT" && call.url === path)?.init?.body)))
+      .toEqual({ expectedRevision: 1, retentionDays: 30, scheduled: true });
+    fireEvent.click(screen.getByRole("button", { name: "一键清理日志" }));
+    const dialog = await screen.findByRole("dialog", { name: "清理过期日志" });
+    expect(calls.some(call => call.method === "POST" && call.url === path + "/run")).toBe(false);
+    fireEvent.click(within(dialog).getByRole("button", { name: "确认清理" }));
+    expect(await screen.findByText(/已删除 12 条审计事件和 3 条任务日志/)).toBeVisible();
+    expect(JSON.parse(String(calls.find(call => call.method === "POST" && call.url === path + "/run")?.init?.body)))
+      .toEqual({ expectedRevision: 2 });
+  });
+});

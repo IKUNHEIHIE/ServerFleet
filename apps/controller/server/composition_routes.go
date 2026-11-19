@@ -20,6 +20,7 @@ import (
 func (s *Server) registerRoutes() error {
 	s.registerOperatorIncidentRoutes()
 	s.registerBackupMaintenanceRoutes()
+	s.registerLogCleanupRoutes()
 	s.mux.HandleFunc("GET /readyz", s.readiness)
 	s.mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

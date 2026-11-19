@@ -280,13 +280,7 @@ func (r *SQLRecorder) PurgeBefore(ctx context.Context, cutoff time.Time, actor, 
 			if err := txCtx.Err(); err != nil {
 				return err
 			}
-			outcome, err := tx.Exec(txCtx, `DELETE FROM audit_events WHERE id IN (
-				SELECT id FROM audit_events WHERE at < ? ORDER BY id LIMIT ?)`,
-				cutoff.UTC().Format(time.RFC3339Nano), batch)
-			if err != nil {
-				return err
-			}
-			affected, err := outcome.RowsAffected()
+			affected, err := r.PurgeExpiredBatchTx(txCtx, tx, cutoff, batch)
 			if err != nil {
 				return err
 			}
@@ -300,6 +294,28 @@ func (r *SQLRecorder) PurgeBefore(ctx context.Context, cutoff time.Time, actor, 
 		return 0, err
 	}
 	return removed, nil
+}
+
+// PurgeExpiredBatchTx removes one batch. The caller must persist an audit
+// retention event before any deletion in the same cleanup operation.
+func (r *SQLRecorder) PurgeExpiredBatchTx(ctx context.Context, tx storage.Tx, cutoff time.Time, batch int) (int64, error) {
+	if cutoff.IsZero() || cutoff.After(r.now().Add(-time.Hour)) {
+		return 0, ErrRetentionTooRecent
+	}
+	if batch < 1 || batch > 10000 {
+		return 0, ErrInvalidBatch
+	}
+	threshold := cutoff.UTC().Format(time.RFC3339Nano)
+	if cutoff.Nanosecond() == 0 {
+		// A whole-second boundary sorts before all timestamps in that second.
+		threshold = threshold[:len(threshold)-1]
+	}
+	outcome, err := tx.Exec(ctx, `DELETE FROM audit_events WHERE id IN (
+		SELECT id FROM audit_events WHERE at < ? ORDER BY at, id LIMIT ?)`, threshold, batch)
+	if err != nil {
+		return 0, err
+	}
+	return outcome.RowsAffected()
 }
 
 // Count returns the number of stored events.

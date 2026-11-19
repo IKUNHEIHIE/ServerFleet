@@ -95,6 +95,7 @@ func Migrations() [][]storage.Migration {
 		recovery.ResidentAuthorityMigrations(),
 		updates.AcquisitionMigrations(),
 		audit.Migrations(),
+		{logCleanupMigration()},
 	}
 }
 

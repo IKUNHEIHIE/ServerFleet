@@ -1,4 +1,28 @@
 import { apiClient } from "./client";
+
+export interface LogCleanupPolicy {
+  revision: number;
+  retentionDays: number;
+  scheduled: boolean;
+  nextRunAt?: string;
+  lastRun?: {
+    startedAt: string;
+    cutoff: string;
+    finishedAt?: string;
+    auditEvents: number;
+    taskLogs: number;
+    scheduled: boolean;
+  };
+}
+const logCleanupPath = "/api/v1/settings/log-cleanup";
+export const logCleanupApi = {
+  get: (signal?: AbortSignal) => apiClient.request<LogCleanupPolicy>(logCleanupPath, { signal }),
+  configure: (expectedRevision: number, retentionDays: number, scheduled: boolean) =>
+    apiClient.request<LogCleanupPolicy>(logCleanupPath, { method: "PUT", body: { expectedRevision, retentionDays, scheduled } }),
+  run: (expectedRevision: number) =>
+    apiClient.request<LogCleanupPolicy>(`${logCleanupPath}/run`, { method: "POST", body: { expectedRevision } }),
+};
+
 export interface BackupDestination { kind: "s3" | "webdav"; endpoint: string; bucket?: string; region?: string; prefix: string; credentialRef: string; credentialRevision: number }
 export interface BackupPolicy { revision: number; ownerId: string; updatedAt: string; scheduledBackups: boolean; intervalHours: number; autoUpload: boolean; scheduleCleanup: boolean; localDays: number; localKeep: number; remoteDays: number; remoteKeep: number; requireVerifiedRemote: boolean; destination?: BackupDestination }
 export type BackupPolicyInput = Omit<BackupPolicy, "revision" | "ownerId" | "updatedAt">;
