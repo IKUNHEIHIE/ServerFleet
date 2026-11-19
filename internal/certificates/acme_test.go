@@ -374,6 +374,10 @@ func (f *fakeACMEServer) order(w http.ResponseWriter, r *http.Request) {
 	if f.orderStatus == "valid" {
 		body["certificate"] = f.server.URL + "/certificate"
 	}
+	if f.finalizeProcessing && f.orderStatus == "processing" {
+		// Publish processing once, then expose the completed order on the next poll.
+		f.orderStatus = "valid"
+	}
 	writeACMEMap(w, body)
 }
 
@@ -629,13 +633,6 @@ func TestACMEDNS01PollsProcessingOrder(t *testing.T) {
 	fake.finalizeProcessing = true
 	signer := newTestKeySigner(t, "account-key", "cert-key")
 	client := newACMEClient(t, fake, signer, newACMEPublisher(fake))
-	// Let the fake transition processing -> valid on the first order poll.
-	go func() {
-		time.Sleep(50 * time.Millisecond)
-		fake.mu.Lock()
-		fake.orderStatus = "valid"
-		fake.mu.Unlock()
-	}()
 	if _, err := client.IssueDNS01(context.Background(), certificates.ACMERequest{CommonName: "app.example.com", KeyRef: "cert-key"}); err != nil {
 		t.Fatal(err)
 	}
