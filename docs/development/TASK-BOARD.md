@@ -4,6 +4,8 @@
 
 会话 `codex-managed-websites-20261119-01`。工作范围为 awskr 独立工作树 `/home/admin/sf-managed-certificates-20261119` 和测试站组件。用户选择同域名使用同一张证书。验收目标为主控签发、自动续签、快捷选择和逐节点安装回执。隔离验证使用专用测试域名和供应商夹具。保留现有历史证书与任务。
 
+测试站已部署。隔离签发、续签、文件安装、页面快速选择和 PostgreSQL 迁移通过。实机核对主控就绪、同机 Agent 下发能力及五节点在线。见[回执](MANAGED-WEBSITES-20261119.md)。
+
 ## 2026-11-19 15:57 测试站已部署证书操作引导
 
 CERTIFICATE-GUIDE-20261119 / codex-certificate-guide-20261119-01，范围为 awskr 工作树、测试站和经确认的验收域名。
