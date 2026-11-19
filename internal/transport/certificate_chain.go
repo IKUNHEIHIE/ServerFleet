@@ -97,8 +97,15 @@ func VerifyNodeCertificateChain(raw, csrDER []byte, domain string, roots *x509.C
 		return nil, ErrPeerIdentity
 	}
 	csr, err := x509.ParseCertificateRequest(csrDER)
+	if err != nil || csr.CheckSignature() != nil {
+		return nil, ErrPeerIdentity
+	}
+	return verifyWebsiteChain(certs, csr.RawSubjectPublicKeyInfo, domain, roots, now)
+}
+
+func verifyWebsiteChain(certs []*x509.Certificate, spki []byte, domain string, roots *x509.CertPool, now time.Time) (*x509.Certificate, error) {
 	leaf := certs[0]
-	if err != nil || csr.CheckSignature() != nil || leaf.IsCA || !bytes.Equal(leaf.RawSubjectPublicKeyInfo, csr.RawSubjectPublicKeyInfo) || len(leaf.DNSNames) != 1 || leaf.DNSNames[0] != domain || now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) {
+	if leaf.IsCA || !bytes.Equal(leaf.RawSubjectPublicKeyInfo, spki) || len(leaf.DNSNames) != 1 || leaf.DNSNames[0] != domain || now.Before(leaf.NotBefore) || !now.Before(leaf.NotAfter) {
 		return nil, ErrPeerIdentity
 	}
 	host := domain
@@ -112,7 +119,7 @@ func VerifyNodeCertificateChain(raw, csrDER []byte, domain string, roots *x509.C
 		}
 		intermediate.AddCert(cert)
 	}
-	if _, err = leaf.Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediate, DNSName: host, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
+	if _, err := leaf.Verify(x509.VerifyOptions{Roots: roots, Intermediates: intermediate, DNSName: host, CurrentTime: now, KeyUsages: []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth}}); err != nil {
 		return nil, ErrPeerIdentity
 	}
 	return leaf, nil

@@ -25,6 +25,7 @@ import (
 
 type publicCertificateExecution struct {
 	renewals                            publicRenewalState
+	managedMu                           sync.Mutex
 	publicationDNSLocks                 [64]sync.Mutex
 	s                                   *Server
 	authorityID                         string
@@ -175,19 +176,19 @@ func (m *publicCertificateExecution) Execute(ctx context.Context, t tasks.Task) 
 	}
 	publisher, err := dns.NewACMEChallengePublisher(dns.ACMEPublisherConfig{Service: m.s.DNS, SubjectID: t.SubmitterID, RequestID: t.RequestID, ZoneID: zoneID, TTL: 60})
 	if err != nil {
-		return m.finish(ctx, t, order, nil, err, nil)
+		return m.finish(ctx, t, order, nil, err, nil, nil)
 	}
 	tracked := &trackedCertificateChallenges{manager: m, scope: scope, next: publisher, pending: map[string]certificateChallengeState{}}
 	client, err := certificates.NewACMEClient(certificates.ACMEConfig{DirectoryURL: m.o.DirectoryURL, Client: m.acmeClient, AccountKey: "account", Signer: privateACMEAccountSigner{manager: m, scope: scope}, Challenge: tracked, TrustRoots: m.acmeRoots, Timeout: issuanceTimeout})
 	if err != nil {
-		return m.finish(ctx, t, order, nil, err, tracked)
+		return m.finish(ctx, t, order, nil, err, tracked, nil)
 	}
 	csrDER, err := base64.StdEncoding.Strict().DecodeString(csr.PublicResult.CSRDER)
 	if err != nil {
-		return m.finish(ctx, t, order, nil, err, tracked)
+		return m.finish(ctx, t, order, nil, err, tracked, nil)
 	}
 	issued, issueErr := client.IssueDNS01WithCSR(ctx, certificates.ACMERequest{CommonName: csr.Domain, KeyRef: certificates.KeyRef(csr.KeyRef)}, csrDER)
-	return m.finish(ctx, t, order, &issued, issueErr, tracked)
+	return m.finish(ctx, t, order, &issued, issueErr, tracked, nil)
 }
 
 type certificateChallengeState struct {
@@ -256,10 +257,10 @@ func (p *trackedCertificateChallenges) persist(ctx context.Context) error {
 		if err := certificates.ObservePublicOrderChallengesTx(ctx, tx, p.scope.task.ID, p.scope.task.PlanHash, records); err != nil {
 			return err
 		}
-		return p.manager.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: p.scope.task.SubmitterID, Action: actionPublicCertificateIssue, Result: "allowed", RequestID: p.scope.task.RequestID, TaskID: p.scope.task.ID, Source: audit.Source(p.scope.task.Source), ReasonCode: "dns_challenge_observation", At: time.Now().UTC()})
+		return p.manager.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: p.scope.task.SubmitterID, Action: p.scope.task.ActionID, Result: "allowed", RequestID: p.scope.task.RequestID, TaskID: p.scope.task.ID, Source: audit.Source(p.scope.task.Source), ReasonCode: "dns_challenge_observation", At: time.Now().UTC()})
 	})
 }
-func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, order certificates.PublicOrder, issued *certificates.ACMEIssued, issueErr error, tracked *trackedCertificateChallenges) (map[string]tasks.WorkerResult, error) {
+func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, order certificates.PublicOrder, issued *certificates.ACMEIssued, issueErr error, tracked *trackedCertificateChallenges, complete func(context.Context, storage.Tx, certificates.PublicOrder) error) (map[string]tasks.WorkerResult, error) {
 	finalCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	pending := []certificateChallengeState{}
@@ -303,14 +304,23 @@ func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, o
 		if err := certificates.FinishPublicOrderTx(ctx, tx, order); err != nil {
 			return err
 		}
+		if code == tasks.NodeResultSucceeded && complete != nil {
+			if err := complete(ctx, tx, order); err != nil {
+				return err
+			}
+		}
 		result := "failure"
 		if code == tasks.NodeResultSucceeded {
 			result = "success"
 		}
-		return m.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: t.SubmitterID, Action: actionPublicCertificateIssue, Result: result, RequestID: t.RequestID, TaskID: t.ID, NodeIDs: []string{order.NodeID}, Source: audit.Source(t.Source), ReasonCode: "public_order_terminal_observed", At: order.UpdatedAt})
+		var nodeIDs []string
+		if order.NodeID != "" {
+			nodeIDs = []string{order.NodeID}
+		}
+		return m.s.Audit.AppendTx(ctx, tx, audit.Event{SubjectID: t.SubmitterID, Action: t.ActionID, Result: result, RequestID: t.RequestID, TaskID: t.ID, NodeIDs: nodeIDs, Source: audit.Source(t.Source), ReasonCode: "public_order_terminal_observed", At: order.UpdatedAt})
 	})
 	if err != nil {
 		code = tasks.NodeResultUnknown
 	}
-	return map[string]tasks.WorkerResult{order.NodeID: {Code: code, Message: order.Status + "; no automatic replay of CA/provider effects"}}, nil
+	return map[string]tasks.WorkerResult{t.Targets[0].NodeID: {Code: code, Message: order.Status + "; no automatic replay of CA/provider effects"}}, nil
 }

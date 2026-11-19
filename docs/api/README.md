@@ -128,7 +128,7 @@ v0.9.2 / [R39](../contracts/revisions/v09-r39-pki-raw.md) 修复 provisioned 完
 | 节点/分组/服务组 | `/nodes`、`/groups`、`/service-groups` | 区分分类与业务成员，节点操作按资源授权 |
 | 任务/文件 | `/tasks`、`/files`、`/transfers` | 预览/独立审批/终态；文件根映射、摘要、实际路径和显式续传 |
 | 网关/发布 | `/gateways`、`/gateway-routes`、`/publications` | 可信部署配置及当前目标权限，发布阶段任务/补偿；`/publishing/publications`兼容同处理器 |
-| DNS/证书 | `/dns`、`/certificates` | Cloudflare、ACME、内部PKI配置；CSR/安装/续签/替换是独立任务链 |
+| DNS/证书 | `/dns`、`/certificates` | Cloudflare、ACME 和内部 PKI 配置；主控签发后按节点选择下发 |
 | AI/工作流 | `/ai`、`/workflows` | AI资源范围/模型/审批；工作流1—32步、参数string-map、事件触发、步骤经统一任务 |
 | 监控/通知/流量 | `/availability-monitors`、`/traffic-risks`、`/notifications`、节点traffic相关路径 | 源节点权限、当前owner、通知凭据、真实计数覆盖；旧`/monitoring/`前缀兼容 |
 | 更新/备份/恢复/处置 | `/system`、`/backups`、`/disaster-recovery`、`/operations/incidents` | 可信supervisor、加密/存储凭据、恢复隔离、独立审批和新鲜证据 |
@@ -195,11 +195,13 @@ AI 侧审批收敛为会话范围的三档：`per_action`（每次询问）、`a
 - 三条路由均需当前管理员身份，写操作需 CSRF 与同源。策略过期或清理仍在运行时返回 409 `LOG_CLEANUP_CONFLICT`。
 - `lastRun` 包含 `startedAt`、`cutoff`、`scheduled`、`auditEvents`、`taskLogs`。完成后提供 `finishedAt`。批量删除和进度原子保存，重启后恢复未完成工作。
 
-## 证书管理引导
+## 主控管理网站证书
 
-- `GET /api/v1/certificates/public-profile` 增加 `choicesAvailable`、`nodes` 和 `zones`。节点选项来自当前主体可读的在线节点及真实协商的网站 CSR、安装能力，DNS 选项来自签发配置绑定的已同步有效区域。原签发配置字段保留。
-- `GET /api/v1/certificates/internal/distributions` 增加 `configured`，说明当前内部签发器、任务和服务组读取组件是否已配置。
-- 公网引导用既有 CSR、签发和安装任务接口。页面读取当前任务及已核验回执，自动匹配 DNS，带入任务关联和公开证书链。审批继续走既有任务接口，发布 HTTPS 是独立操作。
+- 新增 `GET /api/v1/certificates/websites`，返回 `configured`、域名记录和当前可见节点。证书记录提供代数、到期时间、续签时间、任务状态和当前证书在节点上的相对路径。节点选项提供上线状态和已协商的下发能力。
+- 新增 `POST /api/v1/certificates/websites`。传字符串 `operation`、`domain`、`idempotencyKey`。`issue` 和 `auto-renew` 另传 `autoRenew` 为 `"true"` 或 `"false"`，`deliver` 另传 `nodeIds` 为逗号分隔的去重节点 ID。首次签发和手动下发提交后返回 `202` 和既有任务审批所需的任务 ID。
+- 续签绑定当前域名、原证书版本和 DNS 区域。自动下发使用上次确认的固定节点范围。Controller 使用 `certificates.website.issue` 本地任务，Agent 用 `certificates.website.install` 安装受控证书。
+- `POST /api/v1/agent/website-certificate` 是 Agent 专用 mTLS 接口。通过当前运行任务、计划摘要、执行和节点身份校验后返回相应证书材料。Web 清单与任务日志只有状态、文件路径和公开标识。
+- 移除旧公网签发配置、CSR 任务创建、签发任务创建、安装任务创建、证书集合登记和旧续签写入入口。历史任务与已安装证书仍可查询。旧计划停止调度，旧订单的 DNS 验证记录保留清理能力。内部证书接口和发布服务已有证书引用保留。
 
 ## 维护索引
 

@@ -65,70 +65,46 @@ describe("certificates page", () => {
   });
 });
 
-describe("public certificate guide", () => {
-  it("matches DNS and reuses the verified task and certificate without asking to copy IDs", async () => {
-    const profile = {
-      configured: true, choicesAvailable: true, profileSha256: "a".repeat(64),
-      nodes: [{ id: "install-node", name: "网站节点" }],
-      zones: [{ id: "parent", name: "example.com" }, { id: "more-specific", name: "lab.example.com" }],
+describe("Controller-managed website certificates", () => {
+  it("requests a domain independently and supports selecting only compatible nodes", async () => {
+    const path = "/api/v1/certificates/websites";
+    const inventory = {
+      configured: true,
+      items: [{
+        domain: "other.example.com", generation: 1, autoRenew: true, nodeIds: [],
+        issue: { id: "issued", status: "completed", planHash: "digest" }, delivery: null,
+        notAfter: "2099-01-01T00:00:00Z",
+      }],
+      nodes: [
+        { id: "node-east", name: "East site", online: true, supported: true },
+        { id: "node-west", name: "West site", online: true, supported: true },
+        { id: "node-old", name: "Old site", online: true, supported: false },
+        { id: "node-offline", name: "Offline site", online: false, supported: false },
+      ],
     };
-    let approved = false;
-    const task = (taskId: string) => jsonResponse({ taskId, planHash: "b".repeat(64), status: "awaiting_approval", approvalRequired: true }, 202);
-    const done = (id: string) => jsonResponse({ jobId: id, state: "completed", targetNodeIdsSnapshot: ["install-node"] });
-    const routes: FetchRoutes = {
+    const { calls } = await renderAuthenticated("/certificates", {
       ...certRoutes(),
-      "GET /api/v1/certificates/public-profile": () => jsonResponse(profile),
-      "POST /api/v1/certificates/csr-tasks": () => task("guide-csr"),
-      "GET /api/v1/tasks/guide-csr": () => approved ? done("guide-csr") : jsonResponse({
-        jobId: "guide-csr", state: "awaiting_approval", targetNodeIdsSnapshot: ["install-node"],
-      }),
-      "POST /api/v1/tasks/guide-csr/approve": () => {
-        approved = true;
-        return jsonResponse({ taskId: "guide-csr", state: "queued" });
-      },
-      "GET /api/v1/certificates/csr-tasks/guide-csr": () => jsonResponse({
-        taskId: "guide-csr", result: { nodeId: "install-node", domain: "site.lab.example.com" },
-      }),
-      "POST /api/v1/certificates/public-tasks": () => task("guide-issue"),
-      "GET /api/v1/tasks/guide-issue": () => done("guide-issue"),
-      "GET /api/v1/certificates/public-tasks/guide-issue": () => jsonResponse({
-        taskId: "guide-issue", csrTaskId: "guide-csr", nodeId: "install-node", domain: "site.lab.example.com",
-        orderStatus: "issued", certificatePemBase64: "Y2hhaW4=", pendingCleanupCount: 0,
-      }),
-      "POST /api/v1/certificates/chain-tasks": () => task("guide-install"),
-      "GET /api/v1/tasks/guide-install": () => done("guide-install"),
-      "GET /api/v1/certificates/chain-tasks/guide-install": () => jsonResponse({
-        taskId: "guide-install", csrTaskId: "guide-csr",
-        result: { nodeId: "install-node", domain: "site.lab.example.com", notAfter: "2027-01-01T10:00:00Z" },
-      }),
-    };
-    const { calls } = await renderAuthenticated("/certificates", routes);
-    fireEvent.click(await screen.findByRole("tab", { name: "公网 HTTPS 证书" }));
-    expect(await screen.findByLabelText("安装节点")).toHaveValue("install-node");
-    const domain = screen.getByLabelText("网站域名");
-    fireEvent.change(domain, { target: { value: "not-example.com" } });
-    expect(screen.getByRole("button", { name: "开始申请" })).toBeDisabled();
-    fireEvent.change(domain, { target: { value: "SITE.lab.example.com" } });
-    expect(screen.getByText("DNS 区域 lab.example.com")).toBeVisible();
-    fireEvent.click(screen.getByRole("button", { name: "开始申请" }));
-    expect(calls.some(call => call.url.endsWith("/approve"))).toBe(false);
-    fireEvent.click(await screen.findByRole("button", { name: "批准生成申请" }));
-    fireEvent.click(await screen.findByRole("button", { name: "提交签发" }));
-    fireEvent.click(await screen.findByRole("button", { name: "提交安装" }));
-    expect(await screen.findByText("节点已安装证书")).toBeVisible();
-    const posted = (path: string) => JSON.parse(String(calls.find(call => call.method === "POST" && call.url === path)?.init?.body));
-    expect(posted("/api/v1/certificates/csr-tasks")).toMatchObject({ nodeId: "install-node", domain: "site.lab.example.com", keyRef: expect.stringMatching(/^tls-/) });
-    expect(posted("/api/v1/certificates/public-tasks")).toMatchObject({ csrTaskId: "guide-csr", zoneId: "more-specific" });
-    expect(posted("/api/v1/certificates/chain-tasks")).toMatchObject({ csrTaskId: "guide-csr", certificatePemBase64: "Y2hhaW4=" });
-    expect(posted("/api/v1/tasks/guide-csr/approve")).toEqual({ planDigest: "b".repeat(64), decision: "approve" });
-  });
-
-  it("shows an actionable error before submitting to an unconfigured internal issuer", async () => {
-    await renderAuthenticated("/certificates", {
-      ...certRoutes(),
-      "GET /api/v1/certificates/internal/distributions": () => jsonResponse({ items: [], configured: false }),
+      [`GET ${path}`]: () => jsonResponse(inventory),
+      [`POST ${path}`]: () => jsonResponse({ taskId: "next", status: "awaiting_approval", approvalRequired: true }, 202),
     });
-    expect(await screen.findByText("内部 TLS 签发尚未配置")).toBeVisible();
-    expect(screen.getByRole("button", { name: "新建下发" })).toBeDisabled();
+    fireEvent.click(await screen.findByRole("tab", { name: "公网 HTTPS 证书" }));
+    const domain = await screen.findByLabelText("网站域名");
+    fireEvent.change(domain, { target: { value: "new.example.com" } });
+    fireEvent.click(screen.getByRole("button", { name: "申请证书" }));
+    const posted = () => calls.filter(call => call.method === "POST" && call.url === path)
+      .map(call => JSON.parse(String(call.init?.body)));
+    await waitFor(() => expect(posted()[0]).toMatchObject({
+      operation: "issue", domain: "new.example.com", autoRenew: "true",
+    }));
+    fireEvent.click(await screen.findByRole("button", { name: "选择节点下发" }));
+    const dialog = await screen.findByRole("dialog", { name: "选择下发节点" });
+    expect(within(dialog).getByRole("checkbox", { name: /Old site/ })).toBeDisabled();
+    expect(within(dialog).getByRole("checkbox", { name: /Offline site/ })).toBeDisabled();
+    fireEvent.change(within(dialog).getByLabelText("搜索节点"), { target: { value: "west" } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "全选匹配节点" }));
+    fireEvent.click(within(dialog).getByRole("button", { name: "提交下发" }));
+    await waitFor(() => expect(posted()[1]).toMatchObject({
+      operation: "deliver", domain: "other.example.com", nodeIds: "node-west",
+    }));
   });
 });

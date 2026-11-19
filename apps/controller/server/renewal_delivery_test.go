@@ -105,6 +105,7 @@ func TestRenewalDeliveryHTTPRejectsUnreviewedUnknownAndNeverReplays(t *testing.T
 		t.Fatal(e)
 	}
 	s.PublicCertificates = &publicCertificateExecution{s: s}
+	s.registerPublicRenewalRoutes()
 	path := "/api/v1/certificates/public-renewals/renew-one/delivery"
 	body := map[string]any{"expectedRevision": 0, "policyRevision": 1, "enabled": true, "publicationIds": []string{}}
 	if code, _ = request("POST", path, body, ""); code != 403 {

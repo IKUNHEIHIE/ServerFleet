@@ -1,9 +1,4 @@
-import { PublicCertificateGuide } from "./public-certificate-guide";
-import { PublicCertificatePanel } from "./public-certificate-panel";
-import { PublicRenewalPanel } from "./public-renewal-panel";
-import { NodeCertificatePanel } from "./node-certificate-panel";
-import { NodeCSRPanel } from "./node-csr-panel";
-import { CertificateCleanupPanel } from "./certificate-cleanup-panel";
+import { ManagedWebsiteCertificates } from "./managed-website-certificates";
 import { useEffect, useState, type FormEvent } from "react";
 import { RefreshCw } from "lucide-react";
 import { useSession } from "@/app/session";
@@ -12,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { EmptyState, Notice } from "@/components/ui/feedback";
 import { Checkbox, Field, Select, TextInput } from "@/components/ui/form";
 import { Modal } from "@/components/ui/modal";
-import { PageHeader, Panel, SectionDivider } from "@/components/ui/panel";
+import { PageHeader, Panel } from "@/components/ui/panel";
 import { DataTable, TabBar } from "@/components/ui/table";
 import { describeApiError } from "@/lib/api/errors";
 import { certificatesApi } from "@/lib/api/endpoints-infra";
@@ -47,7 +42,6 @@ export function CertificatesPage() {
   const session = useSession();
   const [tab, setTab] = useState<"internal" | "public">("internal");
   const [createOpen, setCreateOpen] = useState(false);
-  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [detailId, setDetailId] = useState<string | null>(null);
   const [revoking, setRevoking] = useState<InternalCertificateJob | null>(null);
   const [rotating, setRotating] = useState<InternalCertificateJob | null>(null);
@@ -154,26 +148,7 @@ export function CertificatesPage() {
         ]}
       />
 
-      {tab === "public" ? (
-        <div className="space-y-5">
-          <PublicCertificateGuide key={session.viewEpoch} />
-          <details className="rounded-xl border border-border bg-card p-4" open={advancedOpen} onToggle={event => setAdvancedOpen(event.currentTarget.open)}>
-            <summary className="cursor-pointer text-sm font-semibold">续签、批量发布与手动操作</summary>
-            {advancedOpen ? <>
-            <div className="mt-4 grid gap-5 xl:grid-cols-2 xl:items-start">
-              <PublicRenewalPanel key={`renewal:${session.viewEpoch}`} />
-              <NodeCSRPanel key={session.viewEpoch} />
-              <PublicCertificatePanel key={`public:${session.viewEpoch}`} />
-              <NodeCertificatePanel key={`chain:${session.viewEpoch}`} />
-            </div>
-            <div className="mt-4">
-              <SectionDivider label="DNS 验证记录清理" />
-              <CertificateCleanupPanel key={`cleanup:${session.viewEpoch}`} />
-            </div>
-            </> : null}
-          </details>
-        </div>
-      ) : null}
+      {tab === "public" ? <ManagedWebsiteCertificates key={session.viewEpoch} /> : null}
 
       {tab === "internal" ? (
         <div className="space-y-5">

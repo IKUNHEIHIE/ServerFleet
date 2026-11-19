@@ -2,7 +2,7 @@
 
 由 `node scripts/api-docs.mjs --write` 从 Go AST 与已登记 OpenAPI 生成；不要手改。
 
-共 **291** 个不同的 method/path 声明，其中 **16** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
+共 **290** 个不同的 method/path 声明，其中 **19** 个尚无同路径或明确兼容别名 OpenAPI 候选。声明包含别名、可选配置和拒绝式入口，**不代表全部功能已装配或可执行**。GET 的隐式 HEAD 不单独计数。
 
 入口、安全规则、手写协议端点和字段规范见 [接口使用说明](README.md)。候选列列出登记顺序中最后一个同路径或明确别名参考（JSON 的 candidateMatch 区分两者）；字段仍须结合该领域实现/修订说明，不能用路径匹配冒充字段审计。完整候选引用见 [JSON](route-inventory.json)。
 
@@ -13,6 +13,7 @@
 | POST | `/api/v1/agent/command-admission` | [command_tasks.go](../../apps/controller/server/command_tasks.go) · registerCommandRoutes | [checkNormalCommandAdmissionR20](../../api/openapi/revisions/v09-r20/command-profiles-candidate.yaml) |
 | POST | `/api/v1/agent/root-admission` | [command_tasks.go](../../apps/controller/server/command_tasks.go) · registerCommandRoutes | [checkRootBrokerAdmissionR20](../../api/openapi/revisions/v09-r20/command-profiles-candidate.yaml) |
 | POST | `/api/v1/agent/update-admission` | [resident_updates.go](../../apps/controller/server/resident_updates.go) · registerResidentUpdateRoutes | [residentSupervisorCurrentAdmission](../../api/openapi/revisions/v09-r22/resident-updates-candidate.yaml) |
+| POST | `/api/v1/agent/website-certificate` | [managed_website_http.go](../../apps/controller/server/managed_website_http.go) · registerManagedWebsiteRoutes | 未覆盖；以源码和领域说明为准 |
 
 ## ai
 
@@ -110,21 +111,19 @@
 | GET | `/api/v1/certificates/cleanup` | [cleanup_http.go](../../internal/certificates/cleanup_http.go) · RegisterCleanupHTTP | [listCertificateCleanupR7](../../api/openapi/revisions/v09-r7/services-candidate.yaml) |
 | GET | `/api/v1/certificates/csr-tasks/{taskId}` | [certificate_csr.go](../../apps/controller/server/certificate_csr.go) · registerCertificateCSRRoutes | [readCompletedNodeCSRTaskR14](../../api/openapi/revisions/v09-r14/node-csr-candidate.yaml) |
 | GET | `/api/v1/certificates/internal/distributions` | [http.go](../../internal/certificates/http.go) · RegisterHTTP | [listInternalCertDistributions](../../api/openapi/g2-merged-candidate.yaml) |
-| GET | `/api/v1/certificates/public-profile` | [acme_http.go](../../apps/controller/server/acme_http.go) · registerPublicCertificateRoutes | [publicCertificateProfileR17](../../api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml) |
 | GET | `/api/v1/certificates/public-renewals` | [certificate_renewals.go](../../apps/controller/server/certificate_renewals.go) · registerPublicRenewalRoutes | [listPublicRenewalPoliciesR24](../../api/openapi/revisions/v09-r24/public-renewals-candidate.yaml) |
 | GET | `/api/v1/certificates/public-renewals/{policyId}/delivery` | [renewal_delivery.go](../../apps/controller/server/renewal_delivery.go) · registerRenewalDeliveryRoutes | [getRenewalDelivery](../../api/openapi/revisions/v09-r31/delivery-candidate.yaml) |
 | GET | `/api/v1/certificates/public-tasks/{taskId}` | [acme_http.go](../../apps/controller/server/acme_http.go) · registerPublicCertificateRoutes | [observePublicCertificateOrderR17](../../api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml) |
-| POST | `/api/v1/certificates/chain-tasks` | [certificate_install.go](../../apps/controller/server/certificate_install.go) · registerCertificateInstallRoutes | [createNodeCertificateInstallR15](../../api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml) |
+| GET | `/api/v1/certificates/websites` | [managed_website_http.go](../../apps/controller/server/managed_website_http.go) · registerManagedWebsiteRoutes | 未覆盖；以源码和领域说明为准 |
 | POST | `/api/v1/certificates/cleanup/{cleanupId}/cancel` | [cleanup_http.go](../../internal/certificates/cleanup_http.go) · RegisterCleanupHTTP | [cancelCertificateCleanupR7](../../api/openapi/revisions/v09-r7/services-candidate.yaml) |
 | POST | `/api/v1/certificates/cleanup/{cleanupId}/retry` | [cleanup_http.go](../../internal/certificates/cleanup_http.go) · RegisterCleanupHTTP | [retryCertificateCleanupR7](../../api/openapi/revisions/v09-r7/services-candidate.yaml) |
-| POST | `/api/v1/certificates/csr-tasks` | [certificate_csr.go](../../apps/controller/server/certificate_csr.go) · registerCertificateCSRRoutes | [createNodeCSRTaskR14](../../api/openapi/revisions/v09-r14/node-csr-candidate.yaml) |
 | POST | `/api/v1/certificates/internal/distributions` | [http.go](../../internal/certificates/http.go) · RegisterHTTP | [createInternalCertDistribution](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/certificates/internal/distributions/{distributionId}/revoke` | [http.go](../../internal/certificates/http.go) · RegisterHTTP | [revokeInternalCertDistribution](../../api/openapi/g2-merged-candidate.yaml) |
 | POST | `/api/v1/certificates/node-sets` | [certificate_set.go](../../apps/controller/server/certificate_set.go) · registerCertificateSetRoutes | [freezeNodeCertificateSetR16](../../api/openapi/revisions/v09-r16/node-certificate-sets-candidate.yaml) |
 | POST | `/api/v1/certificates/public-renewals` | [certificate_renewals.go](../../apps/controller/server/certificate_renewals.go) · registerPublicRenewalRoutes | [configurePublicRenewalPolicyR24](../../api/openapi/revisions/v09-r24/public-renewals-candidate.yaml) |
 | POST | `/api/v1/certificates/public-renewals/{policyId}/delivery` | [renewal_delivery.go](../../apps/controller/server/renewal_delivery.go) · registerRenewalDeliveryRoutes | [configureRenewalDelivery](../../api/openapi/revisions/v09-r31/delivery-candidate.yaml) |
 | POST | `/api/v1/certificates/public-renewals/{policyId}/delivery/recover` | [renewal_recovery.go](../../apps/controller/server/renewal_recovery.go) · registerRenewalRecoveryRoute | [recoverRenewalDelivery](../../api/openapi/revisions/v09-r31/delivery-candidate.yaml) |
-| POST | `/api/v1/certificates/public-tasks` | [acme_http.go](../../apps/controller/server/acme_http.go) · registerPublicCertificateRoutes | [submitPublicCertificateTaskR17](../../api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml) |
+| POST | `/api/v1/certificates/websites` | [managed_website_http.go](../../apps/controller/server/managed_website_http.go) · registerManagedWebsiteRoutes | 未覆盖；以源码和领域说明为准 |
 
 ## commands
 

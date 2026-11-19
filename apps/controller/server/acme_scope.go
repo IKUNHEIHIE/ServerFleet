@@ -93,6 +93,24 @@ func (m *publicCertificateExecution) current(ctx context.Context, scope *publicC
 		if e != nil || p["zoneId"] != scope.zoneID || m.mutationCurrent(ctx, scope.task, p) != nil {
 			return auth.ErrDenied
 		}
+	} else if scope.task.ActionID == actionManagedWebsiteIssue {
+		var domain, zone string
+		if scope.cleanup {
+			order, err := certificates.ReadPublicOrder(ctx, m.s.DB, scope.task.ID)
+			if err != nil || order.PlanSHA256 != scope.task.PlanHash || order.ProfileSHA256 != m.profileSHA {
+				return auth.ErrDenied
+			}
+			domain, zone = order.Domain, order.ZoneID
+		} else {
+			site, err := m.managedIssueSite(ctx, scope.task)
+			if err != nil {
+				return auth.ErrDenied
+			}
+			domain, zone = site.Domain, site.ZoneID
+		}
+		if zone != scope.zoneID || m.zone(ctx, scope.task, zone, domain) != nil {
+			return auth.ErrDenied
+		}
 	} else {
 		if scope.task.Source == "system" && !scope.cleanup {
 			var p map[string]string

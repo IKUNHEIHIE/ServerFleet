@@ -22,21 +22,25 @@ func (m *publicCertificateExecution) inspectionExecution(authority string, worke
 	}
 	m.authorityID = authority
 	workers[actionDNSProviderInspect] = dnsInspectionWorker{manager: m}
+	workers[actionManagedWebsiteIssue] = managedWebsiteWorker{manager: m}
 	workers[actionDNSRecordApply] = dnsMutationWorker{manager: m}
 	workers[actionPublicationDNSApply] = publicationDNSWorker{manager: m}
 	workers[actionPublicationDNSRollback] = publicationDNSWorker{manager: m}
-	return &tasks.ControllerExecution{AuthorityID: authority, Actions: map[string]tasks.ControllerAction{actionDNSProviderInspect: {}, actionDNSRecordApply: {RequireApproval: true}, actionPublicationDNSApply: {RequireApproval: true}, actionPublicationDNSRollback: {RequireApproval: true}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
-		if action != actionDNSProviderInspect && action != actionDNSRecordApply && action != actionPublicationDNSApply && action != actionPublicationDNSRollback {
+	return &tasks.ControllerExecution{AuthorityID: authority, Actions: map[string]tasks.ControllerAction{actionManagedWebsiteIssue: {AllowSystem: true}, actionDNSProviderInspect: {}, actionDNSRecordApply: {RequireApproval: true}, actionPublicationDNSApply: {RequireApproval: true}, actionPublicationDNSRollback: {RequireApproval: true}}, Authorize: func(ctx context.Context, subject, action, operation string) error {
+		if action != actionManagedWebsiteIssue && action != actionDNSProviderInspect && action != actionDNSRecordApply && action != actionPublicationDNSApply && action != actionPublicationDNSRollback {
 			return auth.ErrDenied
 		}
 		return m.s.Identity.AuthorizeAdministrator(ctx, subject)
 	}}, nil
 }
 func (m *publicCertificateExecution) validExecutionTask(ctx context.Context, t tasks.Task) bool {
-	if (t.Source != "web" && !(t.Source == "system" && t.ActionID == actionPublicCertificateIssue)) || t.ScopeRevision != 0 || t.PluginID != "" {
+	if (t.Source != "web" && !(t.Source == "system" && (t.ActionID == actionPublicCertificateIssue || t.ActionID == actionManagedWebsiteIssue))) || t.ScopeRevision != 0 || t.PluginID != "" {
 		return false
 	}
 	switch t.ActionID {
+	case actionManagedWebsiteIssue:
+		_, err := m.managedIssueSite(ctx, t)
+		return err == nil
 	case actionPublicationDNSApply, actionPublicationDNSRollback:
 		_, _, err := m.parseBatchTask(ctx, t)
 		return err == nil

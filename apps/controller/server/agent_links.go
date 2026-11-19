@@ -25,16 +25,17 @@ const agentOfferLifetime = 9 * time.Minute
 // approvals still come from the sole task service before any offer is sent.
 func agentAllowedActions() map[string]string {
 	return map[string]string{
-		transport.ProbeCapability:          "1",
-		"tasks.command":                    "1",
-		transport.CommandCapability:        "1",
-		transport.ResidentUpdateAction:     "1",
-		transport.CertificateCSRAction:     "1",
-		transport.CertificateInstallAction: "1",
-		transport.FileCapability:           "1",
-		transport.FileResumeCapability:     "1",
-		"host.patch":                       "1",
-		"host.root":                        "1",
+		transport.ProbeCapability:                 "1",
+		"tasks.command":                           "1",
+		transport.CommandCapability:               "1",
+		transport.ResidentUpdateAction:            "1",
+		transport.CertificateCSRAction:            "1",
+		transport.CertificateInstallAction:        "1",
+		transport.WebsiteCertificateInstallAction: "1",
+		transport.FileCapability:                  "1",
+		transport.FileResumeCapability:            "1",
+		"host.patch":                              "1",
+		"host.root":                               "1",
 	}
 }
 

@@ -263,6 +263,8 @@ func runOneShotLink(ctx context.Context, request agentruntime.ConnectRequest, en
 			return errAgentConnect
 		}
 		capability.roots = roots
+		executor.actions[transport.WebsiteCertificateInstallAction] = capability.ManagedWebsiteAction(endpoint, admissionClient)
+		semantic.AllowedActions[transport.WebsiteCertificateInstallAction] = "1"
 		executor.actions[transport.CertificateInstallAction] = capability.InstallAction()
 		semantic.AllowedActions[transport.CertificateInstallAction] = "1"
 		executor.actions[transport.CertificateCSRAction] = capability.Action()

@@ -613,9 +613,6 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		// not inherit the task-scoped credential gate.
 	}
 	workers := map[string]tasks.Worker{}
-	if publicCertificates != nil {
-		workers[actionPublicCertificateIssue] = publicCertificates
-	}
 	if s.FileWorker != nil {
 		workers[files.ActionTransfer] = s.FileWorker
 		workers[files.ActionResume] = s.FileWorker
@@ -1057,7 +1054,7 @@ func (s *Server) startTaskScheduler() {
 		}
 		if s.PublicCertificates != nil {
 			workers.Add(1)
-			go func() { defer workers.Done(); s.runPublicRenewalSchedule(ctx) }()
+			go func() { defer workers.Done(); s.runManagedWebsiteSchedule(ctx) }()
 		}
 		if s.notificationAuthority != "" {
 			workers.Add(3)

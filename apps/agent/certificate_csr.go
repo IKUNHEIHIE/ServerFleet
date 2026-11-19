@@ -15,15 +15,17 @@ import (
 	"encoding/pem"
 	"os"
 	"path/filepath"
+	"sync"
 
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 	"serverfleet.local/serverfleet/internal/transport"
 )
 
 type certificateCSRCapability struct {
-	root   *os.Root
-	nodeID string
-	roots  *x509.CertPool
+	managedMu sync.Mutex
+	root      *os.Root
+	nodeID    string
+	roots     *x509.CertPool
 }
 
 func newCertificateCSRCapability(directory, nodeID, fileRoot string) (*certificateCSRCapability, error) {

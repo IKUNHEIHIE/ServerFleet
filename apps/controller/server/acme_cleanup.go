@@ -24,20 +24,22 @@ func (c publicCertificateCleaner) DeleteChallengeRecord(ctx context.Context, sub
 	if err != nil {
 		return certificates.ErrCleanupUnavailable
 	}
-	csrID, zoneID, err := m.requestParams(task)
-	if err != nil {
-		return certificates.ErrCleanupUnavailable
-	}
 	order, err := certificates.ReadPublicOrder(ctx, m.s.DB, task.ID)
-	if err != nil || order.CSRTaskID != csrID || order.ZoneID != zoneID || order.PlanSHA256 != task.PlanHash || order.ProfileSHA256 != m.profileSHA || order.Domain != record.Domain {
+	if err != nil || order.PlanSHA256 != task.PlanHash || order.ProfileSHA256 != m.profileSHA || order.Domain != record.Domain {
 		return certificates.ErrCleanupUnavailable
 	}
-	scope := m.taskScope(task, zoneID)
+	if task.ActionID != actionManagedWebsiteIssue {
+		csrID, zoneID, err := m.requestParams(task)
+		if err != nil || order.CSRTaskID != csrID || order.ZoneID != zoneID {
+			return certificates.ErrCleanupUnavailable
+		}
+	}
+	scope := m.taskScope(task, order.ZoneID)
 	scope.cleanup = true
 	scope.cleanupID = record.ID
 	scope.requestID = requestID
 	scoped := m.scope(ctx, scope)
-	if m.current(scoped, scope) != nil || m.zone(scoped, task, zoneID, record.Domain) != nil {
+	if m.current(scoped, scope) != nil || m.zone(scoped, task, order.ZoneID, record.Domain) != nil {
 		return certificates.ErrCleanupUnavailable
 	}
 	return c.next.DeleteChallengeRecord(scoped, subject, requestID, fqdn, recordID, value)

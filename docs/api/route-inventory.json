@@ -858,24 +858,6 @@
     },
     {
       "method": "GET",
-      "path": "/api/v1/certificates/public-profile",
-      "declarations": [
-        {
-          "source": "apps/controller/server/acme_http.go",
-          "owner": "registerPublicCertificateRoutes"
-        }
-      ],
-      "candidateMatch": "exact",
-      "candidates": [
-        {
-          "file": "api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml",
-          "path": "/api/v1/certificates/public-profile",
-          "operationId": "publicCertificateProfileR17"
-        }
-      ]
-    },
-    {
-      "method": "GET",
       "path": "/api/v1/certificates/public-renewals",
       "declarations": [
         {
@@ -927,6 +909,18 @@
           "operationId": "observePublicCertificateOrderR17"
         }
       ]
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/certificates/websites",
+      "declarations": [
+        {
+          "source": "apps/controller/server/managed_website_http.go",
+          "owner": "registerManagedWebsiteRoutes"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
     },
     {
       "method": "GET",
@@ -3170,6 +3164,18 @@
     },
     {
       "method": "POST",
+      "path": "/api/v1/agent/website-certificate",
+      "declarations": [
+        {
+          "source": "apps/controller/server/managed_website_http.go",
+          "owner": "registerManagedWebsiteRoutes"
+        }
+      ],
+      "candidateMatch": "none",
+      "candidates": []
+    },
+    {
+      "method": "POST",
       "path": "/api/v1/ai/model-settings/models",
       "declarations": [
         {
@@ -3801,24 +3807,6 @@
     },
     {
       "method": "POST",
-      "path": "/api/v1/certificates/chain-tasks",
-      "declarations": [
-        {
-          "source": "apps/controller/server/certificate_install.go",
-          "owner": "registerCertificateInstallRoutes"
-        }
-      ],
-      "candidateMatch": "exact",
-      "candidates": [
-        {
-          "file": "api/openapi/revisions/v09-r15/node-certificate-chain-candidate.yaml",
-          "path": "/api/v1/certificates/chain-tasks",
-          "operationId": "createNodeCertificateInstallR15"
-        }
-      ]
-    },
-    {
-      "method": "POST",
       "path": "/api/v1/certificates/cleanup/{cleanupId}/cancel",
       "declarations": [
         {
@@ -3850,24 +3838,6 @@
           "file": "api/openapi/revisions/v09-r7/services-candidate.yaml",
           "path": "/api/v1/certificates/cleanup/{cleanupId}/retry",
           "operationId": "retryCertificateCleanupR7"
-        }
-      ]
-    },
-    {
-      "method": "POST",
-      "path": "/api/v1/certificates/csr-tasks",
-      "declarations": [
-        {
-          "source": "apps/controller/server/certificate_csr.go",
-          "owner": "registerCertificateCSRRoutes"
-        }
-      ],
-      "candidateMatch": "exact",
-      "candidates": [
-        {
-          "file": "api/openapi/revisions/v09-r14/node-csr-candidate.yaml",
-          "path": "/api/v1/certificates/csr-tasks",
-          "operationId": "createNodeCSRTaskR14"
         }
       ]
     },
@@ -3981,21 +3951,15 @@
     },
     {
       "method": "POST",
-      "path": "/api/v1/certificates/public-tasks",
+      "path": "/api/v1/certificates/websites",
       "declarations": [
         {
-          "source": "apps/controller/server/acme_http.go",
-          "owner": "registerPublicCertificateRoutes"
+          "source": "apps/controller/server/managed_website_http.go",
+          "owner": "registerManagedWebsiteRoutes"
         }
       ],
-      "candidateMatch": "exact",
-      "candidates": [
-        {
-          "file": "api/openapi/revisions/v09-r17/public-certificate-tasks-candidate.yaml",
-          "path": "/api/v1/certificates/public-tasks",
-          "operationId": "submitPublicCertificateTaskR17"
-        }
-      ]
+      "candidateMatch": "none",
+      "candidates": []
     },
     {
       "method": "POST",

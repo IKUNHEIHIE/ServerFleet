@@ -112,6 +112,14 @@ func (s *Server) nodeProbeTaskCurrent(ctx context.Context, t tasks.Task) error {
 	return s.bindNodeProbe(ctx, r, t)
 }
 func (s *Server) currentTask(ctx context.Context, t tasks.Task) error {
+	switch t.ActionID {
+	case actionPublicCertificateIssue, transport.CertificateCSRAction, transport.CertificateInstallAction:
+		// Historical tasks remain readable and cancellable after the switch.
+		return tasks.ErrInvalidTask
+	case transport.WebsiteCertificateInstallAction:
+		_, err := s.managedDeliverySite(ctx, t)
+		return err
+	}
 	if t.ActionID == transport.ProbeCapability {
 		return s.nodeProbeTaskCurrent(ctx, t)
 	}
