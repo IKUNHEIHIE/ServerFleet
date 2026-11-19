@@ -137,6 +137,7 @@ type fakeACMEServer struct {
 	published          map[string]string
 	badNonceOnce       bool
 	nonceRejections    int
+	nonceRequests      int
 	rejectChallenge    bool
 	failFinalize       bool
 	finalizeProcessing bool
@@ -214,6 +215,7 @@ func (f *fakeACMEServer) directory(w http.ResponseWriter, _ *http.Request) {
 
 func (f *fakeACMEServer) newNonce(w http.ResponseWriter, _ *http.Request) {
 	f.mu.Lock()
+	f.nonceRequests++
 	nonce := f.newNonceLocked()
 	f.mu.Unlock()
 	w.Header().Set("Replay-Nonce", nonce)
@@ -561,6 +563,12 @@ func TestACMEDNS01IssuanceWithVerifiedJWS(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	fake.mu.Lock()
+	nonceRequests := fake.nonceRequests
+	fake.mu.Unlock()
+	if nonceRequests != 1 {
+		t.Fatalf("nonce requests = %d, want initial fetch only", nonceRequests)
 	}
 	if len(issued.CertificatePEM) == 0 || len(issued.ChainPEM) <= len(issued.CertificatePEM) {
 		t.Fatalf("issued = %+v", issued)

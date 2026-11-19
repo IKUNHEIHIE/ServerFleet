@@ -103,6 +103,8 @@ type ACMEClient struct {
 	dirMu           sync.Mutex
 	directory       acmeDirectory
 	dirFetched      bool
+	nonceMu         sync.Mutex
+	replayNonce     string
 	directoryOrigin string
 	accountKey      KeyRef
 	signer          ACMESigner
@@ -208,9 +210,10 @@ type acmeIdentifier struct {
 }
 
 type acmeChallenge struct {
-	Type  string `json:"type"`
-	URL   string `json:"url"`
-	Token string `json:"token"`
+	Type  string       `json:"type"`
+	URL   string       `json:"url"`
+	Token string       `json:"token"`
+	Error *acmeProblem `json:"error"`
 }
 
 type acmeJWK struct {
@@ -580,6 +583,11 @@ func (c *ACMEClient) waitAuthorization(ctx context.Context, accountURL, authzURL
 		case "valid":
 			return nil
 		case "invalid", "deactivated", "expired", "revoked":
+			for _, challenge := range authz.Challenges {
+				if challenge.Type == "dns-01" && challenge.Error != nil {
+					return errors.Join(ErrACMEChallenge, challenge.Error)
+				}
+			}
 			return fmt.Errorf("%w: authorization %s", ErrACMEChallenge, authz.Status)
 		}
 		select {
@@ -701,9 +709,14 @@ func (s *acmeCSRSigner) Sign(_ io.Reader, digest []byte, opts crypto.SignerOpts)
 	return value, nil
 }
 
-// postJWS signs one request. newNonce is fetched lazily; a badNonce problem is
-// retried exactly once with the nonce from the failed response.
+// postJWS consumes each response nonce once. Fetch a nonce on first use,
+// and retry a badNonce response only with a fresh nonce.
 func (c *ACMEClient) postJWS(ctx context.Context, endpoint string, payload any, jwk *acmeJWK, kid, nonce string) (http.Header, []byte, int, error) {
+	if nonce == "" {
+		c.nonceMu.Lock()
+		nonce, c.replayNonce = c.replayNonce, ""
+		c.nonceMu.Unlock()
+	}
 	if nonce == "" {
 		fetched, err := c.fetchNonce(ctx)
 		if err != nil {
@@ -751,7 +764,7 @@ func (c *ACMEClient) postJWS(ctx context.Context, endpoint string, payload any, 
 		if errors.As(callErr, &problem) {
 			if attempt == 0 && strings.HasSuffix(problem.Type, ":badNonce") {
 				nonce = headers.Get("Replay-Nonce")
-				if nonce == "" {
+				if !validReplayNonce(nonce) {
 					next, err := c.fetchNonce(ctx)
 					if err != nil {
 						return nil, nil, 0, err
@@ -768,9 +781,59 @@ func (c *ACMEClient) postJWS(ctx context.Context, endpoint string, payload any, 
 		if status >= 400 {
 			return nil, responseBody, status, fmt.Errorf("%w: status %d", ErrACMEProtocol, status)
 		}
+		if fresh := headers.Get("Replay-Nonce"); fresh != nonce && validReplayNonce(fresh) {
+			c.nonceMu.Lock()
+			c.replayNonce = fresh
+			c.nonceMu.Unlock()
+		}
 		return headers, responseBody, status, nil
 	}
 	return nil, nil, 0, fmt.Errorf("%w: nonce retry", ErrACMEProtocol)
+}
+
+func validReplayNonce(nonce string) bool {
+	return len(nonce) > 0 && len(nonce) <= 512 && strings.IndexFunc(nonce, func(r rune) bool {
+		return !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' || r == '-' || r == '_')
+	}) == -1
+}
+
+// ACMEFailureCode returns a bounded cause without copying the CA response,
+// requested URL, DNS challenge value, or authentication data into receipts.
+func ACMEFailureCode(err error) string {
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "certificate_provider_timeout"
+	}
+	var problem *acmeProblem
+	if errors.As(err, &problem) {
+		switch problem.Type {
+		case "urn:ietf:params:acme:error:dns":
+			return "certificate_provider_dns"
+		case "urn:ietf:params:acme:error:caa":
+			return "certificate_provider_caa"
+		case "urn:ietf:params:acme:error:rateLimited":
+			return "certificate_provider_rate_limit"
+		case "urn:ietf:params:acme:error:unauthorized":
+			return "certificate_provider_unauthorized"
+		case "urn:ietf:params:acme:error:badCSR":
+			return "certificate_provider_bad_csr"
+		}
+	}
+	switch {
+	case errors.Is(err, ErrACMEChallenge):
+		return "certificate_dns_validation_failed"
+	case errors.Is(err, ErrACMEChain):
+		return "certificate_provider_chain_untrusted"
+	case errors.Is(err, ErrACMESigner):
+		return "certificate_provider_signer_failed"
+	case errors.Is(err, ErrACMEConfig):
+		return "certificate_provider_authority_unavailable"
+	case errors.Is(err, ErrACMEProtocol):
+		return "certificate_provider_protocol_error"
+	case errors.Is(err, ErrACMEIssuance):
+		return "certificate_issuance_failed"
+	default:
+		return "certificate_provider_outcome_unknown"
+	}
 }
 
 func (c *ACMEClient) fetchNonce(ctx context.Context) (string, error) {
@@ -836,10 +899,16 @@ func (c *ACMEClient) doRawHeaders(ctx context.Context, method, endpoint string, 
 		if ctx.Err() != nil {
 			return nil, nil, 0, ctx.Err()
 		}
-		if errors.Is(err, ErrACMERedirect) {
+		switch {
+		case errors.Is(err, context.DeadlineExceeded):
+			return nil, nil, 0, errors.Join(ErrACMEProtocol, context.DeadlineExceeded)
+		case errors.Is(err, ErrACMERedirect):
 			return nil, nil, 0, ErrACMERedirect
+		case errors.Is(err, ErrACMEConfig):
+			return nil, nil, 0, ErrACMEConfig
+		default:
+			return nil, nil, 0, fmt.Errorf("%w: transport", ErrACMEProtocol)
 		}
-		return nil, nil, 0, fmt.Errorf("%w: transport", ErrACMEProtocol)
 	}
 	defer response.Body.Close()
 	payload, err := io.ReadAll(io.LimitReader(response.Body, maxACMEBodyBytes+1))

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -169,32 +170,24 @@ func (t certificateRoundTripper) RoundTrip(request *http.Request) (*http.Respons
 	if err != nil {
 		return nil, err
 	}
-	if t.manager.current(request.Context(), scope) != nil {
-		response.Body.Close()
+	// Both ACME and Cloudflare responses are bounded and consumed as a whole.
+	// Buffer before exposing any bytes, then recheck the current task scope.
+	// This keeps the permission postcondition even if access changes mid-read.
+	defer response.Body.Close()
+	const maxProviderBody = 1 << 20
+	body, err := io.ReadAll(io.LimitReader(response.Body, maxProviderBody+1))
+	if err != nil {
+		clear(body)
+		return nil, err
+	}
+	if len(body) > maxProviderBody || t.manager.current(request.Context(), scope) != nil {
+		clear(body)
 		return nil, certificates.ErrACMEConfig
 	}
-	response.Body = &certificateResponseBody{ReadCloser: response.Body, manager: t.manager, scope: scope, ctx: request.Context()}
+	response.Body = io.NopCloser(bytes.NewReader(body))
 	return response, nil
 }
 
-type certificateResponseBody struct {
-	io.ReadCloser
-	manager *publicCertificateExecution
-	scope   *publicCertificateScope
-	ctx     context.Context
-}
-
-func (b *certificateResponseBody) Read(raw []byte) (int, error) {
-	if b.manager.current(b.ctx, b.scope) != nil {
-		return 0, certificates.ErrACMEConfig
-	}
-	n, err := b.ReadCloser.Read(raw)
-	if b.manager.current(b.ctx, b.scope) != nil {
-		clear(raw[:n])
-		return 0, certificates.ErrACMEConfig
-	}
-	return n, err
-}
 func (m *publicCertificateExecution) client(address, rootFile string) (*http.Client, *x509.CertPool, error) {
 	parsed, err := url.Parse(address)
 	if err != nil || parsed.Scheme != "https" || parsed.Hostname() == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" || parsed.Opaque != "" || parsed.RawPath != "" || parsed.ForceQuery {

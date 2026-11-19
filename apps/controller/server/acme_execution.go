@@ -277,10 +277,7 @@ func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, o
 		}
 	}
 	order.Status = "unknown"
-	order.ErrorCode = "certificate_provider_outcome_unknown"
-	if errors.Is(issueErr, context.DeadlineExceeded) {
-		order.ErrorCode = "certificate_provider_timeout"
-	}
+	order.ErrorCode = certificates.ACMEFailureCode(issueErr)
 	order.UpdatedAt = time.Now().UTC()
 	code := tasks.NodeResultUnknown
 	if issued != nil && len(issued.CertificatePEM) > 0 {
