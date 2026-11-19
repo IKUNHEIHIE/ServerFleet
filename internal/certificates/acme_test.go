@@ -1,6 +1,7 @@
 package certificates_test
 
 import (
+	"bytes"
 	"context"
 	"crypto"
 	"crypto/ecdsa"
@@ -390,6 +391,8 @@ func (f *fakeACMEServer) certificate(w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	chain := append([]byte(nil), f.certificateChain...)
 	f.mu.Unlock()
+	// Public CAs may include whitespace between PEM blocks and after the chain.
+	chain = bytes.ReplaceAll(chain, []byte("-----END CERTIFICATE-----\n"), []byte("-----END CERTIFICATE-----\r\n\r\n"))
 	w.Header().Set("Content-Type", "application/pem-certificate-chain")
 	_, _ = w.Write(chain)
 }
@@ -569,6 +572,9 @@ func TestACMEDNS01IssuanceWithVerifiedJWS(t *testing.T) {
 	fake.mu.Unlock()
 	if nonceRequests != 1 {
 		t.Fatalf("nonce requests = %d, want initial fetch only", nonceRequests)
+	}
+	if !bytes.Equal(issued.ChainPEM, fake.certificateChain) {
+		t.Fatal("returned chain must contain exactly one leaf and canonical issuer PEM")
 	}
 	if len(issued.CertificatePEM) == 0 || len(issued.ChainPEM) <= len(issued.CertificatePEM) {
 		t.Fatalf("issued = %+v", issued)

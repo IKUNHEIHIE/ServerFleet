@@ -281,7 +281,8 @@ func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, o
 	order.UpdatedAt = time.Now().UTC()
 	code := tasks.NodeResultUnknown
 	if issued != nil && len(issued.CertificatePEM) > 0 {
-		chain := append(append([]byte{}, issued.CertificatePEM...), issued.ChainPEM...)
+		chain := issued.ChainPEM
+		order.ErrorCode = "certificate_chain_encoding_rejected"
 		if _, err := transport.ParsePublicCertificateChain(chain); err == nil {
 			order.ChainPEM = chain
 			sum := sha256.Sum256(chain)

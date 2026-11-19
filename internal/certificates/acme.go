@@ -992,33 +992,37 @@ func acmeThumbprint(jwk *acmeJWK) (string, error) {
 }
 
 func parseACMEChain(chain []byte) (ACMEIssued, error) {
-	remaining := chain
-	var blocks [][]byte
-	for {
+	if len(chain) == 0 || len(chain) > 8<<10 {
+		return ACMEIssued{}, fmt.Errorf("%w: chain size", ErrACMEIssuance)
+	}
+	remaining := bytes.TrimSpace(chain)
+	canonical := make([]byte, 0, len(chain))
+	var leaf *x509.Certificate
+	var leafPEM []byte
+	for count := 0; len(remaining) > 0; count++ {
+		if count >= 6 || !bytes.HasPrefix(remaining, []byte("-----BEGIN CERTIFICATE-----")) {
+			return ACMEIssued{}, fmt.Errorf("%w: chain format", ErrACMEIssuance)
+		}
 		block, rest := pem.Decode(remaining)
-		if block == nil {
-			break
+		if block == nil || block.Type != "CERTIFICATE" || len(block.Headers) != 0 {
+			return ACMEIssued{}, fmt.Errorf("%w: chain format", ErrACMEIssuance)
 		}
-		remaining = rest
-		if block.Type != "CERTIFICATE" {
-			continue
+		cert, err := x509.ParseCertificate(block.Bytes)
+		if err != nil || leaf == nil && cert.IsCA || leaf != nil && !cert.IsCA {
+			return ACMEIssued{}, fmt.Errorf("%w: chain certificate", ErrACMEChain)
 		}
-		blocks = append(blocks, block.Bytes)
+		pemBytes := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert.Raw})
+		if leaf == nil {
+			leaf, leafPEM = cert, pemBytes
+		}
+		canonical = append(canonical, pemBytes...)
+		remaining = bytes.TrimSpace(rest)
 	}
-	if len(blocks) == 0 {
-		return ACMEIssued{}, fmt.Errorf("%w: empty certificate chain", ErrACMEIssuance)
-	}
-	leaf, err := x509.ParseCertificate(blocks[0])
-	if err != nil {
-		return ACMEIssued{}, fmt.Errorf("%w: leaf certificate", ErrACMEIssuance)
-	}
-	if leaf.SerialNumber == nil || leaf.NotAfter.Before(leaf.NotBefore) {
+	if leaf == nil || leaf.SerialNumber == nil || leaf.NotAfter.Before(leaf.NotBefore) || len(canonical) > 8<<10 {
 		return ACMEIssued{}, fmt.Errorf("%w: leaf metadata", ErrACMEIssuance)
 	}
-	var certificatePEM strings.Builder
-	_ = pem.Encode(&certificatePEM, &pem.Block{Type: "CERTIFICATE", Bytes: blocks[0]})
 	return ACMEIssued{
-		CertificatePEM: []byte(certificatePEM.String()), ChainPEM: chain,
+		CertificatePEM: leafPEM, ChainPEM: canonical,
 		Serial: leaf.SerialNumber.String(), NotBefore: leaf.NotBefore, NotAfter: leaf.NotAfter,
 	}, nil
 }
