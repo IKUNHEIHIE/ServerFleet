@@ -151,7 +151,10 @@ func (m *publicCertificateExecution) Execute(ctx context.Context, t tasks.Task) 
 		return result(tasks.NodeResultFailed, "public certificate plan rejected")
 	}
 	scope := m.taskScope(t, zoneID)
-	ctx, cancel := context.WithTimeout(m.scope(ctx, scope), 3*time.Minute)
+	// Allow for DNS validation and the repeated authenticated provider calls.
+	// Keep a separate minute for preparation and recording the outcome.
+	const issuanceTimeout = 6 * time.Minute
+	ctx, cancel := context.WithTimeout(m.scope(ctx, scope), issuanceTimeout+time.Minute)
 	defer cancel()
 	if m.current(ctx, scope) != nil {
 		return result(tasks.NodeResultFailed, "certificate authority unavailable")
@@ -175,7 +178,7 @@ func (m *publicCertificateExecution) Execute(ctx context.Context, t tasks.Task) 
 		return m.finish(ctx, t, order, nil, err, nil)
 	}
 	tracked := &trackedCertificateChallenges{manager: m, scope: scope, next: publisher, pending: map[string]certificateChallengeState{}}
-	client, err := certificates.NewACMEClient(certificates.ACMEConfig{DirectoryURL: m.o.DirectoryURL, Client: m.acmeClient, AccountKey: "account", Signer: privateACMEAccountSigner{manager: m, scope: scope}, Challenge: tracked, TrustRoots: m.acmeRoots, Timeout: 2 * time.Minute})
+	client, err := certificates.NewACMEClient(certificates.ACMEConfig{DirectoryURL: m.o.DirectoryURL, Client: m.acmeClient, AccountKey: "account", Signer: privateACMEAccountSigner{manager: m, scope: scope}, Challenge: tracked, TrustRoots: m.acmeRoots, Timeout: issuanceTimeout})
 	if err != nil {
 		return m.finish(ctx, t, order, nil, err, tracked)
 	}
@@ -275,6 +278,9 @@ func (m *publicCertificateExecution) finish(ctx context.Context, t tasks.Task, o
 	}
 	order.Status = "unknown"
 	order.ErrorCode = "certificate_provider_outcome_unknown"
+	if errors.Is(issueErr, context.DeadlineExceeded) {
+		order.ErrorCode = "certificate_provider_timeout"
+	}
 	order.UpdatedAt = time.Now().UTC()
 	code := tasks.NodeResultUnknown
 	if issued != nil && len(issued.CertificatePEM) > 0 {

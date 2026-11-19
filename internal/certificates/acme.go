@@ -284,6 +284,11 @@ func (c *ACMEClient) issueDNS01(ctx context.Context, request ACMERequest, extern
 	}
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
+	defer func() {
+		if resultErr != nil && errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			resultErr = errors.Join(resultErr, context.DeadlineExceeded)
+		}
+	}()
 
 	directory, err := c.fetchDirectory(ctx)
 	if err != nil {
