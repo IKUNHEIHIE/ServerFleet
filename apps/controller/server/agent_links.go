@@ -315,6 +315,14 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 	case envelope.GetAgentHello() != nil:
 		return nil
 	case envelope.GetHeartbeat() != nil:
+		// A recent metrics frame already persisted liveness. Keep the heartbeat
+		// as a fallback for agents with missing or stale metrics.
+		if node.Status == nodes.StatusOnline && node.Metrics != nil {
+			age := b.now().Sub(node.Metrics.ObservedAt)
+			if age >= 0 && age < 3*time.Second {
+				return nil
+			}
+		}
 		return b.applyAgentState(ctx, observation, requestID, nil, nodes.StatusOnline)
 	case envelope.GetMetrics() != nil:
 		metrics := agentMetrics(envelope.GetMetrics(), b.now().UTC())

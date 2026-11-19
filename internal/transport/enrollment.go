@@ -11,6 +11,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sort"
+	"sync"
 	"time"
 )
 
@@ -108,6 +109,16 @@ type EnrollmentService struct {
 	// Must use current transaction-bound/read-only authority; no nested writer.
 	commit EnrollmentGate
 	now    func() time.Time
+
+	lookupMu sync.Mutex
+	lookup   *enrollmentLookupSnapshot
+}
+
+type enrollmentLookupSnapshot struct {
+	digest      [sha256.Size]byte
+	clockFloor  time.Time
+	identities  map[string]AgentIdentity
+	retirements map[string]time.Time
 }
 
 func NewEnrollmentService(store EnrollmentStore, issuer *CertificateIssuer, gate, commit EnrollmentGate) (*EnrollmentService, error) {
@@ -492,19 +503,42 @@ func (s *EnrollmentService) Decide(ctx context.Context, op EnrollmentOperation, 
 	}
 	return result, nil
 }
+
+// identitySnapshot reuses only the decoded projection of the exact store
+// contents. Lookup still reads current persisted bytes for every verification.
+func (s *EnrollmentService) identitySnapshot(payload []byte) (*enrollmentLookupSnapshot, error) {
+	digest := sha256.Sum256(payload)
+	s.lookupMu.Lock()
+	defer s.lookupMu.Unlock()
+	if s.lookup != nil && s.lookup.digest == digest {
+		return s.lookup, nil
+	}
+	st, err := decodeEnrollment(payload)
+	if err != nil {
+		return nil, err
+	}
+	s.lookup = &enrollmentLookupSnapshot{
+		digest: digest, clockFloor: st.ClockFloor,
+		identities: st.Identities, retirements: st.Retirements,
+	}
+	return s.lookup, nil
+}
+
 func (s *EnrollmentService) Lookup(ctx context.Context, fingerprint string) (AgentIdentity, error) {
 	var id AgentIdentity
 	if s == nil || ctx == nil {
 		return id, ErrPeerIdentity
 	}
 	err := s.store.View(ctx, func(b []byte) error {
-		st, err := decodeEnrollment(b)
+		snapshot, err := s.identitySnapshot(b)
 		if err != nil {
 			return err
 		}
+		now := s.now()
+		retirement := snapshot.retirements[fingerprint]
 		var ok bool
-		id, ok = st.Identities[fingerprint]
-		if !ok || s.now().Before(st.ClockFloor) || !st.Retirements[fingerprint].IsZero() && !s.now().Before(st.Retirements[fingerprint]) {
+		id, ok = snapshot.identities[fingerprint]
+		if !ok || now.Before(snapshot.clockFloor) || !retirement.IsZero() && !now.Before(retirement) {
 			return ErrPeerIdentity
 		}
 		return nil

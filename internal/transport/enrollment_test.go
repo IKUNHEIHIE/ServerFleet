@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/hex"
+	"encoding/json"
 	"encoding/pem"
 	"errors"
 	"sync"
@@ -74,6 +75,49 @@ func enrollmentCSR(t *testing.T) string {
 	}
 	return string(pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csr}))
 }
+func TestEnrollmentLookupReusesOnlyTheCurrentPersistedState(t *testing.T) {
+	ctx := context.Background()
+	service, store, now := enrollmentFixture(t)
+	fingerprint := hex.EncodeToString(make([]byte, sha256.Size))
+	identity := AgentIdentity{
+		NodeID: "node", FingerprintSHA256: fingerprint, Serial: "7",
+		Enabled: true, TrustGeneration: 1,
+	}
+	save := func(state enrollmentState) {
+		t.Helper()
+		if err := store.Update(ctx, func(context.Context, []byte) ([]byte, error) {
+			return json.Marshal(state)
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	state := enrollmentState{
+		Version: 1, ClockFloor: *now,
+		Identities: map[string]AgentIdentity{fingerprint: identity},
+	}
+	save(state)
+	if got, err := service.Lookup(ctx, fingerprint); err != nil || got != identity {
+		t.Fatalf("initial lookup = %+v, %v", got, err)
+	}
+	snapshot := service.lookup
+	if got, err := service.Lookup(ctx, fingerprint); err != nil || got != identity || service.lookup != snapshot {
+		t.Fatalf("unchanged data must reuse the validated projection: %+v, %v", got, err)
+	}
+
+	identity.Revoked = true
+	state.Identities[fingerprint] = identity
+	save(state)
+	if got, err := service.Lookup(ctx, fingerprint); err != nil || got != identity || service.lookup == snapshot {
+		t.Fatalf("lookup must read the committed revocation immediately: %+v, %v", got, err)
+	}
+
+	state.Version = 2
+	save(state)
+	if _, err := service.Lookup(ctx, fingerprint); err != ErrPeerIdentity {
+		t.Fatalf("invalid store data must fail closed, got %v", err)
+	}
+}
+
 func TestEnrollmentOneTimeCSRApprovalReinstallAndLiveRevocation(t *testing.T) {
 	ctx := context.Background()
 	s, store, _ := enrollmentFixture(t)

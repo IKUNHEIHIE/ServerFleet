@@ -89,3 +89,50 @@ func TestBridgeRejectsRevokedNodeBeforeProcessingEvents(t *testing.T) {
 		}
 	}
 }
+
+func TestBridgeOnlySkipsHeartbeatCoveredByRecentMetrics(t *testing.T) {
+	ctx := context.Background()
+	now := time.Now().UTC()
+	db := testkit.NewDB(t, nodes.Migrations())
+	repo, err := nodes.NewRepo(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A missing state writer makes the fallback observable. An already
+	// persisted, recent online sample should never reach that writer.
+	bridge := newAgentLinkBridge(repo, nil, nil, func() time.Time { return now })
+	for _, test := range []struct {
+		name   string
+		status nodes.Status
+		sample time.Time
+		skip   bool
+	}{
+		{"fresh", nodes.StatusOnline, now.Add(-time.Second), true},
+		{"stale", nodes.StatusOnline, now.Add(-3 * time.Second), false},
+		{"none", nodes.StatusOnline, time.Time{}, false},
+		{"future", nodes.StatusOnline, now.Add(time.Second), false},
+		{"offline", nodes.StatusOffline, now.Add(-time.Second), false},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			if _, err := repo.Create(ctx, db, nodes.NodeCreateInput{ID: test.name, Name: test.name, Status: test.status}); err != nil {
+				t.Fatal(err)
+			}
+			if !test.sample.IsZero() {
+				update := nodes.AgentUpdate{
+					NodeID: test.name, Status: test.status, Sequence: 1,
+					ObservedAt: test.sample, Metrics: &nodes.Metrics{CPUPercent: 12, MemoryPercent: 34},
+					SampleSource: nodes.SampleSourceAgent,
+				}
+				if _, _, err := repo.ApplyAgentUpdate(ctx, db, update); err != nil {
+					t.Fatal(err)
+				}
+			}
+			observed := transport.LinkObservation{Identity: transport.AgentIdentity{NodeID: test.name}}
+			envelope := &agentv1.Envelope{NodeId: test.name, Message: &agentv1.Envelope_Heartbeat{Heartbeat: &agentv1.Heartbeat{}}}
+			err := bridge.event(ctx, observed, envelope)
+			if test.skip && err != nil || !test.skip && !errors.Is(err, transport.ErrLinkRejected) {
+				t.Fatalf("heartbeat covered = %t, got %v", test.skip, err)
+			}
+		})
+	}
+}

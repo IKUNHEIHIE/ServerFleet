@@ -511,6 +511,9 @@ func TestWave3ControllerAgentEnrollmentWSSAndTaskExecution(t *testing.T) {
 	if hello.GetControllerHello() == nil || !hello.GetControllerHello().Accepted {
 		t.Fatalf("controller hello rejected: %v", hello)
 	}
+	if interval := hello.GetControllerHello().GetHeartbeatIntervalSeconds(); interval != 1 {
+		t.Fatalf("negotiated heartbeat interval = %d seconds, want 1", interval)
+	}
 	granted := map[string]bool{}
 	for _, id := range hello.GetControllerHello().GrantedCapabilityIds {
 		granted[id] = true
