@@ -54,6 +54,9 @@ func TestLogCleanupManualAndScheduled(t *testing.T) {
 		req.Header.Set("X-Requested-With", "ServerFleetWeb")
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("X-CSRF-Token", csrf)
+		if path == "/api/v1/auth/bootstrap" {
+			req.Header.Set("Idempotency-Key", "bootstrap-log-cleanup-fixture")
+		}
 		res, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
