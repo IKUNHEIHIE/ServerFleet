@@ -39,12 +39,12 @@ func (s *Service) bindPolicyTx(ctx context.Context, tx storage.Tx, policy Policy
 	policy.AutomationRevision = next.Revision
 	return policy, e
 }
-func (r *Repo) hydratePolicy(ctx context.Context, policy *Policy) error {
+func (r *Repo) hydratePolicy(ctx context.Context, q storage.Queryer, policy *Policy) error {
 	policy.Direction = "combined"
 	policy.ResetDay = 1
 	policy.Timezone = "UTC"
 	var raw []byte
-	e := r.db.QueryRow(ctx, `SELECT payload FROM quota_policy_automation WHERE node_id=?`, policy.NodeID).Scan(&raw)
+	e := q.QueryRow(ctx, `SELECT payload FROM quota_policy_automation WHERE node_id=?`, policy.NodeID).Scan(&raw)
 	if storage.IsNotFound(e) {
 		return nil
 	}

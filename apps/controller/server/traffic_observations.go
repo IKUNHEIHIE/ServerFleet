@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"encoding/hex"
 	"math"
 	agentv1 "serverfleet.local/serverfleet/gen/go/serverfleet/agent/v1"
 	"serverfleet.local/serverfleet/internal/quota"
@@ -12,7 +11,7 @@ import (
 )
 
 func (s *Server) recordTraffic(ctx context.Context, obs transport.LinkObservation, boot string, batch *agentv1.MetricsBatch) error {
-	if s.Quota == nil || s.runtimeGate(ctx) != nil {
+	if s.traffic == nil || ctx.Err() != nil {
 		return nil
 	}
 	var rx, tx *uint64
@@ -33,8 +32,7 @@ func (s *Server) recordTraffic(ctx context.Context, obs transport.LinkObservatio
 		observed = p.ObservedAtUnixMs
 		if isSet {
 			digest := strings.TrimPrefix(name, "network.interfaces.")
-			decoded, e := hex.DecodeString(digest)
-			if e != nil || len(decoded) != 32 || digest != strings.ToLower(digest) || interfaces != "" || p.Unit != "set" || p.Value != 1 {
+			if digest == "" || interfaces != "" || p.Unit != "set" || p.Value != 1 {
 				return quota.ErrInvalidUsage
 			}
 			interfaces = digest
@@ -62,5 +60,10 @@ func (s *Server) recordTraffic(ctx context.Context, obs transport.LinkObservatio
 	if rx == nil || tx == nil || interfaces == "" || boot == "" {
 		return quota.ErrInvalidUsage
 	}
-	return s.Quota.RecordCounter(ctx, quota.CounterSample{NodeID: obs.Identity.NodeID, BootID: boot, Interfaces: interfaces, BytesIn: *rx, BytesOut: *tx, ObservedAt: time.UnixMilli(observed)})
+	sample := quota.CounterSample{NodeID: obs.Identity.NodeID, BootID: boot, Interfaces: interfaces, BytesIn: *rx, BytesOut: *tx, ObservedAt: time.UnixMilli(observed)}
+	if err := quota.ValidateCounterSample(sample, s.now()); err != nil {
+		return err
+	}
+	s.traffic.enqueue(sample)
+	return nil
 }

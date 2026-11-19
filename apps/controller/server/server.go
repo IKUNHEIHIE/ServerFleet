@@ -193,6 +193,7 @@ type Server struct {
 	workflowState *workflowRuntime
 
 	agentBridge *agentLinkBridge
+	traffic     *trafficCounterBuffer
 	mux         *http.ServeMux
 	console     http.Handler
 	now         func() time.Time
@@ -1008,6 +1009,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	s.Quota = quotaService
 	if agentBridge != nil {
+		s.traffic = &trafficCounterBuffer{pending: make(map[string][]quota.CounterSample)}
 		agentBridge.recordTraffic = s.recordTraffic
 	}
 	s.Certificates = certificatesService
@@ -1040,6 +1042,10 @@ func (s *Server) startTaskScheduler() {
 		workers.Add(2)
 		go func() { defer workers.Done(); defer s.schedulerReady.Store(false); _ = s.Tasks.Run(ctx) }()
 		go func() { defer workers.Done(); s.runLogCleanup(ctx) }()
+		if s.traffic != nil {
+			workers.Add(1)
+			go func() { defer workers.Done(); s.runTrafficSettlement(ctx) }()
+		}
 		if s.cleanupEnabled {
 			workers.Add(1)
 			go func() { defer workers.Done(); s.runCertificateCleanup(ctx) }()

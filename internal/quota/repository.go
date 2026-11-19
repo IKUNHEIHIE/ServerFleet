@@ -51,14 +51,18 @@ func (r *Repo) GetPolicy(ctx context.Context, nodeID string) (Policy, error) {
 	if r == nil || r.db == nil {
 		return Policy{}, ErrServiceNotConfigured
 	}
-	policy, err := scanPolicy(r.db.QueryRow(ctx, `SELECT node_id, monthly_limit_bytes,
+	return r.getPolicy(ctx, r.db, nodeID)
+}
+
+func (r *Repo) getPolicy(ctx context.Context, q storage.Queryer, nodeID string) (Policy, error) {
+	policy, err := scanPolicy(q.QueryRow(ctx, `SELECT node_id, monthly_limit_bytes,
 		warning_percent, expiry_at, estimated, updated_at FROM quota_policies
 		WHERE node_id = ?`, nodeID))
 	if storage.IsNotFound(err) {
 		return Policy{}, ErrPolicyNotFound
 	}
 	if err == nil {
-		err = r.hydratePolicy(ctx, &policy)
+		err = r.hydratePolicy(ctx, q, &policy)
 	}
 	return policy, err
 }
@@ -89,7 +93,7 @@ func (r *Repo) ListPolicies(ctx context.Context) ([]Policy, error) {
 		return nil, ErrInvalidPolicy
 	}
 	for i := range policies {
-		if err = r.hydratePolicy(ctx, &policies[i]); err != nil {
+		if err = r.hydratePolicy(ctx, r.db, &policies[i]); err != nil {
 			return nil, err
 		}
 	}

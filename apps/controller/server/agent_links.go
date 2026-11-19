@@ -270,9 +270,35 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 	if b.nodesRepo == nil {
 		return transport.ErrLinkRejected
 	}
+	// The telemetry write already reads and verifies the node inside its
+	// transaction. Avoid fetching the whole record twice on a metrics frame.
+	if batch := envelope.GetMetrics(); batch != nil {
+		metrics := agentMetrics(batch, b.now().UTC())
+		if e := b.applyAgentState(ctx, observation, envelope.GetMessageId(), metrics, nodes.StatusOnline); e != nil {
+			return e
+		}
+		if b.recordTraffic != nil {
+			b.seqMu.Lock()
+			boot := b.boots[observation.ConnectionID]
+			b.seqMu.Unlock()
+			return b.recordTraffic(ctx, observation, boot, batch)
+		}
+		return nil
+	}
 	node, err := b.nodesRepo.Get(ctx, observation.Identity.NodeID)
 	if err != nil || node.Status == nodes.StatusRevoked {
 		return transport.ErrLinkRejected
+	}
+	if envelope.GetHeartbeat() != nil {
+		// A recent metrics frame already persisted liveness. Keep the heartbeat
+		// as a fallback for agents with missing or stale metrics.
+		if node.Status == nodes.StatusOnline && node.Metrics != nil {
+			age := b.now().Sub(node.Metrics.ObservedAt)
+			if age >= 0 && age < 3*time.Second {
+				return nil
+			}
+		}
+		return b.applyAgentState(ctx, observation, envelope.GetMessageId(), nil, nodes.StatusOnline)
 	}
 	fileChild := false
 	if b.fileWorker != nil {
@@ -311,31 +337,8 @@ func (b *agentLinkBridge) event(ctx context.Context, observation transport.LinkO
 			return transport.ErrLinkRejected
 		}
 	}
-	requestID := envelope.GetMessageId()
 	switch {
 	case envelope.GetAgentHello() != nil:
-		return nil
-	case envelope.GetHeartbeat() != nil:
-		// A recent metrics frame already persisted liveness. Keep the heartbeat
-		// as a fallback for agents with missing or stale metrics.
-		if node.Status == nodes.StatusOnline && node.Metrics != nil {
-			age := b.now().Sub(node.Metrics.ObservedAt)
-			if age >= 0 && age < 3*time.Second {
-				return nil
-			}
-		}
-		return b.applyAgentState(ctx, observation, requestID, nil, nodes.StatusOnline)
-	case envelope.GetMetrics() != nil:
-		metrics := agentMetrics(envelope.GetMetrics(), b.now().UTC())
-		if e := b.applyAgentState(ctx, observation, requestID, metrics, nodes.StatusOnline); e != nil {
-			return e
-		}
-		if b.recordTraffic != nil {
-			b.seqMu.Lock()
-			boot := b.boots[observation.ConnectionID]
-			b.seqMu.Unlock()
-			return b.recordTraffic(ctx, observation, boot, envelope.GetMetrics())
-		}
 		return nil
 	case envelope.GetTaskAck() != nil:
 		return b.taskAck(ctx, observation, envelope.GetTaskAck())

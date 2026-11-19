@@ -99,3 +99,54 @@ func TestQuotaPolicyCycleAndReminderSettingsPersist(t *testing.T) {
 		}
 	}
 }
+
+func TestCounterBatchPreservesBillingBoundaryAndResets(t *testing.T) {
+	h := newFixture(t, nil, &fakeNotifier{})
+	ctx := context.Background()
+	policy, err := h.service.UpsertPolicy(ctx, "admin", "batch-test", quota.PolicyInput{NodeID: "n1", MonthlyLimitBytes: 100000, WarningPercent: 80, ResetDay: 5, Timezone: "Asia/Shanghai"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	start, boundary, err := quota.PolicyPeriod(h.clock.Now(), policy)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h.clock.Advance(boundary.Sub(h.clock.Now()) + 6*time.Second)
+	counter := func(second int, boot, iface string, rx, tx uint64) quota.CounterSample {
+		return quota.CounterSample{NodeID: "n1", BootID: boot, Interfaces: strings.Repeat(iface, 64), BytesIn: rx, BytesOut: tx,
+			ObservedAt: boundary.Add(time.Duration(second) * time.Second)}
+	}
+	batch := []quota.CounterSample{
+		counter(-4, "first", "a", 100, 200),
+		counter(-3, "first", "a", 120, 230),
+		counter(-2, "first", "a", 2, 3),
+		counter(-1, "first", "a", 5, 13),
+		counter(0, "first", "a", 1000, 5000),
+		counter(1, "first", "a", 1007, 5010),
+		counter(2, "rebooted", "a", 1, 2),
+		counter(3, "rebooted", "a", 6, 12),
+		counter(4, "rebooted", "b", 8, 16),
+		counter(5, "rebooted", "b", 18, 36),
+		counter(6, "rebooted", "b", 30, 50),
+	}
+	batch[10].GapBefore = true
+	for attempt := 0; attempt < 2; attempt++ {
+		if err := h.service.RecordCounterBatch(ctx, batch); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, want := range []struct {
+		start         time.Time
+		rx, tx        float64
+		samples, gaps uint64
+	}{{start, 23, 40, 4, 1}, {boundary, 22, 40, 7, 4}} {
+		usage, ok, err := h.service.GetUsage(ctx, "admin", "n1", want.start)
+		if err != nil || !ok || usage.BytesIn != want.rx || usage.BytesOut != want.tx {
+			t.Fatalf("usage=%+v ok=%t err=%v", usage, ok, err)
+		}
+		coverage, ok, err := h.service.CounterCoverage(ctx, "admin", "n1", want.start)
+		if err != nil || !ok || coverage.Samples != want.samples || coverage.Gaps != want.gaps {
+			t.Fatalf("coverage=%+v ok=%t err=%v", coverage, ok, err)
+		}
+	}
+}
