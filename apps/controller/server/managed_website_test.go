@@ -240,6 +240,7 @@ func managedTestCA(t *testing.T, domain string) (*httptest.Server, *x509.CertPoo
 			}
 			chainMu.Lock()
 			chain = pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: signed})
+			chain = append(chain, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: ca.Raw})...)
 			chainMu.Unlock()
 			reply(map[string]string{"status": "valid", "certificate": base + "/certificate"})
 		case "/certificate":
