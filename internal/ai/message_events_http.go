@@ -12,10 +12,10 @@ import (
 	"serverfleet.local/serverfleet/internal/auth"
 )
 
-// MessageEventsHTTP is an unmounted candidate for the existing AI SSE path.
-// Authenticate MUST run the real TLS/Origin/Cookie boundary on each call and
-// attach the current trusted actor for SessionAccess. CommitGate MUST recheck
-// that observation immediately before flush. Neither has a default success.
+// MessageEventsHTTP serves the AI session event stream.
+// Authenticate enforces the TLS/Origin/Cookie boundary once per HTTP request
+// and attaches the trusted actor. SessionAccess and CommitGate check current
+// authorization again before each event is disclosed.
 type MessageEventsHTTP struct {
 	conversation *ConversationService
 	authenticate func(*http.Request) (context.Context, error)
@@ -92,16 +92,14 @@ func (h *MessageEventsHTTP) events(w http.ResponseWriter, r *http.Request) {
 	bounded, cancel := context.WithTimeout(r.Context(), 30*time.Second)
 	defer cancel()
 	r = r.WithContext(bounded)
+	observed, err := h.authenticate(r)
+	if err != nil || observed == nil || observed.Err() != nil {
+		messageStreamProblem(w, auth.IdentityHTTPStatus(err), "AUTHENTICATION_REQUIRED")
+		return
+	}
 	controller := http.NewResponseController(w)
 	started := false
 	for {
-		observed, err := h.authenticate(r)
-		if err != nil || observed == nil || observed.Err() != nil {
-			if !started {
-				messageStreamProblem(w, auth.IdentityHTTPStatus(err), "AUTHENTICATION_REQUIRED")
-			}
-			return
-		}
 		events, err := h.conversation.Events(observed, id, after, 100)
 		gateErr := h.commitGate(observed)
 		if err != nil || gateErr != nil {
@@ -132,17 +130,13 @@ func (h *MessageEventsHTTP) events(w http.ResponseWriter, r *http.Request) {
 			started = true
 		}
 		for _, event := range events {
-			// Do not cache one poll's principal across a batch of writes.
-			fresh, err := h.authenticate(r)
-			if err != nil || fresh == nil || fresh.Err() != nil {
-				return
-			}
-			// Session ownership/action is rechecked after reauthentication too.
-			if _, err = h.conversation.Events(fresh, id, event.Sequence-1, 1); err != nil {
+			// The HTTP request identity is fixed. Recheck current session
+			// access and credential validity without refreshing it on every event.
+			if _, err = h.conversation.Events(observed, id, event.Sequence-1, 1); err != nil {
 				return
 			}
 			payload, err := json.Marshal(event)
-			if err != nil || bounded.Err() != nil || controller.SetWriteDeadline(time.Now().Add(5*time.Second)) != nil || h.commitGate(fresh) != nil {
+			if err != nil || bounded.Err() != nil || controller.SetWriteDeadline(time.Now().Add(5*time.Second)) != nil || h.commitGate(observed) != nil {
 				return
 			}
 			if _, err = fmt.Fprintf(w, "id: %s\nevent: %s\ndata: %s\n\n", messageEventCursor(id, event.Sequence), event.Kind, payload); err != nil || controller.Flush() != nil {

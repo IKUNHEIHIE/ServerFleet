@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"serverfleet.local/serverfleet/internal/auth"
 )
@@ -67,5 +68,51 @@ func TestMessageStreamRejectsBeforeAnyEventDisclosure(t *testing.T) {
 				t.Fatal(w.Code, w.Body.String())
 			}
 		})
+	}
+}
+
+type messageStreamRecorder struct {
+	*httptest.ResponseRecorder
+}
+
+func (*messageStreamRecorder) SetWriteDeadline(time.Time) error { return nil }
+
+func TestMessageStreamAuthenticatesOnceAndRechecksEachDelivery(t *testing.T) {
+	ctx := context.Background()
+	sessions, _, _, _, _ := sessionFixture(t)
+	view, err := sessions.Create(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	chat, _ := conversationFixture(t, sessions, func(context.Context, GenerationRequest, func(string) error) error {
+		return ErrModelUnavailable
+	})
+	for _, client := range []string{"client-one", "client-two"} {
+		if _, err := chat.Submit(ctx, view.ID, client, MessageInput{"question", client, view.ScopeRevision}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	authentications, observations := 0, 0
+	handler, err := NewMessageEventsHTTP(chat, func(r *http.Request) (context.Context, error) {
+		authentications++
+		return r.Context(), nil
+	}, func(context.Context) error {
+		observations++
+		if observations == 3 {
+			return auth.ErrDenied
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := &messageStreamRecorder{httptest.NewRecorder()}
+	handler.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "https://fleet.test/api/v1/ai/sessions/"+view.ID+"/events", nil))
+	if authentications != 1 || observations != 3 {
+		t.Fatalf("stream authentications = %d, authorization observations = %d", authentications, observations)
+	}
+	out := w.Body.String()
+	if !strings.Contains(out, "id: "+messageEventCursor(view.ID, 1)) || strings.Contains(out, "id: "+messageEventCursor(view.ID, 2)) {
+		t.Fatalf("stream must withhold the event that lost authorization: %q", out)
 	}
 }

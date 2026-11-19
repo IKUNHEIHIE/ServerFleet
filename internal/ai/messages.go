@@ -303,8 +303,8 @@ func (c *ConversationService) Submit(ctx context.Context, id, idempotencyKey str
 	return out, nil
 }
 
-// Events contains committed metadata only. Consumers reauthenticate each poll
-// and before SSE flush. Cursor is per session; retention overflow is rejected.
+// Events contains committed metadata only. Consumers recheck current access
+// on each poll and before SSE flush. Cursor is per session.
 func (c *ConversationService) Events(ctx context.Context, id string, after uint64, limit int) ([]MessageEvent, error) {
 	if c == nil || limit < 1 || limit > 100 {
 		return nil, ErrToolDenied

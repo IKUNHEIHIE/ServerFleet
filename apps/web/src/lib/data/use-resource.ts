@@ -154,7 +154,7 @@ export function useResource<T>(
   // 明确声明的作业状态轮询：页面隐藏时暂停，终止态由 shouldPoll 决定。
   const interval = options.refreshIntervalMs;
   useEffect(() => {
-    if (!interval || current.status !== "ready") return;
+    if (!interval || current.status !== "ready" || current.refreshing) return;
     if (optionsRef.current.shouldPoll && !optionsRef.current.shouldPoll(current.data)) return;
     let visible = typeof document === "undefined" || document.visibilityState !== "hidden";
     const onVisibility = () => {
