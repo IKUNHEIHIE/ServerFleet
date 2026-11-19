@@ -89,6 +89,9 @@ func (s *Server) listManagedWebsites(w http.ResponseWriter, r *http.Request) {
 		}
 		visible := map[string]bool{}
 		for _, node := range inventory {
+			if node.Status == nodes.StatusRevoked {
+				continue
+			}
 			online := node.Status == nodes.StatusOnline
 			ready := online && s.Links.HasCurrentCapabilities(ctx, node.ID, transport.WebsiteCertificateInstallAction) && s.authorizeManagedTargets(ctx, owner, []string{node.ID})
 			choices = append(choices, map[string]any{"id": node.ID, "name": node.Name, "online": online, "supported": ready})
